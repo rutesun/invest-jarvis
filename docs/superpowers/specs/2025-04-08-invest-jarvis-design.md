@@ -109,6 +109,7 @@ invest-jarvis/
 │   │   │       ├── disparity.py
 │   │   │       └── risk.py
 │   │   ├── fundamental.py       # 펀더멘털 분석
+│   │   ├── macro.py             # 매크로 지표 (VIX, 공포탐욕, 유가, 금리)
 │   │   ├── news.py              # 뉴스 분석 (실시간 조회)
 │   │   └── disclosure.py        # 공시 분석 (SEC, DART)
 │   │
@@ -123,11 +124,11 @@ invest-jarvis/
 │   │   ├── orchestrator.py      # LLM 기반 도구 오케스트레이션
 │   │   └── prompts.py           # 시스템 프롬프트
 │   │
-│   ├── pipelines/               # 미리 정의된 파이프라인
-│   │   ├── deep_dive.py         # 심층 분석
-│   │   ├── quick_check.py       # 빠른 체크
-│   │   ├── daily_report.py      # 일일 리포트
-│   │   └── portfolio.py         # 포트폴리오 모니터링
+│   ├── pipelines/               # 미리 정의된 파이프라인 (LLM 사용)
+│   │   ├── deep_dive.py         # 심층 분석 → LLM.generate_report()
+│   │   ├── quick_check.py       # 빠른 체크 (LLM 미사용)
+│   │   ├── daily_report.py      # 일일 리포트 → LLM.extract_themes(), summarize_news()
+│   │   └── portfolio.py         # 포트폴리오 → LLM.summarize_news()
 │   │
 │   ├── report/                  # 리포트 생성
 │   │   ├── generator.py         # 마크다운 리포트 생성
@@ -414,7 +415,116 @@ llm:
 
 ---
 
-## 7. CLI 명령어
+## 7. 매크로 지표 도구
+
+### 7.1 지표 목록
+
+| 지표 | 설명 | 데이터 소스 |
+|------|------|------------|
+| VIX | 변동성 지수 | yfinance (^VIX) |
+| Fear & Greed | 공포탐욕 지수 | CNN API |
+| WTI | 유가 | yfinance (CL=F) |
+| US 10Y | 미국 10년물 금리 | yfinance (^TNX) |
+| US 2Y | 미국 2년물 금리 | yfinance (^IRX 또는 API) |
+| DXY | 달러 인덱스 | yfinance (DX-Y.NYB) |
+
+### 7.2 데이터 모델
+
+```python
+class MacroSnapshot(BaseModel):
+    """매크로 지표 스냅샷"""
+
+    timestamp: datetime
+
+    # 변동성
+    vix: float
+    vix_change: float
+
+    # 심리
+    fear_greed: int              # 0-100
+    fear_greed_label: str        # "Extreme Fear", "Fear", "Neutral", "Greed", "Extreme Greed"
+
+    # 원자재
+    wti: float
+    wti_change: float
+
+    # 금리
+    us_10y: float
+    us_2y: float
+    yield_spread: float          # 10Y - 2Y (장단기 금리차)
+
+    # 달러
+    dxy: float
+    dxy_change: float
+```
+
+### 7.3 daily_report에서의 사용
+
+```python
+class DailyReportPipeline:
+    async def run(self, date: str) -> Report:
+        # 1. 매크로 지표 조회 (항상 포함)
+        macro = await self.tools["macro"].execute()
+
+        # 2. 뉴스/텔레그램 데이터 로드
+        news_data = await self.load_news(date)
+
+        # 3. LLM으로 테마 추출 및 요약
+        themes = await self.llm.extract_themes(news_data)
+        summary = await self.llm.summarize_news(news_data)
+
+        # 4. 리포트 생성 (매크로 섹션 포함)
+        return Report(
+            date=date,
+            macro=macro,        # 항상 포함
+            themes=themes,
+            summary=summary,
+        )
+```
+
+---
+
+## 8. 파이프라인-LLM 상호작용
+
+각 파이프라인에서 LLM이 담당하는 역할:
+
+| 파이프라인 | LLM 사용 | 호출 메서드 |
+|-----------|----------|------------|
+| `deep_dive.py` | 종합 리포트 생성 | `LLM.generate_report()` |
+| `quick_check.py` | 미사용 | - |
+| `daily_report.py` | 매크로 지표 + 테마 추출 + 뉴스 요약 | `LLM.extract_themes()`, `LLM.summarize_news()` |
+| `portfolio.py` | 종목별 뉴스 요약 | `LLM.summarize_news()` |
+
+### 예시: deep_dive.py
+
+```python
+class DeepDivePipeline:
+    def __init__(self, llm: LLMClient, tools: dict[str, BaseTool]):
+        self.llm = llm
+        self.tools = tools
+
+    async def run(self, ticker: str) -> Report:
+        # 1. 병렬로 데이터 수집 (LLM 미사용)
+        tech_result = await self.tools["technical"].execute(ticker)
+        fund_result = await self.tools["fundamental"].execute(ticker)
+        news_result = await self.tools["news"].execute(ticker)
+
+        # 2. LLM으로 종합 리포트 생성
+        report = await self.llm.generate_report(
+            ReportInput(
+                ticker=ticker,
+                technical=tech_result,
+                fundamental=fund_result,
+                news=news_result,
+            )
+        )
+
+        return report
+```
+
+---
+
+## 9. CLI 명령어
 
 ```bash
 # 종목 분석
@@ -443,11 +553,11 @@ jarvis news --market KR          # 한국 시장 뉴스
 
 ---
 
-## 8. Claude Code Skills
+## 10. Claude Code Skills
 
 가벼운 CLI 래퍼로 구현:
 
-### 8.1 /invest-analyze
+### 10.1 /invest-analyze
 
 ```markdown
 name: invest-analyze
@@ -457,7 +567,7 @@ description: 종목 심층 분석
 jarvis analyze <ticker>
 ```
 
-### 8.2 /invest-report
+### 10.2 /invest-report
 
 ```markdown
 name: invest-report
@@ -467,7 +577,7 @@ description: 시장 일일 리포트 생성
 jarvis report [--date DATE] [--market MARKET]
 ```
 
-### 8.3 /invest-screen
+### 10.3 /invest-screen
 
 ```markdown
 name: invest-screen
@@ -477,7 +587,7 @@ description: 종목 스크리닝
 jarvis screen [--market MARKET] [--theme THEME]
 ```
 
-### 8.4 /invest-portfolio
+### 10.4 /invest-portfolio
 
 ```markdown
 name: invest-portfolio
@@ -487,7 +597,7 @@ description: 포트폴리오 모니터링
 jarvis portfolio [--ticker TICKER]
 ```
 
-### 8.5 /invest-chat
+### 10.5 /invest-chat
 
 ```markdown
 name: invest-chat
@@ -507,9 +617,9 @@ description: 대화형 투자 분석
 
 ---
 
-## 9. 저장소
+## 11. 저장소
 
-### 9.1 구조
+### 11.1 구조
 
 ```
 data/
@@ -521,7 +631,7 @@ data/
     └── jarvis.db             # SQLite
 ```
 
-### 9.2 캐싱 전략
+### 11.2 캐싱 전략
 
 | 데이터 | TTL | 저장 방식 |
 |--------|-----|----------|
@@ -533,23 +643,23 @@ data/
 
 ---
 
-## 10. 데이터 소스
+## 12. 데이터 소스
 
-### 10.1 필수
+### 12.1 필수
 
 - **뉴스**: yfinance, DuckDuckGo 검색
 - **가격 데이터**: yfinance (미국), KIS/Naver (한국)
 - **공시**: SEC (미국), DART (한국)
 
-### 10.2 선택적
+### 12.2 선택적
 
 - **텔레그램**: 투자 정보 채널 모니터링
 
 ---
 
-## 11. 포트폴리오 기능
+## 13. 포트폴리오 기능
 
-### 11.1 설정
+### 13.1 설정
 
 ```yaml
 # config.yaml
@@ -562,7 +672,7 @@ portfolio:
     avg_price: 72000
 ```
 
-### 11.2 출력 예시
+### 13.2 출력 예시
 
 ```
 ## 포트폴리오 현황 (2025-04-08)
@@ -587,7 +697,7 @@ portfolio:
 
 ---
 
-## 12. 의존성
+## 14. 의존성
 
 ```toml
 # pyproject.toml
@@ -611,7 +721,7 @@ telegram = ["telethon"]  # 텔레그램 수집 (선택적)
 
 ---
 
-## 13. 향후 확장
+## 15. 향후 확장
 
 - **RAG**: 수집된 데이터 벡터DB 저장 및 시맨틱 검색
 - **추가 전략**: 볼륨 프로파일, 하모닉 패턴 등
