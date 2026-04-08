@@ -1,0 +1,8 @@
+technical:
+  strategies:
+    - trend
+
+cache:
+  quote_ttl: 60        # 1분
+  history_ttl: 300     # 5분
+  indicators_ttl: 300  # 5분
