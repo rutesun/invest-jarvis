@@ -435,6 +435,10 @@ jarvis screen --theme 반도체     # 테마별
 # 포트폴리오
 jarvis portfolio                 # 전체 포트폴리오 현황
 jarvis portfolio --ticker AAPL   # 특정 종목만
+
+# 뉴스
+jarvis news AAPL                 # 종목 관련 최근 뉴스
+jarvis news --market KR          # 한국 시장 뉴스
 ```
 
 ---
@@ -490,7 +494,15 @@ name: invest-chat
 description: 대화형 투자 분석
 
 ## 동작
-Agent orchestrator 호출하여 자연어 질문 처리
+1. 자연어 질문에서 티커/의도 파싱
+2. 필요한 도구 결정 (기술적 분석, 뉴스, 공시 등)
+3. jarvis CLI로 각 도구 실행
+4. 결과를 Claude Code가 종합하여 답변
+
+예시:
+  입력: "NVDA 지금 들어가도 될까?"
+  실행: jarvis analyze NVDA + jarvis news NVDA
+  출력: Claude Code가 결과 해석하여 답변
 ```
 
 ---
