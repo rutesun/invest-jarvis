@@ -41,6 +41,14 @@ class IndicatorCalculator:
         # ATR
         df["ATR"] = ta.atr(df["High"], df["Low"], df["Close"], length=14)
 
+        # Stochastic
+        stoch = ta.stoch(df["High"], df["Low"], df["Close"], k=14, d=3, smooth_k=3)
+        if stoch is not None:
+            df = pd.concat([df, stoch], axis=1)
+
+        # CCI
+        df["CCI_14_0.015"] = ta.cci(df["High"], df["Low"], df["Close"], length=14)
+
         # Supertrend
         st = ta.supertrend(df["High"], df["Low"], df["Close"], length=10, multiplier=3.0)
         if st is not None:
