@@ -1,11 +1,19 @@
 from typing import Optional
 from src.tools.technical.base import BaseStrategy
 from src.tools.technical.strategies.trend import TrendStrategy
+from src.tools.technical.strategies.oscillator import OscillatorStrategy
+from src.tools.technical.strategies.divergence import DivergenceStrategy
+from src.tools.technical.strategies.disparity import DisparityStrategy
+from src.tools.technical.strategies.risk import RiskStrategy
 
 
 # Strategy mapping
 STRATEGY_MAP = {
     "trend": TrendStrategy,
+    "oscillator": OscillatorStrategy,
+    "divergence": DivergenceStrategy,
+    "disparity": DisparityStrategy,
+    "risk": RiskStrategy,
 }
 
 

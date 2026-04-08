@@ -1,6 +1,10 @@
 technical:
   strategies:
     - trend
+    - oscillator
+    - divergence
+    - disparity
+    - risk
 
 cache:
   quote_ttl: 60        # 1분
