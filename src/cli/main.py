@@ -111,16 +111,67 @@ def format_deep_dive_output(result: dict) -> str:
 
     # Support both old (indicators) and new (snapshot) field
     snapshot = technical.indicators or technical.snapshot
-    output += f"## Price: ${snapshot.price:.2f} ({snapshot.change_pct:+.2f}%)\n\n"
+    output += f"## 가격: ${snapshot.price:.2f} ({snapshot.change_pct:+.2f}%)\n\n"
 
-    output += "## Technical Analysis\n\n"
-    output += f"**Total Score**: {technical.total_score}\n\n"
-    output += f"**Summary**: {tech_summary.summary}\n\n"
-    output += f"**Recommendation**: {tech_summary.recommendation} (신뢰도: {tech_summary.confidence * 100:.0f}%)\n\n"
-    output += f"**Rationale**: {tech_summary.rationale}\n\n"
+    # Raw technical indicators
+    output += "### 기술적 지표\n\n"
+
+    # Moving averages
+    if snapshot.sma_20:
+        output += f"- **20일 이동평균선**: ${snapshot.sma_20:.2f}\n"
+    if snapshot.sma_50:
+        output += f"- **50일 이동평균선**: ${snapshot.sma_50:.2f}\n"
+    if snapshot.sma_150:
+        output += f"- **150일 이동평균선**: ${snapshot.sma_150:.2f}\n"
+    if snapshot.sma_200:
+        output += f"- **200일 이동평균선**: ${snapshot.sma_200:.2f}\n"
+
+    output += "\n"
+
+    # Momentum indicators
+    if snapshot.rsi:
+        output += f"- **RSI (14일)**: {snapshot.rsi:.1f}\n"
+    if snapshot.crsi:
+        output += f"- **Cycle RSI**: {snapshot.crsi:.1f}"
+        if snapshot.crsi_high_band and snapshot.crsi_low_band:
+            output += f" (밴드: {snapshot.crsi_low_band:.1f} - {snapshot.crsi_high_band:.1f})"
+        output += "\n"
+    if snapshot.macd:
+        output += f"- **MACD**: {snapshot.macd:.2f}"
+        if snapshot.macd_signal:
+            output += f" (시그널: {snapshot.macd_signal:.2f})"
+        output += "\n"
+
+    output += "\n"
+
+    # Trend strength
+    if snapshot.adx:
+        output += f"- **ADX (추세 강도)**: {snapshot.adx:.1f}\n"
+
+    # Support/Resistance
+    if snapshot.pivot:
+        output += f"- **피봇 포인트**: ${snapshot.pivot:.2f}\n"
+    if snapshot.support_s1:
+        output += f"- **지지선 S1**: ${snapshot.support_s1:.2f}\n"
+    if snapshot.resistance_r1:
+        output += f"- **저항선 R1**: ${snapshot.resistance_r1:.2f}\n"
+
+    # 52-week high/low
+    if snapshot.high_52w:
+        output += f"- **52주 최고가**: ${snapshot.high_52w:.2f}\n"
+    if snapshot.low_52w:
+        output += f"- **52주 최저가**: ${snapshot.low_52w:.2f}\n"
+
+    output += "\n"
+
+    output += "### 종합 분석\n\n"
+    output += f"**총점**: {technical.total_score}\n\n"
+    output += f"**요약**: {tech_summary.summary}\n\n"
+    output += f"**추천**: {tech_summary.recommendation} (신뢰도: {tech_summary.confidence * 100:.0f}%)\n\n"
+    output += f"**근거**: {tech_summary.rationale}\n\n"
 
     if tech_summary.key_insights:
-        output += "**Key Insights**:\n"
+        output += "**핵심 인사이트**:\n"
         for insight in tech_summary.key_insights:
             output += f"- {insight}\n"
         output += "\n"
