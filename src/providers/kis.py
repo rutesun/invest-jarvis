@@ -177,3 +177,146 @@ class KISProvider(BaseProvider):
             "stock_value": float(output2.get("scts_evlu_amt", 0)),
             "positions": positions,
         }
+
+    async def get_investor_ranking(
+        self, investor_type: str = "foreign", top_n: int = 30
+    ) -> list[dict]:
+        """Get foreign/institution net buy ranking for Korean stocks."""
+        token = await self._get_access_token()
+        url = f"{self.BASE_URL}/uapi/domestic-stock/v1/quotations/foreign-institution-total"
+        fid_code = "1" if investor_type == "foreign" else "2"
+        headers = {
+            "Authorization": f"{token.token_type} {token.access_token}",
+            "appkey": self.app_key,
+            "appsecret": self.app_secret,
+            "tr_id": "FHPTJ04400000",
+            "Content-Type": "application/json; charset=utf-8",
+        }
+        params = {
+            "FID_COND_MRKT_DIV_CODE": "V",
+            "FID_COND_SCR_DIV_CODE": "16174",
+            "FID_INPUT_ISCD": "0000",
+            "FID_DIV_CLS_CODE": "0",
+            "FID_BLNG_CLS_CODE": "0",
+            "FID_TRGT_CLS_CODE": "111111111",
+            "FID_TRGT_EXLS_CLS_CODE": "000000",
+            "FID_INPUT_PRICE_1": "",
+            "FID_INPUT_PRICE_2": "",
+            "FID_VOL_CNT": "",
+            "FID_INPUT_DATE_1": "",
+            "FID_ETC_CLS_CODE": fid_code,
+        }
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(url, headers=headers, params=params)
+            response.raise_for_status()
+            data = response.json()
+
+        results = []
+        for item in data.get("output", [])[:top_n]:
+            results.append({
+                "ticker": item.get("mksc_shrn_iscd", ""),
+                "name": item.get("hts_kor_isnm", ""),
+                "net_buy_volume": int(item.get("frgn_ntby_qty", 0)),
+                "net_buy_amount": int(item.get("frgn_ntby_tr_pbmn", 0)),
+            })
+        return results
+
+    async def get_us_ranking_updown(
+        self, exchange: str = "NAS", direction: str = "up", top_n: int = 30
+    ) -> list[dict]:
+        """Get US stock up/down rate ranking."""
+        token = await self._get_access_token()
+        url = f"{self.BASE_URL}/uapi/overseas-stock/v1/ranking/updown-rate"
+        gubn = "1" if direction == "up" else "0"
+        headers = {
+            "Authorization": f"{token.token_type} {token.access_token}",
+            "appkey": self.app_key,
+            "appsecret": self.app_secret,
+            "tr_id": "HHDFS76290000",
+            "Content-Type": "application/json; charset=utf-8",
+        }
+        params = {"EXCD": exchange, "GUBN": gubn, "BYMD": "", "NDAY": ""}
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(url, headers=headers, params=params)
+            response.raise_for_status()
+            data = response.json()
+
+        results = []
+        body = data.get("output", {}).get("body", [])
+        for item in body[:top_n]:
+            results.append({
+                "ticker": item.get("symb", ""),
+                "name": item.get("name", ""),
+                "change_pct": float(item.get("rate", 0)),
+                "price": float(item.get("last", 0)),
+                "volume": int(item.get("tvol", 0)),
+                "exchange": exchange,
+            })
+        return results
+
+    async def get_us_ranking_volume(
+        self, exchange: str = "NAS", top_n: int = 30
+    ) -> list[dict]:
+        """Get US stock volume ranking."""
+        token = await self._get_access_token()
+        url = f"{self.BASE_URL}/uapi/overseas-stock/v1/ranking/trade-pbmn"
+        headers = {
+            "Authorization": f"{token.token_type} {token.access_token}",
+            "appkey": self.app_key,
+            "appsecret": self.app_secret,
+            "tr_id": "HHDFS76320010",
+            "Content-Type": "application/json; charset=utf-8",
+        }
+        params = {"EXCD": exchange, "GUBN": "", "BYMD": "", "NDAY": ""}
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(url, headers=headers, params=params)
+            response.raise_for_status()
+            data = response.json()
+
+        results = []
+        body = data.get("output", {}).get("body", [])
+        for item in body[:top_n]:
+            results.append({
+                "ticker": item.get("symb", ""),
+                "name": item.get("name", ""),
+                "price": float(item.get("last", 0)),
+                "volume": int(item.get("tvol", 0)),
+                "exchange": exchange,
+            })
+        return results
+
+    async def get_investor_trend(self, ticker: str, days: int = 10) -> list[dict]:
+        """Get daily investor trend (foreign + institution net buy) for a Korean stock."""
+        token = await self._get_access_token()
+        url = f"{self.BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-investor"
+        headers = {
+            "Authorization": f"{token.token_type} {token.access_token}",
+            "appkey": self.app_key,
+            "appsecret": self.app_secret,
+            "tr_id": "FHKST01010900",
+            "Content-Type": "application/json; charset=utf-8",
+        }
+        params = {
+            "FID_COND_MRKT_DIV_CODE": "J",
+            "FID_INPUT_ISCD": ticker,
+        }
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(url, headers=headers, params=params)
+            response.raise_for_status()
+            data = response.json()
+
+        results = []
+        for item in data.get("output", [])[:days]:
+            foreign_net = int(item.get("frgn_ntby_qty", 0))
+            institution_net = int(item.get("orgn_ntby_qty", 0))
+            results.append({
+                "date": item.get("stck_bsop_date", ""),
+                "foreign_net": foreign_net,
+                "institution_net": institution_net,
+                "total_net": foreign_net + institution_net,
+            })
+        return results
