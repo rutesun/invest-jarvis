@@ -17,3 +17,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Common Commands
 
 *To be added once build/test infrastructure is established*
+
+## Skills
+
+Location: `.claude/skills/`
+
+**Rule**: Simple CLI wrappers only. Show command + brief description + example. Keep under 20 lines.
