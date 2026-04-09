@@ -280,7 +280,42 @@ async def collect_and_score(self, universe: list[UniverseStock]) -> list[Screene
     return scored
 ```
 
-### 7.2 단일 종목 수집
+### 7.2 티커 직접 스코어링 (재사용 인터페이스)
+
+Universe 구축 없이 티커만으로 스코어링. 다른 파이프라인에서 재사용 가능.
+
+```python
+async def score_tickers(self, tickers: list[str]) -> list[ScreenerEvidence]:
+    """티커 리스트로 직접 스코어링. Universe 구축 없이 동작."""
+    universe = [
+        UniverseStock(
+            ticker=ticker,
+            name=ticker,
+            market=self._detect_market(ticker),
+            sources=["direct"],
+        )
+        for ticker in tickers
+    ]
+    return await self.collect_and_score(universe)
+
+def _detect_market(self, ticker: str) -> str:
+    """티커 형식으로 시장 추정."""
+    if ticker.endswith(".KS"):
+        return "KOSPI"
+    elif ticker.endswith(".KQ"):
+        return "KOSDAQ"
+    elif ticker.isdigit() and len(ticker) == 6:
+        return "KOSPI"
+    return "US"
+```
+
+**활용처:**
+- `jarvis check AAPL` → 기술적 분석 + 모멘텀 스코어 함께 표시
+- 포트폴리오 모니터링 → 보유 종목별 모멘텀 스코어
+- 워치리스트 → 관심 종목 비교 스코어링
+- Daily Report → 종목별 모멘텀 스코어 추가
+
+### 7.3 단일 종목 수집
 
 ```python
 async def _collect_one(self, stock: UniverseStock) -> ScreenerEvidence:
