@@ -90,18 +90,16 @@ class StrategyResult(BaseModel):
 class TechnicalResult(BaseModel):
     """Complete technical analysis result."""
 
-    ticker: str
+    ticker: str | None
     timestamp: datetime
-
-    # Raw indicators
-    indicators: IndicatorSnapshot
-
-    # Strategy results
-    strategies: list[StrategyResult]
-
-    # Summary
-    overall_assessment: str
-    confidence_score: float
-    key_insights: list[str]
-    warnings: list[str]
+    snapshot: IndicatorSnapshot
+    components: dict[str, dict]
     total_score: int = 0
+
+    # Legacy fields for backward compatibility
+    indicators: IndicatorSnapshot | None = None
+    strategies: list[StrategyResult] | None = None
+    overall_assessment: str | None = None
+    confidence_score: float | None = None
+    key_insights: list[str] | None = None
+    warnings: list[str] | None = None
