@@ -1,5 +1,5 @@
 import pytest
-from src.providers.ticker_models import CandidateTicker
+from src.providers.ticker_models import CandidateTicker, TickerResolution
 
 
 def test_candidate_ticker_creation():
@@ -29,3 +29,55 @@ def test_candidate_ticker_validation():
             score=100.0,
             quote_type="EQUITY"
         )
+
+
+def test_ticker_resolution_single_result():
+    """Test TickerResolution with single result"""
+    resolution = TickerResolution(
+        original_query="AAPL",
+        resolved_ticker="AAPL",
+        display_name="Apple Inc.",
+        confidence="high",
+        candidates=[],
+        resolution_method="direct_ticker",
+        source="user_input"
+    )
+
+    assert resolution.original_query == "AAPL"
+    assert resolution.resolved_ticker == "AAPL"
+    assert resolution.confidence == "high"
+    assert resolution.resolution_method == "direct_ticker"
+    assert len(resolution.candidates) == 0
+
+
+def test_ticker_resolution_with_candidates():
+    """Test TickerResolution with multiple candidates"""
+    candidates = [
+        CandidateTicker(
+            symbol="005930.KS",
+            name="SamsungElec",
+            exchange="KSC",
+            score=23044.0,
+            quote_type="EQUITY"
+        ),
+        CandidateTicker(
+            symbol="207940.KS",
+            name="SAMSUNG BIOLOGICS",
+            exchange="KSC",
+            score=20002.0,
+            quote_type="EQUITY"
+        )
+    ]
+
+    resolution = TickerResolution(
+        original_query="Samsung",
+        resolved_ticker="005930.KS",
+        display_name="SamsungElec",
+        confidence="low",
+        candidates=candidates,
+        resolution_method="yfinance_search_multiple",
+        source="yfinance_api"
+    )
+
+    assert len(resolution.candidates) == 2
+    assert resolution.confidence == "low"
