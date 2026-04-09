@@ -122,35 +122,35 @@ def format_deep_dive_output(result: dict) -> str:
     output += "### 기술적 지표\n\n"
 
     # Moving averages
-    if snapshot.sma_20:
+    if snapshot.sma_20 is not None:
         output += f"- **20일 이동평균선**: ${snapshot.sma_20:.2f}\n"
-    if snapshot.sma_50:
+    if snapshot.sma_50 is not None:
         output += f"- **50일 이동평균선**: ${snapshot.sma_50:.2f}\n"
-    if snapshot.sma_150:
+    if snapshot.sma_150 is not None:
         output += f"- **150일 이동평균선**: ${snapshot.sma_150:.2f}\n"
-    if snapshot.sma_200:
+    if snapshot.sma_200 is not None:
         output += f"- **200일 이동평균선**: ${snapshot.sma_200:.2f}\n"
 
     output += "\n"
 
     # Momentum indicators
-    if snapshot.rsi:
+    if snapshot.rsi is not None:
         output += f"- **RSI (14일)**: {snapshot.rsi:.1f}\n"
-    if snapshot.crsi:
+    if snapshot.crsi is not None:
         output += f"- **Cycle RSI**: {snapshot.crsi:.1f}"
-        if snapshot.crsi_high_band and snapshot.crsi_low_band:
+        if snapshot.crsi_high_band is not None and snapshot.crsi_low_band is not None:
             output += f" (밴드: {snapshot.crsi_low_band:.1f} - {snapshot.crsi_high_band:.1f})"
         output += "\n"
-    if snapshot.macd:
+    if snapshot.macd is not None:
         output += f"- **MACD**: {snapshot.macd:.2f}"
-        if snapshot.macd_signal:
+        if snapshot.macd_signal is not None:
             output += f" (시그널: {snapshot.macd_signal:.2f})"
         output += "\n"
 
     output += "\n"
 
     # Trend strength
-    if snapshot.adx:
+    if snapshot.adx is not None:
         output += f"- **ADX (추세 강도)**: {snapshot.adx:.1f}\n"
 
     # Supertrend
@@ -175,17 +175,17 @@ def format_deep_dive_output(result: dict) -> str:
     output += "\n"
 
     # Support/Resistance
-    if snapshot.pivot:
+    if snapshot.pivot is not None:
         output += f"- **피봇 포인트**: ${snapshot.pivot:.2f}\n"
-    if snapshot.support_s1:
+    if snapshot.support_s1 is not None:
         output += f"- **지지선 S1**: ${snapshot.support_s1:.2f}\n"
-    if snapshot.resistance_r1:
+    if snapshot.resistance_r1 is not None:
         output += f"- **저항선 R1**: ${snapshot.resistance_r1:.2f}\n"
 
     # 52-week high/low
-    if snapshot.high_52w:
+    if snapshot.high_52w is not None:
         output += f"- **52주 최고가**: ${snapshot.high_52w:.2f}\n"
-    if snapshot.low_52w:
+    if snapshot.low_52w is not None:
         output += f"- **52주 최저가**: ${snapshot.low_52w:.2f}\n"
 
     output += "\n"
@@ -210,43 +210,43 @@ def format_deep_dive_output(result: dict) -> str:
         if fundamental.sector or fundamental.industry:
             output += f"**Sector/Industry**: {fundamental.sector or 'N/A'} / {fundamental.industry or 'N/A'}\n\n"
 
-        if fundamental.market_cap:
+        if fundamental.market_cap is not None:
             output += f"- **시가총액**: ${fundamental.market_cap/1e9:.2f}B\n"
 
-        if fundamental.pe_ratio:
+        if fundamental.pe_ratio is not None:
             output += f"- **P/E Ratio**: {fundamental.pe_ratio:.1f}\n"
-        if fundamental.forward_pe:
+        if fundamental.forward_pe is not None:
             output += f"- **Forward P/E**: {fundamental.forward_pe:.1f}\n"
-        if fundamental.peg_ratio:
+        if fundamental.peg_ratio is not None:
             output += f"- **PEG Ratio**: {fundamental.peg_ratio:.2f}\n"
-        if fundamental.ev_ebitda:
+        if fundamental.ev_ebitda is not None:
             output += f"- **EV/EBITDA**: {fundamental.ev_ebitda:.1f}\n"
 
         output += "\n"
 
-        if fundamental.roe:
+        if fundamental.roe is not None:
             output += f"- **ROE**: {fundamental.roe*100:.1f}%\n"
-        if fundamental.roa:
+        if fundamental.roa is not None:
             output += f"- **ROA**: {fundamental.roa*100:.1f}%\n"
-        if fundamental.gross_margin:
+        if fundamental.gross_margin is not None:
             output += f"- **매출총이익률**: {fundamental.gross_margin*100:.1f}%\n"
-        if fundamental.operating_margin:
+        if fundamental.operating_margin is not None:
             output += f"- **영업이익률**: {fundamental.operating_margin*100:.1f}%\n"
-        if fundamental.profit_margin:
+        if fundamental.profit_margin is not None:
             output += f"- **순이익률**: {fundamental.profit_margin*100:.1f}%\n"
 
         output += "\n"
 
-        if fundamental.revenue_growth:
+        if fundamental.revenue_growth is not None:
             output += f"- **매출 성장률**: {fundamental.revenue_growth*100:.1f}%\n"
-        if fundamental.earnings_growth:
+        if fundamental.earnings_growth is not None:
             output += f"- **이익 성장률**: {fundamental.earnings_growth*100:.1f}%\n"
 
         output += "\n"
 
-        if fundamental.debt_to_equity:
+        if fundamental.debt_to_equity is not None:
             output += f"- **Debt/Equity**: {fundamental.debt_to_equity:.1f}\n"
-        if fundamental.current_ratio:
+        if fundamental.current_ratio is not None:
             output += f"- **유동비율**: {fundamental.current_ratio:.2f}\n"
 
         output += "\n"

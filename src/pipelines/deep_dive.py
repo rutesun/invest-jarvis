@@ -1,3 +1,4 @@
+import logging
 from langchain_core.language_models import BaseChatModel
 from src.tools.technical.tool import TechnicalAnalysisTool
 from src.tools.news import NewsTool, NewsArticle
@@ -13,6 +14,8 @@ from src.llm.models import (
     FundamentalSummaryInput,
     FundamentalSummaryOutput,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class DeepDivePipeline:
@@ -68,6 +71,8 @@ class DeepDivePipeline:
             if fund_result.success:
                 fundamental_data = fund_result.data
                 fundamental_summary = await self._generate_fundamental_summary(ticker, fundamental_data)
+            else:
+                logger.warning(f"Fundamental data fetch failed for {ticker}: {fund_result.error}")
 
         return {
             "ticker": ticker,

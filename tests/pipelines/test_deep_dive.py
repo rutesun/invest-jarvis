@@ -7,7 +7,8 @@ from src.tools.technical.models import (
     StrategyResult,
 )
 from src.tools.news import NewsArticle
-from src.llm.models import NewsAnalysisOutput, TechnicalSummaryOutput
+from src.tools.fundamental import FundamentalSnapshot
+from src.llm.models import NewsAnalysisOutput, TechnicalSummaryOutput, FundamentalSummaryOutput
 from src.core.models import ToolResult
 from datetime import datetime
 
@@ -58,8 +59,8 @@ def mock_llm():
 @pytest.mark.asyncio
 async def test_deep_dive_pipeline_success(mock_technical_tool, mock_news_tool, mock_llm):
     """Test successful deep dive analysis."""
-    with patch("src.llm.analyzer.generate_technical_summary", new_callable=AsyncMock) as mock_tech_summary:
-        with patch("src.llm.analyzer.analyze_news", new_callable=AsyncMock) as mock_news_analysis:
+    with patch("src.pipelines.deep_dive.analyzer.generate_technical_summary", new_callable=AsyncMock) as mock_tech_summary:
+        with patch("src.pipelines.deep_dive.analyzer.analyze_news", new_callable=AsyncMock) as mock_news_analysis:
             # Mock LLM outputs
             mock_tech_summary.return_value = TechnicalSummaryOutput(
                 summary="강세",
@@ -137,7 +138,7 @@ async def test_deep_dive_pipeline_empty_news(mock_technical_tool, mock_llm):
     mock_news_tool = AsyncMock()
     mock_news_tool.execute.return_value = ToolResult(success=True, data=[])
 
-    with patch("src.llm.analyzer.generate_technical_summary", new_callable=AsyncMock) as mock_tech_summary:
+    with patch("src.pipelines.deep_dive.analyzer.generate_technical_summary", new_callable=AsyncMock) as mock_tech_summary:
         mock_tech_summary.return_value = TechnicalSummaryOutput(
             summary="강세",
             key_insights=["골든크로스"],
@@ -157,3 +158,111 @@ async def test_deep_dive_pipeline_empty_news(mock_technical_tool, mock_llm):
 
         assert result["ticker"] == "AAPL"
         assert result["news_analysis"] is None
+
+
+@pytest.mark.asyncio
+async def test_deep_dive_pipeline_with_fundamental_success(mock_technical_tool, mock_news_tool, mock_llm):
+    """Test successful deep dive with fundamental data."""
+    mock_fundamental_tool = AsyncMock()
+    fundamental_data = FundamentalSnapshot(
+        ticker="AAPL",
+        sector="Technology",
+        industry="Consumer Electronics",
+        market_cap=3000000000000,
+        pe_ratio=28.5,
+        forward_pe=25.2,
+        peg_ratio=1.8,
+        ps_ratio=7.2,
+        ev_ebitda=22.1,
+        roe=0.45,
+        revenue_growth=0.08,
+        earnings_growth=0.12,
+        debt_to_equity=1.5,
+        free_cash_flow=95000000000,
+        fcf_yield=0.032,
+        gross_margin=0.42,
+        operating_margin=0.28,
+    )
+    mock_fundamental_tool.execute.return_value = ToolResult(success=True, data=fundamental_data)
+
+    with patch("src.pipelines.deep_dive.analyzer.generate_technical_summary", new_callable=AsyncMock) as mock_tech_summary:
+        with patch("src.pipelines.deep_dive.analyzer.analyze_news", new_callable=AsyncMock) as mock_news_analysis:
+            with patch("src.pipelines.deep_dive.generate_fundamental_summary", new_callable=AsyncMock) as mock_fund_summary:
+                mock_tech_summary.return_value = TechnicalSummaryOutput(
+                    summary="강세",
+                    key_insights=["골든크로스"],
+                    recommendation="매수",
+                    confidence=0.75,
+                    rationale="좋음",
+                )
+                mock_news_analysis.return_value = NewsAnalysisOutput(
+                    sentiment="긍정",
+                    confidence=0.85,
+                    key_themes=["신제품"],
+                    summary="긍정적",
+                    impact_assessment="좋음",
+                )
+                mock_fund_summary.return_value = FundamentalSummaryOutput(
+                    summary="건강한 재무상태",
+                    valuation_assessment="적정",
+                    confidence=0.8,
+                    strengths=["높은 ROE", "강한 현금흐름"],
+                    weaknesses=["높은 밸류에이션"],
+                )
+
+                pipeline = DeepDivePipeline(
+                    technical_tool=mock_technical_tool,
+                    news_tool=mock_news_tool,
+                    llm=mock_llm,
+                    fundamental_tool=mock_fundamental_tool,
+                )
+
+                result = await pipeline.run("AAPL")
+
+                assert result["ticker"] == "AAPL"
+                assert result["fundamental"] is not None
+                assert result["fundamental"].pe_ratio == 28.5
+                assert result["fundamental_summary"] is not None
+                assert result["fundamental_summary"].valuation_assessment == "적정"
+                assert len(result["fundamental_summary"].strengths) == 2
+
+
+@pytest.mark.asyncio
+async def test_deep_dive_pipeline_fundamental_failure(mock_technical_tool, mock_news_tool, mock_llm):
+    """Test handling of fundamental data fetch failure."""
+    mock_fundamental_tool = AsyncMock()
+    mock_fundamental_tool.execute.return_value = ToolResult(
+        success=False, data=None, error="yfinance API timeout"
+    )
+
+    with patch("src.pipelines.deep_dive.analyzer.generate_technical_summary", new_callable=AsyncMock) as mock_tech_summary:
+        with patch("src.pipelines.deep_dive.analyzer.analyze_news", new_callable=AsyncMock) as mock_news_analysis:
+            mock_tech_summary.return_value = TechnicalSummaryOutput(
+                summary="강세",
+                key_insights=["골든크로스"],
+                recommendation="매수",
+                confidence=0.75,
+                rationale="좋음",
+            )
+            mock_news_analysis.return_value = NewsAnalysisOutput(
+                sentiment="긍정",
+                confidence=0.85,
+                key_themes=["신제품"],
+                summary="긍정적",
+                impact_assessment="좋음",
+            )
+
+            pipeline = DeepDivePipeline(
+                technical_tool=mock_technical_tool,
+                news_tool=mock_news_tool,
+                llm=mock_llm,
+                fundamental_tool=mock_fundamental_tool,
+            )
+
+            result = await pipeline.run("AAPL")
+
+            assert result["ticker"] == "AAPL"
+            assert result["fundamental"] is None
+            assert result["fundamental_summary"] is None
+            assert result["technical"] is not None
+            assert result["news_analysis"] is not None
