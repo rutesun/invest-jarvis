@@ -6,9 +6,15 @@
 
 ### 1. 빠른 기술적 분석 (Quick Check)
 ```bash
-jarvis check AAPL
-jarvis check 005930  # 한국 주식
+jarvis check AAPL          # 티커로 검색
+jarvis check Apple         # 회사명으로 검색
+jarvis check 구글          # 한글 회사명으로 검색
+jarvis check 005930        # 한국 주식 (6자리 코드)
+jarvis check 005930.KS     # 한국 주식 (거래소 명시)
 ```
+- 티커 또는 회사명으로 검색 가능 (자동 변환)
+- 한글 회사명 지원 (예: 애플, 구글, 테슬라, 삼성전자)
+- 검색 결과 자동 캐싱 (재검색 시 빠른 응답)
 - 실시간 가격 및 변동률
 - 5개 전략 기반 기술적 분석 (Trend, Oscillator, Divergence, Disparity, Risk)
 - 이동평균선, RSI, MACD, ADX 등 주요 지표
@@ -16,8 +22,11 @@ jarvis check 005930  # 한국 주식
 
 ### 2. LLM 기반 심층 분석 (Deep Dive)
 ```bash
-jarvis analyze AAPL
+jarvis analyze AAPL        # 티커로 검색
+jarvis analyze Apple       # 회사명으로 검색
+jarvis analyze 구글        # 한글 회사명으로 검색
 ```
+- 티커 또는 회사명으로 검색 가능
 - 기술적 분석 + LLM 해석
 - 최근 뉴스 감성 분석
 - 투자 추천 및 근거 제시
@@ -41,7 +50,17 @@ jarvis portfolio
 - 최근 뉴스 요약
 - 수익률 추적
 
-### 5. Claude Code Skills
+### 5. 티커 캐시 관리
+```bash
+jarvis cache list          # 캐시된 매핑 목록 보기
+jarvis cache clear         # 캐시 전체 삭제
+```
+- 회사명 → 티커 매핑을 자동으로 캐싱
+- 재검색 시 빠른 응답
+- 캐시는 ~/.cache/invest-jarvis/user_mappings.yaml에 저장
+- 200개 항목 제한, 6개월 후 자동 만료
+
+### 6. Claude Code Skills
 ```
 /invest-check AAPL
 /invest-analyze AAPL
@@ -132,12 +151,15 @@ uv run jarvis --help
 uv run jarvis check --help
 
 # 빠른 체크 (LLM 불필요)
-uv run jarvis check AAPL
-uv run jarvis check MSFT
-uv run jarvis check 005930  # 삼성전자
+uv run jarvis check AAPL           # 티커로 검색
+uv run jarvis check Apple          # 회사명으로 검색
+uv run jarvis check 구글           # 한글 회사명
+uv run jarvis check 005930         # 삼성전자 (코드)
+uv run jarvis check 삼성전자       # 삼성전자 (한글)
 
 # 심층 분석 (LLM 필요)
 uv run jarvis analyze AAPL
+uv run jarvis analyze Apple        # 회사명도 가능
 uv run jarvis analyze TSLA --provider anthropic
 
 # 일일 리포트 (LLM 필요)
@@ -146,6 +168,10 @@ uv run jarvis report --tickers=AAPL,GOOGL,META
 
 # 포트폴리오 (KIS API 필요)
 uv run jarvis portfolio
+
+# 티커 캐시 관리
+uv run jarvis cache list           # 캐시 목록
+uv run jarvis cache clear          # 캐시 삭제
 ```
 
 ### Claude Code Skills
@@ -308,6 +334,14 @@ invest-jarvis/
 ---
 
 ## 버전 히스토리
+
+### v0.4.0 (2026-04-09)
+- 회사명으로 티커 검색 (영문/한글 지원)
+- 티커 자동 변환 (Apple → AAPL, 구글 → GOOGL)
+- 정적 매핑 (한글 회사명 → 영문)
+- yfinance Search API 연동
+- 사용자 캐시 시스템 (자동 저장, 6개월 만료)
+- `jarvis cache` 명령어 (list/clear)
 
 ### v0.3.0 (2026-04-09)
 - 한국 주식 지원 (KIS API)
