@@ -26,7 +26,7 @@ console = Console()
 
 def version_callback(value: bool):
     if value:
-        console.print("invest-jarvis version 0.2.0")
+        console.print("invest-jarvis version 0.3.0")
         raise typer.Exit()
 
 
