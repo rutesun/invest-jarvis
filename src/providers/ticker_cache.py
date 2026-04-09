@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Optional
 import yaml
-from datetime import datetime
+from datetime import datetime, timedelta
 from src.providers.ticker_models import CachedMapping
 
 
@@ -104,3 +104,25 @@ class UserMappingCache:
             mapping.last_used = datetime.now()
             mapping.use_count += 1
             self._save()
+
+    def cleanup_old_entries(self):
+        """Remove stale entries and enforce LRU limit"""
+        now = datetime.now()
+        cutoff = now - timedelta(days=self.expiry_days)
+
+        # Remove entries not used within expiry_days
+        self.mappings = {
+            k: v for k, v in self.mappings.items()
+            if v.last_used > cutoff
+        }
+
+        # Enforce max_entries via LRU
+        if len(self.mappings) > self.max_entries:
+            sorted_entries = sorted(
+                self.mappings.items(),
+                key=lambda x: x[1].last_used,
+                reverse=True
+            )
+            self.mappings = dict(sorted_entries[:self.max_entries])
+
+        self._save()
