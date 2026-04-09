@@ -99,3 +99,16 @@ def test_cached_mapping_creation():
     assert mapping.ticker == "AAPL"
     assert mapping.display_name == "Apple Inc."
     assert mapping.use_count == 1
+
+
+def test_cached_mapping_validation():
+    """Test CachedMapping use_count validation"""
+    now = datetime.now()
+    with pytest.raises(ValueError):
+        CachedMapping(
+            ticker="AAPL",
+            display_name="Apple Inc.",
+            created_at=now,
+            last_used=now,
+            use_count=0  # Should fail validation (ge=1)
+        )
