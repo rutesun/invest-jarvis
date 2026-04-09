@@ -89,9 +89,12 @@ class EvidenceCollector:
         is_kr = stock.market in ("KOSPI", "KOSDAQ")
 
         # 1. OHLCV (140+ days)
-        ticker_for_yf = stock.ticker
-        if is_kr:
+        if stock.market == "KOSPI":
             ticker_for_yf = f"{stock.ticker}.KS"
+        elif stock.market == "KOSDAQ":
+            ticker_for_yf = f"{stock.ticker}.KQ"
+        else:
+            ticker_for_yf = stock.ticker
 
         df = await self.yf.get_price_history(ticker_for_yf, period="6mo")
 
