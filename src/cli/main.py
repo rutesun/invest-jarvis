@@ -8,13 +8,16 @@ from rich.markdown import Markdown
 
 from src.core.config import load_config
 from src.providers.yfinance_provider import YFinanceProvider
+from src.providers.kis import KISProvider
 from src.tools.technical.registry import StrategyRegistry
 from src.tools.technical.tool import TechnicalAnalysisTool
 from src.tools.macro import MacroTool
 from src.tools.news import NewsTool
+from src.tools.portfolio import PortfolioTool
 from src.pipelines.quick_check import QuickCheckPipeline
 from src.pipelines.deep_dive import DeepDivePipeline
 from src.pipelines.daily_report import DailyReportPipeline
+from src.pipelines.portfolio import PortfolioPipeline
 from src.llm.client import LLMClient
 
 app = typer.Typer(help="Invest Jarvis - Financial Analysis CLI")
@@ -244,6 +247,53 @@ def report(
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1)
+
+
+async def run_portfolio_monitoring() -> dict:
+    """Run portfolio monitoring."""
+    config = load_config()
+    kis_provider = KISProvider(
+        app_key=os.getenv("KIS_APP_KEY"),
+        app_secret=os.getenv("KIS_APP_SECRET"),
+    )
+    yf_provider = YFinanceProvider()
+
+    portfolio_tool = PortfolioTool(provider=kis_provider)
+    registry = StrategyRegistry.from_config(config.technical.strategies)
+    technical_tool = TechnicalAnalysisTool(provider=yf_provider, registry=registry)
+    news_tool = NewsTool()
+
+    pipeline = PortfolioPipeline(
+        portfolio_tool=portfolio_tool,
+        technical_tool=technical_tool,
+        news_tool=news_tool,
+    )
+
+    return await pipeline.run()
+
+
+@app.command()
+def portfolio(
+    provider: str = typer.Option("openai", help="LLM provider"),
+):
+    """Monitor portfolio with technical analysis and news."""
+    kis_app_key = os.getenv("KIS_APP_KEY")
+    kis_app_secret = os.getenv("KIS_APP_SECRET")
+    if not kis_app_key or not kis_app_secret:
+        console.print("[red]Error: KIS_APP_KEY and KIS_APP_SECRET required[/red]")
+        raise typer.Exit(1)
+
+    console.print("[bold]Loading portfolio...[/bold]\n")
+
+    result = asyncio.run(run_portfolio_monitoring())
+
+    if not result.get("success", False):
+        console.print(f"[red]Error: {result.get('error', 'Unknown error')}[/red]")
+        raise typer.Exit(1)
+
+    pipeline = PortfolioPipeline(None, None, None)
+    output = pipeline.format_output(result)
+    console.print(Markdown(output))
 
 
 if __name__ == "__main__":
