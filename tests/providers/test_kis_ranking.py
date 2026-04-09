@@ -85,3 +85,77 @@ async def test_get_us_ranking_updown(mock_token_response):
 
         assert len(result) == 1
         assert result[0]["ticker"] == "NVDA"
+
+
+@pytest.mark.asyncio
+async def test_get_us_ranking_volume(mock_token_response):
+    mock_us_response = {
+        "output": {
+            "body": [
+                {
+                    "symb": "AAPL",
+                    "name": "Apple Inc",
+                    "last": "180.00",
+                    "tvol": "75000000",
+                },
+            ]
+        }
+    }
+
+    with patch("httpx.AsyncClient") as mock_client:
+        mock_token_resp = MagicMock()
+        mock_token_resp.json.return_value = mock_token_response
+        mock_token_resp.raise_for_status = MagicMock()
+
+        mock_ranking_resp = MagicMock()
+        mock_ranking_resp.json.return_value = mock_us_response
+        mock_ranking_resp.raise_for_status = MagicMock()
+
+        mock_client_instance = AsyncMock()
+        mock_client_instance.post.return_value = mock_token_resp
+        mock_client_instance.get.return_value = mock_ranking_resp
+        mock_client.return_value.__aenter__.return_value = mock_client_instance
+
+        provider = KISProvider(app_key="test", app_secret="test")
+        result = await provider.get_us_ranking_volume(exchange="NAS", top_n=10)
+
+        assert len(result) == 1
+        assert result[0]["ticker"] == "AAPL"
+        assert result[0]["name"] == "Apple Inc"
+        assert result[0]["volume"] == 75000000
+
+
+@pytest.mark.asyncio
+async def test_get_investor_trend(mock_token_response):
+    mock_trend_response = {
+        "output": [
+            {
+                "stck_bsop_date": "20260409",
+                "frgn_ntby_qty": "100",
+                "orgn_ntby_qty": "200",
+            },
+        ]
+    }
+
+    with patch("httpx.AsyncClient") as mock_client:
+        mock_token_resp = MagicMock()
+        mock_token_resp.json.return_value = mock_token_response
+        mock_token_resp.raise_for_status = MagicMock()
+
+        mock_trend_resp = MagicMock()
+        mock_trend_resp.json.return_value = mock_trend_response
+        mock_trend_resp.raise_for_status = MagicMock()
+
+        mock_client_instance = AsyncMock()
+        mock_client_instance.post.return_value = mock_token_resp
+        mock_client_instance.get.return_value = mock_trend_resp
+        mock_client.return_value.__aenter__.return_value = mock_client_instance
+
+        provider = KISProvider(app_key="test", app_secret="test")
+        result = await provider.get_investor_trend(ticker="005930", days=10)
+
+        assert len(result) == 1
+        assert result[0]["date"] == "20260409"
+        assert result[0]["foreign_net"] == 100
+        assert result[0]["institution_net"] == 200
+        assert result[0]["total_net"] == 300
