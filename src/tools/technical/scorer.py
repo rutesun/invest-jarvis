@@ -8,6 +8,8 @@ from src.tools.technical.components.crsi import analyze_crsi
 from src.tools.technical.components.volume import analyze_volume
 from src.tools.technical.components.patterns import analyze_patterns
 from src.tools.technical.components.supertrend import analyze_supertrend
+from src.tools.technical.components.divergence import analyze_divergence
+from src.tools.technical.components.risk import analyze_risk
 
 
 class TechnicalScorer:
@@ -25,6 +27,8 @@ class TechnicalScorer:
         volume_result = analyze_volume(df)
         patterns_result = analyze_patterns(df)
         supertrend_result = analyze_supertrend(df)
+        divergence_result = analyze_divergence(df)
+        risk_result = analyze_risk(df)
 
         # Aggregate component results
         components = {
@@ -63,6 +67,18 @@ class TechnicalScorer:
                 "signals": supertrend_result.signals,
                 "evidence": supertrend_result.evidence,
                 "metrics": supertrend_result.metrics,
+            },
+            "divergence": {
+                "score": divergence_result.score,
+                "signals": divergence_result.signals,
+                "evidence": divergence_result.evidence,
+                "metrics": divergence_result.metrics,
+            },
+            "risk": {
+                "score": risk_result.score,
+                "signals": risk_result.signals,
+                "evidence": risk_result.evidence,
+                "metrics": risk_result.metrics,
             },
         }
 
