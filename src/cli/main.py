@@ -13,6 +13,7 @@ load_dotenv()
 from src.core.config import load_config
 from src.providers.yfinance_provider import YFinanceProvider
 from src.providers.kis import KISProvider
+from src.providers.ticker_resolver import TickerResolver
 from src.tools.technical.registry import StrategyRegistry
 from src.tools.technical.tool import TechnicalAnalysisTool
 from src.tools.macro import MacroTool
@@ -44,8 +45,21 @@ def main(
     pass
 
 
-async def run_quick_check(ticker: str) -> dict:
+async def resolve_ticker(query: str) -> str:
+    """Resolve user query to ticker symbol."""
+    resolver = TickerResolver()
+    try:
+        resolution = await resolver.resolve(query)
+        return resolution.resolved_ticker
+    except Exception as e:
+        raise ValueError(f"Could not resolve ticker for '{query}': {e}")
+
+
+async def run_quick_check(ticker_or_name: str) -> dict:
     """Run quick check pipeline."""
+    # Resolve ticker if company name is provided
+    ticker = await resolve_ticker(ticker_or_name)
+
     config = load_config()
     provider = YFinanceProvider()
     registry = StrategyRegistry.from_config(config.technical.strategies)
@@ -56,12 +70,20 @@ async def run_quick_check(ticker: str) -> dict:
 
 @app.command()
 def check(
-    ticker: str = typer.Argument(..., help="Stock ticker symbol (e.g., AAPL)"),
+    query: str = typer.Argument(..., help="Stock ticker or company name (e.g., AAPL, Apple, 구글)"),
 ):
     """Quick check - technical analysis without LLM."""
-    console.print(f"[bold]Analyzing {ticker}...[/bold]\n")
+    console.print(f"[bold]Resolving '{query}'...[/bold]")
 
-    result = asyncio.run(run_quick_check(ticker))
+    try:
+        ticker = asyncio.run(resolve_ticker(query))
+        console.print(f"[green]✓ Resolved to: {ticker}[/green]\n")
+        console.print(f"[bold]Analyzing {ticker}...[/bold]\n")
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+
+    result = asyncio.run(run_quick_check(query))
 
     if not result.get("success", False):
         console.print(f"[red]Error: {result.get('error', 'Unknown error')}[/red]")
@@ -72,8 +94,11 @@ def check(
     console.print(Markdown(output))
 
 
-async def run_deep_dive(ticker: str, provider: str) -> dict:
+async def run_deep_dive(ticker_or_name: str, provider: str) -> dict:
     """Run deep dive analysis pipeline."""
+    # Resolve ticker if company name is provided
+    ticker = await resolve_ticker(ticker_or_name)
+
     api_key_env = "OPENAI_API_KEY" if provider == "openai" else "ANTHROPIC_API_KEY"
     base_url_env = "OPENAI_BASE_URL" if provider == "openai" else "ANTHROPIC_BASE_URL"
     api_key = os.getenv(api_key_env)
@@ -138,16 +163,20 @@ def format_deep_dive_output(result: dict) -> str:
 
 @app.command()
 def analyze(
-    ticker: str = typer.Argument(..., help="Stock ticker symbol (e.g., AAPL)"),
+    query: str = typer.Argument(..., help="Stock ticker or company name (e.g., AAPL, Apple, 구글)"),
     provider: Literal["openai", "anthropic"] = typer.Option(
         "openai", "--provider", "-p", help="LLM provider"
     ),
 ):
     """Deep dive analysis with LLM (technical + news)."""
-    console.print(f"[bold]Running deep dive analysis for {ticker}...[/bold]\n")
+    console.print(f"[bold]Resolving '{query}'...[/bold]")
 
     try:
-        result = asyncio.run(run_deep_dive(ticker, provider))
+        ticker = asyncio.run(resolve_ticker(query))
+        console.print(f"[green]✓ Resolved to: {ticker}[/green]\n")
+        console.print(f"[bold]Running deep dive analysis for {ticker}...[/bold]\n")
+
+        result = asyncio.run(run_deep_dive(query, provider))
         output = format_deep_dive_output(result)
         console.print(Markdown(output))
     except ValueError as e:
@@ -312,6 +341,50 @@ def portfolio(
     pipeline = PortfolioPipeline(None, None, None)
     output = pipeline.format_output(result)
     console.print(Markdown(output))
+
+
+cache_app = typer.Typer(help="Manage user ticker cache")
+app.add_typer(cache_app, name="cache")
+
+
+@cache_app.command("list")
+def cache_list():
+    """List all cached ticker mappings."""
+    from src.providers.ticker_cache import UserMappingCache
+
+    cache = UserMappingCache()
+    mappings = cache.list_mappings()
+
+    if not mappings:
+        console.print("[yellow]No cached mappings found.[/yellow]")
+        return
+
+    console.print("[bold]Cached Ticker Mappings[/bold]\n")
+    for mapping in mappings:
+        console.print(
+            f"[green]{mapping['query']}[/green] → [cyan]{mapping['ticker']}[/cyan] "
+            f"({mapping['display_name']}) - used {mapping['use_count']} times"
+        )
+
+
+@cache_app.command("clear")
+def cache_clear(
+    confirm: bool = typer.Option(
+        False, "--yes", "-y", help="Skip confirmation prompt"
+    )
+):
+    """Clear all cached ticker mappings."""
+    from src.providers.ticker_cache import UserMappingCache
+
+    if not confirm:
+        response = typer.confirm("Are you sure you want to clear all cached mappings?")
+        if not response:
+            console.print("[yellow]Cancelled.[/yellow]")
+            raise typer.Exit()
+
+    cache = UserMappingCache()
+    cache.clear()
+    console.print("[green]✓ Cache cleared successfully.[/green]")
 
 
 if __name__ == "__main__":
