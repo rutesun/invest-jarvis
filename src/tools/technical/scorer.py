@@ -7,6 +7,7 @@ from src.tools.technical.components.velocity import analyze_velocity
 from src.tools.technical.components.crsi import analyze_crsi
 from src.tools.technical.components.volume import analyze_volume
 from src.tools.technical.components.patterns import analyze_patterns
+from src.tools.technical.components.supertrend import analyze_supertrend
 
 
 class TechnicalScorer:
@@ -23,6 +24,7 @@ class TechnicalScorer:
         crsi_result = analyze_crsi(df)
         volume_result = analyze_volume(df)
         patterns_result = analyze_patterns(df)
+        supertrend_result = analyze_supertrend(df)
 
         # Aggregate component results
         components = {
@@ -55,6 +57,12 @@ class TechnicalScorer:
                 "signals": patterns_result.signals,
                 "evidence": patterns_result.evidence,
                 "metrics": patterns_result.metrics,
+            },
+            "supertrend": {
+                "score": supertrend_result.score,
+                "signals": supertrend_result.signals,
+                "evidence": supertrend_result.evidence,
+                "metrics": supertrend_result.metrics,
             },
         }
 
