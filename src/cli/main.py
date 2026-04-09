@@ -5,6 +5,10 @@ from typing import Optional, Literal
 import typer
 from rich.console import Console
 from rich.markdown import Markdown
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 from src.core.config import load_config
 from src.providers.yfinance_provider import YFinanceProvider
@@ -71,7 +75,9 @@ def check(
 async def run_deep_dive(ticker: str, provider: str) -> dict:
     """Run deep dive analysis pipeline."""
     api_key_env = "OPENAI_API_KEY" if provider == "openai" else "ANTHROPIC_API_KEY"
+    base_url_env = "OPENAI_BASE_URL" if provider == "openai" else "ANTHROPIC_BASE_URL"
     api_key = os.getenv(api_key_env)
+    base_url = os.getenv(base_url_env)
     if not api_key:
         raise ValueError(f"Missing {api_key_env} environment variable")
 
@@ -80,7 +86,7 @@ async def run_deep_dive(ticker: str, provider: str) -> dict:
     registry = StrategyRegistry.from_config(config.technical.strategies)
     technical_tool = TechnicalAnalysisTool(provider=yf_provider, registry=registry)
     news_tool = NewsTool()
-    llm_client = LLMClient(provider=provider, api_key=api_key)
+    llm_client = LLMClient(provider=provider, api_key=api_key, base_url=base_url)
 
     pipeline = DeepDivePipeline(
         technical_tool=technical_tool,
@@ -150,7 +156,9 @@ def analyze(
 async def run_daily_report(tickers: list[str], provider: str) -> dict:
     """Run daily report pipeline."""
     api_key_env = "OPENAI_API_KEY" if provider == "openai" else "ANTHROPIC_API_KEY"
+    base_url_env = "OPENAI_BASE_URL" if provider == "openai" else "ANTHROPIC_BASE_URL"
     api_key = os.getenv(api_key_env)
+    base_url = os.getenv(base_url_env)
     if not api_key:
         raise ValueError(f"Missing {api_key_env} environment variable")
 
@@ -159,7 +167,7 @@ async def run_daily_report(tickers: list[str], provider: str) -> dict:
     registry = StrategyRegistry.from_config(config.technical.strategies)
     technical_tool = TechnicalAnalysisTool(provider=yf_provider, registry=registry)
     macro_tool = MacroTool()
-    llm_client = LLMClient(provider=provider, api_key=api_key)
+    llm_client = LLMClient(provider=provider, api_key=api_key, base_url=base_url)
 
     pipeline = DailyReportPipeline(
         macro_tool=macro_tool,

@@ -19,10 +19,12 @@ class LLMClient:
         provider: Literal["openai", "anthropic"] = "openai",
         api_key: str | None = None,
         model: str | None = None,
+        base_url: str | None = None,
     ):
         self.provider = provider
         self.api_key = api_key
         self.model = model or self._get_default_model()
+        self.base_url = base_url
 
     def _get_default_model(self) -> str:
         """Get default model for provider."""
@@ -42,7 +44,8 @@ class LLMClient:
 
     async def _call_openai(self, request: LLMRequest) -> LLMResponse:
         """Call OpenAI API."""
-        url = "https://api.openai.com/v1/chat/completions"
+        base = self.base_url or "https://api.openai.com/v1"
+        url = f"{base}/chat/completions"
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
@@ -69,7 +72,8 @@ class LLMClient:
 
     async def _call_anthropic(self, request: LLMRequest) -> LLMResponse:
         """Call Anthropic API."""
-        url = "https://api.anthropic.com/v1/messages"
+        base = self.base_url or "https://api.anthropic.com/v1"
+        url = f"{base}/messages"
         headers = {
             "x-api-key": self.api_key,
             "anthropic-version": "2023-06-01",
