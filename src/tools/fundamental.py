@@ -66,7 +66,7 @@ class FundamentalTool(BaseTool):
 
     async def execute(self, ticker: str, **kwargs) -> ToolResult:
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             snapshot = await loop.run_in_executor(
                 None, partial(self._fetch_fundamentals, ticker)
             )
@@ -92,15 +92,16 @@ class FundamentalTool(BaseTool):
                 quarterly_revenue = []
                 quarterly_earnings = []
                 for col in qf.columns[:4]:
-                    period = col.strftime("%Y-Q%q") if hasattr(col, "strftime") else str(col)
+                    period = f"{col.year}-Q{col.quarter}" if hasattr(col, "quarter") else str(col)
                     rev = qf.loc["Total Revenue", col] if "Total Revenue" in qf.index else None
                     earn = qf.loc["Net Income", col] if "Net Income" in qf.index else None
                     if rev is not None:
                         quarterly_revenue.append({"period": period, "revenue": float(rev)})
                     if earn is not None:
                         quarterly_earnings.append({"period": period, "earnings": float(earn)})
-        except Exception:
-            pass
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning("Failed to parse quarterly financials: %s", e)
 
         return FundamentalSnapshot(
             market_cap=info.get("marketCap"),

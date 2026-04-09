@@ -1,4 +1,5 @@
 # tests/tools/test_fundamental.py
+import pandas as pd
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 from src.tools.fundamental import FundamentalTool, FundamentalSnapshot
@@ -51,3 +52,112 @@ async def test_fundamental_tool_execute():
     assert snapshot.pe_ratio == 28.5
     assert snapshot.sector == "Technology"
     assert snapshot.roe == 1.60
+
+
+@pytest.mark.asyncio
+async def test_quarterly_data_parsing_with_data():
+    mock_info = {
+        "marketCap": 2800000000000,
+        "freeCashflow": 100000000000,
+    }
+
+    q1 = pd.Period("2024Q1", freq="Q")
+    q2 = pd.Period("2024Q2", freq="Q")
+    q3 = pd.Period("2024Q3", freq="Q")
+    q4 = pd.Period("2024Q4", freq="Q")
+
+    mock_qf = pd.DataFrame(
+        {
+            q4: {"Total Revenue": 120000000000, "Net Income": 30000000000},
+            q3: {"Total Revenue": 110000000000, "Net Income": 28000000000},
+            q2: {"Total Revenue": 105000000000, "Net Income": 27000000000},
+            q1: {"Total Revenue": 100000000000, "Net Income": 25000000000},
+        }
+    )
+
+    mock_ticker = MagicMock()
+    mock_ticker.info = mock_info
+    mock_ticker.quarterly_financials = mock_qf
+
+    with patch("yfinance.Ticker", return_value=mock_ticker):
+        tool = FundamentalTool()
+        result = await tool.execute("AAPL")
+
+    assert result.success is True
+    snapshot = result.data
+    assert snapshot.quarterly_revenue is not None
+    assert len(snapshot.quarterly_revenue) == 4
+    assert snapshot.quarterly_revenue[0]["period"] == "2024-Q4"
+    assert snapshot.quarterly_revenue[0]["revenue"] == 120000000000
+    assert snapshot.quarterly_earnings is not None
+    assert len(snapshot.quarterly_earnings) == 4
+    assert snapshot.quarterly_earnings[0]["period"] == "2024-Q4"
+    assert snapshot.quarterly_earnings[0]["earnings"] == 30000000000
+
+
+@pytest.mark.asyncio
+async def test_fcf_yield_calculation():
+    mock_info = {
+        "marketCap": 2000000000000,
+        "freeCashflow": 100000000000,
+    }
+
+    mock_ticker = MagicMock()
+    mock_ticker.info = mock_info
+    mock_ticker.quarterly_financials = MagicMock()
+    mock_ticker.quarterly_financials.empty = True
+
+    with patch("yfinance.Ticker", return_value=mock_ticker):
+        tool = FundamentalTool()
+        result = await tool.execute("AAPL")
+
+    assert result.success is True
+    snapshot = result.data
+    assert snapshot.fcf_yield == 0.05
+
+
+@pytest.mark.asyncio
+async def test_fcf_yield_when_no_data():
+    mock_info = {"marketCap": None, "freeCashflow": None}
+
+    mock_ticker = MagicMock()
+    mock_ticker.info = mock_info
+    mock_ticker.quarterly_financials = MagicMock()
+    mock_ticker.quarterly_financials.empty = True
+
+    with patch("yfinance.Ticker", return_value=mock_ticker):
+        tool = FundamentalTool()
+        result = await tool.execute("AAPL")
+
+    assert result.success is True
+    snapshot = result.data
+    assert snapshot.fcf_yield is None
+
+
+@pytest.mark.asyncio
+async def test_error_handling_for_quarterly_data():
+    mock_info = {"marketCap": 2800000000000}
+
+    mock_ticker = MagicMock()
+    mock_ticker.info = mock_info
+    mock_ticker.quarterly_financials = None
+
+    with patch("yfinance.Ticker", return_value=mock_ticker):
+        tool = FundamentalTool()
+        result = await tool.execute("AAPL")
+
+    assert result.success is True
+    snapshot = result.data
+    assert snapshot.quarterly_revenue is None
+    assert snapshot.quarterly_earnings is None
+
+
+@pytest.mark.asyncio
+async def test_error_handling_when_yfinance_fails():
+    with patch("yfinance.Ticker", side_effect=Exception("Network error")):
+        tool = FundamentalTool()
+        result = await tool.execute("INVALID")
+
+    assert result.success is False
+    assert result.data is None
+    assert "Network error" in result.error
