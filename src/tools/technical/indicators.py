@@ -1,5 +1,6 @@
 import pandas as pd
 import pandas_ta as ta
+import numpy as np
 from src.tools.technical.models import IndicatorSnapshot
 
 
@@ -18,6 +19,7 @@ class IndicatorCalculator:
         df["SMA_20"] = ta.sma(df["Close"], length=20)
         df["SMA_50"] = ta.sma(df["Close"], length=50)
         df["SMA_120"] = ta.sma(df["Close"], length=120)
+        df["SMA_150"] = ta.sma(df["Close"], length=150)
         df["SMA_200"] = ta.sma(df["Close"], length=200)
 
         # RSI
@@ -73,6 +75,35 @@ class IndicatorCalculator:
         df["S1"] = (2 * pivot) - prev_high
         df["R1"] = (2 * pivot) - prev_low
 
+        # Fast MACD (5/35/5)
+        macd_fast = ta.macd(df["Close"], fast=5, slow=35, signal=5)
+        if macd_fast is not None:
+            df = pd.concat([df, macd_fast], axis=1)
+
+        # Volume SMAs
+        df["Vol_SMA_20"] = ta.sma(df["Volume"], length=20)
+        df["Vol_SMA_50"] = ta.sma(df["Volume"], length=50)
+        df["Vol_SMA_120"] = ta.sma(df["Volume"], length=120)
+
+        # Swing High/Low (11-bar window, 5 on each side)
+        df["Swing_High"] = df["High"].where(
+            df["High"] == df["High"].rolling(window=11, center=True).max()
+        )
+        df["Swing_Low"] = df["Low"].where(
+            df["Low"] == df["Low"].rolling(window=11, center=True).min()
+        )
+
+        # Gap detection
+        prev_high = df["High"].shift(1)
+        prev_low = df["Low"].shift(1)
+        df["Is_Gap_Up"] = df["Low"] > prev_high
+        df["Is_Gap_Down"] = df["High"] < prev_low
+        df["Gap_Up_Lower"] = prev_high.where(df["Is_Gap_Up"])
+        df["Gap_Down_Upper"] = prev_low.where(df["Is_Gap_Down"])
+
+        # Cycle RSI (cRSI)
+        df = self._calculate_crsi(df)
+
         return df
 
     def create_snapshot(self, df: pd.DataFrame) -> IndicatorSnapshot:
@@ -120,4 +151,63 @@ class IndicatorCalculator:
             resistance_r1=safe_get("R1"),
             high_52w=safe_get("High_52w"),
             low_52w=safe_get("Low_52w"),
+            sma_150=safe_get("SMA_150"),
+            crsi=safe_get("cRSI"),
+            crsi_high_band=safe_get("cRSI_HighBand"),
+            crsi_low_band=safe_get("cRSI_LowBand"),
+            vol_sma_20=safe_get("Vol_SMA_20"),
+            vol_sma_50=safe_get("Vol_SMA_50"),
+            vol_sma_120=safe_get("Vol_SMA_120"),
+            swing_high=safe_get("Swing_High"),
+            swing_low=safe_get("Swing_Low"),
+            is_gap_up=bool(latest.get("Is_Gap_Up")) if not pd.isna(latest.get("Is_Gap_Up")) else None,
+            is_gap_down=bool(latest.get("Is_Gap_Down")) if not pd.isna(latest.get("Is_Gap_Down")) else None,
+            macd_fast=safe_get("MACD_5_35_5"),
+            macd_fast_signal=safe_get("MACDs_5_35_5"),
+            macd_fast_histogram=safe_get("MACDh_5_35_5"),
         )
+
+    def _calculate_crsi(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Calculate Cycle-Tuned RSI with dynamic bands."""
+        rsi_10 = ta.rsi(df["Close"], length=10)
+        if rsi_10 is None or rsi_10.isna().all():
+            df["cRSI"] = np.nan
+            df["cRSI_HighBand"] = np.nan
+            df["cRSI_LowBand"] = np.nan
+            return df
+
+        dominant_cycle = 20
+        vibration = 10
+        torque = 2.0 / (vibration + 1)
+        lag = int((vibration - 1) / 2)
+
+        rsi_values = rsi_10.values
+        crsi = np.full(len(rsi_values), np.nan)
+
+        # Find first valid RSI index
+        first_valid = rsi_10.first_valid_index()
+        if first_valid is None:
+            df["cRSI"] = np.nan
+            df["cRSI_HighBand"] = np.nan
+            df["cRSI_LowBand"] = np.nan
+            return df
+
+        start_idx = df.index.get_loc(first_valid)
+        if start_idx + lag < len(rsi_values):
+            crsi[start_idx + lag] = rsi_values[start_idx + lag]
+
+        for i in range(start_idx + lag + 1, len(rsi_values)):
+            if np.isnan(rsi_values[i]) or np.isnan(rsi_values[i - lag]):
+                continue
+            prev_crsi = crsi[i - 1] if not np.isnan(crsi[i - 1]) else rsi_values[i]
+            crsi[i] = torque * (2 * rsi_values[i] - rsi_values[i - lag]) + (1 - torque) * prev_crsi
+
+        df["cRSI"] = crsi
+
+        # Dynamic bands (10th/90th percentile over 40-bar lookback)
+        lookback = 2 * dominant_cycle
+        crsi_series = pd.Series(crsi, index=df.index)
+        df["cRSI_LowBand"] = crsi_series.rolling(window=lookback, min_periods=10).quantile(0.10)
+        df["cRSI_HighBand"] = crsi_series.rolling(window=lookback, min_periods=10).quantile(0.90)
+
+        return df
