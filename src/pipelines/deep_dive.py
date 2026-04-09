@@ -120,13 +120,13 @@ class DeepDivePipeline:
         snapshot = technical_data.indicators or technical_data.snapshot
 
         indicators = {}
-        if snapshot.sma_20:
+        if snapshot.sma_20 is not None:
             indicators["sma_20"] = snapshot.sma_20
-        if snapshot.sma_50:
+        if snapshot.sma_50 is not None:
             indicators["sma_50"] = snapshot.sma_50
-        if snapshot.rsi:
+        if snapshot.rsi is not None:
             indicators["rsi"] = snapshot.rsi
-        if snapshot.macd:
+        if snapshot.macd is not None:
             indicators["macd"] = snapshot.macd
 
         input_data = TechnicalSummaryInput(
