@@ -18,21 +18,16 @@ def mock_technical_tool():
     tech_result = TechnicalResult(
         ticker="AAPL",
         timestamp=datetime.now(),
-        indicators=IndicatorSnapshot(price=178.50, change_pct=2.5),
-        strategies=[
-            StrategyResult(
-                name="trend",
-                status="강세",
-                confidence=75.0,
-                signals=["골든크로스"],
-                evidence=["20일선 > 50일선"],
-                metrics={},
-            )
-        ],
-        overall_assessment="매수",
-        confidence_score=75.0,
-        key_insights=["상승 추세"],
-        warnings=[],
+        snapshot=IndicatorSnapshot(price=178.50, change_pct=2.5, rsi=58.0, sma_20=175.0, sma_50=170.0),
+        components={
+            "trend": {
+                "signals": ["골든크로스"],
+                "evidence": ["20일선 > 50일선"],
+                "metrics": {"sma_20": 175.0},
+                "score": 15,
+            }
+        },
+        total_score=75,
     )
     tool.execute.return_value = ToolResult(success=True, data=tech_result)
     return tool
@@ -85,6 +80,7 @@ async def test_deep_dive_pipeline_success(mock_technical_tool, mock_news_tool, m
                 technical_tool=mock_technical_tool,
                 news_tool=mock_news_tool,
                 llm=mock_llm,
+                fundamental_tool=None,
             )
 
             result = await pipeline.run("AAPL")
@@ -94,6 +90,8 @@ async def test_deep_dive_pipeline_success(mock_technical_tool, mock_news_tool, m
             assert result["technical_summary"].summary == "강세"
             assert result["news"] is not None
             assert result["news_analysis"].sentiment == "긍정"
+            assert result["fundamental"] is None
+            assert result["fundamental_summary"] is None
 
 
 @pytest.mark.asyncio
@@ -126,6 +124,7 @@ async def test_deep_dive_pipeline_news_failure(mock_technical_tool, mock_llm):
         technical_tool=mock_technical_tool,
         news_tool=mock_news_tool,
         llm=mock_llm,
+        fundamental_tool=None,
     )
 
     with pytest.raises(RuntimeError, match="News fetch failed"):
@@ -151,9 +150,10 @@ async def test_deep_dive_pipeline_empty_news(mock_technical_tool, mock_llm):
             technical_tool=mock_technical_tool,
             news_tool=mock_news_tool,
             llm=mock_llm,
+            fundamental_tool=None,
         )
 
         result = await pipeline.run("AAPL")
 
         assert result["ticker"] == "AAPL"
-        assert result["news_analysis"] is None  # No news analysis when news is empty
+        assert result["news_analysis"] is None

@@ -15,6 +15,7 @@ from src.providers.yfinance_provider import YFinanceProvider
 from src.providers.kis import KISProvider
 from src.tools.technical.scorer import TechnicalScorer
 from src.tools.technical.tool import TechnicalAnalysisTool
+from src.tools.fundamental import FundamentalTool
 from src.tools.macro import MacroTool
 from src.tools.news import NewsTool
 from src.tools.portfolio import PortfolioTool
@@ -83,6 +84,7 @@ async def run_deep_dive(ticker: str, provider: str) -> dict:
     yf_provider = YFinanceProvider()
     scorer = TechnicalScorer()
     technical_tool = TechnicalAnalysisTool(provider=yf_provider, scorer=scorer)
+    fundamental_tool = FundamentalTool()
     news_tool = NewsTool()
     llm = LLMProvider.create(
         provider=provider,
@@ -95,6 +97,7 @@ async def run_deep_dive(ticker: str, provider: str) -> dict:
         technical_tool=technical_tool,
         news_tool=news_tool,
         llm=llm,
+        fundamental_tool=fundamental_tool,
     )
 
     return await pipeline.run(ticker)
@@ -106,6 +109,8 @@ def format_deep_dive_output(result: dict) -> str:
     technical = result["technical"]
     tech_summary = result["technical_summary"]
     news_analysis = result.get("news_analysis")
+    fundamental = result.get("fundamental")
+    fundamental_summary = result.get("fundamental_summary")
 
     output = f"# Deep Dive Analysis: {ticker}\n\n"
 
@@ -196,6 +201,71 @@ def format_deep_dive_output(result: dict) -> str:
         for insight in tech_summary.key_insights:
             output += f"- {insight}\n"
         output += "\n"
+
+    if fundamental and fundamental_summary:
+        output += "## Fundamental Analysis\n\n"
+
+        output += "### Key Metrics\n\n"
+
+        if fundamental.sector or fundamental.industry:
+            output += f"**Sector/Industry**: {fundamental.sector or 'N/A'} / {fundamental.industry or 'N/A'}\n\n"
+
+        if fundamental.market_cap:
+            output += f"- **시가총액**: ${fundamental.market_cap/1e9:.2f}B\n"
+
+        if fundamental.pe_ratio:
+            output += f"- **P/E Ratio**: {fundamental.pe_ratio:.1f}\n"
+        if fundamental.forward_pe:
+            output += f"- **Forward P/E**: {fundamental.forward_pe:.1f}\n"
+        if fundamental.peg_ratio:
+            output += f"- **PEG Ratio**: {fundamental.peg_ratio:.2f}\n"
+        if fundamental.ev_ebitda:
+            output += f"- **EV/EBITDA**: {fundamental.ev_ebitda:.1f}\n"
+
+        output += "\n"
+
+        if fundamental.roe:
+            output += f"- **ROE**: {fundamental.roe*100:.1f}%\n"
+        if fundamental.roa:
+            output += f"- **ROA**: {fundamental.roa*100:.1f}%\n"
+        if fundamental.gross_margin:
+            output += f"- **매출총이익률**: {fundamental.gross_margin*100:.1f}%\n"
+        if fundamental.operating_margin:
+            output += f"- **영업이익률**: {fundamental.operating_margin*100:.1f}%\n"
+        if fundamental.profit_margin:
+            output += f"- **순이익률**: {fundamental.profit_margin*100:.1f}%\n"
+
+        output += "\n"
+
+        if fundamental.revenue_growth:
+            output += f"- **매출 성장률**: {fundamental.revenue_growth*100:.1f}%\n"
+        if fundamental.earnings_growth:
+            output += f"- **이익 성장률**: {fundamental.earnings_growth*100:.1f}%\n"
+
+        output += "\n"
+
+        if fundamental.debt_to_equity:
+            output += f"- **Debt/Equity**: {fundamental.debt_to_equity:.1f}\n"
+        if fundamental.current_ratio:
+            output += f"- **유동비율**: {fundamental.current_ratio:.2f}\n"
+
+        output += "\n"
+
+        output += "### LLM Analysis\n\n"
+        output += f"**Summary**: {fundamental_summary.summary}\n\n"
+        output += f"**Valuation**: {fundamental_summary.valuation_assessment} (신뢰도: {fundamental_summary.confidence * 100:.0f}%)\n\n"
+
+        if fundamental_summary.strengths:
+            output += "**Strengths**:\n"
+            for strength in fundamental_summary.strengths:
+                output += f"- {strength}\n"
+            output += "\n"
+
+        if fundamental_summary.weaknesses:
+            output += "**Weaknesses**:\n"
+            for weakness in fundamental_summary.weaknesses:
+                output += f"- {weakness}\n"
+            output += "\n"
 
     if news_analysis:
         output += "## News Analysis\n\n"

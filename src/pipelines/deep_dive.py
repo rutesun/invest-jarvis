@@ -1,13 +1,17 @@
 from langchain_core.language_models import BaseChatModel
 from src.tools.technical.tool import TechnicalAnalysisTool
 from src.tools.news import NewsTool, NewsArticle
+from src.tools.fundamental import FundamentalTool, FundamentalSnapshot
 from src.tools.technical.models import TechnicalResult
 from src.llm import analyzer
+from src.llm.analyzer import generate_fundamental_summary
 from src.llm.models import (
     TechnicalSummaryInput,
     TechnicalSummaryOutput,
     NewsAnalysisInput,
     NewsAnalysisOutput,
+    FundamentalSummaryInput,
+    FundamentalSummaryOutput,
 )
 
 
@@ -19,10 +23,12 @@ class DeepDivePipeline:
         technical_tool: TechnicalAnalysisTool,
         news_tool: NewsTool,
         llm: BaseChatModel,
+        fundamental_tool: FundamentalTool | None = None,
     ):
         self.technical_tool = technical_tool
         self.news_tool = news_tool
         self.llm = llm
+        self.fundamental_tool = fundamental_tool
 
     async def run(self, ticker: str) -> dict:
         """Run deep dive analysis for a ticker.
@@ -34,6 +40,8 @@ class DeepDivePipeline:
                 - technical_summary: TechnicalSummaryOutput
                 - news: list[NewsArticle]
                 - news_analysis: NewsAnalysisOutput | None
+                - fundamental: FundamentalSnapshot | None
+                - fundamental_summary: FundamentalSummaryOutput | None
         """
         tech_result = await self.technical_tool.execute(ticker)
         if not tech_result.success:
@@ -53,12 +61,22 @@ class DeepDivePipeline:
         if news_articles:
             news_analysis = await self._analyze_news(ticker, news_articles)
 
+        fundamental_data = None
+        fundamental_summary = None
+        if self.fundamental_tool:
+            fund_result = await self.fundamental_tool.execute(ticker)
+            if fund_result.success:
+                fundamental_data = fund_result.data
+                fundamental_summary = await self._generate_fundamental_summary(ticker, fundamental_data)
+
         return {
             "ticker": ticker,
             "technical": technical_data,
             "technical_summary": technical_summary,
             "news": news_articles,
             "news_analysis": news_analysis,
+            "fundamental": fundamental_data,
+            "fundamental_summary": fundamental_summary,
         }
 
     async def _generate_technical_summary(
@@ -137,3 +155,28 @@ class DeepDivePipeline:
         )
 
         return await analyzer.analyze_news(input_data, self.llm)
+
+    async def _generate_fundamental_summary(
+        self, ticker: str, fundamental_data: FundamentalSnapshot
+    ) -> FundamentalSummaryOutput:
+        """Generate LLM summary of fundamental analysis."""
+        input_data = FundamentalSummaryInput(
+            ticker=ticker,
+            sector=fundamental_data.sector,
+            industry=fundamental_data.industry,
+            pe_ratio=fundamental_data.pe_ratio,
+            forward_pe=fundamental_data.forward_pe,
+            peg_ratio=fundamental_data.peg_ratio,
+            ev_ebitda=fundamental_data.ev_ebitda,
+            ps_ratio=fundamental_data.ps_ratio,
+            roe=fundamental_data.roe,
+            revenue_growth=fundamental_data.revenue_growth,
+            earnings_growth=fundamental_data.earnings_growth,
+            debt_to_equity=fundamental_data.debt_to_equity,
+            free_cash_flow=fundamental_data.free_cash_flow,
+            fcf_yield=fundamental_data.fcf_yield,
+            gross_margin=fundamental_data.gross_margin,
+            operating_margin=fundamental_data.operating_margin,
+        )
+
+        return await generate_fundamental_summary(input_data, self.llm)
