@@ -130,3 +130,37 @@ def test_cache_cleanup_enforces_max_entries():
         assert 'query3' in cache.mappings
         assert 'query2' in cache.mappings
         assert 'query0' not in cache.mappings  # Oldest removed
+
+
+def test_cache_list_mappings():
+    """Test listing all cached mappings"""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        cache_path = Path(tmpdir) / "user_mappings.yaml"
+        cache = UserMappingCache(cache_path)
+
+        cache.save('Apple', 'AAPL', 'Apple Inc.')
+        cache.save('Google', 'GOOGL', 'Alphabet Inc.')
+
+        mappings = cache.list_mappings()
+
+        assert len(mappings) == 2
+        assert any(m['query'] == 'Apple' and m['ticker'] == 'AAPL' for m in mappings)
+        assert any(m['query'] == 'Google' and m['ticker'] == 'GOOGL' for m in mappings)
+
+
+def test_cache_clear():
+    """Test clearing all cached mappings"""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        cache_path = Path(tmpdir) / "user_mappings.yaml"
+        cache = UserMappingCache(cache_path)
+
+        cache.save('Apple', 'AAPL', 'Apple Inc.')
+        assert len(cache.mappings) == 1
+
+        cache.clear()
+
+        assert len(cache.mappings) == 0
+
+        # Verify persisted
+        cache2 = UserMappingCache(cache_path)
+        assert len(cache2.mappings) == 0

@@ -126,3 +126,25 @@ class UserMappingCache:
             self.mappings = dict(sorted_entries[:self.max_entries])
 
         self._save()
+
+    def list_mappings(self) -> list[dict]:
+        """Return all cached mappings as list of dicts"""
+        result = []
+        for query, mapping in sorted(
+            self.mappings.items(),
+            key=lambda x: x[1].use_count,
+            reverse=True
+        ):
+            result.append({
+                'query': query,
+                'ticker': mapping.ticker,
+                'display_name': mapping.display_name,
+                'use_count': mapping.use_count,
+                'last_used': mapping.last_used
+            })
+        return result
+
+    def clear(self):
+        """Clear all cached mappings"""
+        self.mappings = {}
+        self._save()
