@@ -112,3 +112,31 @@ def test_cached_mapping_validation():
             last_used=now,
             use_count=0  # Should fail validation (ge=1)
         )
+
+
+def test_ticker_resolution_invalid_confidence():
+    """Test TickerResolution rejects invalid confidence values"""
+    with pytest.raises(ValueError):
+        TickerResolution(
+            original_query="test",
+            resolved_ticker="TEST",
+            display_name="Test",
+            confidence="very_high",  # Invalid value
+            candidates=[],
+            resolution_method="direct_ticker",
+            source="test"
+        )
+
+
+def test_ticker_resolution_invalid_method():
+    """Test TickerResolution rejects invalid resolution_method values"""
+    with pytest.raises(ValueError):
+        TickerResolution(
+            original_query="test",
+            resolved_ticker="TEST",
+            display_name="Test",
+            confidence="high",
+            candidates=[],
+            resolution_method="invalid_method",  # Invalid value
+            source="test"
+        )
