@@ -23,6 +23,10 @@ from src.pipelines.deep_dive import DeepDivePipeline
 from src.pipelines.daily_report import DailyReportPipeline
 from src.pipelines.portfolio import PortfolioPipeline
 from src.llm.provider import LLMProvider
+from src.providers.naver import NaverProvider
+from src.tools.screener.universe import UniverseBuilder
+from src.tools.screener.evidence import EvidenceCollector
+from src.pipelines.screener import ScreenerPipeline
 
 app = typer.Typer(help="Invest Jarvis - Financial Analysis CLI")
 console = Console()
@@ -390,6 +394,65 @@ def portfolio(
     pipeline = PortfolioPipeline(None, None, None)
     output = pipeline.format_output(result)
     console.print(Markdown(output))
+
+
+async def run_screen(market: str) -> dict:
+    """Run screener pipeline."""
+    naver_provider = NaverProvider()
+    kis_provider = None
+
+    kis_key = os.getenv("KIS_APP_KEY")
+    kis_secret = os.getenv("KIS_APP_SECRET")
+    if kis_key and kis_secret:
+        kis_provider = KISProvider(app_key=kis_key, app_secret=kis_secret)
+
+    yf_provider = YFinanceProvider()
+    news_tool = NewsTool()
+
+    universe_builder = UniverseBuilder(
+        naver_provider=naver_provider,
+        kis_provider=kis_provider,
+        yf_provider=yf_provider,
+    )
+    evidence_collector = EvidenceCollector(
+        kis_provider=kis_provider,
+        yf_provider=yf_provider,
+    )
+    pipeline = ScreenerPipeline(
+        universe_builder=universe_builder,
+        evidence_collector=evidence_collector,
+        news_tool=news_tool,
+    )
+
+    return await pipeline.run(market)
+
+
+@app.command()
+def screen(
+    market: str = typer.Option("all", "--market", "-m", help="kr, us, or all"),
+):
+    """Scan market for leading stocks and themes."""
+    console.print(f"[bold]Scanning {market} market...[/bold]\n")
+
+    try:
+        result = asyncio.run(run_screen(market))
+
+        # Format and display
+        pipeline = ScreenerPipeline(
+            universe_builder=None,
+            evidence_collector=None,
+            news_tool=None,
+        )
+        output = pipeline.format_output(result)
+        console.print(Markdown(output))
+
+        # Save report
+        report_path = pipeline.save_report(result)
+        console.print(f"\n[green]Report saved to {report_path}[/green]")
+
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
 
 
 if __name__ == "__main__":
