@@ -65,20 +65,38 @@ class DeepDivePipeline:
         self, technical_data: TechnicalResult
     ) -> TechnicalSummaryOutput:
         """Generate LLM summary of technical analysis."""
-        strategies = [
-            {
-                "name": s.name,
-                "status": s.status,
-                "confidence": s.confidence,
-                "signals": s.signals,
-                "evidence": s.evidence,
-                "metrics": s.metrics,
-            }
-            for s in technical_data.strategies
-        ]
+        # Support both old (strategies) and new (components) formats
+        if technical_data.strategies:
+            # Legacy strategy-based format
+            strategies = [
+                {
+                    "name": s.name,
+                    "status": s.status,
+                    "confidence": s.confidence,
+                    "signals": s.signals,
+                    "evidence": s.evidence,
+                    "metrics": s.metrics,
+                }
+                for s in technical_data.strategies
+            ]
+        else:
+            # New component-based format
+            strategies = [
+                {
+                    "name": name,
+                    "status": "N/A",
+                    "confidence": 0,
+                    "signals": comp["signals"],
+                    "evidence": comp["evidence"],
+                    "metrics": comp["metrics"],
+                }
+                for name, comp in technical_data.components.items()
+            ]
+
+        # Get snapshot from either indicators or snapshot field
+        snapshot = technical_data.indicators or technical_data.snapshot
 
         indicators = {}
-        snapshot = technical_data.indicators
         if snapshot.sma_20:
             indicators["sma_20"] = snapshot.sma_20
         if snapshot.sma_50:
@@ -89,7 +107,7 @@ class DeepDivePipeline:
             indicators["macd"] = snapshot.macd
 
         input_data = TechnicalSummaryInput(
-            ticker=technical_data.ticker,
+            ticker=technical_data.ticker or "UNKNOWN",
             price=snapshot.price,
             change_pct=snapshot.change_pct,
             strategies=strategies,

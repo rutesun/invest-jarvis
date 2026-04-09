@@ -13,7 +13,7 @@ load_dotenv()
 from src.core.config import load_config
 from src.providers.yfinance_provider import YFinanceProvider
 from src.providers.kis import KISProvider
-from src.tools.technical.registry import StrategyRegistry
+from src.tools.technical.scorer import TechnicalScorer
 from src.tools.technical.tool import TechnicalAnalysisTool
 from src.tools.macro import MacroTool
 from src.tools.news import NewsTool
@@ -46,10 +46,9 @@ def main(
 
 async def run_quick_check(ticker: str) -> dict:
     """Run quick check pipeline."""
-    config = load_config()
     provider = YFinanceProvider()
-    registry = StrategyRegistry.from_config(config.technical.strategies)
-    tool = TechnicalAnalysisTool(provider=provider, registry=registry)
+    scorer = TechnicalScorer()
+    tool = TechnicalAnalysisTool(provider=provider, scorer=scorer)
     pipeline = QuickCheckPipeline(technical_tool=tool)
     return await pipeline.run(ticker)
 
@@ -81,10 +80,9 @@ async def run_deep_dive(ticker: str, provider: str) -> dict:
     if not api_key:
         raise ValueError(f"Missing {api_key_env} environment variable")
 
-    config = load_config()
     yf_provider = YFinanceProvider()
-    registry = StrategyRegistry.from_config(config.technical.strategies)
-    technical_tool = TechnicalAnalysisTool(provider=yf_provider, registry=registry)
+    scorer = TechnicalScorer()
+    technical_tool = TechnicalAnalysisTool(provider=yf_provider, scorer=scorer)
     news_tool = NewsTool()
     llm = LLMProvider.create(
         provider=provider,
@@ -111,15 +109,90 @@ def format_deep_dive_output(result: dict) -> str:
 
     output = f"# Deep Dive Analysis: {ticker}\n\n"
 
-    output += f"## Price: ${technical.indicators.price:.2f} ({technical.indicators.change_pct:+.2f}%)\n\n"
+    # Support both old (indicators) and new (snapshot) field
+    snapshot = technical.indicators or technical.snapshot
+    output += f"## 가격: ${snapshot.price:.2f} ({snapshot.change_pct:+.2f}%)\n\n"
 
-    output += "## Technical Analysis\n\n"
-    output += f"**Summary**: {tech_summary.summary}\n\n"
-    output += f"**Recommendation**: {tech_summary.recommendation} (신뢰도: {tech_summary.confidence * 100:.0f}%)\n\n"
-    output += f"**Rationale**: {tech_summary.rationale}\n\n"
+    # Raw technical indicators
+    output += "### 기술적 지표\n\n"
+
+    # Moving averages
+    if snapshot.sma_20:
+        output += f"- **20일 이동평균선**: ${snapshot.sma_20:.2f}\n"
+    if snapshot.sma_50:
+        output += f"- **50일 이동평균선**: ${snapshot.sma_50:.2f}\n"
+    if snapshot.sma_150:
+        output += f"- **150일 이동평균선**: ${snapshot.sma_150:.2f}\n"
+    if snapshot.sma_200:
+        output += f"- **200일 이동평균선**: ${snapshot.sma_200:.2f}\n"
+
+    output += "\n"
+
+    # Momentum indicators
+    if snapshot.rsi:
+        output += f"- **RSI (14일)**: {snapshot.rsi:.1f}\n"
+    if snapshot.crsi:
+        output += f"- **Cycle RSI**: {snapshot.crsi:.1f}"
+        if snapshot.crsi_high_band and snapshot.crsi_low_band:
+            output += f" (밴드: {snapshot.crsi_low_band:.1f} - {snapshot.crsi_high_band:.1f})"
+        output += "\n"
+    if snapshot.macd:
+        output += f"- **MACD**: {snapshot.macd:.2f}"
+        if snapshot.macd_signal:
+            output += f" (시그널: {snapshot.macd_signal:.2f})"
+        output += "\n"
+
+    output += "\n"
+
+    # Trend strength
+    if snapshot.adx:
+        output += f"- **ADX (추세 강도)**: {snapshot.adx:.1f}\n"
+
+    # Supertrend
+    if snapshot.supertrend_direction is not None:
+        direction = "상승" if snapshot.supertrend_direction == 1 else "하락"
+        output += f"- **Supertrend**: {direction}"
+
+        # Get supertrend value and calculate distance from current price
+        if technical.components and "supertrend" in technical.components:
+            supertrend_metrics = technical.components["supertrend"]["metrics"]
+            if "supertrend_value" in supertrend_metrics:
+                st_value = supertrend_metrics["supertrend_value"]
+                output += f" (라인: ${st_value:.2f})"
+
+                # Calculate distance
+                distance = ((snapshot.price - st_value) / st_value) * 100
+                if abs(distance) > 0.1:
+                    output += f", 현재가 대비 {distance:+.2f}%"
+
+        output += "\n"
+
+    output += "\n"
+
+    # Support/Resistance
+    if snapshot.pivot:
+        output += f"- **피봇 포인트**: ${snapshot.pivot:.2f}\n"
+    if snapshot.support_s1:
+        output += f"- **지지선 S1**: ${snapshot.support_s1:.2f}\n"
+    if snapshot.resistance_r1:
+        output += f"- **저항선 R1**: ${snapshot.resistance_r1:.2f}\n"
+
+    # 52-week high/low
+    if snapshot.high_52w:
+        output += f"- **52주 최고가**: ${snapshot.high_52w:.2f}\n"
+    if snapshot.low_52w:
+        output += f"- **52주 최저가**: ${snapshot.low_52w:.2f}\n"
+
+    output += "\n"
+
+    output += "### 종합 분석\n\n"
+    output += f"**총점**: {technical.total_score}\n\n"
+    output += f"**요약**: {tech_summary.summary}\n\n"
+    output += f"**추천**: {tech_summary.recommendation} (신뢰도: {tech_summary.confidence * 100:.0f}%)\n\n"
+    output += f"**근거**: {tech_summary.rationale}\n\n"
 
     if tech_summary.key_insights:
-        output += "**Key Insights**:\n"
+        output += "**핵심 인사이트**:\n"
         for insight in tech_summary.key_insights:
             output += f"- {insight}\n"
         output += "\n"
@@ -167,10 +240,9 @@ async def run_daily_report(tickers: list[str], provider: str) -> dict:
     if not api_key:
         raise ValueError(f"Missing {api_key_env} environment variable")
 
-    config = load_config()
     yf_provider = YFinanceProvider()
-    registry = StrategyRegistry.from_config(config.technical.strategies)
-    technical_tool = TechnicalAnalysisTool(provider=yf_provider, registry=registry)
+    scorer = TechnicalScorer()
+    technical_tool = TechnicalAnalysisTool(provider=yf_provider, scorer=scorer)
     macro_tool = MacroTool()
     llm = LLMProvider.create(
         provider=provider,
@@ -220,15 +292,22 @@ def format_daily_report_output(result: dict) -> str:
             continue
 
         if technical:
-            price = technical.indicators.price
-            change_pct = technical.indicators.change_pct
-            assessment = technical.overall_assessment
-            confidence = technical.confidence_score
+            # Support both old (indicators) and new (snapshot) field
+            snapshot = technical.indicators or technical.snapshot
+            price = snapshot.price
+            change_pct = snapshot.change_pct
 
             output += f"**Price**: ${price:.2f} ({change_pct:+.2f}%)\n"
-            output += f"**Assessment**: {assessment} (신뢰도: {confidence:.0f}%)\n"
+            output += f"**Total Score**: {technical.total_score}\n"
 
-            if technical.key_insights:
+            # Collect signals from components (new format) or key_insights (old format)
+            if technical.components:
+                all_signals = []
+                for comp in technical.components.values():
+                    all_signals.extend(comp.get("signals", []))
+                if all_signals:
+                    output += f"**Signals**: {', '.join(all_signals[:5])}\n"  # Limit to 5
+            elif technical.key_insights:
                 output += f"**Signals**: {', '.join(technical.key_insights)}\n"
 
             if technical.warnings:
@@ -269,7 +348,6 @@ def report(
 
 async def run_portfolio_monitoring() -> dict:
     """Run portfolio monitoring."""
-    config = load_config()
     kis_provider = KISProvider(
         app_key=os.getenv("KIS_APP_KEY"),
         app_secret=os.getenv("KIS_APP_SECRET"),
@@ -277,8 +355,8 @@ async def run_portfolio_monitoring() -> dict:
     yf_provider = YFinanceProvider()
 
     portfolio_tool = PortfolioTool(provider=kis_provider)
-    registry = StrategyRegistry.from_config(config.technical.strategies)
-    technical_tool = TechnicalAnalysisTool(provider=yf_provider, registry=registry)
+    scorer = TechnicalScorer()
+    technical_tool = TechnicalAnalysisTool(provider=yf_provider, scorer=scorer)
     news_tool = NewsTool()
 
     pipeline = PortfolioPipeline(

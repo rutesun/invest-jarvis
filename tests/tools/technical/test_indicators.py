@@ -38,3 +38,45 @@ def test_create_snapshot(sample_df):
     assert isinstance(snapshot, IndicatorSnapshot)
     assert snapshot.price > 0
     assert snapshot.sma_20 is not None or snapshot.sma_20 is None
+
+
+def test_extended_indicators(sample_df):
+    calculator = IndicatorCalculator()
+    result_df = calculator.calculate(sample_df)
+
+    assert "SMA_150" in result_df.columns
+    assert "cRSI" in result_df.columns
+    assert "cRSI_HighBand" in result_df.columns
+    assert "cRSI_LowBand" in result_df.columns
+    assert "Vol_SMA_20" in result_df.columns
+    assert "Vol_SMA_50" in result_df.columns
+    assert "Vol_SMA_120" in result_df.columns
+    assert "Swing_High" in result_df.columns
+    assert "Swing_Low" in result_df.columns
+    assert "Is_Gap_Up" in result_df.columns
+    assert "Is_Gap_Down" in result_df.columns
+    assert "MACD_5_35_5" in result_df.columns
+
+
+def test_crsi_calculation(sample_df):
+    calculator = IndicatorCalculator()
+    result_df = calculator.calculate(sample_df)
+
+    crsi_values = result_df["cRSI"].dropna()
+    if len(crsi_values) > 0:
+        assert crsi_values.min() >= 0
+        assert crsi_values.max() <= 100
+
+
+def test_extended_snapshot(sample_df):
+    calculator = IndicatorCalculator()
+    result_df = calculator.calculate(sample_df)
+    snapshot = calculator.create_snapshot(result_df)
+
+    # New fields should be populated or None (depending on data length)
+    assert hasattr(snapshot, "sma_150")
+    assert hasattr(snapshot, "crsi")
+    assert hasattr(snapshot, "vol_sma_20")
+    assert hasattr(snapshot, "swing_high")
+    assert hasattr(snapshot, "is_gap_up")
+    assert hasattr(snapshot, "macd_fast")
