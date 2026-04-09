@@ -56,16 +56,12 @@ jarvis portfolio
 
 ### 요구사항
 - Python 3.12+
-- uv (권장) 또는 pip
+- uv
 
 ### 의존성 설치
 
 ```bash
-# uv 사용 (권장)
 uv sync
-
-# 또는 pip 사용
-pip install -e .
 ```
 
 ---
