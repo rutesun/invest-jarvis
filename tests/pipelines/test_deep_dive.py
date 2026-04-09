@@ -15,10 +15,14 @@ from datetime import datetime
 @pytest.fixture
 def mock_technical_tool():
     tool = AsyncMock()
+    snapshot = IndicatorSnapshot(price=178.50, change_pct=2.5)
     tech_result = TechnicalResult(
         ticker="AAPL",
         timestamp=datetime.now(),
-        indicators=IndicatorSnapshot(price=178.50, change_pct=2.5),
+        snapshot=snapshot,
+        indicators=snapshot,
+        components={},
+        total_score=75,
         strategies=[
             StrategyResult(
                 name="trend",

@@ -1,0 +1,25 @@
+# Static mapping for Korean company names to English
+korean_to_english:
+  # 한국 주식
+  삼성전자: Samsung Electronics
+  삼성: Samsung Electronics
+  SK하이닉스: SK Hynix
+  현대차: Hyundai Motor
+  현대자동차: Hyundai Motor
+  LG전자: LG Electronics
+  네이버: Naver
+  카카오: Kakao
+  셀트리온: Celltrion
+  포스코: POSCO
+
+  # 미국 주식
+  애플: Apple
+  구글: Google
+  알파벳: Alphabet
+  마이크로소프트: Microsoft
+  테슬라: Tesla
+  아마존: Amazon
+  메타: Meta
+  페이스북: Meta
+  넷플릭스: Netflix
+  엔비디아: NVIDIA

@@ -29,7 +29,10 @@ def mock_technical_tool():
     tech_result = TechnicalResult(
         ticker="AAPL",
         timestamp=datetime.now(),
+        snapshot=indicators,
         indicators=indicators,
+        components={},
+        total_score=75,
         strategies=[strategy],
         overall_assessment="매수",
         confidence_score=75.0,

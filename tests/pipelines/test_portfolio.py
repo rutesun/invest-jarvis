@@ -28,10 +28,14 @@ def mock_technical_tool():
     from src.tools.technical.models import IndicatorSnapshot, StrategyResult, TechnicalResult
     from datetime import datetime
 
+    snapshot = IndicatorSnapshot(price=70000, change_pct=1.5)
     tech_result = TechnicalResult(
         ticker="005930",
         timestamp=datetime.now(),
-        indicators=IndicatorSnapshot(price=70000, change_pct=1.5),
+        snapshot=snapshot,
+        indicators=snapshot,
+        components={},
+        total_score=75,
         strategies=[
             StrategyResult(
                 name="trend",

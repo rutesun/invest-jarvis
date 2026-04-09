@@ -34,16 +34,20 @@ def mock_technical_tool():
     tool = AsyncMock(spec=TechnicalAnalysisTool)
 
     def create_technical_result(ticker: str):
+        snapshot = IndicatorSnapshot(
+            price=178.50 if ticker == "AAPL" else 450.00,
+            change_pct=2.5 if ticker == "AAPL" else -1.2,
+            sma_20=175.0,
+            sma_50=170.0,
+            rsi=58.3,
+        )
         return TechnicalResult(
             ticker=ticker,
             timestamp=datetime.now(),
-            indicators=IndicatorSnapshot(
-                price=178.50 if ticker == "AAPL" else 450.00,
-                change_pct=2.5 if ticker == "AAPL" else -1.2,
-                sma_20=175.0,
-                sma_50=170.0,
-                rsi=58.3,
-            ),
+            snapshot=snapshot,
+            indicators=snapshot,
+            components={},
+            total_score=75,
             strategies=[
                 StrategyResult(
                     name="trend",
@@ -129,12 +133,16 @@ async def test_daily_report_pipeline_technical_failure(
             return ToolResult(
                 success=False, data=None, error="Failed to fetch AAPL data"
             )
+        snapshot = IndicatorSnapshot(price=450.0, change_pct=-1.2)
         return ToolResult(
             success=True,
             data=TechnicalResult(
                 ticker=ticker,
                 timestamp=datetime.now(),
-                indicators=IndicatorSnapshot(price=450.0, change_pct=-1.2),
+                snapshot=snapshot,
+                indicators=snapshot,
+                components={},
+                total_score=50,
                 strategies=[],
                 overall_assessment="중립",
                 confidence_score=50.0,
