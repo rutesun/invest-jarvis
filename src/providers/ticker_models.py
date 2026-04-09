@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -27,3 +28,12 @@ class TickerResolution(BaseModel):
         "yfinance_search_multiple"
     ]
     source: str
+
+
+class CachedMapping(BaseModel):
+    """User cached ticker mapping"""
+    ticker: str
+    display_name: str
+    created_at: datetime
+    last_used: datetime
+    use_count: int = Field(ge=1)

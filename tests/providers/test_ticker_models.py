@@ -1,5 +1,7 @@
+from datetime import datetime
+
 import pytest
-from src.providers.ticker_models import CandidateTicker, TickerResolution
+from src.providers.ticker_models import CachedMapping, CandidateTicker, TickerResolution
 
 
 def test_candidate_ticker_creation():
@@ -81,3 +83,19 @@ def test_ticker_resolution_with_candidates():
 
     assert len(resolution.candidates) == 2
     assert resolution.confidence == "low"
+
+
+def test_cached_mapping_creation():
+    """Test CachedMapping model creation"""
+    now = datetime.now()
+    mapping = CachedMapping(
+        ticker="AAPL",
+        display_name="Apple Inc.",
+        created_at=now,
+        last_used=now,
+        use_count=1
+    )
+
+    assert mapping.ticker == "AAPL"
+    assert mapping.display_name == "Apple Inc."
+    assert mapping.use_count == 1
