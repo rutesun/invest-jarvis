@@ -2,6 +2,14 @@ from datetime import datetime
 from pydantic import BaseModel
 
 
+class ComponentResult(BaseModel):
+    """Result from a technical analysis component."""
+    signals: list[str]
+    evidence: list[str]
+    metrics: dict[str, float]
+    score: int
+
+
 class IndicatorSnapshot(BaseModel):
     """Raw indicator values snapshot."""
 
@@ -14,6 +22,7 @@ class IndicatorSnapshot(BaseModel):
     sma_20: float | None = None
     sma_50: float | None = None
     sma_120: float | None = None
+    sma_150: float | None = None
     sma_200: float | None = None
 
     # Momentum
@@ -43,6 +52,29 @@ class IndicatorSnapshot(BaseModel):
     high_52w: float | None = None
     low_52w: float | None = None
 
+    # Cycle RSI
+    crsi: float | None = None
+    crsi_high_band: float | None = None
+    crsi_low_band: float | None = None
+
+    # Volume
+    vol_sma_20: float | None = None
+    vol_sma_50: float | None = None
+    vol_sma_120: float | None = None
+
+    # Swing Points
+    swing_high: float | None = None
+    swing_low: float | None = None
+
+    # Gap
+    is_gap_up: bool | None = None
+    is_gap_down: bool | None = None
+
+    # Fast MACD (5/35/5)
+    macd_fast: float | None = None
+    macd_fast_signal: float | None = None
+    macd_fast_histogram: float | None = None
+
 
 class StrategyResult(BaseModel):
     """Single strategy execution result."""
@@ -58,17 +90,16 @@ class StrategyResult(BaseModel):
 class TechnicalResult(BaseModel):
     """Complete technical analysis result."""
 
-    ticker: str
+    ticker: str | None
     timestamp: datetime
+    snapshot: IndicatorSnapshot
+    components: dict[str, dict]
+    total_score: int = 0
 
-    # Raw indicators
-    indicators: IndicatorSnapshot
-
-    # Strategy results
-    strategies: list[StrategyResult]
-
-    # Summary
-    overall_assessment: str
-    confidence_score: float
-    key_insights: list[str]
-    warnings: list[str]
+    # Legacy fields for backward compatibility
+    indicators: IndicatorSnapshot | None = None
+    strategies: list[StrategyResult] | None = None
+    overall_assessment: str | None = None
+    confidence_score: float | None = None
+    key_insights: list[str] | None = None
+    warnings: list[str] | None = None

@@ -4,6 +4,7 @@ from src.tools.technical.models import (
     IndicatorSnapshot,
     StrategyResult,
     TechnicalResult,
+    ComponentResult,
 )
 
 
@@ -46,6 +47,8 @@ def test_technical_result():
     result = TechnicalResult(
         ticker="AAPL",
         timestamp=datetime.now(),
+        snapshot=indicators,
+        components={},
         indicators=indicators,
         strategies=[strategy],
         overall_assessment="매수",
@@ -56,3 +59,52 @@ def test_technical_result():
     assert result.ticker == "AAPL"
     assert result.overall_assessment == "매수"
     assert len(result.strategies) == 1
+
+
+def test_component_result():
+    result = ComponentResult(
+        signals=["Stage 2"],
+        evidence=["Price > SMA_150 > SMA_200"],
+        metrics={"sma_150": 175.0},
+        score=40,
+    )
+    assert result.score == 40
+    assert len(result.signals) == 1
+
+
+def test_indicator_snapshot_extended_fields():
+    snapshot = IndicatorSnapshot(
+        price=178.50,
+        change_pct=2.5,
+        sma_150=172.0,
+        crsi=65.0,
+        crsi_high_band=80.0,
+        crsi_low_band=20.0,
+        vol_sma_20=1500000.0,
+        swing_high=180.0,
+        swing_low=170.0,
+        is_gap_up=False,
+        is_gap_down=False,
+        macd_fast=1.5,
+    )
+    assert snapshot.sma_150 == 172.0
+    assert snapshot.crsi == 65.0
+    assert snapshot.vol_sma_20 == 1500000.0
+
+
+def test_technical_result_total_score():
+    snapshot = IndicatorSnapshot(price=178.50, change_pct=2.5)
+    result = TechnicalResult(
+        ticker="AAPL",
+        timestamp=datetime.now(),
+        snapshot=snapshot,
+        components={},
+        indicators=snapshot,
+        strategies=[],
+        overall_assessment="매수",
+        confidence_score=75.0,
+        key_insights=[],
+        warnings=[],
+        total_score=65,
+    )
+    assert result.total_score == 65

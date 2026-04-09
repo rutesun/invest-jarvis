@@ -3,8 +3,7 @@ import pandas as pd
 import numpy as np
 from unittest.mock import AsyncMock, MagicMock
 from src.tools.technical.tool import TechnicalAnalysisTool
-from src.tools.technical.registry import StrategyRegistry
-from src.tools.technical.strategies.trend import TrendStrategy
+from src.tools.technical.scorer import TechnicalScorer
 
 
 @pytest.fixture
@@ -23,27 +22,28 @@ def mock_provider():
 
 
 @pytest.fixture
-def registry():
-    reg = StrategyRegistry()
-    reg.register(TrendStrategy())
-    return reg
+def scorer():
+    return TechnicalScorer()
 
 
 @pytest.mark.asyncio
-async def test_technical_tool_execute(mock_provider, registry):
-    tool = TechnicalAnalysisTool(provider=mock_provider, registry=registry)
+async def test_technical_tool_execute(mock_provider, scorer):
+    tool = TechnicalAnalysisTool(provider=mock_provider, scorer=scorer)
     result = await tool.execute("AAPL")
 
     assert result.success is True
     assert result.data is not None
     assert result.data.ticker == "AAPL"
-    assert len(result.data.strategies) == 1
+    assert result.data.components is not None
+    assert len(result.data.components) > 0
 
 
 @pytest.mark.asyncio
-async def test_technical_tool_has_indicators(mock_provider, registry):
-    tool = TechnicalAnalysisTool(provider=mock_provider, registry=registry)
+async def test_technical_tool_has_indicators(mock_provider, scorer):
+    tool = TechnicalAnalysisTool(provider=mock_provider, scorer=scorer)
     result = await tool.execute("AAPL")
 
-    assert result.data.indicators.price > 0
-    assert result.data.indicators.sma_20 is not None
+    # Support both old (indicators) and new (snapshot) fields
+    snapshot = result.data.indicators or result.data.snapshot
+    assert snapshot.price > 0
+    assert snapshot.sma_20 is not None
