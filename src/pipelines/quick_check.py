@@ -40,6 +40,7 @@ class QuickCheckPipeline:
                     "name": name,
                     "score": comp.get("score", 0),
                     "signals": comp.get("signals", []),
+                    "evidence": comp.get("evidence", []),
                 })
         elif tech.strategies:
             components_list = [
@@ -101,6 +102,10 @@ class QuickCheckPipeline:
                     if comp.get("signals"):
                         for sig in comp["signals"][:3]:  # Top 3 signals per component
                             lines.append(f"  - {sig}")
+                    if comp.get("evidence"):
+                        lines.append(f"  근거:")
+                        for ev in comp["evidence"][:5]:  # Top 5 evidence per component
+                            lines.append(f"  - {ev}")
                 else:  # Legacy format
                     lines.append(f"- **{comp['name']}**: {comp.get('status', 'N/A')} ({comp.get('confidence', 0):.0f}%)")
             lines.append("")
