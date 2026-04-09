@@ -148,6 +148,27 @@ def format_deep_dive_output(result: dict) -> str:
     if snapshot.adx:
         output += f"- **ADX (추세 강도)**: {snapshot.adx:.1f}\n"
 
+    # Supertrend
+    if snapshot.supertrend_direction is not None:
+        direction = "상승" if snapshot.supertrend_direction == 1 else "하락"
+        output += f"- **Supertrend**: {direction}"
+
+        # Get supertrend value and calculate distance from current price
+        if technical.components and "supertrend" in technical.components:
+            supertrend_metrics = technical.components["supertrend"]["metrics"]
+            if "supertrend_value" in supertrend_metrics:
+                st_value = supertrend_metrics["supertrend_value"]
+                output += f" (라인: ${st_value:.2f})"
+
+                # Calculate distance
+                distance = ((snapshot.price - st_value) / st_value) * 100
+                if abs(distance) > 0.1:
+                    output += f", 현재가 대비 {distance:+.2f}%"
+
+        output += "\n"
+
+    output += "\n"
+
     # Support/Resistance
     if snapshot.pivot:
         output += f"- **피봇 포인트**: ${snapshot.pivot:.2f}\n"

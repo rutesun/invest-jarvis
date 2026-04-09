@@ -1,6 +1,7 @@
 import pandas as pd
 import pandas_ta as ta
 import numpy as np
+from scipy.signal import argrelextrema
 from src.tools.technical.models import IndicatorSnapshot
 
 
@@ -85,13 +86,23 @@ class IndicatorCalculator:
         df["Vol_SMA_50"] = ta.sma(df["Volume"], length=50)
         df["Vol_SMA_120"] = ta.sma(df["Volume"], length=120)
 
-        # Swing High/Low (11-bar window, 5 on each side)
-        df["Swing_High"] = df["High"].where(
-            df["High"] == df["High"].rolling(window=11, center=True).max()
-        )
-        df["Swing_Low"] = df["Low"].where(
-            df["Low"] == df["Low"].rolling(window=11, center=True).min()
-        )
+        # Swing High/Low using scipy.signal.argrelextrema for accurate peak detection
+        # order=5 means comparing with 5 points on each side (11-bar window total)
+        df["Swing_High"] = np.nan
+        df["Swing_Low"] = np.nan
+
+        if len(df) >= 11:  # Need minimum data for order=5
+            # Find local maxima (swing highs)
+            high_values = df["High"].values
+            swing_high_idx = argrelextrema(high_values, np.greater, order=5)[0]
+            if len(swing_high_idx) > 0:
+                df.loc[df.index[swing_high_idx], "Swing_High"] = df.iloc[swing_high_idx]["High"].values
+
+            # Find local minima (swing lows)
+            low_values = df["Low"].values
+            swing_low_idx = argrelextrema(low_values, np.less, order=5)[0]
+            if len(swing_low_idx) > 0:
+                df.loc[df.index[swing_low_idx], "Swing_Low"] = df.iloc[swing_low_idx]["Low"].values
 
         # Gap detection
         prev_high = df["High"].shift(1)
