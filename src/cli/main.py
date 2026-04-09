@@ -22,7 +22,7 @@ from src.pipelines.quick_check import QuickCheckPipeline
 from src.pipelines.deep_dive import DeepDivePipeline
 from src.pipelines.daily_report import DailyReportPipeline
 from src.pipelines.portfolio import PortfolioPipeline
-from src.llm.client import LLMClient
+from src.llm.provider import LLMProvider
 
 app = typer.Typer(help="Invest Jarvis - Financial Analysis CLI")
 console = Console()
@@ -86,12 +86,17 @@ async def run_deep_dive(ticker: str, provider: str) -> dict:
     registry = StrategyRegistry.from_config(config.technical.strategies)
     technical_tool = TechnicalAnalysisTool(provider=yf_provider, registry=registry)
     news_tool = NewsTool()
-    llm_client = LLMClient(provider=provider, api_key=api_key, base_url=base_url)
+    llm = LLMProvider.create(
+        provider=provider,
+        api_key=api_key,
+        base_url=base_url,
+        temperature=0,
+    )
 
     pipeline = DeepDivePipeline(
         technical_tool=technical_tool,
         news_tool=news_tool,
-        llm_client=llm_client,
+        llm=llm,
     )
 
     return await pipeline.run(ticker)
@@ -167,12 +172,17 @@ async def run_daily_report(tickers: list[str], provider: str) -> dict:
     registry = StrategyRegistry.from_config(config.technical.strategies)
     technical_tool = TechnicalAnalysisTool(provider=yf_provider, registry=registry)
     macro_tool = MacroTool()
-    llm_client = LLMClient(provider=provider, api_key=api_key, base_url=base_url)
+    llm = LLMProvider.create(
+        provider=provider,
+        api_key=api_key,
+        base_url=base_url,
+        temperature=0,
+    )
 
     pipeline = DailyReportPipeline(
         macro_tool=macro_tool,
         technical_tool=technical_tool,
-        llm_client=llm_client,
+        llm=llm,
     )
 
     return await pipeline.run(tickers)

@@ -5,7 +5,6 @@ from src.pipelines.daily_report import DailyReportPipeline
 from src.tools.macro import MacroTool, MacroSnapshot
 from src.tools.technical.tool import TechnicalAnalysisTool
 from src.tools.technical.models import TechnicalResult, IndicatorSnapshot, StrategyResult
-from src.llm.client import LLMClient
 from src.core.models import ToolResult
 
 
@@ -69,18 +68,19 @@ def mock_technical_tool():
 
 
 @pytest.fixture
-def mock_llm_client():
-    return AsyncMock(spec=LLMClient)
+def mock_llm():
+    """Mock LangChain chat model."""
+    return AsyncMock()
 
 
 @pytest.mark.asyncio
 async def test_daily_report_pipeline_success(
-    mock_macro_tool, mock_technical_tool, mock_llm_client
+    mock_macro_tool, mock_technical_tool, mock_llm
 ):
     pipeline = DailyReportPipeline(
         macro_tool=mock_macro_tool,
         technical_tool=mock_technical_tool,
-        llm_client=mock_llm_client,
+        llm=mock_llm,
     )
 
     result = await pipeline.run(tickers=["AAPL", "MSFT"])
@@ -104,7 +104,7 @@ async def test_daily_report_pipeline_success(
 
 @pytest.mark.asyncio
 async def test_daily_report_pipeline_macro_failure(
-    mock_macro_tool, mock_technical_tool, mock_llm_client
+    mock_macro_tool, mock_technical_tool, mock_llm
 ):
     mock_macro_tool.execute.return_value = ToolResult(
         success=False, data=None, error="Failed to fetch macro data"
@@ -113,7 +113,7 @@ async def test_daily_report_pipeline_macro_failure(
     pipeline = DailyReportPipeline(
         macro_tool=mock_macro_tool,
         technical_tool=mock_technical_tool,
-        llm_client=mock_llm_client,
+        llm=mock_llm,
     )
 
     with pytest.raises(RuntimeError, match="Macro snapshot failed"):
@@ -122,7 +122,7 @@ async def test_daily_report_pipeline_macro_failure(
 
 @pytest.mark.asyncio
 async def test_daily_report_pipeline_technical_failure(
-    mock_macro_tool, mock_technical_tool, mock_llm_client
+    mock_macro_tool, mock_technical_tool, mock_llm
 ):
     async def execute_mock_with_failure(ticker: str):
         if ticker == "AAPL":
@@ -148,7 +148,7 @@ async def test_daily_report_pipeline_technical_failure(
     pipeline = DailyReportPipeline(
         macro_tool=mock_macro_tool,
         technical_tool=mock_technical_tool,
-        llm_client=mock_llm_client,
+        llm=mock_llm,
     )
 
     result = await pipeline.run(tickers=["AAPL", "MSFT"])
@@ -163,12 +163,12 @@ async def test_daily_report_pipeline_technical_failure(
 
 @pytest.mark.asyncio
 async def test_daily_report_pipeline_empty_tickers(
-    mock_macro_tool, mock_technical_tool, mock_llm_client
+    mock_macro_tool, mock_technical_tool, mock_llm
 ):
     pipeline = DailyReportPipeline(
         macro_tool=mock_macro_tool,
         technical_tool=mock_technical_tool,
-        llm_client=mock_llm_client,
+        llm=mock_llm,
     )
 
     result = await pipeline.run(tickers=[])

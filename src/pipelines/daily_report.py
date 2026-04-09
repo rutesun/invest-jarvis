@@ -1,8 +1,8 @@
 from datetime import datetime
+from langchain_core.language_models import BaseChatModel
 from src.tools.macro import MacroTool, MacroSnapshot
 from src.tools.technical.tool import TechnicalAnalysisTool
 from src.tools.technical.models import TechnicalResult
-from src.llm.client import LLMClient
 
 
 class DailyReportPipeline:
@@ -12,11 +12,11 @@ class DailyReportPipeline:
         self,
         macro_tool: MacroTool,
         technical_tool: TechnicalAnalysisTool,
-        llm_client: LLMClient,
+        llm: BaseChatModel,
     ):
         self.macro_tool = macro_tool
         self.technical_tool = technical_tool
-        self.llm = llm_client
+        self.llm = llm
 
     async def run(self, tickers: list[str]) -> dict:
         """Run daily market report for multiple tickers.

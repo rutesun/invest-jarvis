@@ -1,7 +1,8 @@
+from langchain_core.language_models import BaseChatModel
 from src.tools.technical.tool import TechnicalAnalysisTool
 from src.tools.news import NewsTool, NewsArticle
 from src.tools.technical.models import TechnicalResult
-from src.llm.client import LLMClient
+from src.llm import analyzer
 from src.llm.models import (
     TechnicalSummaryInput,
     TechnicalSummaryOutput,
@@ -17,11 +18,11 @@ class DeepDivePipeline:
         self,
         technical_tool: TechnicalAnalysisTool,
         news_tool: NewsTool,
-        llm_client: LLMClient,
+        llm: BaseChatModel,
     ):
         self.technical_tool = technical_tool
         self.news_tool = news_tool
-        self.llm = llm_client
+        self.llm = llm
 
     async def run(self, ticker: str) -> dict:
         """Run deep dive analysis for a ticker.
@@ -95,7 +96,7 @@ class DeepDivePipeline:
             indicators=indicators,
         )
 
-        return await self.llm.generate_technical_summary(input_data)
+        return await analyzer.generate_technical_summary(input_data, self.llm)
 
     async def _analyze_news(
         self, ticker: str, news_articles: list[NewsArticle]
@@ -117,4 +118,4 @@ class DeepDivePipeline:
             news=news_data,
         )
 
-        return await self.llm.analyze_news(input_data)
+        return await analyzer.analyze_news(input_data, self.llm)

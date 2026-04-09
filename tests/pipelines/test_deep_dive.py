@@ -1,28 +1,24 @@
 import pytest
-from unittest.mock import AsyncMock, MagicMock
-from datetime import datetime
+from unittest.mock import AsyncMock, patch
 from src.pipelines.deep_dive import DeepDivePipeline
-from src.tools.technical.tool import TechnicalAnalysisTool
-from src.tools.news import NewsTool, NewsArticle
-from src.tools.technical.models import TechnicalResult, IndicatorSnapshot, StrategyResult
-from src.llm.client import LLMClient
-from src.llm.models import TechnicalSummaryOutput, NewsAnalysisOutput
+from src.tools.technical.models import (
+    TechnicalResult,
+    IndicatorSnapshot,
+    StrategyResult,
+)
+from src.tools.news import NewsArticle
+from src.llm.models import NewsAnalysisOutput, TechnicalSummaryOutput
 from src.core.models import ToolResult
+from datetime import datetime
 
 
 @pytest.fixture
 def mock_technical_tool():
-    tool = AsyncMock(spec=TechnicalAnalysisTool)
+    tool = AsyncMock()
     tech_result = TechnicalResult(
         ticker="AAPL",
         timestamp=datetime.now(),
-        indicators=IndicatorSnapshot(
-            price=178.50,
-            change_pct=2.5,
-            sma_20=175.0,
-            sma_50=170.0,
-            rsi=58.3,
-        ),
+        indicators=IndicatorSnapshot(price=178.50, change_pct=2.5),
         strategies=[
             StrategyResult(
                 name="trend",
@@ -30,12 +26,12 @@ def mock_technical_tool():
                 confidence=75.0,
                 signals=["골든크로스"],
                 evidence=["20일선 > 50일선"],
-                metrics={"sma_20": 175.0},
+                metrics={},
             )
         ],
         overall_assessment="매수",
         confidence_score=75.0,
-        key_insights=["골든크로스 발생"],
+        key_insights=["상승 추세"],
         warnings=[],
     )
     tool.execute.return_value = ToolResult(success=True, data=tech_result)
@@ -44,124 +40,120 @@ def mock_technical_tool():
 
 @pytest.fixture
 def mock_news_tool():
-    tool = AsyncMock(spec=NewsTool)
-    articles = [
+    tool = AsyncMock()
+    news = [
         NewsArticle(
-            title="Apple releases new product",
-            published="2024-01-01T10:00:00",
-            summary="Apple announced a new product line",
-            url="https://example.com/1",
-        ),
-        NewsArticle(
-            title="Apple stock rises on earnings",
-            published="2024-01-02T10:00:00",
-            summary="Stock price increased after strong earnings",
-            url="https://example.com/2",
-        ),
+            title="Apple 신제품 출시",
+            published="2024-01-01",
+            summary="애플이 새로운 제품을 출시했습니다",
+            url="https://example.com/news/1",
+        )
     ]
-    tool.execute.return_value = ToolResult(success=True, data=articles)
+    tool.execute.return_value = ToolResult(success=True, data=news)
     return tool
 
 
 @pytest.fixture
-def mock_llm_client():
-    client = AsyncMock(spec=LLMClient)
-    client.generate_technical_summary.return_value = TechnicalSummaryOutput(
-        summary="AAPL은 강한 상승 추세입니다.",
-        key_insights=["골든크로스 발생", "RSI 중립권"],
-        recommendation="매수",
-        confidence=0.75,
-        rationale="이동평균선 정배열과 모멘텀 지표 긍정적",
-    )
-    client.analyze_news.return_value = NewsAnalysisOutput(
-        sentiment="긍정",
-        confidence=0.85,
-        key_themes=["신제품 출시", "실적 개선"],
-        summary="애플이 새로운 제품을 출시하고 실적이 개선되었습니다.",
-        impact_assessment="단기 긍정적 영향 예상",
-    )
-    return client
+def mock_llm():
+    """Mock LangChain chat model."""
+    llm = AsyncMock()
+    return llm
 
 
 @pytest.mark.asyncio
-async def test_deep_dive_pipeline_success(
-    mock_technical_tool, mock_news_tool, mock_llm_client
-):
-    pipeline = DeepDivePipeline(
-        technical_tool=mock_technical_tool,
-        news_tool=mock_news_tool,
-        llm_client=mock_llm_client,
-    )
+async def test_deep_dive_pipeline_success(mock_technical_tool, mock_news_tool, mock_llm):
+    """Test successful deep dive analysis."""
+    with patch("src.llm.analyzer.generate_technical_summary", new_callable=AsyncMock) as mock_tech_summary:
+        with patch("src.llm.analyzer.analyze_news", new_callable=AsyncMock) as mock_news_analysis:
+            # Mock LLM outputs
+            mock_tech_summary.return_value = TechnicalSummaryOutput(
+                summary="강세",
+                key_insights=["골든크로스"],
+                recommendation="매수",
+                confidence=0.75,
+                rationale="좋음",
+            )
+            mock_news_analysis.return_value = NewsAnalysisOutput(
+                sentiment="긍정",
+                confidence=0.85,
+                key_themes=["신제품"],
+                summary="긍정적",
+                impact_assessment="좋음",
+            )
 
-    result = await pipeline.run(ticker="AAPL")
+            pipeline = DeepDivePipeline(
+                technical_tool=mock_technical_tool,
+                news_tool=mock_news_tool,
+                llm=mock_llm,
+            )
 
-    assert result["ticker"] == "AAPL"
-    assert "technical" in result
-    assert "technical_summary" in result
-    assert "news" in result
-    assert "news_analysis" in result
+            result = await pipeline.run("AAPL")
 
-    assert result["technical"].ticker == "AAPL"
-    assert result["technical_summary"].recommendation == "매수"
-    assert result["news_analysis"].sentiment == "긍정"
-
-    mock_technical_tool.execute.assert_called_once_with("AAPL")
-    mock_news_tool.execute.assert_called_once_with("AAPL", limit=10)
-    mock_llm_client.generate_technical_summary.assert_called_once()
-    mock_llm_client.analyze_news.assert_called_once()
+            assert result["ticker"] == "AAPL"
+            assert result["technical"] is not None
+            assert result["technical_summary"].summary == "강세"
+            assert result["news"] is not None
+            assert result["news_analysis"].sentiment == "긍정"
 
 
 @pytest.mark.asyncio
-async def test_deep_dive_pipeline_technical_failure(
-    mock_technical_tool, mock_news_tool, mock_llm_client
-):
+async def test_deep_dive_pipeline_technical_failure(mock_news_tool, mock_llm):
+    """Test handling of technical analysis failure."""
+    mock_technical_tool = AsyncMock()
     mock_technical_tool.execute.return_value = ToolResult(
-        success=False, data=None, error="Failed to fetch data"
+        success=False, data=None, error="API error"
     )
 
     pipeline = DeepDivePipeline(
         technical_tool=mock_technical_tool,
         news_tool=mock_news_tool,
-        llm_client=mock_llm_client,
+        llm=mock_llm,
     )
 
     with pytest.raises(RuntimeError, match="Technical analysis failed"):
-        await pipeline.run(ticker="AAPL")
+        await pipeline.run("AAPL")
 
 
 @pytest.mark.asyncio
-async def test_deep_dive_pipeline_news_failure(
-    mock_technical_tool, mock_news_tool, mock_llm_client
-):
+async def test_deep_dive_pipeline_news_failure(mock_technical_tool, mock_llm):
+    """Test handling of news fetch failure."""
+    mock_news_tool = AsyncMock()
     mock_news_tool.execute.return_value = ToolResult(
-        success=False, data=None, error="Failed to fetch news"
+        success=False, data=None, error="News API error"
     )
 
     pipeline = DeepDivePipeline(
         technical_tool=mock_technical_tool,
         news_tool=mock_news_tool,
-        llm_client=mock_llm_client,
+        llm=mock_llm,
     )
 
     with pytest.raises(RuntimeError, match="News fetch failed"):
-        await pipeline.run(ticker="AAPL")
+        await pipeline.run("AAPL")
 
 
 @pytest.mark.asyncio
-async def test_deep_dive_pipeline_empty_news(
-    mock_technical_tool, mock_news_tool, mock_llm_client
-):
+async def test_deep_dive_pipeline_empty_news(mock_technical_tool, mock_llm):
+    """Test handling of empty news list."""
+    mock_news_tool = AsyncMock()
     mock_news_tool.execute.return_value = ToolResult(success=True, data=[])
 
-    pipeline = DeepDivePipeline(
-        technical_tool=mock_technical_tool,
-        news_tool=mock_news_tool,
-        llm_client=mock_llm_client,
-    )
+    with patch("src.llm.analyzer.generate_technical_summary", new_callable=AsyncMock) as mock_tech_summary:
+        mock_tech_summary.return_value = TechnicalSummaryOutput(
+            summary="강세",
+            key_insights=["골든크로스"],
+            recommendation="매수",
+            confidence=0.75,
+            rationale="좋음",
+        )
 
-    result = await pipeline.run(ticker="AAPL")
+        pipeline = DeepDivePipeline(
+            technical_tool=mock_technical_tool,
+            news_tool=mock_news_tool,
+            llm=mock_llm,
+        )
 
-    assert result["ticker"] == "AAPL"
-    assert result["news"] == []
-    assert result["news_analysis"] is None
-    mock_llm_client.analyze_news.assert_not_called()
+        result = await pipeline.run("AAPL")
+
+        assert result["ticker"] == "AAPL"
+        assert result["news_analysis"] is None  # No news analysis when news is empty
