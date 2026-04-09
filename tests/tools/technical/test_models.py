@@ -47,6 +47,8 @@ def test_technical_result():
     result = TechnicalResult(
         ticker="AAPL",
         timestamp=datetime.now(),
+        snapshot=indicators,
+        components={},
         indicators=indicators,
         strategies=[strategy],
         overall_assessment="매수",
@@ -91,10 +93,13 @@ def test_indicator_snapshot_extended_fields():
 
 
 def test_technical_result_total_score():
+    snapshot = IndicatorSnapshot(price=178.50, change_pct=2.5)
     result = TechnicalResult(
         ticker="AAPL",
         timestamp=datetime.now(),
-        indicators=IndicatorSnapshot(price=178.50, change_pct=2.5),
+        snapshot=snapshot,
+        components={},
+        indicators=snapshot,
         strategies=[],
         overall_assessment="매수",
         confidence_score=75.0,
