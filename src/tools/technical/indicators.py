@@ -80,8 +80,13 @@ class IndicatorCalculator:
         if df.empty:
             return IndicatorSnapshot(price=0, change_pct=0)
 
-        latest = df.iloc[-1]
-        prev_close = df.iloc[-2]["Close"] if len(df) > 1 else latest["Close"]
+        # Drop rows with NaN Close values to get valid latest data
+        df_clean = df.dropna(subset=["Close"])
+        if df_clean.empty:
+            return IndicatorSnapshot(price=0, change_pct=0)
+
+        latest = df_clean.iloc[-1]
+        prev_close = df_clean.iloc[-2]["Close"] if len(df_clean) > 1 else latest["Close"]
         change_pct = ((latest["Close"] - prev_close) / prev_close) * 100
 
         def safe_get(key: str) -> float | None:

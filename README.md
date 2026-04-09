@@ -61,8 +61,16 @@ jarvis portfolio
 ### 의존성 설치
 
 ```bash
-uv sync
+# 개발 모드 설치 (권장)
+uv sync --all-extras
+
+# jarvis 명령어 설치 (선택)
+uv tool install -e .
 ```
+
+설치 후 두 가지 방법으로 실행 가능:
+- `uv run jarvis` - uv를 통해 실행
+- `jarvis` - PATH에 설치된 명령어 (uv tool install 후)
 
 ---
 
@@ -117,27 +125,27 @@ cache:
 
 ```bash
 # 버전 확인
-jarvis --version
+uv run jarvis --version
 
 # 도움말
-jarvis --help
-jarvis check --help
+uv run jarvis --help
+uv run jarvis check --help
 
 # 빠른 체크 (LLM 불필요)
-jarvis check AAPL
-jarvis check MSFT
-jarvis check 005930  # 삼성전자
+uv run jarvis check AAPL
+uv run jarvis check MSFT
+uv run jarvis check 005930  # 삼성전자
 
 # 심층 분석 (LLM 필요)
-jarvis analyze AAPL
-jarvis analyze TSLA --provider anthropic
+uv run jarvis analyze AAPL
+uv run jarvis analyze TSLA --provider anthropic
 
 # 일일 리포트 (LLM 필요)
-jarvis report
-jarvis report --tickers=AAPL,GOOGL,META
+uv run jarvis report
+uv run jarvis report --tickers=AAPL,GOOGL,META
 
 # 포트폴리오 (KIS API 필요)
-jarvis portfolio
+uv run jarvis portfolio
 ```
 
 ### Claude Code Skills
