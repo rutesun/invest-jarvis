@@ -52,3 +52,33 @@ class TechnicalSummaryOutput(BaseModel):
     recommendation: str  # "매수", "매도", "중립"
     confidence: float  # 0-1
     rationale: str
+
+
+# Fundamental Summary I/O
+class FundamentalSummaryInput(BaseModel):
+    """Input for fundamental summary."""
+    ticker: str
+    sector: str | None
+    industry: str | None
+    pe_ratio: float | None
+    forward_pe: float | None
+    peg_ratio: float | None
+    ev_ebitda: float | None
+    ps_ratio: float | None
+    roe: float | None
+    revenue_growth: float | None
+    earnings_growth: float | None
+    debt_to_equity: float | None
+    free_cash_flow: float | None
+    fcf_yield: float | None
+    gross_margin: float | None
+    operating_margin: float | None
+
+
+class FundamentalSummaryOutput(BaseModel):
+    """Output from fundamental summary."""
+    summary: str
+    strengths: list[str]
+    weaknesses: list[str]
+    valuation_assessment: str  # "저평가", "적정", "고평가"
+    confidence: float  # 0-1

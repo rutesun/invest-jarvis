@@ -1,5 +1,7 @@
 import pytest
 from src.llm.models import (
+    FundamentalSummaryInput,
+    FundamentalSummaryOutput,
     LLMRequest,
     LLMResponse,
     NewsAnalysisInput,
@@ -90,3 +92,66 @@ def test_technical_summary_output():
     )
     assert output.summary == "AAPL은 강한 상승 추세입니다."
     assert output.recommendation == "매수"
+
+
+def test_fundamental_summary_input():
+    input_data = FundamentalSummaryInput(
+        ticker="AAPL",
+        sector="Technology",
+        industry="Consumer Electronics",
+        pe_ratio=28.5,
+        forward_pe=25.3,
+        peg_ratio=2.1,
+        ev_ebitda=20.5,
+        ps_ratio=7.2,
+        roe=0.48,
+        revenue_growth=0.12,
+        earnings_growth=0.15,
+        debt_to_equity=1.8,
+        free_cash_flow=95_000_000_000,
+        fcf_yield=0.045,
+        gross_margin=0.42,
+        operating_margin=0.28,
+    )
+    assert input_data.ticker == "AAPL"
+    assert input_data.pe_ratio == 28.5
+    assert input_data.roe == 0.48
+
+
+def test_fundamental_summary_input_with_nulls():
+    input_data = FundamentalSummaryInput(
+        ticker="XYZ",
+        sector=None,
+        industry=None,
+        pe_ratio=None,
+        forward_pe=None,
+        peg_ratio=None,
+        ev_ebitda=None,
+        ps_ratio=None,
+        roe=None,
+        revenue_growth=None,
+        earnings_growth=None,
+        debt_to_equity=None,
+        free_cash_flow=None,
+        fcf_yield=None,
+        gross_margin=None,
+        operating_margin=None,
+    )
+    assert input_data.ticker == "XYZ"
+    assert input_data.sector is None
+    assert input_data.pe_ratio is None
+
+
+def test_fundamental_summary_output():
+    output = FundamentalSummaryOutput(
+        summary="AAPL은 강한 재무 건전성을 보유하고 있습니다.",
+        strengths=["높은 ROE", "강한 현금 흐름", "꾸준한 성장"],
+        weaknesses=["높은 밸류에이션", "시장 포화"],
+        valuation_assessment="적정",
+        confidence=0.82,
+    )
+    assert output.summary == "AAPL은 강한 재무 건전성을 보유하고 있습니다."
+    assert len(output.strengths) == 3
+    assert len(output.weaknesses) == 2
+    assert output.valuation_assessment == "적정"
+    assert output.confidence == 0.82
