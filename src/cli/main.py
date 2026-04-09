@@ -13,7 +13,7 @@ load_dotenv()
 from src.core.config import load_config
 from src.providers.yfinance_provider import YFinanceProvider
 from src.providers.kis import KISProvider
-from src.tools.technical.registry import StrategyRegistry
+from src.tools.technical.scorer import TechnicalScorer
 from src.tools.technical.tool import TechnicalAnalysisTool
 from src.tools.macro import MacroTool
 from src.tools.news import NewsTool
@@ -46,10 +46,9 @@ def main(
 
 async def run_quick_check(ticker: str) -> dict:
     """Run quick check pipeline."""
-    config = load_config()
     provider = YFinanceProvider()
-    registry = StrategyRegistry.from_config(config.technical.strategies)
-    tool = TechnicalAnalysisTool(provider=provider, registry=registry)
+    scorer = TechnicalScorer()
+    tool = TechnicalAnalysisTool(provider=provider, scorer=scorer)
     pipeline = QuickCheckPipeline(technical_tool=tool)
     return await pipeline.run(ticker)
 
@@ -81,10 +80,9 @@ async def run_deep_dive(ticker: str, provider: str) -> dict:
     if not api_key:
         raise ValueError(f"Missing {api_key_env} environment variable")
 
-    config = load_config()
     yf_provider = YFinanceProvider()
-    registry = StrategyRegistry.from_config(config.technical.strategies)
-    technical_tool = TechnicalAnalysisTool(provider=yf_provider, registry=registry)
+    scorer = TechnicalScorer()
+    technical_tool = TechnicalAnalysisTool(provider=yf_provider, scorer=scorer)
     news_tool = NewsTool()
     llm = LLMProvider.create(
         provider=provider,
@@ -111,9 +109,12 @@ def format_deep_dive_output(result: dict) -> str:
 
     output = f"# Deep Dive Analysis: {ticker}\n\n"
 
-    output += f"## Price: ${technical.indicators.price:.2f} ({technical.indicators.change_pct:+.2f}%)\n\n"
+    # Support both old (indicators) and new (snapshot) field
+    snapshot = technical.indicators or technical.snapshot
+    output += f"## Price: ${snapshot.price:.2f} ({snapshot.change_pct:+.2f}%)\n\n"
 
     output += "## Technical Analysis\n\n"
+    output += f"**Total Score**: {technical.total_score}\n\n"
     output += f"**Summary**: {tech_summary.summary}\n\n"
     output += f"**Recommendation**: {tech_summary.recommendation} (신뢰도: {tech_summary.confidence * 100:.0f}%)\n\n"
     output += f"**Rationale**: {tech_summary.rationale}\n\n"
@@ -167,10 +168,9 @@ async def run_daily_report(tickers: list[str], provider: str) -> dict:
     if not api_key:
         raise ValueError(f"Missing {api_key_env} environment variable")
 
-    config = load_config()
     yf_provider = YFinanceProvider()
-    registry = StrategyRegistry.from_config(config.technical.strategies)
-    technical_tool = TechnicalAnalysisTool(provider=yf_provider, registry=registry)
+    scorer = TechnicalScorer()
+    technical_tool = TechnicalAnalysisTool(provider=yf_provider, scorer=scorer)
     macro_tool = MacroTool()
     llm = LLMProvider.create(
         provider=provider,
@@ -220,15 +220,22 @@ def format_daily_report_output(result: dict) -> str:
             continue
 
         if technical:
-            price = technical.indicators.price
-            change_pct = technical.indicators.change_pct
-            assessment = technical.overall_assessment
-            confidence = technical.confidence_score
+            # Support both old (indicators) and new (snapshot) field
+            snapshot = technical.indicators or technical.snapshot
+            price = snapshot.price
+            change_pct = snapshot.change_pct
 
             output += f"**Price**: ${price:.2f} ({change_pct:+.2f}%)\n"
-            output += f"**Assessment**: {assessment} (신뢰도: {confidence:.0f}%)\n"
+            output += f"**Total Score**: {technical.total_score}\n"
 
-            if technical.key_insights:
+            # Collect signals from components (new format) or key_insights (old format)
+            if technical.components:
+                all_signals = []
+                for comp in technical.components.values():
+                    all_signals.extend(comp.get("signals", []))
+                if all_signals:
+                    output += f"**Signals**: {', '.join(all_signals[:5])}\n"  # Limit to 5
+            elif technical.key_insights:
                 output += f"**Signals**: {', '.join(technical.key_insights)}\n"
 
             if technical.warnings:
@@ -269,7 +276,6 @@ def report(
 
 async def run_portfolio_monitoring() -> dict:
     """Run portfolio monitoring."""
-    config = load_config()
     kis_provider = KISProvider(
         app_key=os.getenv("KIS_APP_KEY"),
         app_secret=os.getenv("KIS_APP_SECRET"),
@@ -277,8 +283,8 @@ async def run_portfolio_monitoring() -> dict:
     yf_provider = YFinanceProvider()
 
     portfolio_tool = PortfolioTool(provider=kis_provider)
-    registry = StrategyRegistry.from_config(config.technical.strategies)
-    technical_tool = TechnicalAnalysisTool(provider=yf_provider, registry=registry)
+    scorer = TechnicalScorer()
+    technical_tool = TechnicalAnalysisTool(provider=yf_provider, scorer=scorer)
     news_tool = NewsTool()
 
     pipeline = PortfolioPipeline(
