@@ -1,0 +1,347 @@
+# Invest-Jarvis
+
+금융 투자 분석을 지원하는 CLI 도구 및 Claude Code 스킬 기반 에이전트
+
+## 주요 기능
+
+### 1. 빠른 기술적 분석 (Quick Check)
+```bash
+jarvis check AAPL
+jarvis check 005930  # 한국 주식
+```
+- 실시간 가격 및 변동률
+- 5개 전략 기반 기술적 분석 (Trend, Oscillator, Divergence, Disparity, Risk)
+- 이동평균선, RSI, MACD, ADX 등 주요 지표
+- LLM 없이 빠른 응답
+
+### 2. LLM 기반 심층 분석 (Deep Dive)
+```bash
+jarvis analyze AAPL
+```
+- 기술적 분석 + LLM 해석
+- 최근 뉴스 감성 분석
+- 투자 추천 및 근거 제시
+- OpenAI/Anthropic 지원
+
+### 3. 일일 시장 리포트 (Daily Report)
+```bash
+jarvis report
+jarvis report --tickers=AAPL,MSFT,NVDA
+```
+- 매크로 지표 스냅샷 (VIX, Fear & Greed, WTI, 금리, DXY)
+- 다중 종목 기술적 분석
+- 시장 전반 요약
+
+### 4. 포트폴리오 모니터링
+```bash
+jarvis portfolio
+```
+- 보유 종목 현황 (KIS API 연동)
+- 각 종목별 기술적 분석
+- 최근 뉴스 요약
+- 수익률 추적
+
+### 5. Claude Code Skills
+```
+/invest-check AAPL
+/invest-analyze AAPL
+/invest-report
+```
+- Claude Code에서 대화형으로 사용 가능
+- CLI 명령어를 가벼운 스킬로 래핑
+
+---
+
+## 설치
+
+### 요구사항
+- Python 3.12+
+- uv (권장) 또는 pip
+
+### 의존성 설치
+
+```bash
+# uv 사용 (권장)
+uv sync
+
+# 또는 pip 사용
+pip install -e .
+```
+
+---
+
+## 설정
+
+### 1. 환경 변수 설정
+
+`.env` 파일 생성:
+
+```bash
+cp .env.example .env
+```
+
+`.env` 파일 편집:
+
+```bash
+# LLM API Keys (analyze, report 명령어에 필요)
+OPENAI_API_KEY=sk-...
+# 또는
+ANTHROPIC_API_KEY=sk-ant-...
+
+# KIS API (한국 주식, portfolio 명령어에 필요)
+KIS_APP_KEY=...
+KIS_APP_SECRET=...
+KIS_ACCOUNT_NO=...
+```
+
+### 2. 전략 설정 (선택)
+
+`config.yaml` 편집:
+
+```yaml
+technical:
+  strategies:
+    - trend
+    - oscillator
+    - divergence
+    - disparity
+    - risk
+
+cache:
+  quote_ttl: 60        # 1분
+  history_ttl: 300     # 5분
+  indicators_ttl: 300  # 5분
+```
+
+---
+
+## 사용법
+
+### CLI 명령어
+
+```bash
+# 버전 확인
+jarvis --version
+
+# 도움말
+jarvis --help
+jarvis check --help
+
+# 빠른 체크 (LLM 불필요)
+jarvis check AAPL
+jarvis check MSFT
+jarvis check 005930  # 삼성전자
+
+# 심층 분석 (LLM 필요)
+jarvis analyze AAPL
+jarvis analyze TSLA --provider anthropic
+
+# 일일 리포트 (LLM 필요)
+jarvis report
+jarvis report --tickers=AAPL,GOOGL,META
+
+# 포트폴리오 (KIS API 필요)
+jarvis portfolio
+```
+
+### Claude Code Skills
+
+Claude Code에서 대화형으로 사용:
+
+```
+나: AAPL 주가 체크해줘
+Claude: /invest-check AAPL
+
+나: AAPL 심층 분석해줘
+Claude: /invest-analyze AAPL
+
+나: 오늘 시장 리포트 만들어줘
+Claude: /invest-report
+```
+
+---
+
+## 아키텍처
+
+### 레이어 구조
+
+```
+┌─────────────────────────────────────┐
+│     CLI / Claude Code Skills        │
+├─────────────────────────────────────┤
+│   Pipelines (Quick, Deep, Report)   │
+├─────────────────────────────────────┤
+│   Tools (Technical, News, Macro)    │
+├─────────────────────────────────────┤
+│   Providers (YFinance, KIS)         │
+├─────────────────────────────────────┤
+│   Storage (Cache)                   │
+└─────────────────────────────────────┘
+```
+
+### 주요 컴포넌트
+
+**Providers** - 데이터 소스 래퍼
+- `YFinanceProvider`: 미국 주식 데이터
+- `KISProvider`: 한국 주식 데이터 (KIS API)
+
+**Tools** - 분석 도구
+- `TechnicalAnalysisTool`: 5개 전략 기반 기술 분석
+- `MacroTool`: 매크로 지표 (VIX, Fear & Greed, 금리 등)
+- `NewsTool`: 뉴스 수집
+- `PortfolioTool`: 포트폴리오 조회
+
+**Strategies** - 기술적 분석 전략
+- `TrendStrategy`: 이동평균선, ADX, Supertrend
+- `OscillatorStrategy`: RSI, Stochastic, CCI
+- `DivergenceStrategy`: 가격-지표 다이버전스
+- `DisparityStrategy`: 이격도 분석
+- `RiskStrategy`: 변동성 및 리스크 평가
+
+**Pipelines** - 워크플로우
+- `QuickCheckPipeline`: 빠른 기술 분석 (LLM 불필요)
+- `DeepDivePipeline`: 기술 + 뉴스 + LLM 해석
+- `DailyReportPipeline`: 매크로 + 다중 종목 분석
+- `PortfolioPipeline`: 포트폴리오 모니터링
+
+**LLM Client** - AI 분석
+- OpenAI (GPT-4)
+- Anthropic (Claude)
+- 재현 가능한 파라미터 (temperature=0, seed=42)
+
+---
+
+## 개발
+
+### 테스트 실행
+
+```bash
+# 전체 유닛 테스트
+uv run pytest tests/ -v --ignore=tests/integration
+
+# 특정 모듈 테스트
+uv run pytest tests/tools/technical/ -v
+
+# 통합 테스트 (API 키 필요)
+export OPENAI_API_KEY=sk-...
+uv run pytest tests/integration/ -v -m integration
+
+# 커버리지 포함
+uv run pytest tests/ --cov=src --cov-report=html
+```
+
+### 새 전략 추가
+
+1. `src/tools/technical/strategies/` 에 새 전략 클래스 작성
+2. `BaseStrategy` 상속 및 `analyze()` 메서드 구현
+3. `src/tools/technical/registry.py`의 `STRATEGY_MAP`에 추가
+4. `config.yaml`의 `strategies` 리스트에 추가
+5. 테스트 작성 및 실행
+
+예시:
+```python
+# src/tools/technical/strategies/my_strategy.py
+from src.tools.technical.base import BaseStrategy
+from src.tools.technical.models import StrategyResult
+
+class MyStrategy(BaseStrategy):
+    name = "my_strategy"
+    description = "My custom strategy"
+    
+    def analyze(self, df: pd.DataFrame) -> StrategyResult:
+        # 분석 로직
+        return StrategyResult(...)
+```
+
+### 코드 스타일
+
+- 타입 힌트 사용
+- Pydantic 모델로 데이터 검증
+- TDD 방식 (테스트 먼저 작성)
+- 영어 코드, 한글 주석 가능
+
+---
+
+## 프로젝트 구조
+
+```
+invest-jarvis/
+├── src/
+│   ├── core/              # 핵심 인터페이스 및 설정
+│   ├── providers/         # 데이터 제공자 (yfinance, KIS)
+│   ├── tools/            # 분석 도구
+│   │   └── technical/    # 기술적 분석 (전략, 지표)
+│   ├── storage/          # 캐시
+│   ├── llm/              # LLM 클라이언트
+│   ├── pipelines/        # 파이프라인
+│   └── cli/              # CLI 진입점
+├── skills/               # Claude Code 스킬
+├── tests/                # 테스트
+├── config.yaml           # 설정 파일
+├── pyproject.toml        # 프로젝트 메타데이터
+└── .env.example          # 환경 변수 템플릿
+```
+
+---
+
+## API 키 발급
+
+### OpenAI API
+1. https://platform.openai.com/api-keys 접속
+2. "Create new secret key" 클릭
+3. 키 복사 후 `.env`에 저장
+
+### Anthropic API
+1. https://console.anthropic.com/settings/keys 접속
+2. "Create Key" 클릭
+3. 키 복사 후 `.env`에 저장
+
+### KIS API (한국투자증권)
+1. KIS Developers (https://apiportal.koreainvestment.com) 가입
+2. 앱 등록 후 APP Key/Secret 발급
+3. `.env`에 저장
+
+---
+
+## 버전 히스토리
+
+### v0.3.0 (2026-04-09)
+- 한국 주식 지원 (KIS API)
+- 포트폴리오 모니터링
+- Claude Code Skills
+
+### v0.2.0 (2026-04-09)
+- LLM 기반 분석 (OpenAI/Anthropic)
+- 4개 전략 추가 (총 5개)
+- Macro/News 도구
+- Deep Dive/Daily Report 파이프라인
+
+### v0.1.0 (2026-04-08)
+- Core 인터페이스 및 YFinance provider
+- Technical 분석 (Trend 전략)
+- Quick Check 파이프라인
+- CLI `check` 명령어
+
+---
+
+## 라이선스
+
+MIT
+
+---
+
+## 기여
+
+이슈 및 풀 리퀘스트 환영합니다!
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'feat: add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+---
+
+## 문의
+
+이슈 트래커: https://github.com/your-username/invest-jarvis/issues
