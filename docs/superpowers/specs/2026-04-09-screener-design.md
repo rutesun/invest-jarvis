@@ -203,21 +203,23 @@ class UniverseStock(BaseModel):
 
 **위치:** `src/tools/screener/scoring.py`
 
-### 6.1 5개 팩터
+### 6.1 4개 스코어링 팩터 + 1개 수집 전용
 
-**1. Accumulation Score (수급) — 0~10**
+**1. Accumulation Score (수급) — 0~15**
 - KIS 투자자 동향 API로 최근 10일 외국인+기관 순매수 조회
 - positive_days = 순매수 > 0인 날 수
-- net_sum > 0이면 score = positive_days, 아니면 0
+- net_sum > 0이면 score = positive_days × 1.5, 아니면 0
 - US 종목은 이 팩터 스킵 (데이터 없음)
 
-**2. Up Days Score (상승일수) — 0~10**
+**2. Up Days (상승일수) — 수집만, 스코어링 불포함**
 - OHLCV에서 Close > Open인 날 수 (최근 10일)
+- ScreenerEvidence에 필드로 기록하되, total_score에 합산하지 않음
+- 참고 지표로만 활용
 
-**3. Volume Burst Score (거래량 급증) — 0~3**
+**3. Volume Burst Score (거래량 급증) — 0~8**
 - vol_ratio = 당일 거래량 / 20일 평균 거래량
-- score = clamp(vol_ratio - 2.5, 0, 3.0)
-- ratio < 2.5이면 0점
+- score = clamp(vol_ratio - 1.5, 0, 8.0)
+- ratio < 1.5이면 0점
 
 **4. Source Diversity Bonus (소스 다양성) — 0~10**
 - 가중치: theme=1.0, volume_rank=1.5, rise_rank=1.0, kis_rank=1.5
