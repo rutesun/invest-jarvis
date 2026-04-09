@@ -75,3 +75,32 @@ async def test_resolve_cache_updates_usage():
 
         updated_count = resolver.user_cache.get('Tesla').use_count
         assert updated_count == initial_count + 1
+
+
+@pytest.mark.asyncio
+async def test_resolve_yfinance_search():
+    """Test resolution using yfinance search"""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        cache_path = Path(tmpdir) / "user_mappings.yaml"
+        resolver = TickerResolver(user_cache_path=cache_path)
+
+        result = await resolver.resolve('Apple')
+
+        assert result.resolved_ticker == 'AAPL'
+        assert result.resolution_method in ['yfinance_search_single', 'yfinance_search_multiple']
+        assert 'Apple' in result.display_name
+
+
+@pytest.mark.asyncio
+async def test_resolve_korean_with_static_mapping():
+    """Test resolution with Korean name using static mapping"""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        cache_path = Path(tmpdir) / "user_mappings.yaml"
+        resolver = TickerResolver(user_cache_path=cache_path)
+
+        result = await resolver.resolve('구글')
+
+        # yfinance may return GOOG or GOOGL depending on search ranking
+        assert result.resolved_ticker in ['GOOG', 'GOOGL']
+        assert result.resolution_method in ['yfinance_search_single', 'yfinance_search_multiple']
+        assert result.original_query == '구글'
