@@ -1,4 +1,7 @@
 # tests/providers/test_ticker_resolver.py
+import tempfile
+from pathlib import Path
+
 import pytest
 from src.providers.ticker_resolver import TickerResolver
 
@@ -38,3 +41,37 @@ async def test_resolve_korean_ticker_normalization():
 
     assert result.resolved_ticker == "005930.KS"
     assert result.resolution_method == "direct_ticker"
+
+
+@pytest.mark.asyncio
+async def test_resolve_from_user_cache():
+    """Test resolution from user cache"""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        cache_path = Path(tmpdir) / "user_mappings.yaml"
+        resolver = TickerResolver(user_cache_path=cache_path)
+
+        # Pre-populate cache
+        resolver.user_cache.save('애플', 'AAPL', 'Apple Inc.')
+
+        result = await resolver.resolve('애플')
+
+        assert result.resolved_ticker == 'AAPL'
+        assert result.display_name == 'Apple Inc.'
+        assert result.resolution_method == 'user_cache'
+        assert result.confidence == 'high'
+
+
+@pytest.mark.asyncio
+async def test_resolve_cache_updates_usage():
+    """Test cache usage is updated on hit"""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        cache_path = Path(tmpdir) / "user_mappings.yaml"
+        resolver = TickerResolver(user_cache_path=cache_path)
+
+        resolver.user_cache.save('Tesla', 'TSLA', 'Tesla, Inc.')
+        initial_count = resolver.user_cache.get('Tesla').use_count
+
+        await resolver.resolve('Tesla')
+
+        updated_count = resolver.user_cache.get('Tesla').use_count
+        assert updated_count == initial_count + 1

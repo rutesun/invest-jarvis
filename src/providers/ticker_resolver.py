@@ -63,7 +63,21 @@ class TickerResolver:
                 source="user_input"
             )
 
-        # TODO: Step 2-4 in later tasks
+        # Step 2: User cache lookup
+        cached = self.user_cache.get(query)
+        if cached:
+            self.user_cache.update_usage(query)
+            return TickerResolution(
+                original_query=query,
+                resolved_ticker=cached.ticker,
+                display_name=cached.display_name,
+                confidence="high",
+                candidates=[],
+                resolution_method="user_cache",
+                source="user_cache"
+            )
+
+        # TODO: Step 3-4 in later tasks
         raise TickerNotFoundError(f"Could not resolve: {query}")
 
     def _is_direct_ticker(self, query: str) -> bool:
