@@ -16,12 +16,13 @@ def test_cli_check_command():
         "success": True,
         "price": 178.50,
         "change_pct": 2.5,
+        "total_score": 45,
         "assessment": "매수",
         "confidence": 75.0,
         "signals": ["골든크로스"],
         "warnings": [],
         "indicators": {"sma_20": 175.0, "sma_50": 170.0, "rsi": 58.3, "adx": 28.0},
-        "strategies": [],
+        "components": [],
     }
 
     with patch("src.cli.main.run_quick_check", new_callable=AsyncMock) as mock_run:
@@ -34,17 +35,27 @@ def test_cli_check_command():
 
 
 def test_cli_analyze_command():
-    mock_indicators = IndicatorSnapshot(
+    mock_snapshot = IndicatorSnapshot(
         price=178.50,
         change_pct=2.5,
         sma_20=175.0,
         sma_50=170.0,
         rsi=58.3,
     )
+    mock_components = {
+        "minervini": {"score": 20, "signals": ["골든크로스"], "evidence": [], "metrics": {}},
+        "velocity": {"score": 10, "signals": [], "evidence": [], "metrics": {}},
+        "crsi": {"score": 5, "signals": [], "evidence": [], "metrics": {}},
+        "volume": {"score": 5, "signals": [], "evidence": [], "metrics": {}},
+        "patterns": {"score": 5, "signals": [], "evidence": [], "metrics": {}},
+    }
     mock_technical = TechnicalResult(
         ticker="AAPL",
         timestamp=datetime.now(),
-        indicators=mock_indicators,
+        snapshot=mock_snapshot,
+        components=mock_components,
+        total_score=45,
+        indicators=mock_snapshot,
         strategies=[],
         overall_assessment="매수",
         confidence_score=75.0,
@@ -99,17 +110,27 @@ def test_cli_report_command():
         dxy_change=0.2,
     )
 
-    mock_indicators = IndicatorSnapshot(
+    mock_snapshot = IndicatorSnapshot(
         price=178.50,
         change_pct=2.5,
         sma_20=175.0,
         sma_50=170.0,
         rsi=58.3,
     )
+    mock_components = {
+        "minervini": {"score": 20, "signals": ["골든크로스"], "evidence": [], "metrics": {}},
+        "velocity": {"score": 10, "signals": [], "evidence": [], "metrics": {}},
+        "crsi": {"score": 5, "signals": [], "evidence": [], "metrics": {}},
+        "volume": {"score": 5, "signals": [], "evidence": [], "metrics": {}},
+        "patterns": {"score": 5, "signals": [], "evidence": [], "metrics": {}},
+    }
     mock_technical = TechnicalResult(
         ticker="AAPL",
         timestamp=datetime.now(),
-        indicators=mock_indicators,
+        snapshot=mock_snapshot,
+        components=mock_components,
+        total_score=45,
+        indicators=mock_snapshot,
         strategies=[],
         overall_assessment="매수",
         confidence_score=75.0,

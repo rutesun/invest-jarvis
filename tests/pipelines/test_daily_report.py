@@ -34,16 +34,27 @@ def mock_technical_tool():
     tool = AsyncMock(spec=TechnicalAnalysisTool)
 
     def create_technical_result(ticker: str):
+        snapshot = IndicatorSnapshot(
+            price=178.50 if ticker == "AAPL" else 450.00,
+            change_pct=2.5 if ticker == "AAPL" else -1.2,
+            sma_20=175.0,
+            sma_50=170.0,
+            rsi=58.3,
+        )
+        components = {
+            "minervini": {"score": 20, "signals": ["골든크로스" if ticker == "AAPL" else "데드크로스"], "evidence": ["20일선 > 50일선"], "metrics": {"sma_20": 175.0}},
+            "velocity": {"score": 10, "signals": [], "evidence": [], "metrics": {}},
+            "crsi": {"score": 5, "signals": [], "evidence": [], "metrics": {}},
+            "volume": {"score": 5, "signals": [], "evidence": [], "metrics": {}},
+            "patterns": {"score": 5, "signals": [], "evidence": [], "metrics": {}},
+        }
         return TechnicalResult(
             ticker=ticker,
             timestamp=datetime.now(),
-            indicators=IndicatorSnapshot(
-                price=178.50 if ticker == "AAPL" else 450.00,
-                change_pct=2.5 if ticker == "AAPL" else -1.2,
-                sma_20=175.0,
-                sma_50=170.0,
-                rsi=58.3,
-            ),
+            snapshot=snapshot,
+            components=components,
+            total_score=45 if ticker == "AAPL" else 30,
+            indicators=snapshot,
             strategies=[
                 StrategyResult(
                     name="trend",
@@ -129,12 +140,23 @@ async def test_daily_report_pipeline_technical_failure(
             return ToolResult(
                 success=False, data=None, error="Failed to fetch AAPL data"
             )
+        snapshot = IndicatorSnapshot(price=450.0, change_pct=-1.2)
+        components = {
+            "minervini": {"score": 0, "signals": [], "evidence": [], "metrics": {}},
+            "velocity": {"score": 0, "signals": [], "evidence": [], "metrics": {}},
+            "crsi": {"score": 0, "signals": [], "evidence": [], "metrics": {}},
+            "volume": {"score": 0, "signals": [], "evidence": [], "metrics": {}},
+            "patterns": {"score": 0, "signals": [], "evidence": [], "metrics": {}},
+        }
         return ToolResult(
             success=True,
             data=TechnicalResult(
                 ticker=ticker,
                 timestamp=datetime.now(),
-                indicators=IndicatorSnapshot(price=450.0, change_pct=-1.2),
+                snapshot=snapshot,
+                components=components,
+                total_score=0,
+                indicators=snapshot,
                 strategies=[],
                 overall_assessment="중립",
                 confidence_score=50.0,
