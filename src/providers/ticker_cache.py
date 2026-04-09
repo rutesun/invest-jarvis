@@ -73,3 +73,34 @@ class UserMappingCache:
     def get(self, query: str) -> Optional[CachedMapping]:
         """Get cached mapping if exists"""
         return self.mappings.get(query)
+
+    def save(self, query: str, ticker: str, display_name: str):
+        """Save new mapping or update existing"""
+        now = datetime.now()
+
+        if query in self.mappings:
+            # Update existing
+            mapping = self.mappings[query]
+            mapping.ticker = ticker
+            mapping.display_name = display_name
+            mapping.last_used = now
+            mapping.use_count += 1
+        else:
+            # Create new
+            self.mappings[query] = CachedMapping(
+                ticker=ticker,
+                display_name=display_name,
+                created_at=now,
+                last_used=now,
+                use_count=1
+            )
+
+        self._save()
+
+    def update_usage(self, query: str):
+        """Update last_used and increment use_count"""
+        if query in self.mappings:
+            mapping = self.mappings[query]
+            mapping.last_used = datetime.now()
+            mapping.use_count += 1
+            self._save()
