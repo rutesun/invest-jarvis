@@ -58,21 +58,21 @@ class TechnicalSummaryOutput(BaseModel):
 class FundamentalSummaryInput(BaseModel):
     """Input for fundamental summary."""
     ticker: str
-    sector: str | None
-    industry: str | None
-    pe_ratio: float | None
-    forward_pe: float | None
-    peg_ratio: float | None
-    ev_ebitda: float | None
-    ps_ratio: float | None
-    roe: float | None
-    revenue_growth: float | None
-    earnings_growth: float | None
-    debt_to_equity: float | None
-    free_cash_flow: float | None
-    fcf_yield: float | None
-    gross_margin: float | None
-    operating_margin: float | None
+    sector: str | None = None
+    industry: str | None = None
+    pe_ratio: float | None = None
+    forward_pe: float | None = None
+    peg_ratio: float | None = None
+    ev_ebitda: float | None = None
+    ps_ratio: float | None = None
+    roe: float | None = None
+    revenue_growth: float | None = None
+    earnings_growth: float | None = None
+    debt_to_equity: float | None = None
+    free_cash_flow: float | None = None
+    fcf_yield: float | None = None
+    gross_margin: float | None = None
+    operating_margin: float | None = None
 
 
 class FundamentalSummaryOutput(BaseModel):

@@ -118,18 +118,22 @@ async def generate_fundamental_summary(
 ) -> FundamentalSummaryOutput:
     """Generate fundamental analysis summary using LLM."""
     metrics_text = []
-    if input_data.pe_ratio: metrics_text.append(f"P/E: {input_data.pe_ratio:.1f}")
-    if input_data.forward_pe: metrics_text.append(f"Forward P/E: {input_data.forward_pe:.1f}")
-    if input_data.peg_ratio: metrics_text.append(f"PEG: {input_data.peg_ratio:.2f}")
-    if input_data.ev_ebitda: metrics_text.append(f"EV/EBITDA: {input_data.ev_ebitda:.1f}")
-    if input_data.ps_ratio: metrics_text.append(f"PSR: {input_data.ps_ratio:.1f}")
-    if input_data.roe: metrics_text.append(f"ROE: {input_data.roe*100:.1f}%")
-    if input_data.revenue_growth: metrics_text.append(f"매출 성장률: {input_data.revenue_growth*100:.1f}%")
-    if input_data.earnings_growth: metrics_text.append(f"이익 성장률: {input_data.earnings_growth*100:.1f}%")
-    if input_data.debt_to_equity: metrics_text.append(f"D/E: {input_data.debt_to_equity:.1f}")
-    if input_data.gross_margin: metrics_text.append(f"매출총이익률: {input_data.gross_margin*100:.1f}%")
-    if input_data.operating_margin: metrics_text.append(f"영업이익률: {input_data.operating_margin*100:.1f}%")
-    if input_data.fcf_yield: metrics_text.append(f"FCF Yield: {input_data.fcf_yield*100:.1f}%")
+    if input_data.pe_ratio is not None: metrics_text.append(f"P/E: {input_data.pe_ratio:.1f}")
+    if input_data.forward_pe is not None: metrics_text.append(f"Forward P/E: {input_data.forward_pe:.1f}")
+    if input_data.peg_ratio is not None: metrics_text.append(f"PEG: {input_data.peg_ratio:.2f}")
+    if input_data.ev_ebitda is not None: metrics_text.append(f"EV/EBITDA: {input_data.ev_ebitda:.1f}")
+    if input_data.ps_ratio is not None: metrics_text.append(f"PSR: {input_data.ps_ratio:.1f}")
+    if input_data.roe is not None: metrics_text.append(f"ROE: {input_data.roe*100:.1f}%")
+    if input_data.revenue_growth is not None: metrics_text.append(f"매출 성장률: {input_data.revenue_growth*100:.1f}%")
+    if input_data.earnings_growth is not None: metrics_text.append(f"이익 성장률: {input_data.earnings_growth*100:.1f}%")
+    if input_data.debt_to_equity is not None: metrics_text.append(f"D/E: {input_data.debt_to_equity:.1f}")
+    if input_data.free_cash_flow is not None: metrics_text.append(f"FCF: ${input_data.free_cash_flow/1e9:.1f}B")
+    if input_data.fcf_yield is not None: metrics_text.append(f"FCF Yield: {input_data.fcf_yield*100:.1f}%")
+    if input_data.gross_margin is not None: metrics_text.append(f"매출총이익률: {input_data.gross_margin*100:.1f}%")
+    if input_data.operating_margin is not None: metrics_text.append(f"영업이익률: {input_data.operating_margin*100:.1f}%")
+
+    if not metrics_text:
+        metrics_text.append("No financial metrics available")
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", "You are a fundamental analysis expert."),
