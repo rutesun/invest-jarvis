@@ -58,7 +58,11 @@ def score_momentum(df: pd.DataFrame, lookback: int = 50) -> dict:
         "momentum_total": 0.0,
     }
 
-    if df.empty or len(df) < lookback:
+    if df.empty or len(df) <= lookback:
+        return result
+
+    required_cols = {"Open", "High", "Low", "Close"}
+    if not required_cols.issubset(df.columns):
         return result
 
     latest = df.iloc[-1]
