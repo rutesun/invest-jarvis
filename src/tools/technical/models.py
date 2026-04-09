@@ -2,6 +2,14 @@ from datetime import datetime
 from pydantic import BaseModel
 
 
+class ComponentResult(BaseModel):
+    """Result from a technical analysis component."""
+    signals: list[str]
+    evidence: list[str]
+    metrics: dict[str, float]
+    score: int
+
+
 class IndicatorSnapshot(BaseModel):
     """Raw indicator values snapshot."""
 
@@ -14,6 +22,7 @@ class IndicatorSnapshot(BaseModel):
     sma_20: float | None = None
     sma_50: float | None = None
     sma_120: float | None = None
+    sma_150: float | None = None
     sma_200: float | None = None
 
     # Momentum
@@ -42,6 +51,29 @@ class IndicatorSnapshot(BaseModel):
     resistance_r1: float | None = None
     high_52w: float | None = None
     low_52w: float | None = None
+
+    # Cycle RSI
+    crsi: float | None = None
+    crsi_high_band: float | None = None
+    crsi_low_band: float | None = None
+
+    # Volume
+    vol_sma_20: float | None = None
+    vol_sma_50: float | None = None
+    vol_sma_120: float | None = None
+
+    # Swing Points
+    swing_high: float | None = None
+    swing_low: float | None = None
+
+    # Gap
+    is_gap_up: bool | None = None
+    is_gap_down: bool | None = None
+
+    # Fast MACD (5/35/5)
+    macd_fast: float | None = None
+    macd_fast_signal: float | None = None
+    macd_fast_histogram: float | None = None
 
 
 class StrategyResult(BaseModel):
@@ -72,3 +104,4 @@ class TechnicalResult(BaseModel):
     confidence_score: float
     key_insights: list[str]
     warnings: list[str]
+    total_score: int = 0
