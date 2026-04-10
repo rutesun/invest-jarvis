@@ -16,7 +16,7 @@ class SectorMetrics:
     ]
 
     CONSUMER_CYCLICAL = [
-        "pe_ratio", "revenue_growth", "gross_margin", "debt_to_equity", "free_cash_flow"
+        "peg_ratio", "revenue_growth", "gross_margin", "debt_to_equity", "free_cash_flow"
     ]
 
     CONSUMER_DEFENSIVE = [
