@@ -22,9 +22,12 @@ def test_cli_check_command():
         "warnings": [],
         "indicators": {"sma_20": 175.0, "sma_50": 170.0, "rsi": 58.3, "adx": 28.0},
         "strategies": [],
+        "total_score": 75,
     }
 
-    with patch("src.cli.main.run_quick_check", new_callable=AsyncMock) as mock_run:
+    with patch("src.cli.main.run_quick_check", new_callable=AsyncMock) as mock_run, \
+         patch("src.cli.main.resolve_ticker", new_callable=AsyncMock) as mock_resolve:
+        mock_resolve.return_value = "AAPL"
         mock_run.return_value = mock_result
         result = runner.invoke(app, ["check", "AAPL"])
 
@@ -34,7 +37,7 @@ def test_cli_check_command():
 
 
 def test_cli_analyze_command():
-    mock_indicators = IndicatorSnapshot(
+    mock_snapshot = IndicatorSnapshot(
         price=178.50,
         change_pct=2.5,
         sma_20=175.0,
@@ -44,7 +47,10 @@ def test_cli_analyze_command():
     mock_technical = TechnicalResult(
         ticker="AAPL",
         timestamp=datetime.now(),
-        indicators=mock_indicators,
+        snapshot=mock_snapshot,
+        indicators=mock_snapshot,
+        components={},
+        total_score=75,
         strategies=[],
         overall_assessment="매수",
         confidence_score=75.0,
@@ -74,7 +80,9 @@ def test_cli_analyze_command():
         "news_analysis": mock_news_analysis,
     }
 
-    with patch("src.cli.main.run_deep_dive", new_callable=AsyncMock) as mock_run:
+    with patch("src.cli.main.run_deep_dive", new_callable=AsyncMock) as mock_run, \
+         patch("src.cli.main.resolve_ticker", new_callable=AsyncMock) as mock_resolve:
+        mock_resolve.return_value = "AAPL"
         mock_run.return_value = mock_result
         result = runner.invoke(app, ["analyze", "AAPL"])
 
@@ -99,7 +107,7 @@ def test_cli_report_command():
         dxy_change=0.2,
     )
 
-    mock_indicators = IndicatorSnapshot(
+    mock_snapshot = IndicatorSnapshot(
         price=178.50,
         change_pct=2.5,
         sma_20=175.0,
@@ -109,7 +117,10 @@ def test_cli_report_command():
     mock_technical = TechnicalResult(
         ticker="AAPL",
         timestamp=datetime.now(),
-        indicators=mock_indicators,
+        snapshot=mock_snapshot,
+        indicators=mock_snapshot,
+        components={},
+        total_score=75,
         strategies=[],
         overall_assessment="매수",
         confidence_score=75.0,
