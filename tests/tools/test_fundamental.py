@@ -85,14 +85,11 @@ async def test_quarterly_data_parsing_with_data():
 
     assert result.success is True
     snapshot = result.data
-    assert snapshot.quarterly_revenue is not None
-    assert len(snapshot.quarterly_revenue) == 4
-    assert snapshot.quarterly_revenue[0]["period"] == "2024-Q4"
-    assert snapshot.quarterly_revenue[0]["revenue"] == 120000000000
-    assert snapshot.quarterly_earnings is not None
-    assert len(snapshot.quarterly_earnings) == 4
-    assert snapshot.quarterly_earnings[0]["period"] == "2024-Q4"
-    assert snapshot.quarterly_earnings[0]["earnings"] == 30000000000
+    assert snapshot.quarterly_data is not None
+    assert len(snapshot.quarterly_data) == 4
+    assert snapshot.quarterly_data[0].period == "2024-Q4"
+    assert snapshot.quarterly_data[0].revenue == 120000000000
+    assert snapshot.quarterly_data[0].earnings == 30000000000
 
 
 @pytest.mark.asyncio
@@ -148,8 +145,7 @@ async def test_error_handling_for_quarterly_data():
 
     assert result.success is True
     snapshot = result.data
-    assert snapshot.quarterly_revenue is None
-    assert snapshot.quarterly_earnings is None
+    assert snapshot.quarterly_data is None
 
 
 @pytest.mark.asyncio
@@ -180,3 +176,21 @@ def test_quarterly_data_model():
     assert data.revenue == 143756000000
     assert data.revenue_yoy == 0.1565
     assert data.revenue_qoq == 0.4030
+
+
+def test_fundamental_snapshot_with_quarterly_data():
+    """FundamentalSnapshot이 quarterly_data 필드를 지원하는지 검증"""
+    from src.tools.fundamental import QuarterlyData
+
+    quarterly = [
+        QuarterlyData(period="2026-Q1", revenue=143756000000, earnings=36500000000),
+        QuarterlyData(period="2025-Q4", revenue=102466000000, earnings=28300000000),
+    ]
+    snapshot = FundamentalSnapshot(
+        market_cap=3828660000000,
+        pe_ratio=33.0,
+        quarterly_data=quarterly,
+    )
+    assert snapshot.quarterly_data is not None
+    assert len(snapshot.quarterly_data) == 2
+    assert snapshot.quarterly_data[0].period == "2026-Q1"

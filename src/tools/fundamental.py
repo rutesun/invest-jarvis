@@ -46,9 +46,8 @@ class FundamentalSnapshot(BaseModel):
     revenue_growth: float | None = None
     earnings_growth: float | None = None
 
-    # Quarterly results (last 4 quarters)
-    quarterly_revenue: list[dict] | None = None
-    quarterly_earnings: list[dict] | None = None
+    # Quarterly data with growth rates
+    quarterly_data: list[QuarterlyData] | None = None
 
     # Financial health
     debt_to_equity: float | None = None
@@ -95,21 +94,23 @@ class FundamentalTool(BaseTool):
         fcf_yield = (fcf / mcap) if fcf and mcap and mcap > 0 else None
 
         # Quarterly data
-        quarterly_revenue = None
-        quarterly_earnings = None
+        quarterly_data = None
         try:
             qf = t.quarterly_financials
             if qf is not None and not qf.empty:
-                quarterly_revenue = []
-                quarterly_earnings = []
+                quarterly_data = []
                 for col in qf.columns[:4]:
                     period = f"{col.year}-Q{col.quarter}" if hasattr(col, "quarter") else str(col)
                     rev = qf.loc["Total Revenue", col] if "Total Revenue" in qf.index else None
                     earn = qf.loc["Net Income", col] if "Net Income" in qf.index else None
-                    if rev is not None:
-                        quarterly_revenue.append({"period": period, "revenue": float(rev)})
-                    if earn is not None:
-                        quarterly_earnings.append({"period": period, "earnings": float(earn)})
+                    if rev is not None or earn is not None:
+                        quarterly_data.append(
+                            QuarterlyData(
+                                period=period,
+                                revenue=float(rev) if rev is not None else None,
+                                earnings=float(earn) if earn is not None else None,
+                            )
+                        )
         except Exception as e:
             import logging
             logging.getLogger(__name__).warning("Failed to parse quarterly financials: %s", e)
@@ -133,8 +134,7 @@ class FundamentalTool(BaseTool):
             roa=info.get("returnOnAssets"),
             revenue_growth=info.get("revenueGrowth"),
             earnings_growth=info.get("earningsGrowth"),
-            quarterly_revenue=quarterly_revenue,
-            quarterly_earnings=quarterly_earnings,
+            quarterly_data=quarterly_data,
             debt_to_equity=info.get("debtToEquity"),
             current_ratio=info.get("currentRatio"),
             quick_ratio=info.get("quickRatio"),
