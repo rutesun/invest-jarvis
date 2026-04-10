@@ -95,6 +95,7 @@ from src.pipelines.deep_dive import DeepDivePipeline
 from src.pipelines.daily_report import DailyReportPipeline
 from src.pipelines.portfolio import PortfolioPipeline
 from src.llm.provider import LLMProvider
+from src.utils.sector_metrics import SectorMetrics
 
 app = typer.Typer(help="Invest Jarvis - Financial Analysis CLI")
 console = Console()
@@ -368,7 +369,6 @@ def format_deep_dive_output(result: dict) -> str:
             output += f"**Sector/Industry**: {fundamental.sector or 'N/A'} / {fundamental.industry or 'N/A'}\n\n"
 
         # 섹터별 우선순위 지표 가져오기
-        from src.utils.sector_metrics import SectorMetrics
         priority_metrics = SectorMetrics.get_priority_metrics(fundamental.sector)
 
         # 우선순위 지표를 ⭐와 함께 먼저 렌더링
