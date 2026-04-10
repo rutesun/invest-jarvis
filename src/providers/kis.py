@@ -311,8 +311,17 @@ class KISProvider(BaseProvider):
 
         results = []
         for item in data.get("output", [])[:days]:
-            foreign_net = int(item.get("frgn_ntby_qty", 0))
-            institution_net = int(item.get("orgn_ntby_qty", 0))
+            # Handle empty strings from API
+            foreign_val = item.get("frgn_ntby_qty", "0") or "0"
+            institution_val = item.get("orgn_ntby_qty", "0") or "0"
+            try:
+                foreign_net = int(foreign_val.strip()) if isinstance(foreign_val, str) and foreign_val.strip() else int(foreign_val) if foreign_val else 0
+            except (ValueError, AttributeError):
+                foreign_net = 0
+            try:
+                institution_net = int(institution_val.strip()) if isinstance(institution_val, str) and institution_val.strip() else int(institution_val) if institution_val else 0
+            except (ValueError, AttributeError):
+                institution_net = 0
             results.append({
                 "date": item.get("stck_bsop_date", ""),
                 "foreign_net": foreign_net,
