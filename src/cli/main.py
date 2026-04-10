@@ -310,12 +310,6 @@ def format_deep_dive_output(result: dict) -> str:
 
         output += "\n"
 
-        # Quarterly trends table
-        if fundamental.quarterly_data is not None:
-            output += "\n"
-            output += _render_quarterly_table(fundamental.quarterly_data)
-            output += "\n"
-
         if fundamental.roe is not None:
             output += f"- **ROE**: {fundamental.roe*100:.1f}%\n"
         if fundamental.roa is not None:
@@ -348,24 +342,24 @@ def format_deep_dive_output(result: dict) -> str:
             output += "### 분기별 실적\n\n"
 
             # Revenue trends
-            output += "**매출 추이:**\n"
+            output += "**매출 추이:**\n\n"
             for q in fundamental.quarterly_data:
                 if q.revenue is not None:
                     revenue_str = f"${q.revenue/1e9:.2f}B"
                     yoy_str = _format_growth_rate(q.revenue_yoy)
                     qoq_str = _format_growth_rate(q.revenue_qoq)
-                    output += f"• {q.period}: {revenue_str} (YoY {yoy_str}, QoQ {qoq_str})\n"
+                    output += f"- {q.period}: {revenue_str} (YoY {yoy_str}, QoQ {qoq_str})\n"
 
             output += "\n"
 
             # Earnings trends
-            output += "**이익 추이:**\n"
+            output += "**이익 추이:**\n\n"
             for q in fundamental.quarterly_data:
                 if q.earnings is not None:
                     earnings_str = f"${q.earnings/1e9:.2f}B"
                     yoy_str = _format_growth_rate(q.earnings_yoy)
                     qoq_str = _format_growth_rate(q.earnings_qoq)
-                    output += f"• {q.period}: {earnings_str} (YoY {yoy_str}, QoQ {qoq_str})\n"
+                    output += f"- {q.period}: {earnings_str} (YoY {yoy_str}, QoQ {qoq_str})\n"
 
             output += "\n"
 
