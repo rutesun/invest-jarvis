@@ -290,12 +290,12 @@ class KISProvider(BaseProvider):
             List of stocks with ticker, name, price, volume
         """
         token = await self._get_access_token()
-        url = f"{self.BASE_URL}/uapi/overseas-stock/v1/ranking/trade-pbmn"
+        url = f"{self.BASE_URL}/uapi/overseas-stock/v1/ranking/trade-vol"
         headers = {
             "Authorization": f"{token.token_type} {token.access_token}",
             "appkey": self.app_key,
             "appsecret": self.app_secret,
-            "tr_id": "HHDFS76320010",
+            "tr_id": "HHDFS76410000",
             "Content-Type": "application/json; charset=utf-8",
         }
         # Use previous day data if current market is closed
@@ -402,7 +402,7 @@ class KISProvider(BaseProvider):
         results = []
         for item in data.get("output", [])[:days]:
             # Handle empty strings from API
-            program_val = item.get("pgtr_ntby_qty", "0") or "0"
+            program_val = item.get("whol_smtn_ntby_qty", "0") or "0"
             try:
                 program_net = int(program_val.strip()) if isinstance(program_val, str) and program_val.strip() else int(program_val) if program_val else 0
             except (ValueError, AttributeError):
