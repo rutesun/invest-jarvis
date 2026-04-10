@@ -161,3 +161,22 @@ async def test_error_handling_when_yfinance_fails():
     assert result.success is False
     assert result.data is None
     assert "Network error" in result.error
+
+
+def test_quarterly_data_model():
+    """QuarterlyData 모델 검증"""
+    from src.tools.fundamental import QuarterlyData
+
+    data = QuarterlyData(
+        period="2026-Q1",
+        revenue=143756000000,
+        earnings=36500000000,
+        revenue_yoy=0.1565,
+        revenue_qoq=0.4030,
+        earnings_yoy=0.1830,
+        earnings_qoq=0.3520,
+    )
+    assert data.period == "2026-Q1"
+    assert data.revenue == 143756000000
+    assert data.revenue_yoy == 0.1565
+    assert data.revenue_qoq == 0.4030

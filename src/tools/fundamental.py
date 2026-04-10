@@ -7,6 +7,17 @@ from src.core.interfaces import BaseTool
 from src.core.models import ToolResult
 
 
+class QuarterlyData(BaseModel):
+    """분기별 재무 데이터 및 성장률"""
+    period: str
+    revenue: float | None = None
+    earnings: float | None = None
+    revenue_yoy: float | None = None
+    revenue_qoq: float | None = None
+    earnings_yoy: float | None = None
+    earnings_qoq: float | None = None
+
+
 class FundamentalSnapshot(BaseModel):
     """Comprehensive fundamental data snapshot."""
     # Basic info
