@@ -42,3 +42,46 @@ def test_get_priority_metrics_unknown():
     result = SectorMetrics.get_priority_metrics("Unknown Sector")
 
     assert result == SectorMetrics.DEFAULT
+
+
+def test_all_sectors_have_mappings():
+    """10개 섹터 모두 매핑되었는지 검증"""
+    sectors = [
+        "Technology",
+        "Financials",
+        "Consumer Cyclical",
+        "Consumer Defensive",
+        "Healthcare",
+        "Industrials",
+        "Energy",
+        "Real Estate",
+        "Utilities",
+        "Communication Services",
+    ]
+
+    for sector in sectors:
+        result = SectorMetrics.get_priority_metrics(sector)
+        assert result is not None
+        assert len(result) > 0
+        assert result != SectorMetrics.DEFAULT, f"{sector} should have specific mapping"
+
+
+def test_case_insensitive_matching():
+    """대소문자 구분 없이 매칭되는지 테스트"""
+    assert SectorMetrics.get_priority_metrics("TECHNOLOGY") == SectorMetrics.TECHNOLOGY
+    assert SectorMetrics.get_priority_metrics("technology") == SectorMetrics.TECHNOLOGY
+    assert SectorMetrics.get_priority_metrics("TechNOLogy") == SectorMetrics.TECHNOLOGY
+
+
+def test_partial_sector_name_matching():
+    """부분 매칭 테스트"""
+    # "Information Technology"도 매칭되어야 함
+    assert SectorMetrics.get_priority_metrics("Information Technology") == SectorMetrics.TECHNOLOGY
+
+    # "Financial Services"도 매칭되어야 함
+    assert SectorMetrics.get_priority_metrics("Financial Services") == SectorMetrics.FINANCIALS
+
+
+def test_empty_string_returns_default():
+    """빈 문자열은 DEFAULT 반환"""
+    assert SectorMetrics.get_priority_metrics("") == SectorMetrics.DEFAULT
