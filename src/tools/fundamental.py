@@ -8,7 +8,7 @@ from src.core.models import ToolResult
 
 
 class QuarterlyData(BaseModel):
-    """분기별 재무 데이터 및 성장률"""
+    """Quarterly financial data with growth rates."""
     period: str
     revenue: float | None = None
     earnings: float | None = None

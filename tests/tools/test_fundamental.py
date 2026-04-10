@@ -164,7 +164,7 @@ async def test_error_handling_when_yfinance_fails():
 
 
 def test_quarterly_data_model():
-    """QuarterlyData 모델 검증"""
+    """Verify QuarterlyData model fields."""
     from src.tools.fundamental import QuarterlyData
 
     data = QuarterlyData(
