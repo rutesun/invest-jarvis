@@ -6,10 +6,81 @@ from typing import Optional, Literal
 import typer
 from rich.console import Console
 from rich.markdown import Markdown
+from rich.table import Table
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
+
+# 지표명 표시 매핑
+METRIC_DISPLAY_NAMES = {
+    "pe_ratio": "P/E Ratio",
+    "forward_pe": "Forward P/E",
+    "peg_ratio": "PEG Ratio",
+    "pb_ratio": "P/B Ratio",
+    "ps_ratio": "PSR",
+    "ev_ebitda": "EV/EBITDA",
+    "roe": "ROE",
+    "roa": "ROA",
+    "revenue_growth": "매출 성장률",
+    "earnings_growth": "이익 성장률",
+    "gross_margin": "매출총이익률",
+    "operating_margin": "영업이익률",
+    "profit_margin": "순이익률",
+    "debt_to_equity": "Debt/Equity",
+    "free_cash_flow": "Free Cash Flow",
+    "operating_cash_flow": "Operating Cash Flow",
+    "fcf_yield": "FCF Yield",
+    "dividend_yield": "배당 수익률",
+    "payout_ratio": "배당 성향",
+    "current_ratio": "유동비율",
+    "quick_ratio": "당좌비율",
+    "market_cap": "시가총액",
+}
+
+
+def _get_metric_display_name(metric_name: str) -> str:
+    """지표명을 표시용 이름으로 변환
+
+    Args:
+        metric_name: 내부 지표명 (예: "pe_ratio")
+
+    Returns:
+        표시용 이름 (예: "P/E Ratio")
+    """
+    # Camel case로 변환 (fallback)
+    if metric_name not in METRIC_DISPLAY_NAMES:
+        return " ".join(word.capitalize() for word in metric_name.split("_"))
+
+    return METRIC_DISPLAY_NAMES[metric_name]
+
+
+def _format_metric_value(metric_name: str, value: float) -> str:
+    """지표 타입에 따라 값 포맷팅
+
+    Args:
+        metric_name: 지표명
+        value: 지표 값
+
+    Returns:
+        포맷팅된 문자열
+    """
+    # 퍼센트 지표
+    if metric_name in ["revenue_growth", "earnings_growth", "gross_margin",
+                       "operating_margin", "profit_margin", "fcf_yield",
+                       "dividend_yield", "roe", "roa", "payout_ratio"]:
+        return f"{value*100:.1f}%"
+
+    # 달러 금액 (10억 단위)
+    elif metric_name in ["free_cash_flow", "operating_cash_flow", "market_cap"]:
+        return f"${value/1e9:.1f}B"
+
+    # 일반 숫자
+    else:
+        # Format with appropriate precision: 2 decimals if value < 10, else 1
+        formatted = f"{value:.2f}" if abs(value) < 10 else f"{value:.1f}"
+        # Remove trailing zeros after decimal point
+        return formatted.rstrip('0').rstrip('.') if '.' in formatted else formatted
 
 from src.core.config import load_config
 from src.providers.yfinance_provider import YFinanceProvider
@@ -17,6 +88,7 @@ from src.providers.kis import KISProvider
 from src.providers.ticker_resolver import TickerResolver
 from src.tools.technical.scorer import TechnicalScorer
 from src.tools.technical.tool import TechnicalAnalysisTool
+from src.tools.fundamental import FundamentalTool, QuarterlyData
 from src.tools.macro import MacroTool
 from src.tools.news import NewsTool
 from src.tools.portfolio import PortfolioTool
@@ -25,6 +97,7 @@ from src.pipelines.deep_dive import DeepDivePipeline
 from src.pipelines.daily_report import DailyReportPipeline
 from src.pipelines.portfolio import PortfolioPipeline
 from src.llm.provider import LLMProvider
+from src.utils.sector_metrics import SectorMetrics
 from src.providers.naver import NaverProvider
 from src.tools.screener.universe import UniverseBuilder
 from src.tools.screener.evidence import EvidenceCollector
@@ -121,6 +194,7 @@ async def run_deep_dive(ticker_or_name: str, provider: str) -> dict:
     yf_provider = YFinanceProvider()
     scorer = TechnicalScorer()
     technical_tool = TechnicalAnalysisTool(provider=yf_provider, scorer=scorer)
+    fundamental_tool = FundamentalTool()
     news_tool = NewsTool()
     llm = LLMProvider.create(
         provider=provider,
@@ -133,9 +207,95 @@ async def run_deep_dive(ticker_or_name: str, provider: str) -> dict:
         technical_tool=technical_tool,
         news_tool=news_tool,
         llm=llm,
+        fundamental_tool=fundamental_tool,
     )
 
     return await pipeline.run(ticker)
+
+
+def _render_quarterly_table(quarterly_data: list[QuarterlyData]) -> str:
+    """Render quarterly data as Rich Table"""
+    if not quarterly_data or len(quarterly_data) == 0:
+        return ""
+
+    table = Table(title="분기별 추이 (최근 4분기)", show_header=True, header_style="bold cyan")
+
+    # Add columns
+    table.add_column("Metric", style="white", no_wrap=True)
+    for q in quarterly_data:
+        table.add_column(q.period, justify="right")
+
+    # Revenue row
+    revenue_values = []
+    for q in quarterly_data:
+        if q.revenue is not None:
+            revenue_values.append(f"${q.revenue/1e9:.2f}B")
+        else:
+            revenue_values.append("N/A")
+    table.add_row("Revenue", *revenue_values)
+
+    # Revenue YoY row
+    yoy_values = []
+    for q in quarterly_data:
+        if q.revenue_yoy is not None:
+            color = "green" if q.revenue_yoy >= 0 else "red"
+            yoy_values.append(f"[{color}]{q.revenue_yoy*100:+.2f}%[/{color}]")
+        else:
+            yoy_values.append("N/A")
+    table.add_row("YoY Growth %", *yoy_values)
+
+    # Revenue QoQ row
+    qoq_values = []
+    for q in quarterly_data:
+        if q.revenue_qoq is not None:
+            color = "green" if q.revenue_qoq >= 0 else "red"
+            qoq_values.append(f"[{color}]{q.revenue_qoq*100:+.2f}%[/{color}]")
+        else:
+            qoq_values.append("N/A")
+    table.add_row("QoQ Growth %", *qoq_values)
+
+    # Earnings row
+    earnings_values = []
+    for q in quarterly_data:
+        if q.earnings is not None:
+            earnings_values.append(f"${q.earnings/1e9:.2f}B")
+        else:
+            earnings_values.append("N/A")
+    table.add_row("Earnings", *earnings_values)
+
+    # Earnings YoY row
+    yoy_e_values = []
+    for q in quarterly_data:
+        if q.earnings_yoy is not None:
+            color = "green" if q.earnings_yoy >= 0 else "red"
+            yoy_e_values.append(f"[{color}]{q.earnings_yoy*100:+.2f}%[/{color}]")
+        else:
+            yoy_e_values.append("N/A")
+    table.add_row("YoY Growth %", *yoy_e_values)
+
+    # Earnings QoQ row
+    qoq_e_values = []
+    for q in quarterly_data:
+        if q.earnings_qoq is not None:
+            color = "green" if q.earnings_qoq >= 0 else "red"
+            qoq_e_values.append(f"[{color}]{q.earnings_qoq*100:+.2f}%[/{color}]")
+        else:
+            qoq_e_values.append("N/A")
+    table.add_row("QoQ Growth %", *qoq_e_values)
+
+    from io import StringIO
+    from rich.console import Console
+    buffer = StringIO()
+    console = Console(file=buffer, force_terminal=True)
+    console.print(table)
+    return buffer.getvalue()
+
+
+def _format_growth_rate(value: float | None) -> str:
+    """Format growth rate with +/- sign"""
+    if value is None:
+        return "N/A"
+    return f"{value*100:+.2f}%"
 
 
 def format_deep_dive_output(result: dict) -> str:
@@ -144,6 +304,8 @@ def format_deep_dive_output(result: dict) -> str:
     technical = result["technical"]
     tech_summary = result["technical_summary"]
     news_analysis = result.get("news_analysis")
+    fundamental = result.get("fundamental")
+    fundamental_summary = result.get("fundamental_summary")
 
     output = f"# Deep Dive Analysis: {ticker}\n\n"
 
@@ -155,35 +317,35 @@ def format_deep_dive_output(result: dict) -> str:
     output += "### 기술적 지표\n\n"
 
     # Moving averages
-    if snapshot.sma_20:
+    if snapshot.sma_20 is not None:
         output += f"- **20일 이동평균선**: ${snapshot.sma_20:.2f}\n"
-    if snapshot.sma_50:
+    if snapshot.sma_50 is not None:
         output += f"- **50일 이동평균선**: ${snapshot.sma_50:.2f}\n"
-    if snapshot.sma_150:
+    if snapshot.sma_150 is not None:
         output += f"- **150일 이동평균선**: ${snapshot.sma_150:.2f}\n"
-    if snapshot.sma_200:
+    if snapshot.sma_200 is not None:
         output += f"- **200일 이동평균선**: ${snapshot.sma_200:.2f}\n"
 
     output += "\n"
 
     # Momentum indicators
-    if snapshot.rsi:
+    if snapshot.rsi is not None:
         output += f"- **RSI (14일)**: {snapshot.rsi:.1f}\n"
-    if snapshot.crsi:
+    if snapshot.crsi is not None:
         output += f"- **Cycle RSI**: {snapshot.crsi:.1f}"
-        if snapshot.crsi_high_band and snapshot.crsi_low_band:
+        if snapshot.crsi_high_band is not None and snapshot.crsi_low_band is not None:
             output += f" (밴드: {snapshot.crsi_low_band:.1f} - {snapshot.crsi_high_band:.1f})"
         output += "\n"
-    if snapshot.macd:
+    if snapshot.macd is not None:
         output += f"- **MACD**: {snapshot.macd:.2f}"
-        if snapshot.macd_signal:
+        if snapshot.macd_signal is not None:
             output += f" (시그널: {snapshot.macd_signal:.2f})"
         output += "\n"
 
     output += "\n"
 
     # Trend strength
-    if snapshot.adx:
+    if snapshot.adx is not None:
         output += f"- **ADX (추세 강도)**: {snapshot.adx:.1f}\n"
 
     # Supertrend
@@ -208,17 +370,17 @@ def format_deep_dive_output(result: dict) -> str:
     output += "\n"
 
     # Support/Resistance
-    if snapshot.pivot:
+    if snapshot.pivot is not None:
         output += f"- **피봇 포인트**: ${snapshot.pivot:.2f}\n"
-    if snapshot.support_s1:
+    if snapshot.support_s1 is not None:
         output += f"- **지지선 S1**: ${snapshot.support_s1:.2f}\n"
-    if snapshot.resistance_r1:
+    if snapshot.resistance_r1 is not None:
         output += f"- **저항선 R1**: ${snapshot.resistance_r1:.2f}\n"
 
     # 52-week high/low
-    if snapshot.high_52w:
+    if snapshot.high_52w is not None:
         output += f"- **52주 최고가**: ${snapshot.high_52w:.2f}\n"
-    if snapshot.low_52w:
+    if snapshot.low_52w is not None:
         output += f"- **52주 최저가**: ${snapshot.low_52w:.2f}\n"
 
     output += "\n"
@@ -234,6 +396,91 @@ def format_deep_dive_output(result: dict) -> str:
         for insight in tech_summary.key_insights:
             output += f"- {insight}\n"
         output += "\n"
+
+    if fundamental and fundamental_summary:
+        output += "## Fundamental Analysis\n\n"
+
+        output += "### Key Metrics\n\n"
+
+        # Sector/Industry 정보는 그대로 유지
+        if fundamental.sector or fundamental.industry:
+            output += f"**Sector/Industry**: {fundamental.sector or 'N/A'} / {fundamental.industry or 'N/A'}\n\n"
+
+        # 섹터별 우선순위 지표 가져오기
+        priority_metrics = SectorMetrics.get_priority_metrics(fundamental.sector)
+
+        # 우선순위 지표를 ⭐와 함께 먼저 렌더링
+        for metric_name in priority_metrics:
+            value = getattr(fundamental, metric_name, None)
+            if value is not None:
+                display_name = _get_metric_display_name(metric_name)
+                formatted = _format_metric_value(metric_name, value)
+                output += f"⭐ **{display_name}**: {formatted}\n\n"
+
+        output += "\n"
+
+        # 나머지 지표 렌더링
+        all_metric_names = [
+            "market_cap", "pe_ratio", "forward_pe", "peg_ratio", "pb_ratio",
+            "ps_ratio", "ev_ebitda", "roe", "roa", "gross_margin",
+            "operating_margin", "profit_margin", "revenue_growth",
+            "earnings_growth", "debt_to_equity", "current_ratio",
+            "quick_ratio", "free_cash_flow", "operating_cash_flow",
+            "fcf_yield", "dividend_yield", "payout_ratio"
+        ]
+
+        remaining_metrics = [m for m in all_metric_names if m not in priority_metrics]
+
+        for metric_name in remaining_metrics:
+            value = getattr(fundamental, metric_name, None)
+            if value is not None:
+                display_name = _get_metric_display_name(metric_name)
+                formatted = _format_metric_value(metric_name, value)
+                output += f"- **{display_name}**: {formatted}\n"
+
+        output += "\n"
+
+        # Quarterly Performance section
+        if fundamental.quarterly_data is not None and len(fundamental.quarterly_data) > 0:
+            output += "### 분기별 실적\n\n"
+
+            # Revenue trends
+            output += "**매출 추이:**\n\n"
+            for q in fundamental.quarterly_data:
+                if q.revenue is not None:
+                    revenue_str = f"${q.revenue/1e9:.2f}B"
+                    yoy_str = _format_growth_rate(q.revenue_yoy)
+                    qoq_str = _format_growth_rate(q.revenue_qoq)
+                    output += f"- {q.period}: {revenue_str} (YoY {yoy_str}, QoQ {qoq_str})\n"
+
+            output += "\n"
+
+            # Earnings trends
+            output += "**이익 추이:**\n\n"
+            for q in fundamental.quarterly_data:
+                if q.earnings is not None:
+                    earnings_str = f"${q.earnings/1e9:.2f}B"
+                    yoy_str = _format_growth_rate(q.earnings_yoy)
+                    qoq_str = _format_growth_rate(q.earnings_qoq)
+                    output += f"- {q.period}: {earnings_str} (YoY {yoy_str}, QoQ {qoq_str})\n"
+
+            output += "\n"
+
+        output += "### LLM Analysis\n\n"
+        output += f"**Summary**: {fundamental_summary.summary}\n\n"
+        output += f"**Valuation**: {fundamental_summary.valuation_assessment} (신뢰도: {fundamental_summary.confidence * 100:.0f}%)\n\n"
+
+        if fundamental_summary.strengths:
+            output += "**Strengths**:\n"
+            for strength in fundamental_summary.strengths:
+                output += f"- {strength}\n"
+            output += "\n"
+
+        if fundamental_summary.weaknesses:
+            output += "**Weaknesses**:\n"
+            for weakness in fundamental_summary.weaknesses:
+                output += f"- {weakness}\n"
+            output += "\n"
 
     if news_analysis:
         output += "## News Analysis\n\n"
