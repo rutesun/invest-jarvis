@@ -1,4 +1,5 @@
 import pytest
+import re
 from typer.testing import CliRunner
 from src.cli.main import app
 
@@ -35,7 +36,6 @@ def test_analyze_shows_quarterly_trends():
     assert "이익 추이:" in result.stdout
 
     # Growth rate format verification (+ or - sign)
-    import re
     assert re.search(r"YoY [+-]\d+\.\d+%", result.stdout) is not None
 
 
@@ -57,9 +57,10 @@ def test_analyze_shows_sector_priority_metrics():
     assert len(lines_with_star) > 0, "Should have lines with priority metrics marked with ⭐"
 
     # P/E Ratio는 우선순위가 아니므로 ⭐가 붙지 않아야 함
-    # "P/E Ratio" 뒤에 바로 ⭐가 오면 안 됨
-    import re
-    assert not re.search(r'⭐[^(P/E)]*P/E Ratio', result.stdout), "P/E Ratio should not have ⭐"
+    # Check that no line contains both ⭐ and P/E Ratio
+    pe_lines = [line for line in result.stdout.split('\n')
+                if '⭐' in line and 'P/E Ratio' in line]
+    assert len(pe_lines) == 0, "P/E Ratio should not have ⭐"
 
     # Sector/Industry 정보는 표시되어야 함
     assert "Technology" in result.stdout or "Semiconductors" in result.stdout
