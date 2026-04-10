@@ -177,3 +177,238 @@ class KISProvider(BaseProvider):
             "stock_value": float(output2.get("scts_evlu_amt", 0)),
             "positions": positions,
         }
+
+    async def get_investor_ranking(
+        self, investor_type: str = "foreign", top_n: int = 30
+    ) -> list[dict]:
+        """Get foreign/institution net buy ranking for Korean stocks."""
+        token = await self._get_access_token()
+        url = f"{self.BASE_URL}/uapi/domestic-stock/v1/quotations/foreign-institution-total"
+        fid_code = "1" if investor_type == "foreign" else "2"
+        headers = {
+            "Authorization": f"{token.token_type} {token.access_token}",
+            "appkey": self.app_key,
+            "appsecret": self.app_secret,
+            "tr_id": "FHPTJ04400000",
+            "Content-Type": "application/json; charset=utf-8",
+        }
+        params = {
+            "FID_COND_MRKT_DIV_CODE": "V",
+            "FID_COND_SCR_DIV_CODE": "16174",
+            "FID_INPUT_ISCD": "0000",
+            "FID_DIV_CLS_CODE": "0",
+            "FID_BLNG_CLS_CODE": "0",
+            "FID_TRGT_CLS_CODE": "111111111",
+            "FID_TRGT_EXLS_CLS_CODE": "000000",
+            "FID_INPUT_PRICE_1": "",
+            "FID_INPUT_PRICE_2": "",
+            "FID_VOL_CNT": "",
+            "FID_INPUT_DATE_1": "",
+            "FID_ETC_CLS_CODE": fid_code,
+        }
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(url, headers=headers, params=params)
+            response.raise_for_status()
+            data = response.json()
+
+        results = []
+        for item in data.get("output", [])[:top_n]:
+            results.append({
+                "ticker": item.get("mksc_shrn_iscd", ""),
+                "name": item.get("hts_kor_isnm", ""),
+                "net_buy_volume": int(item.get("frgn_ntby_qty", 0)),
+                "net_buy_amount": int(item.get("frgn_ntby_tr_pbmn", 0)),
+            })
+        return results
+
+    async def get_us_ranking_updown(
+        self, exchange: str = "NAS", direction: str = "up", top_n: int = 30
+    ) -> list[dict]:
+        """Get US stock up/down rate ranking.
+
+        Args:
+            exchange: Exchange code (NAS=NASDAQ, NYS=NYSE, AMS=AMEX)
+            direction: "up" for rise, "down" for fall
+            top_n: Number of stocks to return
+
+        Returns:
+            List of stocks with ticker, name, change_pct, price, volume
+        """
+        token = await self._get_access_token()
+        url = f"{self.BASE_URL}/uapi/overseas-stock/v1/ranking/updown-rate"
+        gubn = "1" if direction == "up" else "0"
+        headers = {
+            "Authorization": f"{token.token_type} {token.access_token}",
+            "appkey": self.app_key,
+            "appsecret": self.app_secret,
+            "tr_id": "HHDFS76290000",
+            "Content-Type": "application/json; charset=utf-8",
+        }
+        # NDAY: 0=today, 1=previous day
+        # VOL_RANG: 0=all, 1=100+, 2=1K+, 3=10K+, 4=100K+, 5=1M+, 6=10M+
+        # Use previous day data if current market is closed
+        params = {
+            "EXCD": exchange,
+            "NDAY": "1",  # Previous day (more reliable than today)
+            "GUBN": gubn,
+            "VOL_RANG": "0",  # All volume
+            "AUTH": "",
+            "KEYB": "",
+        }
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(url, headers=headers, params=params)
+            response.raise_for_status()
+            data = response.json()
+
+        results = []
+        # Response structure: {"output1": {...}, "output2": [...]}
+        # output2 contains the actual stock list
+        output2 = data.get("output2", [])
+        for item in output2[:top_n]:
+            results.append({
+                "ticker": item.get("symb", ""),
+                "name": item.get("name", ""),
+                "change_pct": float(item.get("rate", 0)),
+                "price": float(item.get("last", 0)),
+                "volume": int(item.get("tvol", 0)),
+                "exchange": exchange,
+            })
+        return results
+
+    async def get_us_ranking_volume(
+        self, exchange: str = "NAS", top_n: int = 30
+    ) -> list[dict]:
+        """Get US stock volume ranking.
+
+        Args:
+            exchange: Exchange code (NAS=NASDAQ, NYS=NYSE, AMS=AMEX)
+            top_n: Number of stocks to return
+
+        Returns:
+            List of stocks with ticker, name, price, volume
+        """
+        token = await self._get_access_token()
+        url = f"{self.BASE_URL}/uapi/overseas-stock/v1/ranking/trade-vol"
+        headers = {
+            "Authorization": f"{token.token_type} {token.access_token}",
+            "appkey": self.app_key,
+            "appsecret": self.app_secret,
+            "tr_id": "HHDFS76410000",
+            "Content-Type": "application/json; charset=utf-8",
+        }
+        # Use previous day data if current market is closed
+        params = {
+            "EXCD": exchange,
+            "NDAY": "1",  # Previous day
+            "GUBN": "",
+            "VOL_RANG": "0",  # All volume
+            "AUTH": "",
+            "KEYB": "",
+        }
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(url, headers=headers, params=params)
+            response.raise_for_status()
+            data = response.json()
+
+        results = []
+        # Response structure: {"output1": {...}, "output2": [...]}
+        # output2 contains the actual stock list
+        output2 = data.get("output2", [])
+        for item in output2[:top_n]:
+            results.append({
+                "ticker": item.get("symb", ""),
+                "name": item.get("name", ""),
+                "price": float(item.get("last", 0)),
+                "volume": int(item.get("tvol", 0)),
+                "exchange": exchange,
+            })
+        return results
+
+    async def get_investor_trend(self, ticker: str, days: int = 10) -> list[dict]:
+        """Get daily investor trend (foreign + institution net buy) for a Korean stock."""
+        token = await self._get_access_token()
+        url = f"{self.BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-investor"
+        headers = {
+            "Authorization": f"{token.token_type} {token.access_token}",
+            "appkey": self.app_key,
+            "appsecret": self.app_secret,
+            "tr_id": "FHKST01010900",
+            "Content-Type": "application/json; charset=utf-8",
+        }
+        params = {
+            "FID_COND_MRKT_DIV_CODE": "J",
+            "FID_INPUT_ISCD": ticker,
+        }
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(url, headers=headers, params=params)
+            response.raise_for_status()
+            data = response.json()
+
+        results = []
+        for item in data.get("output", [])[:days]:
+            # Handle empty strings from API
+            foreign_val = item.get("frgn_ntby_qty", "0") or "0"
+            institution_val = item.get("orgn_ntby_qty", "0") or "0"
+            try:
+                foreign_net = int(foreign_val.strip()) if isinstance(foreign_val, str) and foreign_val.strip() else int(foreign_val) if foreign_val else 0
+            except (ValueError, AttributeError):
+                foreign_net = 0
+            try:
+                institution_net = int(institution_val.strip()) if isinstance(institution_val, str) and institution_val.strip() else int(institution_val) if institution_val else 0
+            except (ValueError, AttributeError):
+                institution_net = 0
+            results.append({
+                "date": item.get("stck_bsop_date", ""),
+                "foreign_net": foreign_net,
+                "institution_net": institution_net,
+                "total_net": foreign_net + institution_net,
+            })
+        return results
+
+    async def get_program_trade(self, ticker: str, days: int = 10) -> list[dict]:
+        """Get daily program trading data for a Korean stock.
+
+        Args:
+            ticker: Stock ticker code (6 digits)
+            days: Number of days to fetch (default 10)
+
+        Returns:
+            List of daily program trading data with date and net buy quantity
+        """
+        token = await self._get_access_token()
+        url = f"{self.BASE_URL}/uapi/domestic-stock/v1/quotations/program-trade-by-stock-daily"
+        headers = {
+            "Authorization": f"{token.token_type} {token.access_token}",
+            "appkey": self.app_key,
+            "appsecret": self.app_secret,
+            "tr_id": "FHPPG04650201",
+            "Content-Type": "application/json; charset=utf-8",
+        }
+        params = {
+            "FID_COND_MRKT_DIV_CODE": "J",
+            "FID_INPUT_ISCD": ticker,
+            "FID_INPUT_DATE_1": "",
+        }
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(url, headers=headers, params=params)
+            response.raise_for_status()
+            data = response.json()
+
+        results = []
+        for item in data.get("output", [])[:days]:
+            # Handle empty strings from API
+            program_val = item.get("whol_smtn_ntby_qty", "0") or "0"
+            try:
+                program_net = int(program_val.strip()) if isinstance(program_val, str) and program_val.strip() else int(program_val) if program_val else 0
+            except (ValueError, AttributeError):
+                program_net = 0
+            results.append({
+                "date": item.get("stck_bsop_date", ""),
+                "program_net": program_net,
+            })
+        return results

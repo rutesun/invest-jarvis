@@ -29,20 +29,13 @@ def mock_technical_tool():
     from datetime import datetime
 
     snapshot = IndicatorSnapshot(price=70000, change_pct=1.5)
-    components = {
-        "minervini": {"score": 20, "signals": ["골든크로스"], "evidence": ["20일선 > 50일선"], "metrics": {}},
-        "velocity": {"score": 10, "signals": [], "evidence": [], "metrics": {}},
-        "crsi": {"score": 5, "signals": [], "evidence": [], "metrics": {}},
-        "volume": {"score": 5, "signals": [], "evidence": [], "metrics": {}},
-        "patterns": {"score": 5, "signals": [], "evidence": [], "metrics": {}},
-    }
     tech_result = TechnicalResult(
         ticker="005930",
         timestamp=datetime.now(),
         snapshot=snapshot,
-        components=components,
-        total_score=45,
         indicators=snapshot,
+        components={},
+        total_score=75,
         strategies=[
             StrategyResult(
                 name="trend",

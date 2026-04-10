@@ -41,20 +41,13 @@ def mock_technical_tool():
             sma_50=170.0,
             rsi=58.3,
         )
-        components = {
-            "minervini": {"score": 20, "signals": ["골든크로스" if ticker == "AAPL" else "데드크로스"], "evidence": ["20일선 > 50일선"], "metrics": {"sma_20": 175.0}},
-            "velocity": {"score": 10, "signals": [], "evidence": [], "metrics": {}},
-            "crsi": {"score": 5, "signals": [], "evidence": [], "metrics": {}},
-            "volume": {"score": 5, "signals": [], "evidence": [], "metrics": {}},
-            "patterns": {"score": 5, "signals": [], "evidence": [], "metrics": {}},
-        }
         return TechnicalResult(
             ticker=ticker,
             timestamp=datetime.now(),
             snapshot=snapshot,
-            components=components,
-            total_score=45 if ticker == "AAPL" else 30,
             indicators=snapshot,
+            components={},
+            total_score=75,
             strategies=[
                 StrategyResult(
                     name="trend",
@@ -141,22 +134,15 @@ async def test_daily_report_pipeline_technical_failure(
                 success=False, data=None, error="Failed to fetch AAPL data"
             )
         snapshot = IndicatorSnapshot(price=450.0, change_pct=-1.2)
-        components = {
-            "minervini": {"score": 0, "signals": [], "evidence": [], "metrics": {}},
-            "velocity": {"score": 0, "signals": [], "evidence": [], "metrics": {}},
-            "crsi": {"score": 0, "signals": [], "evidence": [], "metrics": {}},
-            "volume": {"score": 0, "signals": [], "evidence": [], "metrics": {}},
-            "patterns": {"score": 0, "signals": [], "evidence": [], "metrics": {}},
-        }
         return ToolResult(
             success=True,
             data=TechnicalResult(
                 ticker=ticker,
                 timestamp=datetime.now(),
                 snapshot=snapshot,
-                components=components,
-                total_score=0,
                 indicators=snapshot,
+                components={},
+                total_score=50,
                 strategies=[],
                 overall_assessment="중립",
                 confidence_score=50.0,

@@ -1,9 +1,11 @@
-from datetime import datetime
+import logging
 from src.core.interfaces import BaseTool, BaseProvider
 from src.core.models import ToolResult
 from src.tools.technical.indicators import IndicatorCalculator
 from src.tools.technical.scorer import TechnicalScorer
 from src.tools.technical.models import TechnicalResult
+
+logger = logging.getLogger(__name__)
 
 
 class TechnicalAnalysisTool(BaseTool):
@@ -20,22 +22,25 @@ class TechnicalAnalysisTool(BaseTool):
     async def execute(self, ticker: str, period: str = "1y", **kwargs) -> ToolResult:
         """Execute technical analysis on ticker."""
         try:
-            # Get price history
+            logger.debug("Fetching price history: %s (period=%s)", ticker, period)
             df = await self.provider.get_price_history(ticker, period)
             if df.empty:
+                logger.debug("No price data returned for %s", ticker)
                 return ToolResult(
                     success=False,
                     data=None,
                     error=f"No data found for {ticker}",
                 )
 
-            # Calculate indicators
+            logger.debug("Got %d rows for %s, calculating indicators", len(df), ticker)
             df = self.calculator.calculate(df)
 
-            # Score with components
+            logger.debug("Scoring %s", ticker)
             technical_result = self.scorer.score(df, ticker=ticker)
+            logger.debug("Score for %s: %s", ticker, technical_result.total_score)
 
             return ToolResult(success=True, data=technical_result)
 
         except Exception as e:
+            logger.debug("Technical analysis error for %s: %s", ticker, e)
             return ToolResult(success=False, data=None, error=str(e))

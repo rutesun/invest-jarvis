@@ -11,20 +11,13 @@ from datetime import datetime
 @pytest.fixture
 def mock_technical_tool():
     tool = AsyncMock()
-    snapshot = IndicatorSnapshot(
+    indicators = IndicatorSnapshot(
         price=178.50,
         change_pct=2.5,
         sma_20=175.0,
         sma_50=170.0,
         rsi=58.3,
     )
-    components = {
-        "minervini": {"score": 20, "signals": ["골든크로스"], "evidence": ["20일선 > 50일선"], "metrics": {"sma_20": 175.0}},
-        "velocity": {"score": 10, "signals": [], "evidence": [], "metrics": {}},
-        "crsi": {"score": 5, "signals": [], "evidence": [], "metrics": {}},
-        "volume": {"score": 5, "signals": [], "evidence": [], "metrics": {}},
-        "patterns": {"score": 5, "signals": [], "evidence": [], "metrics": {}},
-    }
     strategy = StrategyResult(
         name="trend",
         status="강세",
@@ -36,10 +29,10 @@ def mock_technical_tool():
     tech_result = TechnicalResult(
         ticker="AAPL",
         timestamp=datetime.now(),
-        snapshot=snapshot,
-        components=components,
-        total_score=45,
-        indicators=snapshot,
+        snapshot=indicators,
+        indicators=indicators,
+        components={},
+        total_score=75,
         strategies=[strategy],
         overall_assessment="매수",
         confidence_score=75.0,
