@@ -11,6 +11,76 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
+# 지표명 표시 매핑
+METRIC_DISPLAY_NAMES = {
+    "pe_ratio": "P/E Ratio",
+    "forward_pe": "Forward P/E",
+    "peg_ratio": "PEG Ratio",
+    "pb_ratio": "P/B Ratio",
+    "ps_ratio": "PSR",
+    "ev_ebitda": "EV/EBITDA",
+    "roe": "ROE",
+    "roa": "ROA",
+    "revenue_growth": "매출 성장률",
+    "earnings_growth": "이익 성장률",
+    "gross_margin": "매출총이익률",
+    "operating_margin": "영업이익률",
+    "profit_margin": "순이익률",
+    "debt_to_equity": "Debt/Equity",
+    "free_cash_flow": "Free Cash Flow",
+    "operating_cash_flow": "Operating Cash Flow",
+    "fcf_yield": "FCF Yield",
+    "dividend_yield": "배당 수익률",
+    "payout_ratio": "배당 성향",
+    "current_ratio": "유동비율",
+    "quick_ratio": "당좌비율",
+    "market_cap": "시가총액",
+}
+
+
+def _get_metric_display_name(metric_name: str) -> str:
+    """지표명을 표시용 이름으로 변환
+
+    Args:
+        metric_name: 내부 지표명 (예: "pe_ratio")
+
+    Returns:
+        표시용 이름 (예: "P/E Ratio")
+    """
+    # Camel case로 변환 (fallback)
+    if metric_name not in METRIC_DISPLAY_NAMES:
+        return " ".join(word.capitalize() for word in metric_name.split("_"))
+
+    return METRIC_DISPLAY_NAMES[metric_name]
+
+
+def _format_metric_value(metric_name: str, value: float) -> str:
+    """지표 타입에 따라 값 포맷팅
+
+    Args:
+        metric_name: 지표명
+        value: 지표 값
+
+    Returns:
+        포맷팅된 문자열
+    """
+    # 퍼센트 지표
+    if metric_name in ["revenue_growth", "earnings_growth", "gross_margin",
+                       "operating_margin", "profit_margin", "fcf_yield",
+                       "dividend_yield", "roe", "roa", "payout_ratio"]:
+        return f"{value*100:.1f}%"
+
+    # 달러 금액 (10억 단위)
+    elif metric_name in ["free_cash_flow", "operating_cash_flow", "market_cap"]:
+        return f"${value/1e9:.1f}B"
+
+    # 일반 숫자
+    else:
+        # Format with appropriate precision: 2 decimals if value < 10, else 1
+        formatted = f"{value:.2f}" if abs(value) < 10 else f"{value:.1f}"
+        # Remove trailing zeros after decimal point
+        return formatted.rstrip('0').rstrip('.') if '.' in formatted else formatted
+
 from src.core.config import load_config
 from src.providers.yfinance_provider import YFinanceProvider
 from src.providers.kis import KISProvider
