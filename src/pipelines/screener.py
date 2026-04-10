@@ -23,30 +23,40 @@ class ScreenerPipeline:
 
     async def run(self, market: str = "all") -> dict[str, Any]:
         """Run screener pipeline.
-        
+
         Args:
             market: Market to screen ("all", "kr", "us")
-            
+
         Returns:
             Dictionary with market results including leaders, themes, and news
         """
-        # 1. Universe
+        # 1. Get Naver themes (KR only)
+        naver_themes = []
+        if market in ("all", "kr"):
+            try:
+                naver = self.universe_builder.naver
+                naver_themes = await naver.get_themes(top_n=20)
+            except Exception:
+                pass
+
+        # 2. Universe
         universe = await self.universe_builder.build(market)
 
-        # 2. Evidence + Score
+        # 3. Evidence + Score
         scored = await self.evidence_collector.collect_and_score(universe)
 
-        # 3. Theme aggregation
+        # 4. Theme aggregation
         theme_ranking = self._aggregate_themes(scored)
 
-        # 4. News for top 10
+        # 5. News for top 10
         top_stocks = scored[:10]
         news = await self._fetch_news_for_top(top_stocks)
 
         return {
             "market": market,
             "timestamp": datetime.now(),
-            "leaders": scored[:20],
+            "leaders": scored[:50],
+            "naver_themes": naver_themes,
             "themes": theme_ranking[:10],
             "news": news,
             "total_universe_size": len(universe),
@@ -125,10 +135,20 @@ class ScreenerPipeline:
             "",
         ]
 
-        # Themes
+        # Naver Themes (raw from Naver API)
+        naver_themes = result.get("naver_themes", [])
+        if naver_themes:
+            lines.append("## 상위 테마 (네이버)")
+            lines.append("| # | 테마명 | 등락률 |")
+            lines.append("|---|--------|--------|")
+            for i, t in enumerate(naver_themes, 1):
+                lines.append(f"| {i} | {t['name']} | {t['change_rate']:+.2f}% |")
+            lines.append("")
+
+        # Themes (aggregated from scored stocks)
         themes = result.get("themes", [])
         if themes:
-            lines.append("## 주도 테마 TOP 10")
+            lines.append("## 주도 테마 TOP 10 (집계)")
             lines.append("| # | 테마 | 등락률 | 종목수 | 주요 종목 |")
             lines.append("|---|------|--------|--------|-----------|")
             for i, t in enumerate(themes, 1):
@@ -140,16 +160,18 @@ class ScreenerPipeline:
         # Leaders
         leaders = result.get("leaders", [])
         if leaders:
-            lines.append("## 주도주 TOP 20")
-            lines.append("| # | 종목 | 시장 | 모멘텀 | 수급 | 거래량 | 소스 |")
-            lines.append("|---|------|------|--------|------|--------|------|")
+            lines.append("## 주도주 TOP 50")
+            lines.append("| # | 종목 | 시장 | 모멘텀 | 외인 | 기관 | 거래량 | 소스 |")
+            lines.append("|---|------|------|--------|------|------|--------|------|")
             for item in leaders:
                 s = item.stock
                 sources_str = ",".join(s.sources)
-                acc = f"{item.accumulation_score:.0f}" if item.accumulation_score > 0 else "-"
+                # Format foreign/institution net (in thousands)
+                foreign = f"{item.foreign_net//1000}K" if item.foreign_net != 0 else "-"
+                institution = f"{item.institution_net//1000}K" if item.institution_net != 0 else "-"
                 lines.append(
                     f"| {item.rank} | {s.name} | {s.market} | "
-                    f"{item.momentum_total:.0f} | {acc} | {item.vol_ratio:.1f}x | {sources_str} |"
+                    f"{item.momentum_total:.0f} | {foreign} | {institution} | {item.vol_ratio:.1f}x | {sources_str} |"
                 )
             lines.append("")
 

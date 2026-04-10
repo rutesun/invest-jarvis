@@ -17,6 +17,8 @@ class ScreenerEvidence(BaseModel):
     """Scored evidence for a stock."""
     stock: UniverseStock
     accumulation_score: float = 0.0
+    foreign_net: int = 0  # foreign net buy quantity
+    institution_net: int = 0  # institution net buy quantity
     up_days: int = 0  # collected but not scored
     volume_burst_score: float = 0.0
     source_diversity_bonus: float = 0.0

@@ -114,6 +114,10 @@ class EvidenceCollector:
         acc_score = score_accumulation(investor_trends)
         up_days = score_up_days(df, window=10) if not df.empty else 0
 
+        # Calculate foreign/institution net totals
+        foreign_net_total = sum(t.get("foreign_net", 0) for t in investor_trends)
+        institution_net_total = sum(t.get("institution_net", 0) for t in investor_trends)
+
         vol_ratio = 0.0
         if not df.empty and "Vol_SMA_20" in df.columns:
             latest_vol = df.iloc[-1].get("Volume", 0)
@@ -134,6 +138,8 @@ class EvidenceCollector:
         return ScreenerEvidence(
             stock=stock,
             accumulation_score=acc_score,
+            foreign_net=foreign_net_total,
+            institution_net=institution_net_total,
             up_days=up_days,
             volume_burst_score=vol_score,
             source_diversity_bonus=diversity,
