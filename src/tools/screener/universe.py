@@ -98,6 +98,7 @@ class UniverseBuilder:
         if not self.kis:
             return
 
+        import logging
         for exchange in ["NAS", "NYS"]:
             # Rise ranking
             try:
@@ -111,8 +112,9 @@ class UniverseBuilder:
                         price=s.get("price"),
                         change_pct=s.get("change_pct"),
                     ))
-            except Exception:
-                pass
+                logging.info(f"US {exchange} rise: {len(rise)} stocks")
+            except Exception as e:
+                logging.warning(f"Failed to get US {exchange} rise ranking: {e}")
 
             # Volume ranking
             try:
@@ -125,8 +127,9 @@ class UniverseBuilder:
                         sources=["volume_rank"],
                         price=s.get("price"),
                     ))
-            except Exception:
-                pass
+                logging.info(f"US {exchange} volume: {len(volume)} stocks")
+            except Exception as e:
+                logging.warning(f"Failed to get US {exchange} volume ranking: {e}")
 
     def _merge(self, stocks: dict[str, UniverseStock], key: str, new: UniverseStock) -> None:
         """Merge stock into universe, accumulating sources."""

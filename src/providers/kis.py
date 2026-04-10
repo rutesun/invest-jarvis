@@ -225,7 +225,16 @@ class KISProvider(BaseProvider):
     async def get_us_ranking_updown(
         self, exchange: str = "NAS", direction: str = "up", top_n: int = 30
     ) -> list[dict]:
-        """Get US stock up/down rate ranking."""
+        """Get US stock up/down rate ranking.
+
+        Args:
+            exchange: Exchange code (NAS=NASDAQ, NYS=NYSE, AMS=AMEX)
+            direction: "up" for rise, "down" for fall
+            top_n: Number of stocks to return
+
+        Returns:
+            List of stocks with ticker, name, change_pct, price, volume
+        """
         token = await self._get_access_token()
         url = f"{self.BASE_URL}/uapi/overseas-stock/v1/ranking/updown-rate"
         gubn = "1" if direction == "up" else "0"
@@ -236,7 +245,17 @@ class KISProvider(BaseProvider):
             "tr_id": "HHDFS76290000",
             "Content-Type": "application/json; charset=utf-8",
         }
-        params = {"EXCD": exchange, "GUBN": gubn, "BYMD": "", "NDAY": ""}
+        # NDAY: 0=today, 1=previous day
+        # VOL_RANG: 0=all, 1=100+, 2=1K+, 3=10K+, 4=100K+, 5=1M+, 6=10M+
+        # Use previous day data if current market is closed
+        params = {
+            "EXCD": exchange,
+            "NDAY": "1",  # Previous day (more reliable than today)
+            "GUBN": gubn,
+            "VOL_RANG": "0",  # All volume
+            "AUTH": "",
+            "KEYB": "",
+        }
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(url, headers=headers, params=params)
@@ -244,8 +263,10 @@ class KISProvider(BaseProvider):
             data = response.json()
 
         results = []
-        body = data.get("output", {}).get("body", [])
-        for item in body[:top_n]:
+        # Response structure: {"output1": {...}, "output2": [...]}
+        # output2 contains the actual stock list
+        output2 = data.get("output2", [])
+        for item in output2[:top_n]:
             results.append({
                 "ticker": item.get("symb", ""),
                 "name": item.get("name", ""),
@@ -259,7 +280,15 @@ class KISProvider(BaseProvider):
     async def get_us_ranking_volume(
         self, exchange: str = "NAS", top_n: int = 30
     ) -> list[dict]:
-        """Get US stock volume ranking."""
+        """Get US stock volume ranking.
+
+        Args:
+            exchange: Exchange code (NAS=NASDAQ, NYS=NYSE, AMS=AMEX)
+            top_n: Number of stocks to return
+
+        Returns:
+            List of stocks with ticker, name, price, volume
+        """
         token = await self._get_access_token()
         url = f"{self.BASE_URL}/uapi/overseas-stock/v1/ranking/trade-pbmn"
         headers = {
@@ -269,7 +298,15 @@ class KISProvider(BaseProvider):
             "tr_id": "HHDFS76320010",
             "Content-Type": "application/json; charset=utf-8",
         }
-        params = {"EXCD": exchange, "GUBN": "", "BYMD": "", "NDAY": ""}
+        # Use previous day data if current market is closed
+        params = {
+            "EXCD": exchange,
+            "NDAY": "1",  # Previous day
+            "GUBN": "",
+            "VOL_RANG": "0",  # All volume
+            "AUTH": "",
+            "KEYB": "",
+        }
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(url, headers=headers, params=params)
@@ -277,8 +314,10 @@ class KISProvider(BaseProvider):
             data = response.json()
 
         results = []
-        body = data.get("output", {}).get("body", [])
-        for item in body[:top_n]:
+        # Response structure: {"output1": {...}, "output2": [...]}
+        # output2 contains the actual stock list
+        output2 = data.get("output2", [])
+        for item in output2[:top_n]:
             results.append({
                 "ticker": item.get("symb", ""),
                 "name": item.get("name", ""),

@@ -42,6 +42,12 @@ class ScreenerPipeline:
         # 2. Universe
         universe = await self.universe_builder.build(market)
 
+        # Debug: log universe stats
+        kr_count = sum(1 for s in universe if s.market in ("KOSPI", "KOSDAQ"))
+        us_count = sum(1 for s in universe if s.market not in ("KOSPI", "KOSDAQ"))
+        import logging
+        logging.info(f"Universe: total={len(universe)}, KR={kr_count}, US={us_count}")
+
         # 3. Evidence + Score
         scored = await self.evidence_collector.collect_and_score(universe)
 
