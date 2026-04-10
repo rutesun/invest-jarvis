@@ -117,20 +117,51 @@ async def generate_fundamental_summary(
     llm: BaseChatModel,
 ) -> FundamentalSummaryOutput:
     """Generate fundamental analysis summary using LLM."""
+    from src.utils.sector_metrics import SectorMetrics
+
+    # 섹터별 우선순위 지표 가져오기
+    priority_metrics = SectorMetrics.get_priority_metrics(input_data.sector)
+
+    # 모든 지표를 포함하되, 우선순위 지표는 [핵심] 표시
+    all_metrics = [
+        ("pe_ratio", "P/E"),
+        ("forward_pe", "Forward P/E"),
+        ("peg_ratio", "PEG"),
+        ("pb_ratio", "P/B"),
+        ("ps_ratio", "PSR"),
+        ("ev_ebitda", "EV/EBITDA"),
+        ("roe", "ROE"),
+        ("roa", "ROA"),
+        ("revenue_growth", "매출 성장률"),
+        ("earnings_growth", "이익 성장률"),
+        ("gross_margin", "매출총이익률"),
+        ("operating_margin", "영업이익률"),
+        ("profit_margin", "순이익률"),
+        ("debt_to_equity", "D/E"),
+        ("free_cash_flow", "FCF"),
+        ("fcf_yield", "FCF Yield"),
+        ("dividend_yield", "배당 수익률"),
+        ("payout_ratio", "배당 성향"),
+    ]
+
     metrics_text = []
-    if input_data.pe_ratio is not None: metrics_text.append(f"P/E: {input_data.pe_ratio:.1f}")
-    if input_data.forward_pe is not None: metrics_text.append(f"Forward P/E: {input_data.forward_pe:.1f}")
-    if input_data.peg_ratio is not None: metrics_text.append(f"PEG: {input_data.peg_ratio:.2f}")
-    if input_data.ev_ebitda is not None: metrics_text.append(f"EV/EBITDA: {input_data.ev_ebitda:.1f}")
-    if input_data.ps_ratio is not None: metrics_text.append(f"PSR: {input_data.ps_ratio:.1f}")
-    if input_data.roe is not None: metrics_text.append(f"ROE: {input_data.roe*100:.1f}%")
-    if input_data.revenue_growth is not None: metrics_text.append(f"매출 성장률: {input_data.revenue_growth*100:.1f}%")
-    if input_data.earnings_growth is not None: metrics_text.append(f"이익 성장률: {input_data.earnings_growth*100:.1f}%")
-    if input_data.debt_to_equity is not None: metrics_text.append(f"D/E: {input_data.debt_to_equity:.1f}")
-    if input_data.free_cash_flow is not None: metrics_text.append(f"FCF: ${input_data.free_cash_flow/1e9:.1f}B")
-    if input_data.fcf_yield is not None: metrics_text.append(f"FCF Yield: {input_data.fcf_yield*100:.1f}%")
-    if input_data.gross_margin is not None: metrics_text.append(f"매출총이익률: {input_data.gross_margin*100:.1f}%")
-    if input_data.operating_margin is not None: metrics_text.append(f"영업이익률: {input_data.operating_margin*100:.1f}%")
+    for metric_name, display_name in all_metrics:
+        value = getattr(input_data, metric_name, None)
+        if value is not None:
+            # 우선순위 지표면 [핵심] 접두사 추가
+            prefix = "[핵심] " if metric_name in priority_metrics else ""
+
+            # 포맷팅
+            if metric_name in ["revenue_growth", "earnings_growth", "gross_margin",
+                              "operating_margin", "profit_margin", "fcf_yield",
+                              "dividend_yield", "roe", "roa", "payout_ratio"]:
+                formatted = f"{value*100:.1f}%"
+            elif metric_name == "free_cash_flow":
+                formatted = f"${value/1e9:.1f}B"
+            else:
+                formatted = f"{value:.1f}" if abs(value) > 10 else f"{value:.2f}"
+
+            metrics_text.append(f"{prefix}{display_name}: {formatted}")
 
     if not metrics_text:
         metrics_text.append("No financial metrics available")
@@ -141,12 +172,12 @@ async def generate_fundamental_summary(
 
 **Sector**: {sector} / {industry}
 
-**Key Metrics**:
+**Key Metrics** (핵심 지표는 [핵심]으로 표시):
 {metrics_text}
 
 Provide summary with:
 - summary: overall fundamental assessment in Korean
-- strengths: list of 2-3 key strengths
+- strengths: list of 2-3 key strengths (핵심 지표를 중심으로)
 - weaknesses: list of 2-3 key weaknesses
 - valuation_assessment: "저평가", "적정", or "고평가"
 - confidence: 0.0-1.0""")
