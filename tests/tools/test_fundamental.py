@@ -194,3 +194,95 @@ def test_fundamental_snapshot_with_quarterly_data():
     assert snapshot.quarterly_data is not None
     assert len(snapshot.quarterly_data) == 2
     assert snapshot.quarterly_data[0].period == "2026-Q1"
+
+
+@pytest.mark.asyncio
+async def test_quarterly_yoy_calculation():
+    """YoY growth rate calculation verification"""
+    import asyncio
+
+    mock_info = {"marketCap": 3e12}
+
+    # 8 quarters of mock data
+    quarters = [
+        pd.Period("2026Q1"),
+        pd.Period("2025Q4"),
+        pd.Period("2025Q3"),
+        pd.Period("2025Q2"),
+        pd.Period("2025Q1"),  # 4 quarters ago (YoY comparison target)
+        pd.Period("2024Q4"),
+        pd.Period("2024Q3"),
+        pd.Period("2024Q2"),
+    ]
+
+    revenues = [143756e6, 102466e6, 94036e6, 88230e6, 124300e6, 95000e6, 90000e6, 85000e6]
+    earnings = [36500e6, 28300e6, 24200e6, 22100e6, 30800e6, 25000e6, 21000e6, 19000e6]
+
+    # Create DataFrame with correct structure: columns are quarters, rows are metrics
+    data = {}
+    for i, q in enumerate(quarters):
+        data[q] = {
+            "Total Revenue": revenues[i],
+            "Net Income": earnings[i],
+        }
+    qf = pd.DataFrame(data)
+
+    mock_ticker = MagicMock()
+    mock_ticker.info = mock_info
+    mock_ticker.quarterly_financials = qf
+
+    with patch("yfinance.Ticker", return_value=mock_ticker):
+        tool = FundamentalTool()
+        result = await tool.execute("AAPL")
+
+    assert result.success is True
+    quarterly_data = result.data.quarterly_data
+    assert quarterly_data is not None
+    assert len(quarterly_data) == 4  # Most recent 4 quarters only
+
+    # Q1 2026 YoY calculation verification: (143756 - 124300) / 124300 = 0.1565
+    assert quarterly_data[0].period == "2026-Q1"
+    assert quarterly_data[0].revenue_yoy is not None
+    assert abs(quarterly_data[0].revenue_yoy - 0.1565) < 0.001
+
+
+@pytest.mark.asyncio
+async def test_quarterly_qoq_calculation():
+    """QoQ growth rate calculation verification"""
+    import asyncio
+
+    mock_info = {"marketCap": 3e12}
+
+    quarters = [
+        pd.Period("2026Q1"),
+        pd.Period("2025Q4"),
+        pd.Period("2025Q3"),
+        pd.Period("2025Q2"),
+        pd.Period("2025Q1"),
+    ]
+
+    revenues = [143756e6, 102466e6, 94036e6, 88230e6, 124300e6]
+    earnings = [36500e6, 28300e6, 24200e6, 22100e6, 30800e6]
+
+    # Create DataFrame with correct structure
+    data = {}
+    for i, q in enumerate(quarters):
+        data[q] = {
+            "Total Revenue": revenues[i],
+            "Net Income": earnings[i],
+        }
+    qf = pd.DataFrame(data)
+
+    mock_ticker = MagicMock()
+    mock_ticker.info = mock_info
+    mock_ticker.quarterly_financials = qf
+
+    with patch("yfinance.Ticker", return_value=mock_ticker):
+        tool = FundamentalTool()
+        result = await tool.execute("AAPL")
+
+    quarterly_data = result.data.quarterly_data
+
+    # Q1 2026 QoQ calculation verification: (143756 - 102466) / 102466 = 0.4030
+    assert quarterly_data[0].revenue_qoq is not None
+    assert abs(quarterly_data[0].revenue_qoq - 0.4030) < 0.001

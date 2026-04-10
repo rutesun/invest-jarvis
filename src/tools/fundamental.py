@@ -93,24 +93,81 @@ class FundamentalTool(BaseTool):
         mcap = info.get("marketCap")
         fcf_yield = (fcf / mcap) if fcf and mcap and mcap > 0 else None
 
-        # Quarterly data
-        quarterly_data = None
+        # Quarterly data with YoY/QoQ growth rates
+        quarterly_data_list = None
         try:
             qf = t.quarterly_financials
             if qf is not None and not qf.empty:
-                quarterly_data = []
-                for col in qf.columns[:4]:
+                import math
+
+                # Parse up to 8 quarters
+                num_quarters = min(len(qf.columns), 8)
+                quarters_raw = []
+
+                for col in qf.columns[:num_quarters]:
                     period = f"{col.year}-Q{col.quarter}" if hasattr(col, "quarter") else str(col)
                     rev = qf.loc["Total Revenue", col] if "Total Revenue" in qf.index else None
                     earn = qf.loc["Net Income", col] if "Net Income" in qf.index else None
-                    if rev is not None or earn is not None:
-                        quarterly_data.append(
-                            QuarterlyData(
-                                period=period,
-                                revenue=float(rev) if rev is not None else None,
-                                earnings=float(earn) if earn is not None else None,
-                            )
-                        )
+
+                    # Handle pandas NaN
+                    rev_value = None
+                    if rev is not None:
+                        try:
+                            rev_float = float(rev)
+                            if not math.isnan(rev_float):
+                                rev_value = rev_float
+                        except (ValueError, TypeError):
+                            pass
+
+                    earn_value = None
+                    if earn is not None:
+                        try:
+                            earn_float = float(earn)
+                            if not math.isnan(earn_float):
+                                earn_value = earn_float
+                        except (ValueError, TypeError):
+                            pass
+
+                    quarters_raw.append({
+                        "period": period,
+                        "revenue": rev_value,
+                        "earnings": earn_value,
+                    })
+
+                # Calculate growth rates for most recent 4 quarters
+                quarterly_data_list = []
+                for i in range(min(4, len(quarters_raw))):
+                    q = quarters_raw[i]
+
+                    # YoY calculation (compare with 4 quarters ago)
+                    revenue_yoy = None
+                    earnings_yoy = None
+                    if len(quarters_raw) >= i + 5:  # Need i+5 quarters for YoY
+                        q_yoy = quarters_raw[i + 4]
+                        if q["revenue"] is not None and q_yoy["revenue"] is not None and q_yoy["revenue"] > 0:
+                            revenue_yoy = (q["revenue"] - q_yoy["revenue"]) / q_yoy["revenue"]
+                        if q["earnings"] is not None and q_yoy["earnings"] is not None and q_yoy["earnings"] > 0:
+                            earnings_yoy = (q["earnings"] - q_yoy["earnings"]) / q_yoy["earnings"]
+
+                    # QoQ calculation (compare with 1 quarter ago)
+                    revenue_qoq = None
+                    earnings_qoq = None
+                    if len(quarters_raw) >= i + 2:  # Need i+2 quarters for QoQ
+                        q_qoq = quarters_raw[i + 1]
+                        if q["revenue"] is not None and q_qoq["revenue"] is not None and q_qoq["revenue"] > 0:
+                            revenue_qoq = (q["revenue"] - q_qoq["revenue"]) / q_qoq["revenue"]
+                        if q["earnings"] is not None and q_qoq["earnings"] is not None and q_qoq["earnings"] > 0:
+                            earnings_qoq = (q["earnings"] - q_qoq["earnings"]) / q_qoq["earnings"]
+
+                    quarterly_data_list.append(QuarterlyData(
+                        period=q["period"],
+                        revenue=q["revenue"],
+                        earnings=q["earnings"],
+                        revenue_yoy=revenue_yoy,
+                        revenue_qoq=revenue_qoq,
+                        earnings_yoy=earnings_yoy,
+                        earnings_qoq=earnings_qoq,
+                    ))
         except Exception as e:
             import logging
             logging.getLogger(__name__).warning("Failed to parse quarterly financials: %s", e)
@@ -134,7 +191,7 @@ class FundamentalTool(BaseTool):
             roa=info.get("returnOnAssets"),
             revenue_growth=info.get("revenueGrowth"),
             earnings_growth=info.get("earningsGrowth"),
-            quarterly_data=quarterly_data,
+            quarterly_data=quarterly_data_list,
             debt_to_equity=info.get("debtToEquity"),
             current_ratio=info.get("currentRatio"),
             quick_ratio=info.get("quickRatio"),
