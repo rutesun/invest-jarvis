@@ -73,6 +73,11 @@ class FundamentalSummaryInput(BaseModel):
     fcf_yield: float | None = None
     gross_margin: float | None = None
     operating_margin: float | None = None
+    pb_ratio: float | None = None
+    roa: float | None = None
+    profit_margin: float | None = None
+    dividend_yield: float | None = None
+    payout_ratio: float | None = None
 
 
 class FundamentalSummaryOutput(BaseModel):
