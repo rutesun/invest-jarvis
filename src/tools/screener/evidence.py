@@ -104,9 +104,11 @@ class EvidenceCollector:
 
         # 3. Investor trend (KR only)
         investor_trends = []
+        program_trades = []
         if is_kr and self.kis:
             try:
                 investor_trends = await self.kis.get_investor_trend(stock.ticker, days=10)
+                program_trades = await self.kis.get_program_trade(stock.ticker, days=10)
             except Exception:
                 pass
 
@@ -114,9 +116,18 @@ class EvidenceCollector:
         acc_score = score_accumulation(investor_trends)
         up_days = score_up_days(df, window=10) if not df.empty else 0
 
-        # Calculate foreign/institution net totals
+        # Calculate daily (most recent day)
+        daily_foreign = investor_trends[0].get("foreign_net", 0) if investor_trends else 0
+        daily_institution = investor_trends[0].get("institution_net", 0) if investor_trends else 0
+        daily_program = program_trades[0].get("program_net", 0) if program_trades else 0
+
+        # Calculate 10-day aggregates
         foreign_net_total = sum(t.get("foreign_net", 0) for t in investor_trends)
         institution_net_total = sum(t.get("institution_net", 0) for t in investor_trends)
+
+        # Calculate buy days count (how many days had net buying)
+        foreign_days_count = sum(1 for t in investor_trends if t.get("foreign_net", 0) > 0)
+        institution_days_count = sum(1 for t in investor_trends if t.get("institution_net", 0) > 0)
 
         vol_ratio = 0.0
         if not df.empty and "Vol_SMA_20" in df.columns:
@@ -138,8 +149,13 @@ class EvidenceCollector:
         return ScreenerEvidence(
             stock=stock,
             accumulation_score=acc_score,
+            daily_foreign=daily_foreign,
+            daily_institution=daily_institution,
+            daily_program=daily_program,
             foreign_net=foreign_net_total,
             institution_net=institution_net_total,
+            foreign_days_count=foreign_days_count,
+            institution_days_count=institution_days_count,
             up_days=up_days,
             volume_burst_score=vol_score,
             source_diversity_bonus=diversity,

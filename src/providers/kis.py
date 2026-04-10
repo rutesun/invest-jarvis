@@ -329,3 +329,47 @@ class KISProvider(BaseProvider):
                 "total_net": foreign_net + institution_net,
             })
         return results
+
+    async def get_program_trade(self, ticker: str, days: int = 10) -> list[dict]:
+        """Get daily program trading data for a Korean stock.
+
+        Args:
+            ticker: Stock ticker code (6 digits)
+            days: Number of days to fetch (default 10)
+
+        Returns:
+            List of daily program trading data with date and net buy quantity
+        """
+        token = await self._get_access_token()
+        url = f"{self.BASE_URL}/uapi/domestic-stock/v1/quotations/program-trade-by-stock-daily"
+        headers = {
+            "Authorization": f"{token.token_type} {token.access_token}",
+            "appkey": self.app_key,
+            "appsecret": self.app_secret,
+            "tr_id": "FHPPG04650201",
+            "Content-Type": "application/json; charset=utf-8",
+        }
+        params = {
+            "FID_COND_MRKT_DIV_CODE": "J",
+            "FID_INPUT_ISCD": ticker,
+            "FID_INPUT_DATE_1": "",
+        }
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(url, headers=headers, params=params)
+            response.raise_for_status()
+            data = response.json()
+
+        results = []
+        for item in data.get("output", [])[:days]:
+            # Handle empty strings from API
+            program_val = item.get("pgtr_ntby_qty", "0") or "0"
+            try:
+                program_net = int(program_val.strip()) if isinstance(program_val, str) and program_val.strip() else int(program_val) if program_val else 0
+            except (ValueError, AttributeError):
+                program_net = 0
+            results.append({
+                "date": item.get("stck_bsop_date", ""),
+                "program_net": program_net,
+            })
+        return results

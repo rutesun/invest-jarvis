@@ -62,6 +62,28 @@ class ScreenerPipeline:
             "total_universe_size": len(universe),
         }
 
+    def _format_net(self, value: int) -> str:
+        """Format net buy quantity with sign and unit.
+
+        Args:
+            value: Net buy quantity (positive for buy, negative for sell)
+
+        Returns:
+            Formatted string (e.g., "+1.2M", "-300K", "-")
+        """
+        if value == 0:
+            return "-"
+
+        abs_val = abs(value)
+        sign = "+" if value > 0 else ""
+
+        if abs_val >= 1_000_000:
+            return f"{sign}{value / 1_000_000:.1f}M"
+        elif abs_val >= 1_000:
+            return f"{sign}{value // 1_000}K"
+        else:
+            return f"{sign}{value}"
+
     def _aggregate_themes(self, scored: list[ScreenerEvidence]) -> list[dict]:
         """Aggregate themes from scored stocks.
         
@@ -157,23 +179,48 @@ class ScreenerPipeline:
                 lines.append(f"| {i} | {t['name']} | {rate:+.1f}% | {t['stock_count']} | {stocks_str} |")
             lines.append("")
 
-        # Leaders
+        # Leaders - separate KR and US
         leaders = result.get("leaders", [])
         if leaders:
-            lines.append("## 주도주 TOP 50")
-            lines.append("| # | 종목 | 시장 | 모멘텀 | 외인 | 기관 | 거래량 | 소스 |")
-            lines.append("|---|------|------|--------|------|------|--------|------|")
-            for item in leaders:
-                s = item.stock
-                sources_str = ",".join(s.sources)
-                # Format foreign/institution net (in thousands)
-                foreign = f"{item.foreign_net//1000}K" if item.foreign_net != 0 else "-"
-                institution = f"{item.institution_net//1000}K" if item.institution_net != 0 else "-"
-                lines.append(
-                    f"| {item.rank} | {s.name} | {s.market} | "
-                    f"{item.momentum_total:.0f} | {foreign} | {institution} | {item.vol_ratio:.1f}x | {sources_str} |"
-                )
-            lines.append("")
+            # Separate KR and US stocks
+            kr_leaders = [item for item in leaders if item.stock.market in ("KOSPI", "KOSDAQ")]
+            us_leaders = [item for item in leaders if item.stock.market not in ("KOSPI", "KOSDAQ")]
+
+            # Korean stocks
+            if kr_leaders:
+                lines.append("## 주도주 TOP 50 (한국)")
+                lines.append("| # | 종목 | 시장 | 모멘텀 | 당일외인 | 당일기관 | 당일프로 | 10일외인 | 10일기관 | 거래량 | 소스 |")
+                lines.append("|---|------|------|--------|----------|----------|----------|----------|----------|--------|------|")
+                for item in kr_leaders:
+                    s = item.stock
+                    sources_str = ",".join(s.sources)
+                    # Daily net buy (most recent day)
+                    daily_f = self._format_net(item.daily_foreign)
+                    daily_i = self._format_net(item.daily_institution)
+                    daily_p = self._format_net(item.daily_program)
+                    # 10-day aggregated: "7/10 (+15.3M)"
+                    ten_f = f"{item.foreign_days_count}/10 ({self._format_net(item.foreign_net)})"
+                    ten_i = f"{item.institution_days_count}/10 ({self._format_net(item.institution_net)})"
+                    lines.append(
+                        f"| {item.rank} | {s.name} | {s.market} | "
+                        f"{item.momentum_total:.0f} | {daily_f} | {daily_i} | {daily_p} | "
+                        f"{ten_f} | {ten_i} | {item.vol_ratio:.1f}x | {sources_str} |"
+                    )
+                lines.append("")
+
+            # US stocks
+            if us_leaders:
+                lines.append("## 주도주 TOP 50 (미국)")
+                lines.append("| # | 종목 | 시장 | 모멘텀 | 거래량 | 소스 |")
+                lines.append("|---|------|------|--------|--------|------|")
+                for item in us_leaders:
+                    s = item.stock
+                    sources_str = ",".join(s.sources)
+                    lines.append(
+                        f"| {item.rank} | {s.name} | {s.market} | "
+                        f"{item.momentum_total:.0f} | {item.vol_ratio:.1f}x | {sources_str} |"
+                    )
+                lines.append("")
 
         # News
         news = result.get("news", {})
