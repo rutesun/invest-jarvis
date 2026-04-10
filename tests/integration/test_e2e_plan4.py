@@ -37,3 +37,29 @@ def test_analyze_shows_quarterly_trends():
     # Growth rate format verification (+ or - sign)
     import re
     assert re.search(r"YoY [+-]\d+\.\d+%", result.stdout) is not None
+
+
+@pytest.mark.integration
+def test_analyze_shows_sector_priority_metrics():
+    """CLI에서 섹터별 우선순위 지표가 ⭐와 함께 표시되는지 검증"""
+    result = runner.invoke(app, ["analyze", "NVDA", "--provider", "openai"])
+
+    assert result.exit_code == 0
+
+    # Technology 섹터는 PSR을 ⭐와 함께 표시해야 함
+    # 렌더링 후에는 **bold** 마크업이 사라지므로 단순 텍스트 검색
+    assert "⭐" in result.stdout, "⭐ symbol should be present in output"
+    assert "PSR" in result.stdout, "PSR metric should be present"
+    assert "매출 성장률" in result.stdout, "Revenue growth metric should be present"
+
+    # 우선순위 지표들이 ⭐와 함께 같은 섹션에 표시되어야 함
+    lines_with_star = [line for line in result.stdout.split('\n') if '⭐' in line]
+    assert len(lines_with_star) > 0, "Should have lines with priority metrics marked with ⭐"
+
+    # P/E Ratio는 우선순위가 아니므로 ⭐가 붙지 않아야 함
+    # "P/E Ratio" 뒤에 바로 ⭐가 오면 안 됨
+    import re
+    assert not re.search(r'⭐[^(P/E)]*P/E Ratio', result.stdout), "P/E Ratio should not have ⭐"
+
+    # Sector/Industry 정보는 표시되어야 함
+    assert "Technology" in result.stdout or "Semiconductors" in result.stdout
