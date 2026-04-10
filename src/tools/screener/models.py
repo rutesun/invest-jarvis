@@ -24,9 +24,11 @@ class ScreenerEvidence(BaseModel):
     # 10-day aggregated net buy
     foreign_net: int = 0
     institution_net: int = 0
+    program_net: int = 0
     # 10-day buy days count (how many days had net buying)
     foreign_days_count: int = 0
     institution_days_count: int = 0
+    program_days_count: int = 0
     up_days: int = 0  # collected but not scored
     volume_burst_score: float = 0.0
     source_diversity_bonus: float = 0.0

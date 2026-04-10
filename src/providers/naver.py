@@ -27,11 +27,12 @@ class NaverProvider:
             response.raise_for_status()
             data = response.json()
 
-            themes_raw = data.get("stocks", [])[:top_n]
+            # API returns array directly, not {"stocks": [...]}
+            themes_raw = data[:top_n] if isinstance(data, list) else []
             themes = []
 
             for theme in themes_raw:
-                theme_id = theme.get("themeCode", "")
+                theme_id = theme.get("no", "")
                 stocks = await self._fetch_theme_stocks(client, theme_id)
                 themes.append({
                     "name": theme.get("name", ""),
@@ -45,13 +46,15 @@ class NaverProvider:
     async def _fetch_theme_stocks(self, client: httpx.AsyncClient, theme_id: str) -> list[dict]:
         """Fetch stocks for a specific theme."""
         url = f"{self.STOCK_API_BASE}/api/domestic/market/theme/{theme_id}/stocklist"
-        params = {"startIdx": 0, "pageSize": 200, "marketType": ""}
+        params = {"startIdx": 0, "pageSize": 200, "marketType": "ALL"}
         response = await client.get(url, params=params)
         response.raise_for_status()
         data = response.json()
 
+        # API returns array directly
+        stocks_raw = data if isinstance(data, list) else []
         stocks = []
-        for item in data.get("stocks", []):
+        for item in stocks_raw:
             sosok = item.get("sosok", "0")
             market = "KOSPI" if sosok == "0" else "KOSDAQ"
             stocks.append({

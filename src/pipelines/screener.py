@@ -189,8 +189,8 @@ class ScreenerPipeline:
             # Korean stocks
             if kr_leaders:
                 lines.append("## 주도주 TOP 50 (한국)")
-                lines.append("| # | 종목 | 시장 | 모멘텀 | 당일외인 | 당일기관 | 당일프로 | 10일외인 | 10일기관 | 거래량 | 소스 |")
-                lines.append("|---|------|------|--------|----------|----------|----------|----------|----------|--------|------|")
+                lines.append("| # | 종목 | 시장 | 모멘텀 | 당일외인 | 당일기관 | 당일프로 | 10일외인 | 10일기관 | 10일프로 | 거래량 | 소스 |")
+                lines.append("|---|------|------|--------|----------|----------|----------|----------|----------|----------|--------|------|")
                 for item in kr_leaders:
                     s = item.stock
                     sources_str = ",".join(s.sources)
@@ -201,10 +201,11 @@ class ScreenerPipeline:
                     # 10-day aggregated: "7/10 (+15.3M)"
                     ten_f = f"{item.foreign_days_count}/10 ({self._format_net(item.foreign_net)})"
                     ten_i = f"{item.institution_days_count}/10 ({self._format_net(item.institution_net)})"
+                    ten_p = f"{item.program_days_count}/10 ({self._format_net(item.program_net)})"
                     lines.append(
                         f"| {item.rank} | {s.name} | {s.market} | "
                         f"{item.momentum_total:.0f} | {daily_f} | {daily_i} | {daily_p} | "
-                        f"{ten_f} | {ten_i} | {item.vol_ratio:.1f}x | {sources_str} |"
+                        f"{ten_f} | {ten_i} | {ten_p} | {item.vol_ratio:.1f}x | {sources_str} |"
                     )
                 lines.append("")
 
