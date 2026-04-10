@@ -220,13 +220,13 @@ class ScreenerPipeline:
         # US stocks
         if us_leaders:
             lines.append("## 주도주 TOP 50 (미국)")
-            lines.append("| # | 종목 | 시장 | 모멘텀 | 거래량 | 소스 |")
-            lines.append("|---|------|------|--------|--------|------|")
+            lines.append("| # | 티커 | 종목명 | 시장 | 모멘텀 | 거래량 | 소스 |")
+            lines.append("|---|------|--------|------|--------|--------|------|")
             for i, item in enumerate(us_leaders, 1):
                 s = item.stock
                 sources_str = ",".join(s.sources)
                 lines.append(
-                    f"| {i} | {s.name} | {s.market} | "
+                    f"| {i} | {s.ticker} | {s.name} | {s.market} | "
                     f"{item.momentum_total:.0f} | {item.vol_ratio:.1f}x | {sources_str} |"
                 )
             lines.append("")
