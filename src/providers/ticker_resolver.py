@@ -1,11 +1,14 @@
 import os
 import re
+import logging
 from typing import Optional
 from pathlib import Path
 
 from src.providers.ticker_models import TickerResolution, TickerNotFoundError, TickerResolutionError
 from src.providers.ticker_cache import UserMappingCache
 from src.providers.llm_ticker_agent import LLMTickerAgent
+
+logger = logging.getLogger(__name__)
 
 
 class TickerResolver:
@@ -42,14 +45,20 @@ class TickerResolver:
 
         cached = self.user_cache.get(query)
         if cached:
-            self.user_cache.update_usage(query)
-            return TickerResolution(
-                original_query=query,
-                resolved_ticker=cached.ticker,
-                display_name=cached.display_name,
-                source="user_cache",
-            )
+            if not cached.ticker:
+                logger.debug("Cache hit for '%s' but ticker is None — evicting", query)
+                self.user_cache.evict(query)
+            else:
+                self.user_cache.update_usage(query)
+                logger.debug("Cache hit: %s → %s", query, cached.ticker)
+                return TickerResolution(
+                    original_query=query,
+                    resolved_ticker=cached.ticker,
+                    display_name=cached.display_name,
+                    source="user_cache",
+                )
 
+        logger.debug("Calling LLM agent for: %s", query)
         ticker, display_name = await self.llm_agent.resolve(query)
         self.user_cache.save(query, ticker, display_name)
         return TickerResolution(

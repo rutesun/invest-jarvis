@@ -144,6 +144,12 @@ class UserMappingCache:
             })
         return result
 
+    def evict(self, query: str):
+        """Remove a single cached mapping by query key."""
+        if query in self.mappings:
+            del self.mappings[query]
+            self._save()
+
     def clear(self):
         """Clear all cached mappings"""
         self.mappings = {}

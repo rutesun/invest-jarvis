@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 from pathlib import Path
 from typing import Optional, Literal
@@ -44,9 +45,17 @@ def main(
     version: Optional[bool] = typer.Option(
         None, "--version", "-v", callback=version_callback, is_eager=True
     ),
+    verbose: bool = typer.Option(False, "--verbose", "-V", help="Enable debug logging"),
 ):
     """Invest Jarvis - Financial Analysis CLI"""
-    pass
+    if verbose:
+        logging.basicConfig(
+            level=logging.DEBUG,
+            format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        )
+        logging.getLogger("httpx").setLevel(logging.WARNING)
+        logging.getLogger("httpcore").setLevel(logging.WARNING)
+        logging.getLogger("openai").setLevel(logging.WARNING)
 
 
 async def resolve_ticker(query: str) -> str:

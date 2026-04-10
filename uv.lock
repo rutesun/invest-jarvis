@@ -351,6 +351,20 @@ wheels = [
 ]
 
 [[package]]
+name = "ddgs"
+version = "9.13.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "click" },
+    { name = "lxml" },
+    { name = "primp" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b0/23/d792684ee325a5965ed9af3fde30af456ca6367529bf137d7582735b3708/ddgs-9.13.0.tar.gz", hash = "sha256:b0b9db0895917d4c6dda54b730cdb1a27501ae4350e8b48182b9c3e87b9dbd84", size = 37311, upload-time = "2026-04-06T15:00:38.075Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ff/8d/ea7dba889bc5520f7a40ef191a48b62e59a265f0fdb5973046513f9e94f4/ddgs-9.13.0-py3-none-any.whl", hash = "sha256:3182c2853e7b0cfc030f50cbebee382fa44d6dd258fa55e5d24789ae1e4c6a93", size = 46437, upload-time = "2026-04-06T15:00:36.901Z" },
+]
+
+[[package]]
 name = "distro"
 version = "1.9.0"
 source = { registry = "https://pypi.org/simple" }
@@ -366,20 +380,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/b2/9d/c3b43da9515bd270df0f80548d9944e389870713cc1fe2b8fb35fe2bcefd/docstring_parser-0.17.0.tar.gz", hash = "sha256:583de4a309722b3315439bb31d64ba3eebada841f2e2cee23b99df001434c912", size = 27442, upload-time = "2025-07-21T07:35:01.868Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/55/e2/2537ebcff11c1ee1ff17d8d0b6f4db75873e3b0fb32c2d4a2ee31ecb310a/docstring_parser-0.17.0-py3-none-any.whl", hash = "sha256:cf2569abd23dce8099b300f9b4fa8191e9582dda731fd533daf54c4551658708", size = 36896, upload-time = "2025-07-21T07:35:00.684Z" },
-]
-
-[[package]]
-name = "duckduckgo-search"
-version = "8.1.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "click" },
-    { name = "lxml" },
-    { name = "primp" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/10/ef/07791a05751e6cc9de1dd49fb12730259ee109b18e6d097e25e6c32d5617/duckduckgo_search-8.1.1.tar.gz", hash = "sha256:9da91c9eb26a17e016ea1da26235d40404b46b0565ea86d75a9f78cc9441f935", size = 22868, upload-time = "2025-07-06T15:30:59.73Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/db/72/c027b3b488b1010cf71670032fcf7e681d44b81829d484bb04e31a949a8d/duckduckgo_search-8.1.1-py3-none-any.whl", hash = "sha256:f48adbb06626ee05918f7e0cef3a45639e9939805c4fc179e68c48a12f1b5062", size = 18932, upload-time = "2025-07-06T15:30:58.339Z" },
 ]
 
 [[package]]
@@ -451,7 +451,7 @@ name = "invest-jarvis"
 version = "0.3.0"
 source = { editable = "." }
 dependencies = [
-    { name = "duckduckgo-search" },
+    { name = "ddgs" },
     { name = "httpx" },
     { name = "langchain-anthropic" },
     { name = "langchain-core" },
@@ -482,7 +482,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "duckduckgo-search", specifier = ">=6.0.0" },
+    { name = "ddgs", specifier = ">=9.0.0" },
     { name = "httpx", specifier = ">=0.25.0" },
     { name = "langchain-anthropic", specifier = ">=1.4.0" },
     { name = "langchain-core", specifier = ">=1.2.28" },
