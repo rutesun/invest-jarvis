@@ -1,8 +1,11 @@
 import asyncio
+import logging
 from functools import partial
 import pandas as pd
 import yfinance as yf
 from src.core.interfaces import BaseProvider
+
+logger = logging.getLogger(__name__)
 
 
 class YFinanceProvider(BaseProvider):
@@ -15,6 +18,7 @@ class YFinanceProvider(BaseProvider):
 
     def _get_quote_sync(self, ticker: str) -> dict:
         """Synchronous quote fetching."""
+        logger.debug("yfinance get_quote: %s", ticker)
         t = yf.Ticker(ticker)
         info = t.info
         return {
@@ -35,5 +39,8 @@ class YFinanceProvider(BaseProvider):
 
     def _get_history_sync(self, ticker: str, period: str) -> pd.DataFrame:
         """Synchronous history fetching."""
+        logger.debug("yfinance get_price_history: %s (period=%s)", ticker, period)
         t = yf.Ticker(ticker)
-        return t.history(period=period)
+        df = t.history(period=period)
+        logger.debug("yfinance returned %d rows for %s", len(df), ticker)
+        return df
