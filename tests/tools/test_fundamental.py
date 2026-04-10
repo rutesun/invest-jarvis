@@ -286,3 +286,132 @@ async def test_quarterly_qoq_calculation():
     # Q1 2026 QoQ calculation verification: (143756 - 102466) / 102466 = 0.4030
     assert quarterly_data[0].revenue_qoq is not None
     assert abs(quarterly_data[0].revenue_qoq - 0.4030) < 0.001
+
+
+def test_quarterly_insufficient_data_for_yoy():
+    """Verify YoY is None when fewer than 5 quarters, QoQ still calculates"""
+    import asyncio
+
+    mock_info = {"marketCap": 3e12}
+
+    quarters = [
+        pd.Period("2026Q1"),
+        pd.Period("2025Q4"),
+        pd.Period("2025Q3"),
+    ]
+
+    revenues = [143756e6, 102466e6, 94036e6]
+
+    # Create DataFrame with correct structure: columns are quarters, rows are metrics
+    data = {}
+    for i, q in enumerate(quarters):
+        data[q] = {
+            "Total Revenue": revenues[i],
+            "Net Income": revenues[i] * 0.25,  # Add earnings data
+        }
+    qf = pd.DataFrame(data)
+
+    mock_ticker = MagicMock()
+    mock_ticker.info = mock_info
+    mock_ticker.quarterly_financials = qf
+
+    with patch("yfinance.Ticker", return_value=mock_ticker):
+        tool = FundamentalTool()
+        result = asyncio.run(tool.execute("AAPL"))
+
+    quarterly_data = result.data.quarterly_data
+    assert quarterly_data is not None
+    assert len(quarterly_data) == 3
+
+    # YoY is None (no data 4 quarters ago)
+    assert quarterly_data[0].revenue_yoy is None
+    # QoQ is calculated
+    assert quarterly_data[0].revenue_qoq is not None
+
+
+def test_quarterly_zero_denominator():
+    """Verify None returned when denominator is 0"""
+    import asyncio
+
+    mock_info = {"marketCap": 3e12}
+
+    quarters = [
+        pd.Period("2026Q1"),
+        pd.Period("2025Q4"),
+        pd.Period("2025Q3"),
+        pd.Period("2025Q2"),
+        pd.Period("2025Q1"),
+    ]
+
+    revenues = [143756e6, 0, 94036e6, 88230e6, 0]  # Q4 2025 and Q1 2025 are 0
+    earnings = [36500e6, 0, 24200e6, 22100e6, 0]
+
+    # Create DataFrame with correct structure: columns are quarters, rows are metrics
+    data = {}
+    for i, q in enumerate(quarters):
+        data[q] = {
+            "Total Revenue": revenues[i],
+            "Net Income": earnings[i],
+        }
+    qf = pd.DataFrame(data)
+
+    mock_ticker = MagicMock()
+    mock_ticker.info = mock_info
+    mock_ticker.quarterly_financials = qf
+
+    with patch("yfinance.Ticker", return_value=mock_ticker):
+        tool = FundamentalTool()
+        result = asyncio.run(tool.execute("AAPL"))
+
+    quarterly_data = result.data.quarterly_data
+
+    # Q1 2026: QoQ denominator is 0, should be None
+    assert quarterly_data[0].revenue_qoq is None
+    # Q1 2026: YoY denominator is 0, should be None
+    assert quarterly_data[0].revenue_yoy is None
+
+
+def test_quarterly_missing_earnings():
+    """Verify partial results when only revenue available, no earnings"""
+    import asyncio
+
+    mock_info = {"marketCap": 3e12}
+
+    quarters = [
+        pd.Period("2026Q1"),
+        pd.Period("2025Q4"),
+        pd.Period("2025Q3"),
+        pd.Period("2025Q2"),
+        pd.Period("2025Q1"),
+    ]
+
+    revenues = [143756e6, 102466e6, 94036e6, 88230e6, 124300e6]
+
+    # Create DataFrame with correct structure: columns are quarters, rows are metrics
+    # Only Total Revenue row, no Net Income row
+    data = {}
+    for i, q in enumerate(quarters):
+        data[q] = {
+            "Total Revenue": revenues[i],
+        }
+    qf = pd.DataFrame(data)
+
+    mock_ticker = MagicMock()
+    mock_ticker.info = mock_info
+    mock_ticker.quarterly_financials = qf
+
+    with patch("yfinance.Ticker", return_value=mock_ticker):
+        tool = FundamentalTool()
+        result = asyncio.run(tool.execute("AAPL"))
+
+    quarterly_data = result.data.quarterly_data
+
+    # Revenue data and growth rates exist
+    assert quarterly_data[0].revenue is not None
+    assert quarterly_data[0].revenue_yoy is not None
+    assert quarterly_data[0].revenue_qoq is not None
+
+    # Earnings data and growth rates are None
+    assert quarterly_data[0].earnings is None
+    assert quarterly_data[0].earnings_yoy is None
+    assert quarterly_data[0].earnings_qoq is None
