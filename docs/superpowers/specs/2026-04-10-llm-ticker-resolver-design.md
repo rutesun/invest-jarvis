@@ -20,37 +20,16 @@ resolve(query)
 
 ## 데이터 모델
 
-### CandidateTicker (변경 없음)
+### TickerResolution (대폭 간소화)
 
-검색 결과에서 나온 후보 티커 하나를 나타낸다. yfinance를 제거하더라도 LLMTickerAgent가 여러 후보를 반환할 수 있는 경우를 위해 구조는 유지한다.
-
-```python
-class CandidateTicker(BaseModel):
-    symbol: str        # 거래소 티커 심볼 (예: 005930.KS)
-    name: str          # 회사 전체명 (예: Samsung Electronics Co., Ltd.)
-    exchange: str      # 거래소 코드 (예: KSC, NMS)
-    score: float       # 신뢰 점수 (0.0 ~ 1.0)
-    quote_type: str    # 증권 유형 (예: EQUITY)
-```
-
-### TickerResolution (resolution_method 필드 변경)
-
-티커 해결 결과 전체를 담는 모델. `resolution_method`에 `"llm_agent"` 값이 추가된다.
+티커 해결 결과 전체를 담는 모델. `confidence`, `candidates`, `resolution_method` 필드와 `CandidateTicker` 모델을 제거한다.
 
 ```python
 class TickerResolution(BaseModel):
-    original_query: str       # 사용자가 입력한 원본 쿼리 (예: 삼성전자)
-    resolved_ticker: str      # 최종 결정된 티커 (예: 005930.KS)
-    display_name: str         # 표시용 회사명 (예: Samsung Electronics)
-    confidence: Literal["high", "medium", "low"]
-    candidates: list[CandidateTicker]
-    resolution_method: Literal[
-        "direct_ticker",           # 사용자가 직접 티커 입력
-        "user_cache",              # 이전에 해결된 결과를 캐시에서 조회
-        "llm_agent",               # (신규) GPT-4o + DuckDuckGo로 해결
-        # 제거: "static_mapping", "yfinance_search_single", "yfinance_search_multiple"
-    ]
-    source: str
+    original_query: str   # 사용자가 입력한 원본 쿼리 (예: 삼성전자)
+    resolved_ticker: str  # 최종 결정된 티커 (예: 005930.KS)
+    display_name: str     # 표시용 회사명 (예: Samsung Electronics)
+    source: str           # 해결 방법 (예: direct_ticker, user_cache, llm_agent)
 ```
 
 ### CachedMapping (변경 없음)
@@ -114,7 +93,7 @@ resolve("삼성전자")
 |---|---|---|
 | `src/providers/llm_ticker_agent.py` | 신규 | LLMTickerAgent 구현 |
 | `src/providers/ticker_resolver.py` | 수정 | yfinance/static mapping 제거, LLMTickerAgent 연결 |
-| `src/providers/ticker_models.py` | 수정 | resolution_method에 `"llm_agent"` 추가, 불필요 값 제거 |
+| `src/providers/ticker_models.py` | 수정 | `CandidateTicker` 삭제, `TickerResolution`에서 `confidence`/`candidates`/`resolution_method` 제거 |
 | `pyproject.toml` | 수정 | `duckduckgo-search>=6.0.0` 의존성 추가 |
 | `config/ticker_names.yaml` | 삭제 | 더 이상 사용하지 않음 |
 
