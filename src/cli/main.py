@@ -377,7 +377,7 @@ def format_deep_dive_output(result: dict) -> str:
             if value is not None:
                 display_name = _get_metric_display_name(metric_name)
                 formatted = _format_metric_value(metric_name, value)
-                output += f"⭐ **{display_name}**: {formatted}\n"
+                output += f"⭐ **{display_name}**: {formatted}\n\n"
 
         output += "\n"
 
