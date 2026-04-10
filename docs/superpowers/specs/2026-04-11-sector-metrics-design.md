@@ -1,114 +1,114 @@
-# Sector-Specific Fundamental Metrics Design
+# 섹터별 펀더멘털 지표 우선순위 설계
 
-**Date:** 2026-04-11
-**Status:** Draft
-**Author:** Claude Code
+**날짜:** 2026-04-11
+**상태:** 초안
+**작성자:** Claude Code
 
-## Overview
+## 개요
 
-Add sector-specific prioritization and highlighting of fundamental metrics in CLI output and LLM analysis. Different sectors emphasize different metrics (e.g., Technology focuses on PEG/PSR, Financials on ROE/P/B), so users should see the most relevant metrics first with visual emphasis.
+CLI 출력과 LLM 분석에서 섹터별 펀더멘털 지표의 우선순위 지정 및 강조 표시 기능을 추가합니다. 섹터마다 중요한 지표가 다르므로(예: 기술주는 PEG/PSR, 금융주는 ROE/P/B 중시), 사용자가 가장 관련성 높은 지표를 먼저 볼 수 있도록 시각적 강조를 제공합니다.
 
-## Goals
+## 목표
 
-1. Display sector-appropriate metrics at the top of fundamental analysis output
-2. Highlight priority metrics with ⭐ emoji and bold formatting
-3. Inform LLM which metrics are most important for each sector
-4. Support 7-10 major sectors with customized metric priorities
-5. Maintain all existing metrics in output (reorder only, no removal)
+1. 펀더멘털 분석 출력에서 섹터에 적합한 지표를 상단에 표시
+2. 핵심 지표를 ⭐ 이모지와 볼드 포맷으로 강조
+3. LLM에게 각 섹터에서 어떤 지표가 중요한지 알려주기
+4. 7-10개 주요 섹터를 커스텀 지표 우선순위로 지원
+5. 기존 모든 지표를 출력에 유지 (순서만 변경, 제거 없음)
 
-## Non-Goals
+## 비목표 (Non-Goals)
 
-- Sector average/benchmark comparisons (data collection complexity)
-- Threshold-based automatic valuations (LLM handles this)
-- Runtime configurable metrics via YAML (hard-coded is sufficient)
-- Custom user-defined sectors
+- 섹터 평균/벤치마크 비교 (데이터 수집 복잡도)
+- 임계값 기반 자동 밸류에이션 (LLM이 담당)
+- YAML을 통한 런타임 설정 가능한 지표 (하드코딩으로 충분)
+- 사용자 정의 커스텀 섹터
 
-## Architecture
+## 아키텍처
 
-### Component Overview
+### 컴포넌트 개요
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  yfinance API → FundamentalSnapshot (all metrics)       │
+│  yfinance API → FundamentalSnapshot (모든 지표 수집)     │
 └────────────────────┬────────────────────────────────────┘
                      ↓
          ┌───────────────────────────┐
-         │   SectorMetrics Class     │
-         │  (sector identification   │
-         │   + priority metrics)     │
+         │   SectorMetrics 클래스    │
+         │  (섹터 식별 및           │
+         │   우선순위 지표)          │
          └───────────┬───────────────┘
                      ↓
         ┌────────────┴────────────┐
         ↓                         ↓
 ┌───────────────┐        ┌────────────────┐
-│  CLI Output   │        │  LLM Prompt    │
-│ (⭐ emphasis) │        │ ([핵심] tags)  │
+│  CLI 출력     │        │  LLM 프롬프트  │
+│ (⭐ 강조)     │        │ ([핵심] 태그)  │
 └───────────────┘        └────────────────┘
 ```
 
-### New Module: `src/utils/sector_metrics.py`
+### 신규 모듈: `src/utils/sector_metrics.py`
 
-Defines sector-to-metrics mappings and provides utility functions for:
-- Identifying sector from yfinance sector string
-- Retrieving priority metrics for a given sector
-- Sorting metrics (priority first, then alphabetical)
+섹터-지표 매핑을 정의하고 다음 유틸리티 함수 제공:
+- yfinance 섹터 문자열에서 섹터 식별
+- 주어진 섹터의 우선순위 지표 조회
+- 지표 정렬 (우선순위 먼저, 그 다음 알파벳순)
 
-### Modified Module: `src/cli/main.py`
+### 수정 모듈: `src/cli/main.py`
 
-Changes to `format_deep_dive_output()`:
-- Query `SectorMetrics` for priority metrics
-- Render priority metrics first with ⭐ emoji
-- Render remaining metrics after priority section
+`format_deep_dive_output()` 함수 변경사항:
+- `SectorMetrics`에서 우선순위 지표 조회
+- 우선순위 지표를 ⭐ 이모지와 함께 먼저 렌더링
+- 나머지 지표를 우선순위 섹션 다음에 렌더링
 
-### Modified Module: `src/llm/analyzer.py`
+### 수정 모듈: `src/llm/analyzer.py`
 
-Changes to `generate_fundamental_summary()`:
-- Mark priority metrics with [핵심] prefix in prompt
-- Include all metrics (no filtering)
-- LLM uses [핵심] tags to focus analysis
+`generate_fundamental_summary()` 함수 변경사항:
+- 우선순위 지표에 [핵심] 접두사 표시
+- 모든 지표 포함 (필터링 없음)
+- LLM이 [핵심] 태그를 사용해 분석에 집중
 
-## Data Model
+## 데이터 모델
 
-### Sector-to-Metrics Mapping
+### 섹터별 지표 매핑
 
-**Supported Sectors (10):**
+**지원 섹터 (10개):**
 
-1. **Technology**
-   - Priority: PEG Ratio, PSR, Revenue Growth, Earnings Growth, Operating Margin, FCF Yield, Debt/Equity
+1. **Technology (기술주)**
+   - 핵심 지표: PEG Ratio, PSR, 매출 성장률, 이익 성장률, 영업이익률, FCF Yield, Debt/Equity
 
-2. **Financials**
-   - Priority: ROE, ROA, P/B Ratio, Debt/Equity, Earnings Growth
+2. **Financials (금융주)**
+   - 핵심 지표: ROE, ROA, P/B Ratio, Debt/Equity, 이익 성장률
 
-3. **Consumer Cyclical**
-   - Priority: P/E Ratio, Revenue Growth, Gross Margin, Debt/Equity, Free Cash Flow
+3. **Consumer Cyclical (경기소비재)**
+   - 핵심 지표: P/E Ratio, 매출 성장률, 매출총이익률, Debt/Equity, Free Cash Flow
 
-4. **Consumer Defensive**
-   - Priority: Dividend Yield, P/E Ratio, Gross Margin, ROE, Payout Ratio
+4. **Consumer Defensive (필수소비재)**
+   - 핵심 지표: 배당 수익률, P/E Ratio, 매출총이익률, ROE, 배당 성향
 
-5. **Healthcare**
-   - Priority: PEG Ratio, Revenue Growth, Operating Margin, ROE, FCF Yield
+5. **Healthcare (헬스케어)**
+   - 핵심 지표: PEG Ratio, 매출 성장률, 영업이익률, ROE, FCF Yield
 
-6. **Industrials**
-   - Priority: P/E Ratio, ROE, Debt/Equity, Free Cash Flow, Operating Margin
+6. **Industrials (산업재)**
+   - 핵심 지표: P/E Ratio, ROE, Debt/Equity, Free Cash Flow, 영업이익률
 
-7. **Energy**
-   - Priority: P/B Ratio, Debt/Equity, FCF Yield, Operating Margin, Dividend Yield
+7. **Energy (에너지)**
+   - 핵심 지표: P/B Ratio, Debt/Equity, FCF Yield, 영업이익률, 배당 수익률
 
-8. **Real Estate**
-   - Priority: P/B Ratio, Dividend Yield, Debt/Equity, Free Cash Flow
+8. **Real Estate (부동산)**
+   - 핵심 지표: P/B Ratio, 배당 수익률, Debt/Equity, Free Cash Flow
 
-9. **Utilities**
-   - Priority: Dividend Yield, P/E Ratio, Debt/Equity, Payout Ratio
+9. **Utilities (유틸리티)**
+   - 핵심 지표: 배당 수익률, P/E Ratio, Debt/Equity, 배당 성향
 
-10. **Communication Services**
-    - Priority: P/E Ratio, EV/EBITDA, Revenue Growth, FCF Yield, Operating Margin
+10. **Communication Services (통신)**
+    - 핵심 지표: P/E Ratio, EV/EBITDA, 매출 성장률, FCF Yield, 영업이익률
 
-**Default (fallback):**
-- Priority: P/E Ratio, ROE, Revenue Growth, Debt/Equity, Free Cash Flow
+**Default (기본값 - 섹터 매칭 실패 시):**
+- 핵심 지표: P/E Ratio, ROE, 매출 성장률, Debt/Equity, Free Cash Flow
 
-### Field Name Mapping
+### 필드명 매핑
 
-Metric internal names to display names:
+내부 지표명에서 표시명으로:
 ```python
 {
     "pe_ratio": "P/E Ratio",
@@ -135,15 +135,15 @@ Metric internal names to display names:
 }
 ```
 
-## Implementation Details
+## 구현 상세
 
-### 1. SectorMetrics Class
+### 1. SectorMetrics 클래스
 
-**File:** `src/utils/sector_metrics.py`
+**파일:** `src/utils/sector_metrics.py`
 
 ```python
 class SectorMetrics:
-    """Sector-specific priority metrics definitions."""
+    """섹터별 우선순위 지표 정의"""
     
     TECHNOLOGY = [
         "peg_ratio", "ps_ratio", "revenue_growth", "earnings_growth",
@@ -154,7 +154,37 @@ class SectorMetrics:
         "roe", "roa", "pb_ratio", "debt_to_equity", "earnings_growth"
     ]
     
-    # ... (other sectors)
+    CONSUMER_CYCLICAL = [
+        "pe_ratio", "revenue_growth", "gross_margin", "debt_to_equity", "free_cash_flow"
+    ]
+    
+    CONSUMER_DEFENSIVE = [
+        "dividend_yield", "pe_ratio", "gross_margin", "roe", "payout_ratio"
+    ]
+    
+    HEALTHCARE = [
+        "peg_ratio", "revenue_growth", "operating_margin", "roe", "fcf_yield"
+    ]
+    
+    INDUSTRIALS = [
+        "pe_ratio", "roe", "debt_to_equity", "free_cash_flow", "operating_margin"
+    ]
+    
+    ENERGY = [
+        "pb_ratio", "debt_to_equity", "fcf_yield", "operating_margin", "dividend_yield"
+    ]
+    
+    REAL_ESTATE = [
+        "pb_ratio", "dividend_yield", "debt_to_equity", "free_cash_flow"
+    ]
+    
+    UTILITIES = [
+        "dividend_yield", "pe_ratio", "debt_to_equity", "payout_ratio"
+    ]
+    
+    COMMUNICATION_SERVICES = [
+        "pe_ratio", "ev_ebitda", "revenue_growth", "fcf_yield", "operating_margin"
+    ]
     
     DEFAULT = [
         "pe_ratio", "roe", "revenue_growth", "debt_to_equity", "free_cash_flow"
@@ -162,10 +192,10 @@ class SectorMetrics:
     
     @classmethod
     def get_priority_metrics(cls, sector: str | None) -> list[str]:
-        """Get priority metrics for a given sector.
+        """주어진 섹터의 우선순위 지표 반환.
         
-        Uses fuzzy matching to handle yfinance sector name variations.
-        Returns DEFAULT if sector is None or not recognized.
+        yfinance 섹터명 변형을 처리하기 위해 퍼지 매칭 사용.
+        섹터가 None이거나 인식되지 않으면 DEFAULT 반환.
         """
         if not sector:
             return cls.DEFAULT
@@ -196,14 +226,14 @@ class SectorMetrics:
         return cls.DEFAULT
 ```
 
-### 2. CLI Rendering Changes
+### 2. CLI 렌더링 변경
 
-**File:** `src/cli/main.py`
+**파일:** `src/cli/main.py`
 
-**Helper Function:**
+**헬퍼 함수:**
 ```python
 def _format_metric_value(metric_name: str, value: float) -> str:
-    """Format metric value based on type."""
+    """지표 타입에 따라 값 포맷팅"""
     if metric_name in ["revenue_growth", "earnings_growth", "gross_margin", 
                        "operating_margin", "profit_margin", "fcf_yield", 
                        "dividend_yield", "roe", "roa"]:
@@ -216,14 +246,14 @@ def _format_metric_value(metric_name: str, value: float) -> str:
         return f"{value:.1f}" if abs(value) > 10 else f"{value:.2f}"
 ```
 
-**Modified format_deep_dive_output():**
+**수정된 format_deep_dive_output():**
 ```python
 from src.utils.sector_metrics import SectorMetrics
 
-# In fundamental section (after Sector/Industry line):
+# 펀더멘털 섹션에서 (Sector/Industry 라인 다음):
 priority_metrics = SectorMetrics.get_priority_metrics(fundamental.sector)
 
-# Render priority metrics first with ⭐
+# 우선순위 지표를 ⭐와 함께 먼저 렌더링
 for metric_name in priority_metrics:
     value = getattr(fundamental, metric_name, None)
     if value is not None:
@@ -231,9 +261,9 @@ for metric_name in priority_metrics:
         formatted = _format_metric_value(metric_name, value)
         output += f"⭐ **{display_name}**: {formatted}\n"
 
-output += "\n"  # Separator
+output += "\n"  # 구분자
 
-# Render remaining metrics
+# 나머지 지표 렌더링
 all_metric_names = [
     "market_cap", "pe_ratio", "forward_pe", "peg_ratio", "pb_ratio", 
     "ps_ratio", "ev_ebitda", "roe", "roa", "gross_margin", 
@@ -253,11 +283,11 @@ for metric_name in remaining_metrics:
         output += f"- **{display_name}**: {formatted}\n"
 ```
 
-### 3. LLM Prompt Changes
+### 3. LLM 프롬프트 변경
 
-**File:** `src/llm/analyzer.py`
+**파일:** `src/llm/analyzer.py`
 
-**Modified generate_fundamental_summary():**
+**수정된 generate_fundamental_summary():**
 ```python
 from src.utils.sector_metrics import SectorMetrics
 
@@ -267,7 +297,7 @@ async def generate_fundamental_summary(
 ) -> FundamentalSummaryOutput:
     priority_metrics = SectorMetrics.get_priority_metrics(input_data.sector)
     
-    # Build metrics text with [핵심] prefix for priority metrics
+    # 우선순위 지표에 [핵심] 접두사를 붙여 지표 텍스트 생성
     metrics_text = []
     
     all_metrics = [
@@ -330,11 +360,11 @@ Provide summary with:
     return result
 ```
 
-## Example Output
+## 출력 예시
 
-### CLI Output (NVDA - Technology)
+### CLI 출력 (NVDA - Technology)
 
-**Before:**
+**변경 전:**
 ```
 Sector/Industry: Technology / Semiconductors
 
@@ -346,7 +376,7 @@ Sector/Industry: Technology / Semiconductors
 ...
 ```
 
-**After:**
+**변경 후:**
 ```
 Sector/Industry: Technology / Semiconductors
 
@@ -367,7 +397,7 @@ Sector/Industry: Technology / Semiconductors
 ...
 ```
 
-### LLM Prompt (NVDA - Technology)
+### LLM 프롬프트 (NVDA - Technology)
 
 ```
 **Sector**: Technology / Semiconductors
@@ -389,112 +419,112 @@ Sector/Industry: Technology / Semiconductors
 ...
 ```
 
-## Testing Strategy
+## 테스트 전략
 
-### Unit Tests
+### 단위 테스트
 
-**File:** `tests/utils/test_sector_metrics.py`
+**파일:** `tests/utils/test_sector_metrics.py`
 
-Tests for `SectorMetrics` class:
-1. `test_get_priority_metrics_technology()` - Verify Technology sector mapping
-2. `test_get_priority_metrics_financials()` - Verify Financials sector mapping
-3. `test_get_priority_metrics_fuzzy_match()` - Test "Technology" vs "Information Technology"
-4. `test_get_priority_metrics_none()` - Verify DEFAULT returned for None
-5. `test_get_priority_metrics_unknown()` - Verify DEFAULT for unrecognized sector
-6. `test_all_sectors_covered()` - Verify all 10 sectors have mappings
+`SectorMetrics` 클래스 테스트:
+1. `test_get_priority_metrics_technology()` - Technology 섹터 매핑 검증
+2. `test_get_priority_metrics_financials()` - Financials 섹터 매핑 검증
+3. `test_get_priority_metrics_fuzzy_match()` - "Technology" vs "Information Technology" 테스트
+4. `test_get_priority_metrics_none()` - None일 때 DEFAULT 반환 검증
+5. `test_get_priority_metrics_unknown()` - 인식되지 않는 섹터에 대해 DEFAULT 검증
+6. `test_all_sectors_covered()` - 10개 섹터 모두 매핑되었는지 검증
 
-**File:** `tests/cli/test_main.py`
+**파일:** `tests/cli/test_main.py`
 
-Tests for CLI rendering:
-1. `test_format_metric_value_percent()` - Test percentage formatting
-2. `test_format_metric_value_dollar()` - Test dollar amount formatting
-3. `test_cli_priority_metrics_order()` - Verify priority metrics appear first
-4. `test_cli_priority_metrics_emoji()` - Verify ⭐ emoji present
+CLI 렌더링 테스트:
+1. `test_format_metric_value_percent()` - 퍼센트 포맷팅 테스트
+2. `test_format_metric_value_dollar()` - 달러 금액 포맷팅 테스트
+3. `test_cli_priority_metrics_order()` - 우선순위 지표가 먼저 나오는지 검증
+4. `test_cli_priority_metrics_emoji()` - ⭐ 이모지가 있는지 검증
 
-### Integration Tests
+### 통합 테스트
 
-**File:** `tests/integration/test_e2e_plan4.py`
+**파일:** `tests/integration/test_e2e_plan4.py`
 
-Integration test:
+통합 테스트:
 ```python
 @pytest.mark.integration
 def test_analyze_shows_sector_priority_metrics():
-    """Verify CLI shows sector-specific priority metrics with emphasis"""
+    """CLI에서 섹터별 우선순위 지표가 강조 표시되는지 검증"""
     result = runner.invoke(app, ["analyze", "NVDA", "--provider", "openai"])
     
-    # Technology sector should show PEG and PSR with ⭐
+    # Technology 섹터는 PEG와 PSR을 ⭐와 함께 표시해야 함
     assert "⭐ **PEG Ratio**" in result.stdout
     assert "⭐ **PSR**" in result.stdout
     
-    # Non-priority metrics should not have ⭐
+    # 우선순위가 아닌 지표는 ⭐가 없어야 함
     assert "⭐ **P/E Ratio**" not in result.stdout
 ```
 
-### Manual Testing
+### 수동 테스트
 
-**Test Cases:**
-1. Technology stock: `uv run jarvis analyze NVDA --provider openai`
-   - Verify PEG, PSR appear first with ⭐
-2. Financial stock: `uv run jarvis analyze JPM --provider openai`
-   - Verify ROE, P/B appear first with ⭐
-3. Unknown sector: Mock ticker with sector="Unknown"
-   - Verify DEFAULT metrics used
-4. LLM response: Check that strengths mention [핵심] metrics
+**테스트 케이스:**
+1. 기술주: `uv run jarvis analyze NVDA --provider openai`
+   - PEG, PSR이 ⭐와 함께 먼저 나오는지 확인
+2. 금융주: `uv run jarvis analyze JPM --provider openai`
+   - ROE, P/B가 ⭐와 함께 먼저 나오는지 확인
+3. 알 수 없는 섹터: sector="Unknown"인 mock 티커
+   - DEFAULT 지표가 사용되는지 확인
+4. LLM 응답: strengths에서 [핵심] 지표를 언급하는지 확인
 
-## Error Handling
+## 에러 처리
 
-**Scenarios:**
+**시나리오:**
 
-1. **Sector is None**: Use DEFAULT metrics
-2. **Unrecognized sector string**: Use DEFAULT metrics
-3. **Metric value is None**: Skip in rendering (existing behavior)
-4. **All priority metrics are None**: Show remaining metrics only
+1. **섹터가 None**: DEFAULT 지표 사용
+2. **인식되지 않는 섹터 문자열**: DEFAULT 지표 사용
+3. **지표 값이 None**: 렌더링에서 스킵 (기존 동작)
+4. **모든 우선순위 지표가 None**: 나머지 지표만 표시
 
-## Dependencies
+## 의존성
 
-- No new external dependencies
-- Uses existing `yfinance` for sector data
-- Uses existing `pydantic` for type safety
+- 신규 외부 의존성 없음
+- 섹터 데이터는 기존 `yfinance` 사용
+- 타입 안전성은 기존 `pydantic` 사용
 
-## Risks and Mitigation
+## 리스크 및 완화 방안
 
-**Risk 1: yfinance sector names vary**
-- Mitigation: Fuzzy matching with substring checks
-- Impact: Low - DEFAULT fallback ensures functionality
+**리스크 1: yfinance 섹터명이 다양함**
+- 완화 방안: 부분 문자열 검사로 퍼지 매칭
+- 영향도: 낮음 - DEFAULT 폴백으로 기능 보장
 
-**Risk 2: Sector classifications change over time**
-- Mitigation: Easy to update mappings in single file
-- Impact: Low - changes are infrequent
+**리스크 2: 섹터 분류가 시간에 따라 변경됨**
+- 완화 방안: 단일 파일에서 매핑 업데이트 용이
+- 영향도: 낮음 - 변경 빈도 낮음
 
-**Risk 3: Breaking existing CLI output**
-- Mitigation: Only reordering, no removal of metrics
-- Impact: Low - users still see all information
+**리스크 3: 기존 CLI 출력 깨짐**
+- 완화 방안: 순서만 변경, 지표 제거 없음
+- 영향도: 낮음 - 사용자는 여전히 모든 정보 확인 가능
 
-**Risk 4: LLM misinterprets [핵심] tags**
-- Mitigation: Clear prompt instructions + LLM is capable
-- Impact: Low - worst case LLM ignores tags (no worse than current)
+**리스크 4: LLM이 [핵심] 태그를 오해**
+- 완화 방안: 명확한 프롬프트 지시 + LLM 능력 충분
+- 영향도: 낮음 - 최악의 경우 LLM이 태그 무시 (현재보다 나쁘지 않음)
 
-## Future Enhancements (Out of Scope)
+## 향후 개선 사항 (범위 외)
 
-- Sector average/benchmark comparisons
-- User-customizable metric priorities via config
-- Per-industry (not just sector) granularity
-- Automatic valuation thresholds per sector
-- Historical sector rotation analysis
+- 섹터 평균/벤치마크 비교
+- config를 통한 사용자 커스터마이즈 가능한 지표 우선순위
+- 섹터가 아닌 업종(industry) 단위의 세분화
+- 섹터별 자동 밸류에이션 임계값
+- 히스토리컬 섹터 로테이션 분석
 
-## Implementation Checklist
+## 구현 체크리스트
 
-- [ ] Create `src/utils/sector_metrics.py` with SectorMetrics class
-- [ ] Add all 10 sector metric mappings + DEFAULT
-- [ ] Implement `get_priority_metrics()` with fuzzy matching
-- [ ] Create METRIC_DISPLAY_NAMES mapping in CLI
-- [ ] Add `_format_metric_value()` helper function
-- [ ] Modify `format_deep_dive_output()` to render priority metrics first
-- [ ] Add ⭐ emoji to priority metrics
-- [ ] Modify `generate_fundamental_summary()` to add [핵심] tags
-- [ ] Update LLM prompt to mention [핵심] tags
-- [ ] Write 6 unit tests for SectorMetrics
-- [ ] Write 4 unit tests for CLI formatting
-- [ ] Write 1 integration test for E2E verification
-- [ ] Manually test with NVDA (Technology) and JPM (Financials)
-- [ ] Update documentation if needed
+- [ ] `src/utils/sector_metrics.py`에 SectorMetrics 클래스 생성
+- [ ] 10개 섹터 지표 매핑 + DEFAULT 추가
+- [ ] 퍼지 매칭을 사용한 `get_priority_metrics()` 구현
+- [ ] CLI에 METRIC_DISPLAY_NAMES 매핑 생성
+- [ ] `_format_metric_value()` 헬퍼 함수 추가
+- [ ] `format_deep_dive_output()` 수정하여 우선순위 지표 먼저 렌더링
+- [ ] 우선순위 지표에 ⭐ 이모지 추가
+- [ ] `generate_fundamental_summary()` 수정하여 [핵심] 태그 추가
+- [ ] [핵심] 태그를 언급하도록 LLM 프롬프트 업데이트
+- [ ] SectorMetrics에 대한 6개 단위 테스트 작성
+- [ ] CLI 포맷팅에 대한 4개 단위 테스트 작성
+- [ ] E2E 검증을 위한 1개 통합 테스트 작성
+- [ ] NVDA (Technology)와 JPM (Financials)로 수동 테스트
+- [ ] 필요시 문서 업데이트
