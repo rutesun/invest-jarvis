@@ -54,14 +54,19 @@ class ScreenerPipeline:
         # 4. Theme aggregation
         theme_ranking = self._aggregate_themes(scored)
 
-        # 5. News for top 10
-        top_stocks = scored[:10]
+        # 5. Separate KR and US stocks
+        kr_scored = [item for item in scored if item.stock.market in ("KOSPI", "KOSDAQ")]
+        us_scored = [item for item in scored if item.stock.market not in ("KOSPI", "KOSDAQ")]
+
+        # 6. News for top 10 (KR only)
+        top_stocks = kr_scored[:10]
         news = await self._fetch_news_for_top(top_stocks)
 
         return {
             "market": market,
             "timestamp": datetime.now(),
-            "leaders": scored[:50],
+            "kr_leaders": kr_scored[:50],
+            "us_leaders": us_scored[:50],
             "naver_themes": naver_themes,
             "themes": theme_ranking[:10],
             "news": news,
@@ -186,48 +191,45 @@ class ScreenerPipeline:
             lines.append("")
 
         # Leaders - separate KR and US
-        leaders = result.get("leaders", [])
-        if leaders:
-            # Separate KR and US stocks
-            kr_leaders = [item for item in leaders if item.stock.market in ("KOSPI", "KOSDAQ")]
-            us_leaders = [item for item in leaders if item.stock.market not in ("KOSPI", "KOSDAQ")]
+        kr_leaders = result.get("kr_leaders", [])
+        us_leaders = result.get("us_leaders", [])
 
-            # Korean stocks
-            if kr_leaders:
-                lines.append("## 주도주 TOP 50 (한국)")
-                lines.append("| # | 종목 | 시장 | 모멘텀 | 당일외인 | 당일기관 | 당일프로 | 10일외인 | 10일기관 | 10일프로 | 거래량 | 소스 |")
-                lines.append("|---|------|------|--------|----------|----------|----------|----------|----------|----------|--------|------|")
-                for item in kr_leaders:
-                    s = item.stock
-                    sources_str = ",".join(s.sources)
-                    # Daily net buy (most recent day)
-                    daily_f = self._format_net(item.daily_foreign)
-                    daily_i = self._format_net(item.daily_institution)
-                    daily_p = self._format_net(item.daily_program)
-                    # 10-day aggregated: "7/10 (+15.3M)"
-                    ten_f = f"{item.foreign_days_count}/10 ({self._format_net(item.foreign_net)})"
-                    ten_i = f"{item.institution_days_count}/10 ({self._format_net(item.institution_net)})"
-                    ten_p = f"{item.program_days_count}/10 ({self._format_net(item.program_net)})"
-                    lines.append(
-                        f"| {item.rank} | {s.name} | {s.market} | "
-                        f"{item.momentum_total:.0f} | {daily_f} | {daily_i} | {daily_p} | "
-                        f"{ten_f} | {ten_i} | {ten_p} | {item.vol_ratio:.1f}x | {sources_str} |"
-                    )
-                lines.append("")
+        # Korean stocks
+        if kr_leaders:
+            lines.append("## 주도주 TOP 50 (한국)")
+            lines.append("| # | 종목 | 시장 | 모멘텀 | 당일외인 | 당일기관 | 당일프로 | 10일외인 | 10일기관 | 10일프로 | 거래량 | 소스 |")
+            lines.append("|---|------|------|--------|----------|----------|----------|----------|----------|----------|--------|------|")
+            for i, item in enumerate(kr_leaders, 1):
+                s = item.stock
+                sources_str = ",".join(s.sources)
+                # Daily net buy (most recent day)
+                daily_f = self._format_net(item.daily_foreign)
+                daily_i = self._format_net(item.daily_institution)
+                daily_p = self._format_net(item.daily_program)
+                # 10-day aggregated: "7/10 (+15.3M)"
+                ten_f = f"{item.foreign_days_count}/10 ({self._format_net(item.foreign_net)})"
+                ten_i = f"{item.institution_days_count}/10 ({self._format_net(item.institution_net)})"
+                ten_p = f"{item.program_days_count}/10 ({self._format_net(item.program_net)})"
+                lines.append(
+                    f"| {i} | {s.name} | {s.market} | "
+                    f"{item.momentum_total:.0f} | {daily_f} | {daily_i} | {daily_p} | "
+                    f"{ten_f} | {ten_i} | {ten_p} | {item.vol_ratio:.1f}x | {sources_str} |"
+                )
+            lines.append("")
 
-            # US stocks
-            if us_leaders:
-                lines.append("## 주도주 TOP 50 (미국)")
-                lines.append("| # | 종목 | 시장 | 모멘텀 | 거래량 | 소스 |")
-                lines.append("|---|------|------|--------|--------|------|")
-                for item in us_leaders:
-                    s = item.stock
-                    sources_str = ",".join(s.sources)
-                    lines.append(
-                        f"| {item.rank} | {s.name} | {s.market} | "
-                        f"{item.momentum_total:.0f} | {item.vol_ratio:.1f}x | {sources_str} |"
-                    )
-                lines.append("")
+        # US stocks
+        if us_leaders:
+            lines.append("## 주도주 TOP 50 (미국)")
+            lines.append("| # | 종목 | 시장 | 모멘텀 | 거래량 | 소스 |")
+            lines.append("|---|------|------|--------|--------|------|")
+            for i, item in enumerate(us_leaders, 1):
+                s = item.stock
+                sources_str = ",".join(s.sources)
+                lines.append(
+                    f"| {i} | {s.name} | {s.market} | "
+                    f"{item.momentum_total:.0f} | {item.vol_ratio:.1f}x | {sources_str} |"
+                )
+            lines.append("")
 
         # News
         news = result.get("news", {})
