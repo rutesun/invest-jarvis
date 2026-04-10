@@ -16,7 +16,7 @@ from src.providers.yfinance_provider import YFinanceProvider
 from src.providers.kis import KISProvider
 from src.tools.technical.scorer import TechnicalScorer
 from src.tools.technical.tool import TechnicalAnalysisTool
-from src.tools.fundamental import FundamentalTool
+from src.tools.fundamental import FundamentalTool, QuarterlyData
 from src.tools.macro import MacroTool
 from src.tools.news import NewsTool
 from src.tools.portfolio import PortfolioTool
@@ -104,7 +104,7 @@ async def run_deep_dive(ticker: str, provider: str) -> dict:
     return await pipeline.run(ticker)
 
 
-def _render_quarterly_table(quarterly_data: list) -> str:
+def _render_quarterly_table(quarterly_data: list[QuarterlyData]) -> str:
     """Render quarterly data as Rich Table"""
     if not quarterly_data or len(quarterly_data) == 0:
         return ""

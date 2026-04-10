@@ -2,10 +2,11 @@ import pytest
 from typer.testing import CliRunner
 from unittest.mock import patch, AsyncMock
 from datetime import datetime
-from src.cli.main import app
+from src.cli.main import app, _render_quarterly_table
 from src.tools.macro import MacroSnapshot
 from src.tools.technical.models import TechnicalResult, IndicatorSnapshot
 from src.llm.models import TechnicalSummaryOutput, NewsAnalysisOutput
+from src.tools.fundamental import QuarterlyData
 
 runner = CliRunner()
 
@@ -163,3 +164,103 @@ def test_cli_version():
     result = runner.invoke(app, ["--version"])
     assert result.exit_code == 0
     assert "0.3.0" in result.stdout
+
+
+def test_render_quarterly_table_with_full_data():
+    """Test rendering with complete quarterly data"""
+    data = [
+        QuarterlyData(
+            period="2026-Q1",
+            revenue=143e9,
+            earnings=36e9,
+            revenue_yoy=0.15,
+            revenue_qoq=0.40,
+            earnings_yoy=0.18,
+            earnings_qoq=0.35,
+        ),
+        QuarterlyData(
+            period="2025-Q4",
+            revenue=102e9,
+            earnings=28e9,
+            revenue_yoy=0.08,
+            revenue_qoq=0.09,
+            earnings_yoy=0.12,
+            earnings_qoq=0.17,
+        ),
+    ]
+    result = _render_quarterly_table(data)
+    assert "Revenue" in result
+    assert "YoY Growth %" in result
+    assert "QoQ Growth %" in result
+    assert "Earnings" in result
+    assert "2026-Q1" in result
+    assert "2025-Q4" in result
+    assert "$143.00B" in result
+    assert "$102.00B" in result
+    assert "$36.00B" in result
+    assert "$28.00B" in result
+
+
+def test_render_quarterly_table_with_none_values():
+    """Test rendering with None values (verify N/A appears instead of crashing)"""
+    data = [
+        QuarterlyData(
+            period="2026-Q1",
+            revenue=143e9,
+            earnings=None,
+            revenue_yoy=0.15,
+            revenue_qoq=None,
+            earnings_yoy=None,
+            earnings_qoq=None,
+        ),
+        QuarterlyData(
+            period="2025-Q4",
+            revenue=None,
+            earnings=28e9,
+            revenue_yoy=None,
+            revenue_qoq=0.09,
+            earnings_yoy=0.12,
+            earnings_qoq=None,
+        ),
+    ]
+    result = _render_quarterly_table(data)
+    assert "N/A" in result
+    assert "Revenue" in result
+    assert "Earnings" in result
+    assert "2026-Q1" in result
+    assert "2025-Q4" in result
+
+
+def test_render_quarterly_table_color_coding():
+    """Test color coding (verify green for positive growth, red for negative)"""
+    data = [
+        QuarterlyData(
+            period="2026-Q1",
+            revenue=143e9,
+            earnings=36e9,
+            revenue_yoy=0.15,
+            revenue_qoq=-0.05,
+            earnings_yoy=-0.10,
+            earnings_qoq=0.20,
+        ),
+    ]
+    result = _render_quarterly_table(data)
+    # ANSI color codes: \x1b[32m = green, \x1b[31m = red
+    assert "\x1b[32m" in result  # Green color code present
+    assert "\x1b[31m" in result  # Red color code present
+    assert "+15.00%" in result
+    assert "-5.00%" in result
+    assert "-10.00%" in result
+    assert "+20.00%" in result
+
+
+def test_render_quarterly_table_with_empty_list():
+    """Test with empty list (verify empty string returned)"""
+    result = _render_quarterly_table([])
+    assert result == ""
+
+
+def test_render_quarterly_table_with_none_input():
+    """Test with None input (verify empty string returned)"""
+    result = _render_quarterly_table(None)
+    assert result == ""
