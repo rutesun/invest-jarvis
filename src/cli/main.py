@@ -363,47 +363,42 @@ def format_deep_dive_output(result: dict) -> str:
 
         output += "### Key Metrics\n\n"
 
+        # Sector/Industry 정보는 그대로 유지
         if fundamental.sector or fundamental.industry:
             output += f"**Sector/Industry**: {fundamental.sector or 'N/A'} / {fundamental.industry or 'N/A'}\n\n"
 
-        if fundamental.market_cap is not None:
-            output += f"- **시가총액**: ${fundamental.market_cap/1e9:.2f}B\n"
+        # 섹터별 우선순위 지표 가져오기
+        from src.utils.sector_metrics import SectorMetrics
+        priority_metrics = SectorMetrics.get_priority_metrics(fundamental.sector)
 
-        if fundamental.pe_ratio is not None:
-            output += f"- **P/E Ratio**: {fundamental.pe_ratio:.1f}\n"
-        if fundamental.forward_pe is not None:
-            output += f"- **Forward P/E**: {fundamental.forward_pe:.1f}\n"
-        if fundamental.peg_ratio is not None:
-            output += f"- **PEG Ratio**: {fundamental.peg_ratio:.2f}\n"
-        if fundamental.ev_ebitda is not None:
-            output += f"- **EV/EBITDA**: {fundamental.ev_ebitda:.1f}\n"
-
-        output += "\n"
-
-        if fundamental.roe is not None:
-            output += f"- **ROE**: {fundamental.roe*100:.1f}%\n"
-        if fundamental.roa is not None:
-            output += f"- **ROA**: {fundamental.roa*100:.1f}%\n"
-        if fundamental.gross_margin is not None:
-            output += f"- **매출총이익률**: {fundamental.gross_margin*100:.1f}%\n"
-        if fundamental.operating_margin is not None:
-            output += f"- **영업이익률**: {fundamental.operating_margin*100:.1f}%\n"
-        if fundamental.profit_margin is not None:
-            output += f"- **순이익률**: {fundamental.profit_margin*100:.1f}%\n"
+        # 우선순위 지표를 ⭐와 함께 먼저 렌더링
+        for metric_name in priority_metrics:
+            value = getattr(fundamental, metric_name, None)
+            if value is not None:
+                display_name = _get_metric_display_name(metric_name)
+                formatted = _format_metric_value(metric_name, value)
+                output += f"⭐ **{display_name}**: {formatted}\n"
 
         output += "\n"
 
-        if fundamental.revenue_growth is not None:
-            output += f"- **매출 성장률**: {fundamental.revenue_growth*100:.1f}%\n"
-        if fundamental.earnings_growth is not None:
-            output += f"- **이익 성장률**: {fundamental.earnings_growth*100:.1f}%\n"
+        # 나머지 지표 렌더링
+        all_metric_names = [
+            "market_cap", "pe_ratio", "forward_pe", "peg_ratio", "pb_ratio",
+            "ps_ratio", "ev_ebitda", "roe", "roa", "gross_margin",
+            "operating_margin", "profit_margin", "revenue_growth",
+            "earnings_growth", "debt_to_equity", "current_ratio",
+            "quick_ratio", "free_cash_flow", "operating_cash_flow",
+            "fcf_yield", "dividend_yield", "payout_ratio"
+        ]
 
-        output += "\n"
+        remaining_metrics = [m for m in all_metric_names if m not in priority_metrics]
 
-        if fundamental.debt_to_equity is not None:
-            output += f"- **Debt/Equity**: {fundamental.debt_to_equity:.1f}\n"
-        if fundamental.current_ratio is not None:
-            output += f"- **유동비율**: {fundamental.current_ratio:.2f}\n"
+        for metric_name in remaining_metrics:
+            value = getattr(fundamental, metric_name, None)
+            if value is not None:
+                display_name = _get_metric_display_name(metric_name)
+                formatted = _format_metric_value(metric_name, value)
+                output += f"- **{display_name}**: {formatted}\n"
 
         output += "\n"
 
