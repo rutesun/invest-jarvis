@@ -3,6 +3,7 @@
     "allow": [
       "Read",
       "Bash(tree:*)",
+      "Bash(git diff*)",
       "mcp__serena__read_file",
       "mcp__serena__list_dir",
       "mcp__serena__find_file",
@@ -17,6 +18,18 @@
     ]
   },
   "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/check-docs.sh",
+            "timeout": 15,
+            "statusMessage": "Checking documentation..."
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Bash",

@@ -171,6 +171,42 @@ uv run jarvis portfolio
 
 ---
 
+### 5. screen - 시장 스크리너
+
+**특징:**
+- Naver 테마 + KIS 순위 기반 유니버스 구성
+- 누적/상승일/거래량 폭발 지표 스코어링
+- 후보 종목 랭킹 및 리포트 저장
+
+**사용법:**
+```bash
+uv run jarvis screen [OPTIONS]
+```
+
+**옵션:**
+- `--market, -m`: `kr`, `us`, `all` (기본값: all)
+
+**예시:**
+```bash
+uv run jarvis screen
+uv run jarvis screen --market kr
+uv run jarvis screen --market us
+```
+
+---
+
+### 6. cache - 티커 캐시 관리
+
+종목명→티커 심볼 변환 결과를 로컬에 캐시합니다 (6개월 TTL).
+
+```bash
+uv run jarvis cache list      # 캐시된 매핑 목록
+uv run jarvis cache clear     # 캐시 초기화 (확인 프롬프트)
+uv run jarvis cache clear --yes  # 확인 없이 초기화
+```
+
+---
+
 ## 환경 변수 설정
 
 ### LLM API 키 (.env)

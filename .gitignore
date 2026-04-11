@@ -13,3 +13,4 @@ build/
 .coverage
 .worktrees/
 .claude/worktrees/
+.claude/settings.local.json
