@@ -28,7 +28,7 @@ Telegram 채널 수집
 
 ## 1. Daily Report
 
-→ **상세 설계**: [Daily Report 설계서](2026-04-11-daily-report-design.md)
+→ **상세 설계**: [Telegram 수집 파이프라인 설계서](2026-04-11-telegram-collection-design.md) → [Daily Report 설계서](2026-04-11-daily-report-design.md)
 
 매일 아침, 시장을 이해하기 위해 알아야 할 것들을 한 번에 정리한 리포트.
 - 시장 전반 (매크로 + 주목 뉴스 Top 5 + 시장 내러티브)
@@ -67,8 +67,8 @@ Telegram 채널 수집
 | 1-b | 수급 분석 (외인/기관 플로우) | 🔲 |
 | 2-a | **공시 분석 (SEC/DART)** | 🔲 — Analysis #3 |
 | 2-b | **포트폴리오 브리프 고도화** | 🔲 — Portfolio #2 |
-| 3 | **Telegram 수집** | 🔲 — Daily Report #1의 기반 (CSV 저장, config.yaml 채널 관리) |
-| 4 | **Daily Report 전체** | 🔲 — Telegram 수집 완성 후 |
+| 3 | **Telegram 수집** | 🔲 — [Telegram 수집 파이프라인 설계서](2026-04-11-telegram-collection-design.md) |
+| 4 | **Daily Report 전체** | 🔲 — [Daily Report 설계서](2026-04-11-daily-report-design.md), Telegram 수집 완성 후 |
 | 부가 | Notion 발행 | 🔲 |
 
 ---
