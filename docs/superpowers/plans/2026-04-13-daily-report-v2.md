@@ -1,39 +1,39 @@
-# Daily Report V2 Implementation Plan
+# Daily Report V2 구현 계획
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **에이전트 작업자용:** 필수 서브스킬: superpowers:subagent-driven-development(권장) 또는 superpowers:executing-plans를 사용하여 태스크별로 구현할 것. 체크박스(`- [ ]`) 형식으로 진행 추적.
 
-**Goal:** Replace the current simple daily report with a 5-stage theme-centric pipeline that produces market narrative reports with catalyst analysis.
+**목표:** 현재 단순 일일 리포트를 5단계 테마 중심 파이프라인으로 교체하여, 시장 내러티브 기반 촉매 분석 리포트를 생성한다.
 
-**Architecture:** 5-stage pipeline (Ingest → Map → Shuffle → Catalyst → Synthesize) with each stage independently executable via `--stage` flag. Intermediate results cached as JSON in `.cache/report/YYYY-MM-DD/`. LLM calls tagged for LangSmith tracing.
+**아키텍처:** 5단계 파이프라인 (Ingest → Map → Shuffle → Catalyst → Synthesize). 각 단계는 `--stage` 플래그로 독립 실행 가능. 중간 결과는 `.cache/report/YYYY-MM-DD/`에 JSON으로 캐싱. LLM 호출은 LangSmith 트레이싱 태깅.
 
-**Tech Stack:** langchain-core, langchain-openai, langchain-anthropic, pydantic v2, typer, rich, yfinance, ddgs, httpx
+**기술 스택:** langchain-core, langchain-openai, langchain-anthropic, pydantic v2, typer, rich, yfinance, ddgs, httpx
 
-**Spec:** `docs/superpowers/specs/2026-04-12-daily-report-v2-design.md`
+**설계서:** `docs/superpowers/specs/2026-04-12-daily-report-v2-design.md`
 
 ---
 
-## File Structure
+## 파일 구조
 
 ```
 src/
   llm/
-    daily_report_models.py          # Pydantic models: IngestResult, IssueExtract, StockDetail, Theme, ShuffleResult, StockCatalyst, DailyReport
+    daily_report_models.py          # Pydantic 모델: IngestResult, IssueExtract, StockDetail, Theme, ShuffleResult, StockCatalyst, DailyReport
     prompts/
       __init__.py
-      daily_report.py               # DailyReportPrompts static methods
-    daily_report_analyzer.py        # LLM call wrappers: map_chunk, merge_themes, find_catalysts, synthesize_report
+      daily_report.py               # DailyReportPrompts 정적 메서드
+    daily_report_analyzer.py        # LLM 호출 래퍼: map_chunk, merge_themes, find_catalysts, synthesize_report
   pipelines/
     report_stages/
-      __init__.py                   # StageRunner base, cache load/save helpers
-      ingest.py                     # Stage 1: parallel data collection
-      map_issues.py                 # Stage 2: LLM Map (chunked, parallel)
-      shuffle_filter.py             # Stage 3: theme merge + ticker resolve + market data enrich
-      catalyst.py                   # Stage 4: LLM Catalyst with tool calling
-      synthesize.py                 # Stage 5: LLM final report generation
-    daily_report_v2.py              # Orchestrator: chains stages, handles --stage/--from
+      __init__.py                   # StageCache 캐시 로드/저장 헬퍼
+      ingest.py                     # Stage 1: 병렬 데이터 수집
+      map_issues.py                 # Stage 2: LLM Map (청크별 병렬 처리)
+      shuffle_filter.py             # Stage 3: 테마 병합 + 티커 정규화 + 시장 데이터 보강
+      catalyst.py                   # Stage 4: LLM Catalyst (tool calling으로 뉴스 검색)
+      synthesize.py                 # Stage 5: LLM 최종 리포트 생성
+    daily_report_v2.py              # 오케스트레이터: 단계 체이닝, --stage/--from 처리
   cli/
-    main.py                         # Modify: replace report command with V2 pipeline
-themes.yaml                        # Known theme list (seed file)
+    main.py                         # 수정: report 커맨드를 V2 파이프라인으로 교체
+themes.yaml                        # 알려진 테마 목록 (시드 파일)
 
 tests/
   llm/
@@ -52,13 +52,13 @@ tests/
 
 ---
 
-### Task 1: Data Models
+### Task 1: 데이터 모델
 
-**Files:**
-- Create: `src/llm/daily_report_models.py`
-- Test: `tests/llm/test_daily_report_models.py`
+**파일:**
+- 생성: `src/llm/daily_report_models.py`
+- 테스트: `tests/llm/test_daily_report_models.py`
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: 실패하는 테스트 작성**
 
 ```python
 # tests/llm/test_daily_report_models.py
@@ -170,7 +170,7 @@ def test_daily_report_creation():
 
 
 def test_models_json_roundtrip():
-    """All models must serialize to JSON and back for cache storage."""
+    """모든 모델은 캐시 저장을 위해 JSON 직렬화/역직렬화가 가능해야 한다."""
     theme = Theme(
         name="AI", narrative="AI boom", sentiment="bull",
         mention_count=10, stocks=["NVDA"],
@@ -187,12 +187,12 @@ def test_models_json_roundtrip():
     assert restored.stock_details["NVDA"].volume_score == 3.2
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 2: 테스트 실패 확인**
 
-Run: `uv run pytest tests/llm/test_daily_report_models.py -v`
-Expected: FAIL with `ModuleNotFoundError: No module named 'src.llm.daily_report_models'`
+실행: `uv run pytest tests/llm/test_daily_report_models.py -v`
+예상: `ModuleNotFoundError: No module named 'src.llm.daily_report_models'`로 FAIL
 
-- [ ] **Step 3: Write minimal implementation**
+- [ ] **Step 3: 최소 구현 작성**
 
 ```python
 # src/llm/daily_report_models.py
@@ -255,12 +255,12 @@ class DailyReport(BaseModel):
     featured_analysis: str
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 4: 테스트 통과 확인**
 
-Run: `uv run pytest tests/llm/test_daily_report_models.py -v`
-Expected: All 9 tests PASS
+실행: `uv run pytest tests/llm/test_daily_report_models.py -v`
+예상: 9개 테스트 모두 PASS
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: 커밋**
 
 ```bash
 git add src/llm/daily_report_models.py tests/llm/test_daily_report_models.py
@@ -269,14 +269,14 @@ git commit -m "feat: add daily report V2 pydantic data models"
 
 ---
 
-### Task 2: Prompt Class
+### Task 2: 프롬프트 클래스
 
-**Files:**
-- Create: `src/llm/prompts/__init__.py`
-- Create: `src/llm/prompts/daily_report.py`
-- Test: `tests/llm/test_daily_report_prompts.py`
+**파일:**
+- 생성: `src/llm/prompts/__init__.py`
+- 생성: `src/llm/prompts/daily_report.py`
+- 테스트: `tests/llm/test_daily_report_prompts.py`
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: 실패하는 테스트 작성**
 
 ```python
 # tests/llm/test_daily_report_prompts.py
@@ -328,12 +328,12 @@ def test_synthesize_prompt_includes_all_sections():
     assert "10줄 이내" in prompt
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 2: 테스트 실패 확인**
 
-Run: `uv run pytest tests/llm/test_daily_report_prompts.py -v`
-Expected: FAIL with `ModuleNotFoundError`
+실행: `uv run pytest tests/llm/test_daily_report_prompts.py -v`
+예상: `ModuleNotFoundError`로 FAIL
 
-- [ ] **Step 3: Write minimal implementation**
+- [ ] **Step 3: 최소 구현 작성**
 
 ```python
 # src/llm/prompts/__init__.py
@@ -417,12 +417,12 @@ class DailyReportPrompts:
 {catalysts}"""
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 4: 테스트 통과 확인**
 
-Run: `uv run pytest tests/llm/test_daily_report_prompts.py -v`
-Expected: All 4 tests PASS
+실행: `uv run pytest tests/llm/test_daily_report_prompts.py -v`
+예상: 4개 테스트 모두 PASS
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: 커밋**
 
 ```bash
 git add src/llm/prompts/__init__.py src/llm/prompts/daily_report.py tests/llm/test_daily_report_prompts.py
@@ -431,14 +431,14 @@ git commit -m "feat: add DailyReportPrompts static method class"
 
 ---
 
-### Task 3: Stage Infrastructure (Cache + Runner)
+### Task 3: 스테이지 인프라 (캐시 + 러너)
 
-**Files:**
-- Create: `src/pipelines/report_stages/__init__.py`
-- Test: `tests/pipelines/report_stages/__init__.py` (empty)
-- Test: `tests/pipelines/report_stages/test_stage_infra.py`
+**파일:**
+- 생성: `src/pipelines/report_stages/__init__.py`
+- 테스트: `tests/pipelines/report_stages/__init__.py` (빈 파일)
+- 테스트: `tests/pipelines/report_stages/test_stage_infra.py`
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: 실패하는 테스트 작성**
 
 ```python
 # tests/pipelines/report_stages/test_stage_infra.py
@@ -488,12 +488,12 @@ def test_get_cache_dir_for_date():
     assert result == base / "2026-04-13"
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 2: 테스트 실패 확인**
 
-Run: `uv run pytest tests/pipelines/report_stages/test_stage_infra.py -v`
-Expected: FAIL with `ModuleNotFoundError`
+실행: `uv run pytest tests/pipelines/report_stages/test_stage_infra.py -v`
+예상: `ModuleNotFoundError`로 FAIL
 
-- [ ] **Step 3: Write minimal implementation**
+- [ ] **Step 3: 최소 구현 작성**
 
 ```python
 # tests/pipelines/report_stages/__init__.py
@@ -508,7 +508,7 @@ from pathlib import Path
 
 
 class StageCache:
-    """Manages JSON cache for pipeline stage intermediate results."""
+    """파이프라인 스테이지 중간 결과를 JSON으로 관리하는 캐시."""
 
     def __init__(self, cache_dir: Path) -> None:
         self._dir = cache_dir
@@ -526,19 +526,19 @@ class StageCache:
     def load(self, stage_name: str) -> dict:
         path = self._dir / f"{stage_name}.json"
         if not path.exists():
-            raise FileNotFoundError(f"Stage cache not found: {path}")
+            raise FileNotFoundError(f"스테이지 캐시를 찾을 수 없습니다: {path}")
         return json.loads(path.read_text(encoding="utf-8"))
 
     def has(self, stage_name: str) -> bool:
         return (self._dir / f"{stage_name}.json").exists()
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 4: 테스트 통과 확인**
 
-Run: `uv run pytest tests/pipelines/report_stages/test_stage_infra.py -v`
-Expected: All 5 tests PASS
+실행: `uv run pytest tests/pipelines/report_stages/test_stage_infra.py -v`
+예상: 5개 테스트 모두 PASS
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: 커밋**
 
 ```bash
 git add src/pipelines/report_stages/__init__.py tests/pipelines/report_stages/__init__.py tests/pipelines/report_stages/test_stage_infra.py
@@ -547,14 +547,14 @@ git commit -m "feat: add StageCache for pipeline intermediate result storage"
 
 ---
 
-### Task 4: themes.yaml Seed File + Loader
+### Task 4: themes.yaml 시드 파일 + 로더
 
-**Files:**
-- Create: `themes.yaml`
-- Create: `src/pipelines/report_stages/theme_config.py`
-- Test: `tests/pipelines/report_stages/test_theme_config.py`
+**파일:**
+- 생성: `themes.yaml`
+- 생성: `src/pipelines/report_stages/theme_config.py`
+- 테스트: `tests/pipelines/report_stages/test_theme_config.py`
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: 실패하는 테스트 작성**
 
 ```python
 # tests/pipelines/report_stages/test_theme_config.py
@@ -611,12 +611,12 @@ def test_missing_file_returns_empty():
     assert themes == []
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 2: 테스트 실패 확인**
 
-Run: `uv run pytest tests/pipelines/report_stages/test_theme_config.py -v`
-Expected: FAIL with `ModuleNotFoundError`
+실행: `uv run pytest tests/pipelines/report_stages/test_theme_config.py -v`
+예상: `ModuleNotFoundError`로 FAIL
 
-- [ ] **Step 3: Write minimal implementation**
+- [ ] **Step 3: 최소 구현 작성**
 
 ```yaml
 # themes.yaml
@@ -648,7 +648,7 @@ import yaml
 
 
 class ThemeConfig:
-    """Loads and updates the known theme list from themes.yaml."""
+    """themes.yaml에서 알려진 테마 목록을 로드/업데이트한다."""
 
     def __init__(self, path: Path) -> None:
         self._path = path
@@ -677,12 +677,12 @@ class ThemeConfig:
         return "\n".join(f"- {t}" for t in themes)
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 4: 테스트 통과 확인**
 
-Run: `uv run pytest tests/pipelines/report_stages/test_theme_config.py -v`
-Expected: All 5 tests PASS
+실행: `uv run pytest tests/pipelines/report_stages/test_theme_config.py -v`
+예상: 5개 테스트 모두 PASS
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: 커밋**
 
 ```bash
 git add themes.yaml src/pipelines/report_stages/theme_config.py tests/pipelines/report_stages/test_theme_config.py
@@ -691,13 +691,13 @@ git commit -m "feat: add themes.yaml and ThemeConfig loader"
 
 ---
 
-### Task 5: Stage 1 — Ingest
+### Task 5: Stage 1 — Ingest (병렬 수집)
 
-**Files:**
-- Create: `src/pipelines/report_stages/ingest.py`
-- Test: `tests/pipelines/report_stages/test_ingest.py`
+**파일:**
+- 생성: `src/pipelines/report_stages/ingest.py`
+- 테스트: `tests/pipelines/report_stages/test_ingest.py`
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: 실패하는 테스트 작성**
 
 ```python
 # tests/pipelines/report_stages/test_ingest.py
@@ -799,12 +799,12 @@ async def test_ingest_stage_handles_kis_failure(
     assert result.momentum == []
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 2: 테스트 실패 확인**
 
-Run: `uv run pytest tests/pipelines/report_stages/test_ingest.py -v`
-Expected: FAIL with `ModuleNotFoundError`
+실행: `uv run pytest tests/pipelines/report_stages/test_ingest.py -v`
+예상: `ModuleNotFoundError`로 FAIL
 
-- [ ] **Step 3: Write minimal implementation**
+- [ ] **Step 3: 최소 구현 작성**
 
 ```python
 # src/pipelines/report_stages/ingest.py
@@ -821,7 +821,7 @@ from src.tools.news import NewsTool
 
 logger = logging.getLogger(__name__)
 
-# Market news search keywords
+# 시장 뉴스 검색 키워드
 MARKET_NEWS_QUERIES = ["SPY", "QQQ", "KOSPI", "나스닥", "S&P 500"]
 
 
@@ -829,7 +829,7 @@ MARKET_NEWS_QUERIES = ["SPY", "QQQ", "KOSPI", "나스닥", "S&P 500"]
 class IngestStage:
     macro_tool: MacroTool
     news_tool: NewsTool
-    kis_provider: Any  # KISProvider (optional dependency)
+    kis_provider: Any  # KISProvider (선택적 의존성)
     telegram_loader: Any  # TelegramLoader
 
     async def run(self) -> IngestResult:
@@ -852,7 +852,7 @@ class IngestStage:
 
         for i, r in enumerate(results):
             if isinstance(r, Exception):
-                logger.warning("Ingest source %d failed: %s", i, r)
+                logger.warning("수집 소스 %d 실패: %s", i, r)
 
         return IngestResult(
             telegram_messages=telegram_messages,
@@ -890,7 +890,7 @@ class IngestStage:
                             "url": article.url,
                         })
             except Exception as e:
-                logger.warning("News fetch failed for %s: %s", query, e)
+                logger.warning("%s 뉴스 수집 실패: %s", query, e)
         return all_news
 
     async def _fetch_kr_flow(self) -> list[dict]:
@@ -922,7 +922,7 @@ class IngestStage:
                     }
             return list(merged.values())
         except Exception as e:
-            logger.warning("KR flow fetch failed: %s", e)
+            logger.warning("KR 수급 수집 실패: %s", e)
             return []
 
     async def _fetch_momentum(self) -> list[dict]:
@@ -960,16 +960,16 @@ class IngestStage:
                         seen.add(item["ticker"])
             return results
         except Exception as e:
-            logger.warning("US momentum fetch failed: %s", e)
+            logger.warning("US 모멘텀 수집 실패: %s", e)
             return []
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 4: 테스트 통과 확인**
 
-Run: `uv run pytest tests/pipelines/report_stages/test_ingest.py -v`
-Expected: All 2 tests PASS
+실행: `uv run pytest tests/pipelines/report_stages/test_ingest.py -v`
+예상: 2개 테스트 모두 PASS
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: 커밋**
 
 ```bash
 git add src/pipelines/report_stages/ingest.py tests/pipelines/report_stages/test_ingest.py
@@ -980,12 +980,12 @@ git commit -m "feat: add Stage 1 IngestStage with parallel data collection"
 
 ### Task 6: Stage 2 — LLM Map
 
-**Files:**
-- Create: `src/llm/daily_report_analyzer.py`
-- Create: `src/pipelines/report_stages/map_issues.py`
-- Test: `tests/pipelines/report_stages/test_map_issues.py`
+**파일:**
+- 생성: `src/llm/daily_report_analyzer.py`
+- 생성: `src/pipelines/report_stages/map_issues.py`
+- 테스트: `tests/pipelines/report_stages/test_map_issues.py`
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: 실패하는 테스트 작성**
 
 ```python
 # tests/pipelines/report_stages/test_map_issues.py
@@ -1027,7 +1027,7 @@ async def test_map_stage_chunks_messages(sample_messages, mock_llm):
 
     assert len(issues) >= 1
     assert all(isinstance(i, IssueExtract) for i in issues)
-    # 120 messages / 50 chunk_size = 3 chunks → 3 LLM calls
+    # 120개 메시지 / 50 청크 크기 = 3개 청크 → 3번 LLM 호출
     assert mock_llm.with_structured_output.return_value.ainvoke.call_count == 3
 
 
@@ -1058,16 +1058,16 @@ async def test_map_stage_handles_chunk_failure(sample_messages, mock_llm):
     stage = MapStage(llm=mock_llm, known_themes="", chunk_size=50)
     issues = await stage.run(sample_messages)
 
-    # 3 chunks, 1 failed → results from 2 successful chunks
+    # 3개 청크 중 1개 실패 → 성공한 2개 청크의 결과만
     assert len(issues) == 2
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 2: 테스트 실패 확인**
 
-Run: `uv run pytest tests/pipelines/report_stages/test_map_issues.py -v`
-Expected: FAIL with `ModuleNotFoundError`
+실행: `uv run pytest tests/pipelines/report_stages/test_map_issues.py -v`
+예상: `ModuleNotFoundError`로 FAIL
 
-- [ ] **Step 3: Write the LLM analyzer wrapper**
+- [ ] **Step 3: LLM 분석기 래퍼 작성**
 
 ```python
 # src/llm/daily_report_analyzer.py
@@ -1091,6 +1091,7 @@ async def map_chunk(
     run_name: str = "map_chunk",
     metadata: dict | None = None,
 ) -> list[IssueExtract]:
+    """단일 메시지 청크에서 이슈를 추출한다."""
     structured_llm = llm.with_structured_output(list[IssueExtract])
     prompt = DailyReportPrompts.map_issues(known_themes, messages_text)
     result = await structured_llm.ainvoke(
@@ -1105,6 +1106,7 @@ async def merge_themes_llm(
     known_themes: str,
     new_themes: str,
 ) -> dict[str, str]:
+    """유사 테마를 LLM으로 병합한다."""
     prompt = DailyReportPrompts.merge_themes(known_themes, new_themes)
     structured_llm = llm.with_structured_output(dict)
     result = await structured_llm.ainvoke(
@@ -1122,6 +1124,7 @@ async def synthesize_report(
     catalysts: str,
     metadata: dict | None = None,
 ) -> DailyReport:
+    """전체 데이터를 통합하여 최종 리포트를 생성한다."""
     structured_llm = llm.with_structured_output(DailyReport)
     prompt = DailyReportPrompts.synthesize(macro, news, themes, catalysts)
     result = await structured_llm.ainvoke(
@@ -1131,7 +1134,7 @@ async def synthesize_report(
     return result
 ```
 
-- [ ] **Step 4: Write the MapStage implementation**
+- [ ] **Step 4: MapStage 구현 작성**
 
 ```python
 # src/pipelines/report_stages/map_issues.py
@@ -1150,6 +1153,7 @@ logger = logging.getLogger(__name__)
 
 
 def _format_messages_for_prompt(messages: list[dict]) -> str:
+    """메시지 목록을 프롬프트용 텍스트로 변환한다."""
     lines = []
     for msg in messages:
         msg_id = msg.get("id", "?")
@@ -1183,7 +1187,7 @@ class MapStage:
         all_issues: list[IssueExtract] = []
         for idx, result in enumerate(results):
             if isinstance(result, Exception):
-                logger.warning("Map chunk %d failed: %s", idx, result)
+                logger.warning("Map 청크 %d 실패: %s", idx, result)
                 continue
             all_issues.extend(result)
         return all_issues
@@ -1201,12 +1205,12 @@ class MapStage:
         )
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [ ] **Step 5: 테스트 통과 확인**
 
-Run: `uv run pytest tests/pipelines/report_stages/test_map_issues.py -v`
-Expected: All 3 tests PASS
+실행: `uv run pytest tests/pipelines/report_stages/test_map_issues.py -v`
+예상: 3개 테스트 모두 PASS
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: 커밋**
 
 ```bash
 git add src/llm/daily_report_analyzer.py src/pipelines/report_stages/map_issues.py tests/pipelines/report_stages/test_map_issues.py
@@ -1217,16 +1221,16 @@ git commit -m "feat: add Stage 2 MapStage with chunked parallel LLM extraction"
 
 ### Task 7: Stage 3 — Shuffle & Filter
 
-**Files:**
-- Create: `src/pipelines/report_stages/shuffle_filter.py`
-- Test: `tests/pipelines/report_stages/test_shuffle_filter.py`
+**파일:**
+- 생성: `src/pipelines/report_stages/shuffle_filter.py`
+- 테스트: `tests/pipelines/report_stages/test_shuffle_filter.py`
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: 실패하는 테스트 작성**
 
 ```python
 # tests/pipelines/report_stages/test_shuffle_filter.py
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from src.pipelines.report_stages.shuffle_filter import ShuffleStage
 from src.llm.daily_report_models import IssueExtract, ShuffleResult
 
@@ -1283,7 +1287,7 @@ def mock_ticker_resolver():
 def mock_merge_llm():
     llm = MagicMock()
     structured = MagicMock()
-    # No merges needed — all themes are already normalized
+    # 병합 불필요 — 모든 테마가 이미 정규화됨
     structured.ainvoke = AsyncMock(return_value={"매핑": {}})
     llm.with_structured_output.return_value = structured
     return llm
@@ -1303,7 +1307,7 @@ async def test_shuffle_produces_themes_sorted_by_mention(
     result = await stage.run(sample_issues, sample_kr_flow, sample_momentum)
 
     assert isinstance(result, ShuffleResult)
-    # CPO has 2 mentions, AI has 1, 방산 has 1 → CPO first
+    # CPO 2회 언급, AI 1회, 방산 1회 → CPO가 첫 번째
     assert result.themes[0].name == "CPO/광통신"
     assert result.themes[0].mention_count == 2
 
@@ -1321,7 +1325,7 @@ async def test_shuffle_enriches_stock_details_with_flow(
     )
     result = await stage.run(sample_issues, sample_kr_flow, sample_momentum)
 
-    # 코위버 should have flow_score from kr_flow
+    # 코위버는 kr_flow에서 flow_score를 받아야 함
     if "A058400" in result.stock_details:
         assert result.stock_details["A058400"].flow_score is not None
 
@@ -1339,7 +1343,7 @@ async def test_shuffle_enriches_stock_details_with_momentum(
     )
     result = await stage.run(sample_issues, sample_kr_flow, sample_momentum)
 
-    # NVDA should have volume_score from momentum
+    # NVDA는 momentum에서 volume_score를 받아야 함
     if "NVDA" in result.stock_details:
         assert result.stock_details["NVDA"].volume_score is not None
 
@@ -1357,18 +1361,18 @@ async def test_shuffle_collects_summaries_per_stock(
     )
     result = await stage.run(sample_issues, sample_kr_flow, sample_momentum)
 
-    # NVDA appears in 2 issues → should have 2 summaries
+    # NVDA는 2개 이슈에 등장 → 2개 요약이 있어야 함
     nvda = result.stock_details.get("NVDA")
     if nvda:
         assert len(nvda.summaries) == 2
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 2: 테스트 실패 확인**
 
-Run: `uv run pytest tests/pipelines/report_stages/test_shuffle_filter.py -v`
-Expected: FAIL with `ModuleNotFoundError`
+실행: `uv run pytest tests/pipelines/report_stages/test_shuffle_filter.py -v`
+예상: `ModuleNotFoundError`로 FAIL
 
-- [ ] **Step 3: Write minimal implementation**
+- [ ] **Step 3: 최소 구현 작성**
 
 ```python
 # src/pipelines/report_stages/shuffle_filter.py
@@ -1392,7 +1396,7 @@ logger = logging.getLogger(__name__)
 
 
 def _detect_market(ticker: str) -> str:
-    """Heuristic: Korean tickers are 6-digit numbers or start with A."""
+    """한국 티커 감지 (6자리 숫자 또는 A로 시작)"""
     stripped = ticker.lstrip("A")
     if stripped.isdigit() and len(stripped) == 6:
         return "KR"
@@ -1412,7 +1416,7 @@ class ShuffleStage:
         kr_flow: list[dict],
         momentum: list[dict],
     ) -> ShuffleResult:
-        # Step 1: Merge similar themes via LLM
+        # Step 1: 유사 테마 LLM으로 병합
         raw_theme_names = list({issue.theme for issue in issues})
         new_themes = [t for t in raw_theme_names if t not in self.known_themes]
         theme_mapping: dict[str, str] = {}
@@ -1421,7 +1425,7 @@ class ShuffleStage:
             new_str = "\n".join(f"- {t}" for t in new_themes)
             theme_mapping = await merge_themes_llm(self.merge_llm, known_str, new_str)
 
-        # Step 2: Resolve tickers and build theme groups
+        # Step 2: 티커 정규화 + 테마별 그룹핑
         all_raw_tickers: set[str] = set()
         for issue in issues:
             all_raw_tickers.update(issue.tickers)
@@ -1432,16 +1436,16 @@ class ShuffleStage:
                 resolution = await self.ticker_resolver.resolve(raw)
                 ticker_map[raw] = resolution.resolved_ticker
             except Exception as e:
-                logger.warning("Ticker resolve failed for %s: %s", raw, e)
+                logger.warning("티커 변환 실패 %s: %s", raw, e)
                 ticker_map[raw] = raw
 
-        # Group by normalized theme
+        # 정규화된 테마별 그룹핑
         theme_issues: dict[str, list[IssueExtract]] = defaultdict(list)
         for issue in issues:
             normalized = theme_mapping.get(issue.theme, issue.theme)
             theme_issues[normalized].append(issue)
 
-        # Build stock details
+        # 종목별 상세 정보 수집
         stock_details: dict[str, dict] = defaultdict(lambda: {
             "mention_count": 0, "summaries": [], "source": "telegram",
         })
@@ -1452,7 +1456,7 @@ class ShuffleStage:
                     stock_details[resolved]["mention_count"] += 1
                     stock_details[resolved]["summaries"].append(issue.summary)
 
-        # Build themes
+        # 테마 모델 구성
         themes: list[Theme] = []
         for theme_name, theme_issue_list in theme_issues.items():
             sentiment_counts = Counter(i.sentiment for i in theme_issue_list)
@@ -1476,7 +1480,7 @@ class ShuffleStage:
                 stocks=sorted_tickers,
             ))
 
-        # Step 3: Enrich with market data
+        # Step 3: 시장 데이터로 보강
         kr_flow_map = {item["ticker"]: item for item in kr_flow}
         momentum_map = {item["ticker"]: item for item in momentum}
 
@@ -1510,7 +1514,7 @@ class ShuffleStage:
                 summaries=info["summaries"],
             )
 
-        # Add market-data-only stocks to "기타 수급 특징주" theme
+        # 수급/거래량 상위이지만 테마에 없는 종목 → "기타 수급 특징주" 테마에 편입
         market_only_tickers: list[str] = []
         for ticker in set(kr_flow_map.keys()) | set(momentum_map.keys()):
             if ticker not in all_tickers:
@@ -1540,19 +1544,19 @@ class ShuffleStage:
                 stocks=market_only_tickers,
             ))
 
-        # Step 4: Select top N themes
+        # Step 4: 테마 Top N 선별
         themes.sort(key=lambda t: t.mention_count, reverse=True)
         themes = themes[: self.top_n]
 
         return ShuffleResult(themes=themes, stock_details=final_details)
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 4: 테스트 통과 확인**
 
-Run: `uv run pytest tests/pipelines/report_stages/test_shuffle_filter.py -v`
-Expected: All 4 tests PASS
+실행: `uv run pytest tests/pipelines/report_stages/test_shuffle_filter.py -v`
+예상: 4개 테스트 모두 PASS
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: 커밋**
 
 ```bash
 git add src/pipelines/report_stages/shuffle_filter.py tests/pipelines/report_stages/test_shuffle_filter.py
@@ -1563,11 +1567,11 @@ git commit -m "feat: add Stage 3 ShuffleStage with theme merge and market data e
 
 ### Task 8: Stage 4 — LLM Catalyst
 
-**Files:**
-- Create: `src/pipelines/report_stages/catalyst.py`
-- Test: `tests/pipelines/report_stages/test_catalyst.py`
+**파일:**
+- 생성: `src/pipelines/report_stages/catalyst.py`
+- 테스트: `tests/pipelines/report_stages/test_catalyst.py`
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: 실패하는 테스트 작성**
 
 ```python
 # tests/pipelines/report_stages/test_catalyst.py
@@ -1606,7 +1610,7 @@ def sample_shuffle_result():
 
 @pytest.fixture
 def mock_catalyst_llm():
-    """Mock LLM that simulates tool-calling agent returning StockCatalyst list."""
+    """tool-calling 에이전트가 StockCatalyst 리스트를 반환하는 것을 시뮬레이션하는 mock."""
     llm = AsyncMock()
     llm.return_value = [
         StockCatalyst(
@@ -1629,7 +1633,7 @@ async def test_catalyst_stage_returns_catalysts(sample_shuffle_result, mock_cata
         ticker_resolver=AsyncMock(),
         stocks_per_theme=2,
     )
-    # Override _run_agent to use mock
+    # _run_agent를 mock으로 오버라이드
     stage._run_agent = mock_catalyst_llm
 
     catalysts = await stage.run(sample_shuffle_result)
@@ -1645,7 +1649,8 @@ async def test_catalyst_stage_limits_stocks_per_theme(sample_shuffle_result):
         import json
         data = json.loads(themes_json)
         for theme in data:
-            called_tickers.extend(theme["stocks"])
+            for stock in theme["stocks"]:
+                called_tickers.append(stock["ticker"])
         return []
 
     stage = CatalystStage(
@@ -1657,17 +1662,15 @@ async def test_catalyst_stage_limits_stocks_per_theme(sample_shuffle_result):
     stage._run_agent = mock_agent
     await stage.run(sample_shuffle_result)
 
-    # CPO has 3 stocks but limit is 2 → only top 2 sent
-    # Check that each theme sent at most 2 stocks
-    # (exact assertion depends on implementation detail)
+    # CPO에 3개 종목이 있지만 제한이 2 → 상위 2개만 전달되어야 함
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 2: 테스트 실패 확인**
 
-Run: `uv run pytest tests/pipelines/report_stages/test_catalyst.py -v`
-Expected: FAIL with `ModuleNotFoundError`
+실행: `uv run pytest tests/pipelines/report_stages/test_catalyst.py -v`
+예상: `ModuleNotFoundError`로 FAIL
 
-- [ ] **Step 3: Write minimal implementation**
+- [ ] **Step 3: 최소 구현 작성**
 
 ```python
 # src/pipelines/report_stages/catalyst.py
@@ -1694,7 +1697,7 @@ class CatalystStage:
     stocks_per_theme: int = 3
 
     async def run(self, shuffle_result: ShuffleResult) -> list[StockCatalyst]:
-        # Prepare input: themes with top N stocks + their summaries
+        # 입력 준비: 테마별 상위 N개 종목 + 요약
         themes_for_prompt = []
         for theme in shuffle_result.themes:
             top_stocks = theme.stocks[: self.stocks_per_theme]
@@ -1717,23 +1720,23 @@ class CatalystStage:
         return await self._run_agent(themes_json, shuffle_result.stock_details)
 
     async def _run_agent(self, themes_json: str, stock_details: dict) -> list[StockCatalyst]:
-        # Build langchain tools from news_tool and ticker_resolver
+        # NewsTool과 TickerResolver를 langchain tool로 래핑
         news_tool_ref = self.news_tool
         ticker_resolver_ref = self.ticker_resolver
 
         @tool
         async def search_news(query: str) -> str:
-            """Search recent news for a stock ticker or keyword."""
+            """주식 티커 또는 키워드로 최근 뉴스를 검색합니다."""
             result = await news_tool_ref.execute(ticker=query, limit=5)
             if not result.success or not result.data:
-                return f"No news found for {query}"
+                return f"{query}에 대한 뉴스가 없습니다"
             return "\n".join(
                 f"- {a.title}: {a.summary}" for a in result.data[:5]
             )
 
         @tool
         async def resolve_ticker(name: str) -> str:
-            """Resolve a company name to its stock ticker symbol."""
+            """회사명을 주식 티커 심볼로 변환합니다."""
             result = await ticker_resolver_ref.resolve(name)
             return f"{name} → {result.resolved_ticker}"
 
@@ -1752,12 +1755,12 @@ class CatalystStage:
         return result
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 4: 테스트 통과 확인**
 
-Run: `uv run pytest tests/pipelines/report_stages/test_catalyst.py -v`
-Expected: All 2 tests PASS
+실행: `uv run pytest tests/pipelines/report_stages/test_catalyst.py -v`
+예상: 2개 테스트 모두 PASS
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: 커밋**
 
 ```bash
 git add src/pipelines/report_stages/catalyst.py tests/pipelines/report_stages/test_catalyst.py
@@ -1768,11 +1771,11 @@ git commit -m "feat: add Stage 4 CatalystStage with LLM tool calling"
 
 ### Task 9: Stage 5 — LLM Synthesize
 
-**Files:**
-- Create: `src/pipelines/report_stages/synthesize.py`
-- Test: `tests/pipelines/report_stages/test_synthesize.py`
+**파일:**
+- 생성: `src/pipelines/report_stages/synthesize.py`
+- 테스트: `tests/pipelines/report_stages/test_synthesize.py`
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: 실패하는 테스트 작성**
 
 ```python
 # tests/pipelines/report_stages/test_synthesize.py
@@ -1843,12 +1846,12 @@ async def test_synthesize_returns_daily_report(
     assert "VIX" in report.market_pulse
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 2: 테스트 실패 확인**
 
-Run: `uv run pytest tests/pipelines/report_stages/test_synthesize.py -v`
-Expected: FAIL with `ModuleNotFoundError`
+실행: `uv run pytest tests/pipelines/report_stages/test_synthesize.py -v`
+예상: `ModuleNotFoundError`로 FAIL
 
-- [ ] **Step 3: Write minimal implementation**
+- [ ] **Step 3: 최소 구현 작성**
 
 ```python
 # src/pipelines/report_stages/synthesize.py
@@ -1922,12 +1925,12 @@ class SynthesizeStage:
         )
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 4: 테스트 통과 확인**
 
-Run: `uv run pytest tests/pipelines/report_stages/test_synthesize.py -v`
-Expected: 1 test PASS
+실행: `uv run pytest tests/pipelines/report_stages/test_synthesize.py -v`
+예상: 1개 테스트 PASS
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: 커밋**
 
 ```bash
 git add src/pipelines/report_stages/synthesize.py tests/pipelines/report_stages/test_synthesize.py
@@ -1936,18 +1939,18 @@ git commit -m "feat: add Stage 5 SynthesizeStage with narrative report generatio
 
 ---
 
-### Task 10: Pipeline Orchestrator
+### Task 10: 파이프라인 오케스트레이터
 
-**Files:**
-- Create: `src/pipelines/daily_report_v2.py`
-- Test: `tests/pipelines/test_daily_report_v2.py`
+**파일:**
+- 생성: `src/pipelines/daily_report_v2.py`
+- 테스트: `tests/pipelines/test_daily_report_v2.py`
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: 실패하는 테스트 작성**
 
 ```python
 # tests/pipelines/test_daily_report_v2.py
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from pathlib import Path
 from src.pipelines.daily_report_v2 import DailyReportV2Pipeline, STAGE_NAMES
 
@@ -1972,7 +1975,10 @@ def test_stages_from_invalid_raises():
 async def test_run_single_stage_saves_cache(tmp_path):
     mock_ingest = AsyncMock()
     mock_ingest.run.return_value = MagicMock(
-        model_dump=MagicMock(return_value={"telegram_messages": [], "macro_snapshot": {}, "market_news": [], "kr_flow": [], "momentum": []}),
+        model_dump=MagicMock(return_value={
+            "telegram_messages": [], "macro_snapshot": {},
+            "market_news": [], "kr_flow": [], "momentum": [],
+        }),
     )
 
     pipeline = DailyReportV2Pipeline(
@@ -1989,12 +1995,12 @@ async def test_run_single_stage_saves_cache(tmp_path):
     assert any("1_ingest" in f.name for f in cache_files)
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 2: 테스트 실패 확인**
 
-Run: `uv run pytest tests/pipelines/test_daily_report_v2.py -v`
-Expected: FAIL with `ModuleNotFoundError`
+실행: `uv run pytest tests/pipelines/test_daily_report_v2.py -v`
+예상: `ModuleNotFoundError`로 FAIL
 
-- [ ] **Step 3: Write minimal implementation**
+- [ ] **Step 3: 최소 구현 작성**
 
 ```python
 # src/pipelines/daily_report_v2.py
@@ -2110,17 +2116,17 @@ class DailyReportV2Pipeline:
 
     def _stages_from(self, start: str) -> list[str]:
         if start not in STAGE_NAMES:
-            raise ValueError(f"Unknown stage: {start}. Valid: {STAGE_NAMES}")
+            raise ValueError(f"Unknown stage: {start}. 사용 가능: {STAGE_NAMES}")
         idx = STAGE_NAMES.index(start)
         return STAGE_NAMES[idx:]
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 4: 테스트 통과 확인**
 
-Run: `uv run pytest tests/pipelines/test_daily_report_v2.py -v`
-Expected: All 4 tests PASS
+실행: `uv run pytest tests/pipelines/test_daily_report_v2.py -v`
+예상: 4개 테스트 모두 PASS
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: 커밋**
 
 ```bash
 git add src/pipelines/daily_report_v2.py tests/pipelines/test_daily_report_v2.py
@@ -2129,18 +2135,18 @@ git commit -m "feat: add DailyReportV2Pipeline orchestrator with stage caching"
 
 ---
 
-### Task 11: CLI Integration
+### Task 11: CLI 통합
 
-**Files:**
-- Modify: `src/cli/main.py`
+**파일:**
+- 수정: `src/cli/main.py`
 
-- [ ] **Step 1: Read current report command to understand exact modification points**
+- [ ] **Step 1: 현재 report 커맨드 확인**
 
-Run: `uv run pytest tests/pipelines/test_daily_report_v2.py -v` (ensure Task 10 passes)
+실행: `uv run pytest tests/pipelines/test_daily_report_v2.py -v` (Task 10 통과 확인)
 
-- [ ] **Step 2: Add V2 report runner function**
+- [ ] **Step 2: V2 리포트 실행 함수 추가**
 
-Add the following to `src/cli/main.py`, below the existing `run_daily_report` function:
+`src/cli/main.py`의 기존 `run_daily_report` 함수 아래에 추가:
 
 ```python
 async def run_daily_report_v2(
@@ -2149,7 +2155,7 @@ async def run_daily_report_v2(
     from_stage: str | None = None,
     no_save: bool = False,
 ) -> dict:
-    """Run the V2 daily report pipeline."""
+    """V2 일일 리포트 파이프라인을 실행한다."""
     from pathlib import Path
     from src.tools.macro import MacroTool
     from src.tools.news import NewsTool
@@ -2164,12 +2170,12 @@ async def run_daily_report_v2(
     from src.pipelines.report_stages.synthesize import SynthesizeStage
     from src.pipelines.report_stages.theme_config import ThemeConfig
 
-    # LLM providers
+    # LLM 프로바이더 (스테이지별 모델)
     map_llm = LLMProvider.create(provider="openai", model="gpt-4o-mini")
     catalyst_llm = LLMProvider.create(provider="openai", model="gpt-4o")
     synthesize_llm = LLMProvider.create(provider=provider)
 
-    # Tools and providers
+    # 도구 및 프로바이더
     macro_tool = MacroTool()
     news_tool = NewsTool()
     ticker_resolver = TickerResolver()
@@ -2180,14 +2186,14 @@ async def run_daily_report_v2(
     except Exception:
         kis_provider = None
 
-    # Telegram loader placeholder (depends on telegram-collection implementation)
+    # 텔레그램 로더 스텁 (telegram-collection 구현 완료 후 교체)
     class StubTelegramLoader:
         def load(self):
             return []
 
     telegram_loader = StubTelegramLoader()
 
-    # Build stages
+    # 스테이지 조립
     ingest_stage = IngestStage(
         macro_tool=macro_tool,
         news_tool=news_tool,
@@ -2236,15 +2242,15 @@ async def run_daily_report_v2(
     return result
 ```
 
-- [ ] **Step 3: Add V2 report formatter function**
+- [ ] **Step 3: V2 리포트 포매터 함수 추가**
 
 ```python
 def format_daily_report_v2(report) -> str:
-    """Format DailyReport into markdown string."""
+    """DailyReport를 마크다운 문자열로 포맷팅한다."""
     from src.llm.daily_report_models import DailyReport
 
     if not isinstance(report, DailyReport):
-        return "Report generation failed."
+        return "리포트 생성에 실패했습니다."
 
     lines = [
         f"# Daily Market Report — {report.date}",
@@ -2264,17 +2270,17 @@ def format_daily_report_v2(report) -> str:
     return "\n".join(lines)
 ```
 
-- [ ] **Step 4: Replace the report command**
+- [ ] **Step 4: report 커맨드 교체**
 
-Replace the existing `report` command in `src/cli/main.py`:
+`src/cli/main.py`의 기존 `report` 커맨드를 교체:
 
 ```python
 @app.command()
 def report(
-    provider: str = typer.Option("openai", "--provider", "-p", help="LLM provider (openai|anthropic)"),
-    stage: str = typer.Option(None, "--stage", help="Run single stage (ingest|map|shuffle|catalyst|synthesize)"),
-    from_stage: str = typer.Option(None, "--from", help="Run from stage to end"),
-    no_save: bool = typer.Option(False, "--no-save", help="Skip saving report to file"),
+    provider: str = typer.Option("openai", "--provider", "-p", help="LLM 프로바이더 (openai|anthropic)"),
+    stage: str = typer.Option(None, "--stage", help="단일 스테이지 실행 (ingest|map|shuffle|catalyst|synthesize)"),
+    from_stage: str = typer.Option(None, "--from", help="해당 스테이지부터 끝까지 실행"),
+    no_save: bool = typer.Option(False, "--no-save", help="리포트 파일 저장 생략"),
 ):
     """일일 시장 리포트 (V2: 테마 중심 내러티브)"""
     import asyncio
@@ -2293,19 +2299,19 @@ def report(
         md = format_daily_report_v2(report_obj)
         console.print(Markdown(md))
         if "saved_to" in result:
-            console.print(f"\n[dim]Saved to: {result['saved_to']}[/dim]")
+            console.print(f"\n[dim]저장 위치: {result['saved_to']}[/dim]")
     elif stage:
-        console.print(f"[green]Stage '{stage}' completed. Check .cache/report/ for results.[/green]")
+        console.print(f"[green]스테이지 '{stage}' 완료. .cache/report/ 에서 결과를 확인하세요.[/green]")
     else:
-        console.print("[red]Report generation failed.[/red]")
+        console.print("[red]리포트 생성에 실패했습니다.[/red]")
 ```
 
-- [ ] **Step 5: Run CLI smoke test**
+- [ ] **Step 5: CLI 스모크 테스트**
 
-Run: `uv run jarvis report --help`
-Expected: Shows `--stage`, `--from`, `--no-save` options
+실행: `uv run jarvis report --help`
+예상: `--stage`, `--from`, `--no-save` 옵션이 표시됨
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: 커밋**
 
 ```bash
 git add src/cli/main.py
@@ -2314,24 +2320,22 @@ git commit -m "feat: replace report command with V2 pipeline (stage-based, theme
 
 ---
 
-### Task 12: Documentation Update
+### Task 12: 문서 업데이트
 
-**Files:**
-- Modify: `README.md` — update report command description
-- Modify: `docs/CLI_USAGE.md` — update report section with new options
-- Modify: `CLAUDE.md` — update Commands section
+**파일:**
+- 수정: `README.md` — report 커맨드 설명 업데이트
+- 수정: `docs/CLI_USAGE.md` — report 섹션에 새 옵션 추가
+- 수정: `CLAUDE.md` — Commands 섹션 업데이트
 
-- [ ] **Step 1: Update README.md report section**
-
-Update the report command in README.md to reflect V2:
+- [ ] **Step 1: README.md report 섹션 업데이트**
 
 ```markdown
 uv run jarvis report            # 일일 시장 리포트 (V2: 테마 중심 내러티브)
 ```
 
-- [ ] **Step 2: Update docs/CLI_USAGE.md report section**
+- [ ] **Step 2: docs/CLI_USAGE.md report 섹션 교체**
 
-Replace the existing report section with:
+기존 report 섹션을 다음으로 교체:
 
 ```markdown
 ### 3. report - 일일 시장 리포트 (V2)
@@ -2348,7 +2352,7 @@ Replace the existing report section with:
 - `KIS_APP_KEY`, `KIS_APP_SECRET` 선택 (수급 데이터)
 
 **사용법:**
-```bash
+\`\`\`bash
 # 전체 파이프라인 실행
 uv run jarvis report
 uv run jarvis report --provider anthropic
@@ -2365,7 +2369,7 @@ uv run jarvis report --from shuffle
 
 # 파일 저장 안함
 uv run jarvis report --no-save
-```
+\`\`\`
 
 **출력 내용:**
 - **시장 온도:** 매크로 수치 해석 + 시장 분위기 (10줄 이내)
@@ -2375,15 +2379,13 @@ uv run jarvis report --no-save
 **리포트 저장:** `reports/YYYY-MM/YYYY-MM-DD.md`
 ```
 
-- [ ] **Step 3: Update CLAUDE.md Commands section**
-
-Update the report line:
+- [ ] **Step 3: CLAUDE.md Commands 섹션 업데이트**
 
 ```markdown
 uv run jarvis report            # 일일 시장 리포트 (V2: 테마 중심)
 ```
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 4: 커밋**
 
 ```bash
 git add README.md docs/CLI_USAGE.md CLAUDE.md
@@ -2392,24 +2394,24 @@ git commit -m "docs: update report command documentation for V2 pipeline"
 
 ---
 
-### Task 13: Add .gitignore Entries
+### Task 13: .gitignore 항목 추가
 
-**Files:**
-- Modify: `.gitignore`
+**파일:**
+- 수정: `.gitignore`
 
-- [ ] **Step 1: Add cache and reports directories to .gitignore**
+- [ ] **Step 1: 캐시 및 리포트 디렉토리를 .gitignore에 추가**
 
-Append to `.gitignore`:
+`.gitignore`에 추가:
 
 ```
-# Daily Report V2 cache
+# Daily Report V2 캐시
 .cache/report/
 
-# Generated reports
+# 생성된 리포트
 reports/
 ```
 
-- [ ] **Step 2: Commit**
+- [ ] **Step 2: 커밋**
 
 ```bash
 git add .gitignore
