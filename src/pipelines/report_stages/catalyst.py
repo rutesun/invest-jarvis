@@ -7,7 +7,9 @@ from dataclasses import dataclass
 from typing import List
 from pydantic import BaseModel
 
+from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain_core.language_models import BaseChatModel
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.tools import tool
 
 from src.llm.daily_report_models import ShuffleResult, StockCatalyst
@@ -80,16 +82,44 @@ class CatalystStage:
             result = await ticker_resolver_ref.resolve(name)
             return f"{name} → {result.resolved_ticker}"
 
-        prompt = DailyReportPrompts.catalyst(themes_json)
+        tools = [search_news, resolve_ticker]
 
-        llm_with_tools = self.llm.bind_tools([search_news, resolve_ticker])
-        structured = llm_with_tools.with_structured_output(CatalystListResult)
+        # 1. 툴을 실행할 에이전트 프롬프트 구성
+        prompt_text = DailyReportPrompts.catalyst(themes_json)
+        agent_prompt = ChatPromptTemplate.from_messages([
+            ("system", "당신은 증권 리포트를 작성하기 위해 데이터를 조사하는 전문 연구원입니다. 도구를 적절히 사용하여 각 테마 및 주도주에 필요한 최신 뉴스 등 추가 정보를 수집하고 분석하세요."),
+            ("human", "{input}"),
+            ("placeholder", "{agent_scratchpad}"),
+        ])
 
-        result = await structured.ainvoke(
-            prompt,
+        # 2. 에이전트 실행기(AgentExecutor) 구성
+        agent = create_tool_calling_agent(self.llm, tools, agent_prompt)
+        agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
+
+        # 3. 에이전트 루프 실행하여 외부 조사 후 결과 텍스트 획득
+        agent_result = await agent_executor.ainvoke(
+            {"input": prompt_text},
             config={
-                "run_name": "catalyst_analysis",
+                "run_name": "catalyst_analysis_agent",
                 "metadata": {"stage": "catalyst"},
             },
         )
-        return result.catalysts if result else []
+
+        # 4. 조사된 내용 기반으로 최종 Pydantic 데이터 구조 파싱
+        structured_parser = self.llm.with_structured_output(CatalystListResult)
+        parse_prompt = ChatPromptTemplate.from_messages([
+            ("system", "다음은 시장 이슈 관련 조사 데이터입니다. 이 내용을 바탕으로 요구하는 데이터 구조(CatalystListResult) 모델에 맞게 정보를 정확하게 추출하여 JSON 형식으로 응답하세요."),
+            ("human", "{text}")
+        ])
+        
+        chain = parse_prompt | structured_parser
+        
+        parsed_result = await chain.ainvoke(
+            {"text": agent_result["output"]},
+            config={
+                 "run_name": "catalyst_analysis_parse",
+                 "metadata": {"stage": "catalyst"},
+            }
+        )
+        
+        return parsed_result.catalysts if parsed_result else []
