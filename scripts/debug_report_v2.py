@@ -129,6 +129,38 @@ async def run_full_pipeline(pipeline):
 
 
 # ============================================================
+# 캐시 체크 헬퍼
+# ============================================================
+
+
+def check_cache_and_warn(stage: str) -> tuple[bool, list[str]]:
+    """필요한 캐시가 있는지 확인하고 없으면 경고 메시지 반환
+
+    Returns:
+        (has_all_cache, missing_caches)
+    """
+    from datetime import datetime
+    from src.pipelines.report_stages import StageCache
+    from src.pipelines.daily_report_v2 import STAGE_CACHE_KEYS
+
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    cache = StageCache(StageCache.cache_dir_for_date(Path(".cache/report"), date_str))
+
+    required_caches = []
+    if stage in ["map", "shuffle", "catalyst", "synthesize"]:
+        required_caches.append(STAGE_CACHE_KEYS["ingest"])
+    if stage in ["shuffle", "catalyst", "synthesize"]:
+        required_caches.append(STAGE_CACHE_KEYS["map"])
+    if stage in ["catalyst", "synthesize"]:
+        required_caches.append(STAGE_CACHE_KEYS["shuffle"])
+    if stage == "synthesize":
+        required_caches.append(STAGE_CACHE_KEYS["catalyst"])
+
+    missing = [c for c in required_caches if not cache.has(c)]
+    return (len(missing) == 0, missing)
+
+
+# ============================================================
 # Main 함수
 # ============================================================
 
@@ -174,16 +206,37 @@ async def main():
     if config["run_all"]:
         result = await run_full_pipeline(pipeline)
 
-    # 특정 Stage부터 끝까지 (내부적으로 캐시 사용)
+    # 특정 Stage부터 끝까지
     elif config["from_stage"]:
-        logger.info(f"[실행] {config['from_stage']} 부터 끝까지")
-        result = await pipeline.run(from_stage=config["from_stage"])
+        from_stage = config["from_stage"]
+        logger.info(f"[실행] {from_stage} 부터 끝까지")
+
+        has_cache, missing = check_cache_and_warn(from_stage)
+        if not has_cache:
+            logger.warning(
+                f"필요한 캐시가 없습니다: {missing}\n"
+                f"→ 처음부터 실행합니다 (run_full_pipeline)"
+            )
+            result = await run_full_pipeline(pipeline)
+        else:
+            logger.info("캐시 발견 → 캐시 사용")
+            result = await pipeline.run(from_stage=from_stage)
 
     # 단일 Stage
     elif config["stage"]:
         stage = config["stage"]
         logger.info(f"[실행] {stage} stage만")
-        result = await pipeline.run(stage=stage)
+
+        has_cache, missing = check_cache_and_warn(stage)
+        if not has_cache:
+            logger.warning(
+                f"필요한 캐시가 없습니다: {missing}\n"
+                f"→ 처음부터 실행합니다 (run_full_pipeline)"
+            )
+            result = await run_full_pipeline(pipeline)
+        else:
+            logger.info("캐시 발견 → 캐시 사용")
+            result = await pipeline.run(stage=stage)
 
     else:
         parser.print_help()

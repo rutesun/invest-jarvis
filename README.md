@@ -283,22 +283,26 @@ uv run pytest tests/ --cov=src --cov-report=html
 #### CLI에서 Stage별 실행
 
 ```bash
-# 단일 Stage 실행
+# 단일 Stage 실행 (캐시 없으면 자동으로 처음부터 실행)
 uv run python scripts/debug_report_v2.py ingest      # 데이터 수집
 uv run python scripts/debug_report_v2.py map         # 이슈 추출
 uv run python scripts/debug_report_v2.py shuffle     # 테마 병합
 uv run python scripts/debug_report_v2.py catalyst    # 촉매 분석
 uv run python scripts/debug_report_v2.py synthesize  # 최종 합성
 
-# 특정 Stage부터 끝까지
+# 특정 Stage부터 끝까지 (캐시 없으면 자동으로 처음부터 실행)
 uv run python scripts/debug_report_v2.py --from shuffle
 
-# 전체 파이프라인
+# 전체 파이프라인 (캐시 무시하고 항상 처음부터)
 uv run python scripts/debug_report_v2.py --all
 
 # Anthropic 사용
 uv run python scripts/debug_report_v2.py synthesize --provider anthropic
 ```
+
+**캐시 자동 복구:**
+- `--from shuffle` 또는 단일 Stage 실행 시 필요한 캐시가 없으면 자동으로 처음부터 실행
+- 캐시가 있으면 캐시 사용 (빠른 재실행)
 
 #### IDE 디버거로 실행 (PyCharm, VSCode)
 
