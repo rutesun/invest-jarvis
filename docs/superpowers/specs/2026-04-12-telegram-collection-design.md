@@ -83,8 +83,71 @@ link_processing:
 | channel_name | str | 채널명 |
 | author | str | 작성자 |
 | content | str | 메시지 본문 |
-| media_info | JSON | `{"type": "photo", "local_path": "..."}` |
+| media_info | JSON | `{"type": "photo", "local_path": "data/media/..."}` |
 | forward_from | str | 포워드 출처 |
+
+---
+
+## 미디어 다운로드
+
+메시지에 첨부된 사진·PDF를 로컬에 저장하고, `media_info` 컬럼에 경로를 기록한다.
+
+### 저장 경로
+
+기존 `telegram` 프로젝트의 디렉토리 구조를 계승:
+
+```
+data/
+├── images/YYYY-MM-DD/               # 사진
+│   └── {channel}_{message_id}.jpg
+├── files/YYYY-MM-DD/                # PDF 문서
+│   ├── {channel}_{message_id}_{filename}.pdf      # 첨부 PDF
+│   └── {channel}_url_{message_id}_{filename}.pdf  # URL PDF
+└── YYYY-MM/
+    └── YYYY-MM-DD-{channel}.csv     # 메시지 CSV
+```
+
+### 대상 미디어
+
+| 타입 | Telethon 클래스 | 저장 위치 |
+|------|----------------|----------|
+| 사진 | `MessageMediaPhoto` | `data/images/YYYY-MM-DD/` |
+| PDF 문서 | `MessageMediaDocument` (mime=`application/pdf`) | `data/files/YYYY-MM-DD/` |
+
+- 사진: Telethon `client.download_media(message, file_path)`로 다운로드
+- PDF: 문서 타입 중 `mime_type == "application/pdf"`인 것만 다운로드. 원본 파일명 보존.
+- 그 외 미디어(동영상, 음성 등)는 **다운로드하지 않고** type/mime만 기록
+
+### media_info 형식
+
+사진:
+```json
+{"type": "photo", "local_path": "data/images/2026-04-13/channel_123.jpg"}
+```
+
+첨부 PDF:
+```json
+{"type": "document", "mime_type": "application/pdf", "local_path": "data/files/2026-04-13/channel_456_report.pdf"}
+```
+
+URL PDF (media_info 내 url_pdfs 배열):
+```json
+{"type": "document", "mime_type": "application/pdf", "local_path": "...", "url_pdfs": ["data/files/2026-04-13/channel_url_456_doc.pdf"]}
+```
+
+다운로드 대상이 아닌 미디어:
+```json
+{"type": "MessageMediaDocument", "mime_type": "video/mp4"}
+```
+> `local_path` 없이 type/mime만 기록.
+
+### URL 내 PDF 다운로드
+
+메시지 본문에 `.pdf` URL이 포함된 경우:
+- httpx로 HEAD 요청 → `Content-Type: application/pdf` 확인 후 다운로드
+- `data/files/YYYY-MM-DD/{channel}_url_{msg_id}_{filename}.pdf`에 저장
+- `media_info`의 `url_pdfs` 배열에 경로 추가
+- 다운로드 실패 시 경고 로그, 해당 URL 스킵
 
 ---
 

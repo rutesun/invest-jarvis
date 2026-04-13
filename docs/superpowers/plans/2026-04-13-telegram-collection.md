@@ -20,7 +20,8 @@ src/
     telegram_config.py              # TelegramConfig: config.yaml 텔레그램 섹션 로더
     telegram_client.py              # TelegramClientWrapper: Telethon 클라이언트 래퍼
     telegram_collector.py           # TelegramCollector: fetch/catch-up 수집 로직
-    telegram_storage.py             # TelegramStorage: CSV 저장 + 중복 방지 + 미디어 다운로드
+    telegram_media.py               # TelegramMediaDownloader: 사진/PDF 다운로드
+    telegram_storage.py             # TelegramStorage: CSV 저장 + 중복 방지
     telegram_state.py               # TelegramState: monitor_state.json 관리
     telegram_loader.py              # TelegramLoader: CSV 로더 (Daily Report V2 연동용)
   cli/
@@ -29,6 +30,7 @@ src/
 tests/
   providers/
     test_telegram_config.py
+    test_telegram_media.py
     test_telegram_storage.py
     test_telegram_state.py
     test_telegram_loader.py
@@ -924,7 +926,8 @@ async def test_fetch_applies_include_filter(mock_client, channel_config_with_fil
 
 
 @pytest.mark.asyncio
-async def test_fetch_skips_none_text(mock_client, channel_config):
+async def test_fetch_skips_none_text_and_no_media(mock_client, channel_config):
+    """text=None이고 media도 None이면 스킵."""
     messages = [
         _make_tg_message(1, None, datetime(2026, 4, 13, 9, 0, tzinfo=timezone.utc)),
         _make_tg_message(2, "유효한 메시지", datetime(2026, 4, 13, 10, 0, tzinfo=timezone.utc)),
@@ -940,6 +943,24 @@ async def test_fetch_skips_none_text(mock_client, channel_config):
 
     assert len(result) == 1
     assert result[0]["content"] == "유효한 메시지"
+
+
+@pytest.mark.asyncio
+async def test_fetch_keeps_media_only_message(mock_client, channel_config):
+    """text=None이지만 media가 있으면 수집한다."""
+    msg_with_media = _make_tg_message(1, None, datetime(2026, 4, 13, 9, 0, tzinfo=timezone.utc))
+    msg_with_media.media = MagicMock()  # media 존재
+
+    entity = MagicMock()
+    entity.title = "test_channel"
+    mock_client.get_entity.return_value = entity
+    mock_client.iter_messages = MagicMock(return_value=_async_iter([msg_with_media]))
+
+    collector = TelegramCollector(client=mock_client)
+    result = await collector.fetch_channel(channel_config, "2026-04-13")
+
+    assert len(result) == 1
+    assert result[0]["content"] == ""
 
 
 @pytest.mark.asyncio
@@ -1014,10 +1035,13 @@ class TelegramCollector:
     두 가지 모드:
     - fetch_channel: 특정 날짜의 메시지 일괄 수집
     - fetch_since: 특정 message_id 이후 메시지 수집 (catch-up용)
+
+    미디어 다운로더가 설정되면 사진/PDF를 자동 다운로드한다.
     """
 
-    def __init__(self, client: Any) -> None:
+    def __init__(self, client: Any, media_downloader: Any = None) -> None:
         self._client = client
+        self._media_downloader = media_downloader
 
     async def fetch_channel(
         self,
@@ -1050,13 +1074,13 @@ class TelegramCollector:
             if msg.date >= offset_date:
                 break
 
-            if msg.text is None:
+            if msg.text is None and msg.media is None:
                 continue
 
-            if not channel_config.should_include(msg.text):
+            if msg.text and not channel_config.should_include(msg.text):
                 continue
 
-            messages.append(self._to_dict(msg, channel_name))
+            messages.append(await self._to_dict(msg, channel_name, date_str))
 
         logger.info(
             "%s에서 %s일자 메시지 %d건 수집",
@@ -1083,11 +1107,12 @@ class TelegramCollector:
 
         messages: list[dict] = []
         async for msg in self._client.iter_messages(entity, min_id=min_id, reverse=True):
-            if msg.text is None:
+            if msg.text is None and msg.media is None:
                 continue
-            if not channel_config.should_include(msg.text):
+            if msg.text and not channel_config.should_include(msg.text):
                 continue
-            messages.append(self._to_dict(msg, channel_name))
+            date_str = msg.date.strftime("%Y-%m-%d")
+            messages.append(await self._to_dict(msg, channel_name, date_str))
 
         logger.info(
             "%s에서 min_id=%d 이후 메시지 %d건 수집",
@@ -1095,23 +1120,26 @@ class TelegramCollector:
         )
         return messages
 
-    @staticmethod
-    def _to_dict(msg: Any, channel_name: str) -> dict:
+    async def _to_dict(self, msg: Any, channel_name: str, date_str: str) -> dict:
         """Telethon Message를 CSV 저장용 dict로 변환한다."""
         forward_from = ""
         if msg.forward:
             forward_from = str(getattr(msg.forward, "chat_id", ""))
 
         media_info = json.dumps(None)
-        if msg.media:
+        if msg.media and self._media_downloader:
+            media_info = json.dumps(
+                await self._media_downloader.download(msg, channel_name, date_str)
+            )
+        elif msg.media:
             media_info = json.dumps({"type": type(msg.media).__name__})
 
         return {
             "message_id": msg.id,
             "timestamp": msg.date.isoformat(),
             "channel_name": channel_name,
-            "author": str(msg.sender_id),
-            "content": msg.text,
+            "author": str(msg.sender_id or ""),
+            "content": msg.text or "",
             "media_info": media_info,
             "forward_from": forward_from,
         }
@@ -1131,7 +1159,327 @@ git commit -m "feat: add TelegramCollector for channel message fetching"
 
 ---
 
-### Task 8: CLI 커맨드 — telegram fetch / catch-up
+### Task 8: 미디어 다운로더 (TelegramMediaDownloader)
+
+**파일:**
+- 생성: `src/providers/telegram_media.py`
+- 테스트: `tests/providers/test_telegram_media.py`
+
+기존 `telegram` 프로젝트(`C:\Users\rutes\Develop\telegram\src\utils\media.py`)의 패턴을 계승.
+사진은 `data/images/YYYY-MM-DD/`, PDF는 `data/files/YYYY-MM-DD/`에 저장한다.
+
+- [ ] **Step 1: 실패하는 테스트 작성**
+
+```python
+# tests/providers/test_telegram_media.py
+import json
+import pytest
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, PropertyMock
+
+
+from src.providers.telegram_media import TelegramMediaDownloader
+
+
+@pytest.fixture
+def downloader(tmp_path):
+    client = AsyncMock()
+    return TelegramMediaDownloader(client=client, base_dir=tmp_path)
+
+
+def _make_photo_message(msg_id: int):
+    msg = MagicMock()
+    msg.id = msg_id
+    msg.media = MagicMock()
+    msg.media.photo = MagicMock()
+    msg.media.document = None
+    type(msg.media).__name__ = "MessageMediaPhoto"
+    return msg
+
+
+def _make_pdf_message(msg_id: int, filename: str = "report.pdf"):
+    msg = MagicMock()
+    msg.id = msg_id
+    msg.media = MagicMock()
+    msg.media.photo = None
+    doc = MagicMock()
+    doc.mime_type = "application/pdf"
+    attr = MagicMock()
+    attr.file_name = filename
+    doc.attributes = [attr]
+    msg.media.document = doc
+    type(msg.media).__name__ = "MessageMediaDocument"
+    return msg
+
+
+def _make_video_message(msg_id: int):
+    msg = MagicMock()
+    msg.id = msg_id
+    msg.media = MagicMock()
+    msg.media.photo = None
+    doc = MagicMock()
+    doc.mime_type = "video/mp4"
+    doc.attributes = []
+    msg.media.document = doc
+    type(msg.media).__name__ = "MessageMediaDocument"
+    return msg
+
+
+@pytest.mark.asyncio
+async def test_download_photo(downloader, tmp_path):
+    msg = _make_photo_message(42)
+    # download_media가 파일을 생성하는 것을 시뮬레이션
+    expected_path = tmp_path / "images" / "2026-04-13" / "test_chan_42.jpg"
+
+    async def fake_download(message, file):
+        Path(file).parent.mkdir(parents=True, exist_ok=True)
+        Path(file).write_bytes(b"fake_jpg")
+        return str(file)
+
+    downloader._client.download_media = fake_download
+
+    result = await downloader.download(msg, "test_chan", "2026-04-13")
+
+    assert result["type"] == "photo"
+    assert result["local_path"] == str(expected_path)
+    assert expected_path.exists()
+
+
+@pytest.mark.asyncio
+async def test_download_pdf(downloader, tmp_path):
+    msg = _make_pdf_message(99, "analysis.pdf")
+    expected_path = tmp_path / "files" / "2026-04-13" / "test_chan_99_analysis.pdf"
+
+    async def fake_download(message, file):
+        Path(file).parent.mkdir(parents=True, exist_ok=True)
+        Path(file).write_bytes(b"fake_pdf")
+        return str(file)
+
+    downloader._client.download_media = fake_download
+
+    result = await downloader.download(msg, "test_chan", "2026-04-13")
+
+    assert result["type"] == "document"
+    assert result["mime_type"] == "application/pdf"
+    assert result["local_path"] == str(expected_path)
+
+
+@pytest.mark.asyncio
+async def test_skip_video_no_download(downloader):
+    msg = _make_video_message(10)
+
+    result = await downloader.download(msg, "ch", "2026-04-13")
+
+    assert result["type"] == "MessageMediaDocument"
+    assert result["mime_type"] == "video/mp4"
+    assert "local_path" not in result
+    downloader._client.download_media.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_download_failure_returns_type_only(downloader):
+    msg = _make_photo_message(50)
+    downloader._client.download_media = AsyncMock(side_effect=Exception("network error"))
+
+    result = await downloader.download(msg, "ch", "2026-04-13")
+
+    assert result["type"] == "photo"
+    assert "local_path" not in result
+
+
+@pytest.mark.asyncio
+async def test_download_url_pdf(downloader, tmp_path):
+    content = "좋은 리포트입니다 https://example.com/doc/report.pdf 참고하세요"
+
+    async def fake_fetch(url, path):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"url_pdf_content")
+        return True
+
+    downloader._fetch_url_pdf = fake_fetch
+
+    result = await downloader.download_url_pdfs(content, "ch", "2026-04-13", 77)
+
+    assert len(result) == 1
+    assert "report.pdf" in result[0]
+    assert (tmp_path / "files" / "2026-04-13").exists()
+
+
+@pytest.mark.asyncio
+async def test_download_url_pdf_no_urls(downloader):
+    result = await downloader.download_url_pdfs("URL 없는 메시지", "ch", "2026-04-13", 1)
+    assert result == []
+
+
+@pytest.mark.asyncio
+async def test_download_url_pdf_non_pdf_url_skipped(downloader):
+    content = "https://example.com/page.html 참조"
+
+    async def fake_fetch(url, path):
+        return False  # PDF가 아님
+
+    downloader._fetch_url_pdf = fake_fetch
+
+    result = await downloader.download_url_pdfs(content, "ch", "2026-04-13", 1)
+    assert result == []
+```
+
+- [ ] **Step 2: 테스트 실패 확인**
+
+실행: `uv run pytest tests/providers/test_telegram_media.py -v`
+예상: `ModuleNotFoundError`로 FAIL
+
+- [ ] **Step 3: 최소 구현 작성**
+
+```python
+# src/providers/telegram_media.py
+from __future__ import annotations
+
+import logging
+import re
+from pathlib import Path
+from typing import Any
+
+import httpx
+
+logger = logging.getLogger(__name__)
+
+# 메시지 본문에서 URL 추출용 정규식
+URL_PATTERN = re.compile(r"(https?://\S+\.pdf(?:\?\S*)?)", re.IGNORECASE)
+
+
+class TelegramMediaDownloader:
+    """텔레그램 메시지의 사진/PDF를 로컬에 다운로드한다.
+
+    기존 telegram 프로젝트의 패턴을 계승:
+    - 사진: {base_dir}/images/YYYY-MM-DD/{channel}_{msg_id}.jpg
+    - PDF:  {base_dir}/files/YYYY-MM-DD/{channel}_{msg_id}_{filename}.pdf
+    - URL PDF: {base_dir}/files/YYYY-MM-DD/{channel}_url_{msg_id}_{filename}.pdf
+    """
+
+    def __init__(self, client: Any, base_dir: Path) -> None:
+        self._client = client
+        self._base_dir = base_dir
+
+    async def download(self, msg: Any, channel_name: str, date_str: str) -> dict:
+        """메시지의 미디어를 다운로드하고 media_info dict를 반환한다.
+
+        사진/PDF만 다운로드하고, 그 외 미디어는 type만 기록한다.
+        """
+        media = msg.media
+
+        # 사진
+        if getattr(media, "photo", None):
+            return await self._download_photo(msg, channel_name, date_str)
+
+        # 문서 (PDF만 다운로드)
+        if getattr(media, "document", None):
+            doc = media.document
+            mime = getattr(doc, "mime_type", "")
+            if mime == "application/pdf":
+                return await self._download_pdf(msg, channel_name, date_str)
+            return {"type": type(media).__name__, "mime_type": mime}
+
+        return {"type": type(media).__name__}
+
+    async def _download_photo(self, msg: Any, channel: str, date_str: str) -> dict:
+        dir_path = self._base_dir / "images" / date_str
+        dir_path.mkdir(parents=True, exist_ok=True)
+        file_path = dir_path / f"{channel}_{msg.id}.jpg"
+        try:
+            await self._client.download_media(msg, str(file_path))
+            return {"type": "photo", "local_path": str(file_path)}
+        except Exception as e:
+            logger.warning("사진 다운로드 실패 (msg=%d): %s", msg.id, e)
+            return {"type": "photo"}
+
+    async def _download_pdf(self, msg: Any, channel: str, date_str: str) -> dict:
+        dir_path = self._base_dir / "files" / date_str
+        dir_path.mkdir(parents=True, exist_ok=True)
+
+        # 원본 파일명 추출
+        filename = f"{msg.id}.pdf"
+        doc = msg.media.document
+        for attr in getattr(doc, "attributes", []):
+            if hasattr(attr, "file_name") and attr.file_name:
+                filename = f"{msg.id}_{attr.file_name}"
+                break
+
+        file_path = dir_path / f"{channel}_{filename}"
+        try:
+            await self._client.download_media(msg, str(file_path))
+            return {
+                "type": "document",
+                "mime_type": "application/pdf",
+                "local_path": str(file_path),
+            }
+        except Exception as e:
+            logger.warning("PDF 다운로드 실패 (msg=%d): %s", msg.id, e)
+            return {"type": "document", "mime_type": "application/pdf"}
+
+    async def download_url_pdfs(
+        self, content: str, channel: str, date_str: str, msg_id: int,
+    ) -> list[str]:
+        """메시지 본문에서 PDF URL을 찾아 다운로드한다.
+
+        Returns:
+            다운로드된 파일 경로 리스트
+        """
+        urls = URL_PATTERN.findall(content)
+        if not urls:
+            return []
+
+        dir_path = self._base_dir / "files" / date_str
+        downloaded: list[str] = []
+
+        for url in urls:
+            # URL에서 파일명 추출
+            url_filename = url.split("/")[-1].split("?")[0]
+            if not url_filename.lower().endswith(".pdf"):
+                url_filename = f"{msg_id}.pdf"
+            file_path = dir_path / f"{channel}_url_{msg_id}_{url_filename}"
+
+            if await self._fetch_url_pdf(url, file_path):
+                downloaded.append(str(file_path))
+
+        return downloaded
+
+    async def _fetch_url_pdf(self, url: str, path: Path) -> bool:
+        """URL에서 PDF를 다운로드한다. 성공 시 True."""
+        try:
+            async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+                # HEAD로 Content-Type 확인
+                head = await client.head(url)
+                if "application/pdf" not in head.headers.get("content-type", ""):
+                    return False
+
+                # 스트림 다운로드
+                resp = await client.get(url)
+                resp.raise_for_status()
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(resp.content)
+                logger.info("URL PDF 다운로드 완료: %s", path)
+                return True
+        except Exception as e:
+            logger.warning("URL PDF 다운로드 실패 (%s): %s", url, e)
+            return False
+```
+
+- [ ] **Step 4: 테스트 통과 확인**
+
+실행: `uv run pytest tests/providers/test_telegram_media.py -v`
+예상: 7개 테스트 모두 PASS
+
+- [ ] **Step 5: 커밋**
+
+```bash
+git add src/providers/telegram_media.py tests/providers/test_telegram_media.py
+git commit -m "feat: add TelegramMediaDownloader for photo and PDF downloads"
+```
+
+---
+
+### Task 9: CLI 커맨드 — telegram fetch / catch-up
 
 **파일:**
 - 수정: `src/cli/main.py`
@@ -1152,6 +1500,7 @@ async def run_telegram_fetch(date_str: str, config_path: str):
     from src.providers.telegram_config import TelegramConfig
     from src.providers.telegram_client import TelegramClientWrapper
     from src.providers.telegram_collector import TelegramCollector
+    from src.providers.telegram_media import TelegramMediaDownloader
     from src.providers.telegram_storage import TelegramStorage
     from src.providers.telegram_state import TelegramState
 
@@ -1163,7 +1512,12 @@ async def run_telegram_fetch(date_str: str, config_path: str):
     await wrapper.start()
 
     try:
-        collector = TelegramCollector(client=wrapper.client)
+        media_downloader = TelegramMediaDownloader(
+            client=wrapper.client, base_dir=config.output_dir,
+        )
+        collector = TelegramCollector(
+            client=wrapper.client, media_downloader=media_downloader,
+        )
         storage = TelegramStorage(output_dir=config.output_dir)
         state = TelegramState(config.output_dir / "monitor_state.json")
 
@@ -1186,6 +1540,7 @@ async def run_telegram_catchup(config_path: str):
     from src.providers.telegram_config import TelegramConfig
     from src.providers.telegram_client import TelegramClientWrapper
     from src.providers.telegram_collector import TelegramCollector
+    from src.providers.telegram_media import TelegramMediaDownloader
     from src.providers.telegram_storage import TelegramStorage
     from src.providers.telegram_state import TelegramState
 
@@ -1197,7 +1552,12 @@ async def run_telegram_catchup(config_path: str):
     await wrapper.start()
 
     try:
-        collector = TelegramCollector(client=wrapper.client)
+        media_downloader = TelegramMediaDownloader(
+            client=wrapper.client, base_dir=config.output_dir,
+        )
+        collector = TelegramCollector(
+            client=wrapper.client, media_downloader=media_downloader,
+        )
         storage = TelegramStorage(output_dir=config.output_dir)
         state = TelegramState(config.output_dir / "monitor_state.json")
 
@@ -1285,7 +1645,7 @@ git commit -m "feat: add telegram fetch and catch-up CLI commands"
 
 ---
 
-### Task 9: config.yaml에 telegram 섹션 추가
+### Task 10: config.yaml에 telegram 섹션 추가
 
 **파일:**
 - 수정: `config.yaml`
@@ -1320,7 +1680,7 @@ git commit -m "feat: add telegram section to config.yaml"
 
 ---
 
-### Task 10: 문서 업데이트
+### Task 11: 문서 업데이트
 
 **파일:**
 - 수정: `README.md` — Telegram 커맨드 추가
