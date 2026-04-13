@@ -306,3 +306,69 @@ async def test_dart_fetcher_uses_cache(dart_fetcher, dart_list_response, tmp_pat
     # list.json 조회 1회만 (company.json corp_code 조회 없음)
     assert mock_client.get.call_count == 1
     assert len(items) > 0
+
+
+# ── DisclosureTool Integration Tests ──────────────────────────────────────────
+
+from src.tools.disclosure import DisclosureTool
+from src.core.models import ToolResult
+
+
+@pytest.mark.asyncio
+async def test_disclosure_tool_routes_us_to_sec():
+    """미국 티커는 SEC 페처로 라우팅."""
+    mock_sec = AsyncMock()
+    mock_sec.fetch.return_value = [
+        DisclosureItem(form_type="8-K", date="2026-04-05", description="q1.htm", url="https://sec.gov/...")
+    ]
+    mock_dart = AsyncMock()
+
+    tool = DisclosureTool(sec_fetcher=mock_sec, dart_fetcher=mock_dart)
+    result = await tool.execute("AAPL")
+
+    assert result.success is True
+    assert len(result.data) == 1
+    mock_sec.fetch.assert_called_once_with("AAPL")
+    mock_dart.fetch.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_disclosure_tool_routes_kr_to_dart():
+    """한국 티커(.KS)는 6자리 코드를 추출하여 DART 페처로 라우팅."""
+    mock_sec = AsyncMock()
+    mock_dart = AsyncMock()
+    mock_dart.fetch.return_value = [
+        DisclosureItem(form_type="DART", date="2026-04-05", description="수주계약", url="https://dart.fss.or.kr/...")
+    ]
+
+    tool = DisclosureTool(sec_fetcher=mock_sec, dart_fetcher=mock_dart)
+    result = await tool.execute("005930.KS")
+
+    assert result.success is True
+    mock_dart.fetch.assert_called_once_with("005930")
+    mock_sec.fetch.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_disclosure_tool_no_dart_fetcher_returns_error():
+    """DART 페처 없이 한국주식 조회 시 실패 ToolResult 반환."""
+    mock_sec = AsyncMock()
+
+    tool = DisclosureTool(sec_fetcher=mock_sec, dart_fetcher=None)
+    result = await tool.execute("005930.KS")
+
+    assert result.success is False
+    assert "DART" in result.error
+
+
+@pytest.mark.asyncio
+async def test_disclosure_tool_wraps_exceptions():
+    """페처 예외는 실패 ToolResult로 래핑."""
+    mock_sec = AsyncMock()
+    mock_sec.fetch.side_effect = Exception("network timeout")
+
+    tool = DisclosureTool(sec_fetcher=mock_sec, dart_fetcher=None)
+    result = await tool.execute("AAPL")
+
+    assert result.success is False
+    assert "network timeout" in result.error

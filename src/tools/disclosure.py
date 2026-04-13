@@ -270,3 +270,36 @@ class DARTDisclosureFetcher:
         self.CACHE_PATH.write_text(
             json.dumps(mapping, ensure_ascii=False), encoding="utf-8"
         )
+
+
+from src.core.models import ToolResult
+
+
+class DisclosureTool:
+    """티커 형식에 따라 SEC(미국) 또는 DART(한국)로 공시 조회를 라우팅한다."""
+
+    def __init__(
+        self,
+        sec_fetcher: SECDisclosureFetcher,
+        dart_fetcher: DARTDisclosureFetcher | None = None,
+    ) -> None:
+        self.sec_fetcher = sec_fetcher
+        self.dart_fetcher = dart_fetcher
+
+    async def execute(self, ticker: str) -> ToolResult:
+        """주어진 티커의 공시를 조회한다. ToolResult[list[DisclosureItem]] 반환."""
+        try:
+            if is_korean_ticker(ticker):
+                if self.dart_fetcher is None:
+                    return ToolResult(
+                        success=False,
+                        data=None,
+                        error="DART 페처 미설정 — OPENDART_API_KEY를 환경변수에 추가하세요",
+                    )
+                code = extract_kr_code(ticker)
+                items = await self.dart_fetcher.fetch(code)
+            else:
+                items = await self.sec_fetcher.fetch(ticker)
+            return ToolResult(success=True, data=items)
+        except Exception as exc:
+            return ToolResult(success=False, data=None, error=str(exc))
