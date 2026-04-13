@@ -24,6 +24,7 @@ class KISProvider(BaseProvider):
             return self._token
 
         url = f"{self.BASE_URL}/oauth2/tokenP"
+        headers = {"content-type": "application/json"}
         payload = {
             "grant_type": "client_credentials",
             "appkey": self.app_key,
@@ -31,7 +32,7 @@ class KISProvider(BaseProvider):
         }
 
         async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(url, json=payload)
+            response = await client.post(url, headers=headers, json=payload)
             response.raise_for_status()
             data = response.json()
 
@@ -45,10 +46,11 @@ class KISProvider(BaseProvider):
 
         url = f"{self.BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-price"
         headers = {
-            "Authorization": f"{token.token_type} {token.access_token}",
+            "authorization": f"Bearer {token.access_token}",
             "appkey": self.app_key,
             "appsecret": self.app_secret,
             "tr_id": "FHKST01010100",
+            "custtype": "P",
             "Content-Type": "application/json; charset=utf-8",
         }
         params = {
@@ -85,10 +87,11 @@ class KISProvider(BaseProvider):
         token = await self._get_access_token()
         url = f"{self.BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-daily-price"
         headers = {
-            "Authorization": f"{token.token_type} {token.access_token}",
+            "authorization": f"Bearer {token.access_token}",
             "appkey": self.app_key,
             "appsecret": self.app_secret,
             "tr_id": "FHKST01010400",
+            "custtype": "P",
             "Content-Type": "application/json; charset=utf-8",
         }
 
@@ -131,10 +134,11 @@ class KISProvider(BaseProvider):
 
         url = f"{self.BASE_URL}/uapi/domestic-stock/v1/trading/inquire-balance"
         headers = {
-            "Authorization": f"{token.token_type} {token.access_token}",
+            "authorization": f"Bearer {token.access_token}",
             "appkey": self.app_key,
             "appsecret": self.app_secret,
             "tr_id": "TTTC8434R",
+            "custtype": "P",
             "Content-Type": "application/json; charset=utf-8",
         }
         params = {
@@ -186,10 +190,11 @@ class KISProvider(BaseProvider):
         url = f"{self.BASE_URL}/uapi/domestic-stock/v1/quotations/foreign-institution-total"
         fid_code = "1" if investor_type == "foreign" else "2"
         headers = {
-            "Authorization": f"{token.token_type} {token.access_token}",
+            "authorization": f"Bearer {token.access_token}",
             "appkey": self.app_key,
             "appsecret": self.app_secret,
             "tr_id": "FHPTJ04400000",
+            "custtype": "P",
             "Content-Type": "application/json; charset=utf-8",
         }
         params = {
@@ -239,10 +244,11 @@ class KISProvider(BaseProvider):
         url = f"{self.BASE_URL}/uapi/overseas-stock/v1/ranking/updown-rate"
         gubn = "1" if direction == "up" else "0"
         headers = {
-            "Authorization": f"{token.token_type} {token.access_token}",
+            "authorization": f"Bearer {token.access_token}",
             "appkey": self.app_key,
             "appsecret": self.app_secret,
             "tr_id": "HHDFS76290000",
+            "custtype": "P",
             "Content-Type": "application/json; charset=utf-8",
         }
         # NDAY: 0=today, 1=previous day
@@ -292,10 +298,11 @@ class KISProvider(BaseProvider):
         token = await self._get_access_token()
         url = f"{self.BASE_URL}/uapi/overseas-stock/v1/ranking/trade-vol"
         headers = {
-            "Authorization": f"{token.token_type} {token.access_token}",
+            "authorization": f"Bearer {token.access_token}",
             "appkey": self.app_key,
             "appsecret": self.app_secret,
             "tr_id": "HHDFS76410000",
+            "custtype": "P",
             "Content-Type": "application/json; charset=utf-8",
         }
         # Use previous day data if current market is closed
@@ -332,10 +339,11 @@ class KISProvider(BaseProvider):
         token = await self._get_access_token()
         url = f"{self.BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-investor"
         headers = {
-            "Authorization": f"{token.token_type} {token.access_token}",
+            "authorization": f"Bearer {token.access_token}",
             "appkey": self.app_key,
             "appsecret": self.app_secret,
             "tr_id": "FHKST01010900",
+            "custtype": "P",
             "Content-Type": "application/json; charset=utf-8",
         }
         params = {
@@ -382,10 +390,11 @@ class KISProvider(BaseProvider):
         token = await self._get_access_token()
         url = f"{self.BASE_URL}/uapi/domestic-stock/v1/quotations/program-trade-by-stock-daily"
         headers = {
-            "Authorization": f"{token.token_type} {token.access_token}",
+            "authorization": f"Bearer {token.access_token}",
             "appkey": self.app_key,
             "appsecret": self.app_secret,
             "tr_id": "FHPPG04650201",
+            "custtype": "P",
             "Content-Type": "application/json; charset=utf-8",
         }
         params = {
