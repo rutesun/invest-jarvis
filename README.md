@@ -280,7 +280,7 @@ uv run pytest tests/ --cov=src --cov-report=html
 
 ### Daily Report V2 디버깅
 
-Stage별로 독립 실행하여 중간 결과 확인:
+#### CLI에서 Stage별 실행
 
 ```bash
 # 단일 Stage 실행
@@ -299,6 +299,27 @@ uv run python scripts/debug_report_v2.py --all
 # Anthropic 사용
 uv run python scripts/debug_report_v2.py synthesize --provider anthropic
 ```
+
+#### IDE 디버거로 실행 (PyCharm, VSCode)
+
+1. `scripts/debug_report_v2.py` 파일 열기
+2. 상단 `DEBUG_CONFIG` 수정:
+   ```python
+   DEBUG_CONFIG = {
+       "stage": "ingest",    # 실행할 Stage
+       "run_all": False,     # True면 전체 파이프라인
+       "provider": "openai",
+   }
+   ```
+3. 브레이크포인트 설정 (각 `run_XXX_stage` 함수의 return 라인)
+4. IDE에서 디버그 모드 실행 (`F5` 또는 디버그 버튼)
+5. 변수 inspector로 `result` 확인
+
+**브레이크포인트 추천 위치:**
+- `run_ingest_stage()` 마지막 라인 → `ingest_result` 확인
+- `run_map_stage()` 마지막 라인 → `map_result` 확인
+- `run_shuffle_stage()` 마지막 라인 → `shuffle_result.themes` 확인
+- `run_catalyst_stage()` 마지막 라인 → `catalyst_result` 확인
 
 캐시 위치: `.cache/report/YYYY-MM-DD/`
 
