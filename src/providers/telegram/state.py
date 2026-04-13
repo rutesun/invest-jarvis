@@ -1,4 +1,4 @@
-# src/providers/telegram_state.py
+# src/providers/telegram/state.py
 from __future__ import annotations
 
 import json

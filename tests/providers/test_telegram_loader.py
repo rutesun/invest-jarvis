@@ -2,7 +2,7 @@
 import csv
 import pytest
 from pathlib import Path
-from src.providers.telegram_loader import TelegramLoader
+from src.providers.telegram.loader import TelegramLoader
 
 
 @pytest.fixture

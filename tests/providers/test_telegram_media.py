@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, PropertyMock
 
 
-from src.providers.telegram_media import TelegramMediaDownloader
+from src.providers.telegram.media import TelegramMediaDownloader
 
 
 @pytest.fixture

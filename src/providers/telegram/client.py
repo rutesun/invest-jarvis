@@ -1,4 +1,4 @@
-# src/providers/telegram_client.py
+# src/providers/telegram/client.py
 from __future__ import annotations
 
 import os

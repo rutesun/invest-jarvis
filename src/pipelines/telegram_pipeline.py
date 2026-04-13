@@ -4,12 +4,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from src.providers.telegram_config import TelegramConfig, ChannelConfig
-from src.providers.telegram_client import TelegramClientWrapper
-from src.providers.telegram_collector import TelegramCollector
-from src.providers.telegram_media import TelegramMediaDownloader
-from src.providers.telegram_storage import TelegramStorage
-from src.providers.telegram_state import TelegramState
+from src.providers.telegram import (
+    TelegramConfig,
+    ChannelConfig,
+    TelegramClientWrapper,
+    TelegramCollector,
+    TelegramMediaDownloader,
+    TelegramStorage,
+    TelegramState,
+)
 
 
 @dataclass

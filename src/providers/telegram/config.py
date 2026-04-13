@@ -1,4 +1,4 @@
-# src/providers/telegram_config.py
+# src/providers/telegram/config.py
 from __future__ import annotations
 
 import re

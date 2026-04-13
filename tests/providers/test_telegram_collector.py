@@ -3,8 +3,8 @@ import json
 import pytest
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
-from src.providers.telegram_collector import TelegramCollector
-from src.providers.telegram_config import ChannelConfig
+from src.providers.telegram.collector import TelegramCollector
+from src.providers.telegram.config import ChannelConfig
 
 
 def _make_tg_message(msg_id: int, text: str, date: datetime, sender_id: int = 123):

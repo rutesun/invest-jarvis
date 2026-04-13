@@ -1,4 +1,4 @@
-# src/providers/telegram_collector.py
+# src/providers/telegram/collector.py
 from __future__ import annotations
 
 import json
@@ -6,7 +6,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from src.providers.telegram_config import ChannelConfig
+from .config import ChannelConfig
 
 logger = logging.getLogger(__name__)
 

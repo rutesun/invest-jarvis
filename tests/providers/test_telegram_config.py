@@ -1,7 +1,7 @@
 # tests/providers/test_telegram_config.py
 import pytest
 from pathlib import Path
-from src.providers.telegram_config import TelegramConfig, ChannelConfig
+from src.providers.telegram.config import TelegramConfig, ChannelConfig
 
 
 def test_load_simple_channel(tmp_path):

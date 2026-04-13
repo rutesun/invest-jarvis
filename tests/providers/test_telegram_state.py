@@ -2,7 +2,7 @@
 import json
 import pytest
 from pathlib import Path
-from src.providers.telegram_state import TelegramState
+from src.providers.telegram.state import TelegramState
 
 
 @pytest.fixture

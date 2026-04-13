@@ -3,7 +3,7 @@ import csv
 import json
 import pytest
 from pathlib import Path
-from src.providers.telegram_storage import TelegramStorage
+from src.providers.telegram.storage import TelegramStorage
 
 
 @pytest.fixture

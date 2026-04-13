@@ -1,4 +1,4 @@
-# src/providers/telegram_media.py
+# src/providers/telegram/media.py
 from __future__ import annotations
 
 import logging

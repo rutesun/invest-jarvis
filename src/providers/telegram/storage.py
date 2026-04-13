@@ -1,4 +1,4 @@
-# src/providers/telegram_storage.py
+# src/providers/telegram/storage.py
 from __future__ import annotations
 
 import csv
