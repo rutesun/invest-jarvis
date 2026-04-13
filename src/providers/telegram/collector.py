@@ -110,6 +110,23 @@ class TelegramCollector:
         if msg.forward:
             forward_from = str(getattr(msg.forward, "chat_id", ""))
 
+        # Author 정보 추출: 채널 제목 또는 사용자 이름
+        author = ""
+        if msg.sender:
+            # 채널인 경우: title 사용
+            if hasattr(msg.sender, 'title') and msg.sender.title:
+                author = msg.sender.title
+            # 사용자인 경우: username 또는 이름
+            elif hasattr(msg.sender, 'username') and msg.sender.username:
+                author = f"@{msg.sender.username}"
+            elif hasattr(msg.sender, 'first_name'):
+                parts = [msg.sender.first_name or "", msg.sender.last_name or ""]
+                author = " ".join(p for p in parts if p).strip()
+
+        # Fallback: sender_id
+        if not author:
+            author = str(msg.sender_id or "")
+
         media_info = json.dumps(None)
         if msg.media and self._media_downloader:
             media_info = json.dumps(
@@ -122,7 +139,7 @@ class TelegramCollector:
             "message_id": msg.id,
             "timestamp": msg.date.isoformat(),
             "channel_name": channel_name,
-            "author": str(msg.sender_id or ""),
+            "author": author,
             "content": msg.text or "",
             "media_info": media_info,
             "forward_from": forward_from,
