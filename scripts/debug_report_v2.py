@@ -34,16 +34,26 @@ from src.cli.main import create_daily_report_pipeline
 # IDE 디버깅 설정 (CLI 인자 없이 실행 시 사용됨)
 # ============================================================
 DEBUG_CONFIG = {
-    "stage": "ingest",  # None | "ingest" | "map" | "shuffle" | "catalyst" | "synthesize"
-    "from_stage": None,  # None | "ingest" | "map" | "shuffle" | "catalyst" | "synthesize"
+    "stage": None,  # None | "ingest" | "map" | "shuffle" | "catalyst" | "synthesize"
+    "from_stage": "ingest",  # None | "ingest" | "map" | "shuffle" | "catalyst" | "synthesize"
     "run_all": False,  # True이면 전체 파이프라인 실행
     "provider": "openai",  # "openai" | "anthropic"
 }
 
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
+
+# LLM 관련 모듈만 DEBUG 레벨
+logging.getLogger("langchain").setLevel(logging.DEBUG)
+logging.getLogger("langchain_core").setLevel(logging.DEBUG)
+logging.getLogger("langchain_openai").setLevel(logging.DEBUG)
+logging.getLogger("openai").setLevel(logging.DEBUG)
+logging.getLogger("anthropic").setLevel(logging.DEBUG)
+logging.getLogger("src.llm").setLevel(logging.DEBUG)
+logging.getLogger("src.providers.llm_ticker_agent").setLevel(logging.DEBUG)
+
 logger = logging.getLogger(__name__)
 
 
@@ -185,7 +195,9 @@ async def main():
 
     if result and hasattr(result, "model_dump"):
         print("결과 미리보기:")
-        print(json.dumps(result.model_dump(), indent=2, ensure_ascii=False)[:1000] + "...")
+        print(
+            json.dumps(result.model_dump(), indent=2, ensure_ascii=False)[:1000] + "..."
+        )
 
 
 if __name__ == "__main__":
