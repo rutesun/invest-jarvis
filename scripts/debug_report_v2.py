@@ -25,6 +25,7 @@ from datetime import datetime
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 from src.cli.main import create_daily_report_pipeline
@@ -33,10 +34,10 @@ from src.cli.main import create_daily_report_pipeline
 # IDE 디버깅 설정 (CLI 인자 없이 실행 시 사용됨)
 # ============================================================
 DEBUG_CONFIG = {
-    "stage": "ingest",          # None | "ingest" | "map" | "shuffle" | "catalyst" | "synthesize"
-    "from_stage": None,         # None | "ingest" | "map" | "shuffle" | "catalyst" | "synthesize"
-    "run_all": False,           # True이면 전체 파이프라인 실행
-    "provider": "openai",       # "openai" | "anthropic"
+    "stage": "ingest",  # None | "ingest" | "map" | "shuffle" | "catalyst" | "synthesize"
+    "from_stage": None,  # None | "ingest" | "map" | "shuffle" | "catalyst" | "synthesize"
+    "run_all": False,  # True이면 전체 파이프라인 실행
+    "provider": "openai",  # "openai" | "anthropic"
 }
 
 logging.basicConfig(
@@ -49,6 +50,7 @@ logger = logging.getLogger(__name__)
 # ============================================================
 # Stage별 실행 함수 (브레이크포인트를 여기에 걸어서 디버깅)
 # ============================================================
+
 
 async def run_ingest_stage(pipeline):
     """Stage 1: 데이터 수집"""
@@ -86,7 +88,9 @@ async def run_catalyst_stage(pipeline, shuffle_result):
     return catalyst_result  # ← 브레이크포인트: catalyst_result 확인
 
 
-async def run_synthesize_stage(pipeline, ingest_result, shuffle_result, catalyst_result):
+async def run_synthesize_stage(
+    pipeline, ingest_result, shuffle_result, catalyst_result
+):
     """Stage 5: 최종 리포트 합성"""
     logger.info("=== [Stage 5] Synthesize 시작 ===")
     report = await pipeline.synthesize_stage.run(
@@ -106,7 +110,9 @@ async def run_full_pipeline(pipeline):
     map_result = await run_map_stage(pipeline, ingest_result)
     shuffle_result = await run_shuffle_stage(pipeline, map_result, ingest_result)
     catalyst_result = await run_catalyst_stage(pipeline, shuffle_result)
-    report = await run_synthesize_stage(pipeline, ingest_result, shuffle_result, catalyst_result)
+    report = await run_synthesize_stage(
+        pipeline, ingest_result, shuffle_result, catalyst_result
+    )
 
     logger.info("=== 전체 파이프라인 완료 ===")
     return report
@@ -116,13 +122,19 @@ async def run_full_pipeline(pipeline):
 # Main 함수
 # ============================================================
 
+
 async def main():
     import argparse
+
     parser = argparse.ArgumentParser(description="Daily Report V2 디버그 실행")
-    parser.add_argument("stage", nargs="?", help="실행할 Stage (ingest/map/shuffle/catalyst/synthesize)")
+    parser.add_argument(
+        "stage", nargs="?", help="실행할 Stage (ingest/map/shuffle/catalyst/synthesize)"
+    )
     parser.add_argument("--from", dest="from_stage", help="시작 Stage부터 끝까지 실행")
     parser.add_argument("--all", action="store_true", help="전체 파이프라인 실행")
-    parser.add_argument("--provider", default="openai", help="LLM Provider (openai/anthropic)")
+    parser.add_argument(
+        "--provider", default="openai", help="LLM Provider (openai/anthropic)"
+    )
 
     # CLI 인자가 없으면 DEBUG_CONFIG 사용
     if len(sys.argv) == 1:
