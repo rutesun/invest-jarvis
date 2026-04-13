@@ -1396,9 +1396,12 @@ logger = logging.getLogger(__name__)
 
 
 def _detect_market(ticker: str) -> str:
-    """한국 티커 감지 (6자리 숫자 또는 A로 시작)"""
-    stripped = ticker.lstrip("A")
-    if stripped.isdigit() and len(stripped) == 6:
+    """한국 티커 감지 (6자리 숫자 또는 A+6자리 숫자)"""
+    # 순수 6자리 숫자: 005930 (삼성전자)
+    if ticker.isdigit() and len(ticker) == 6:
+        return "KR"
+    # A + 6자리 숫자: A058400 (코위버) - 총 7글자
+    if len(ticker) == 7 and ticker.startswith("A") and ticker[1:].isdigit():
         return "KR"
     return "US"
 
