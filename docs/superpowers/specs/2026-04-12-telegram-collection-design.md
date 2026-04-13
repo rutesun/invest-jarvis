@@ -175,9 +175,11 @@ CSV 저장 전 기존 파일에서 message_id 풀스캔 → 중복 시 스킵.
 
 | 모듈 | 역할 |
 |------|------|
-| `src/providers/telegram_client.py` | Telethon 클라이언트 설정 (API_ID, API_HASH) |
-| `src/providers/telegram_collector.py` | 메시지 수집 (fetch/catch-up) |
-| `src/providers/telegram_storage.py` | CSV 저장, 중복 방지, 미디어 다운로드 |
+| `src/providers/telegram_config.py` | config.yaml 텔레그램 섹션 로더, 채널 필터 설정 |
+| `src/providers/telegram_client.py` | Telethon 클라이언트 래퍼 (API_ID, API_HASH) |
+| `src/providers/telegram_collector.py` | 메시지 수집 (fetch/catch-up), 필터링 |
+| `src/providers/telegram_media.py` | 사진/PDF 다운로드, URL PDF 다운로드 |
+| `src/providers/telegram_storage.py` | CSV 저장, 중복 방지 |
 | `src/providers/telegram_state.py` | 상태 추적 (monitor_state.json) |
 | `src/providers/telegram_loader.py` | CSV 로더 (Daily Report 및 다른 파이프라인에서 사용) |
 
