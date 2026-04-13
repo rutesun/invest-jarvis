@@ -12,7 +12,7 @@ class DailyReportPrompts:
          해당하지 않으면 새 테마명을 자유 생성하세요.
 - tickers: 언급된 종목명 (원문 그대로, 정규화하지 않음)
 - sentiment: 시장 영향 방향 (bull/bear/neutral)
-- summary: 핵심 내용 요약 (1-2문장)
+- summary: 핵심 내용 요약
 - source_ids: 해당 메시지 ID 목록
 
 기존 테마 목록:
@@ -55,12 +55,11 @@ class DailyReportPrompts:
     @staticmethod
     def synthesize(macro: str, news: str, themes: str, catalysts: str) -> str:
         """Stage 5: 전체 통합 리포트 생성"""
-        return f"""아래 데이터를 기반으로 일일 시장 리포트를 작성하세요.
+        return f"""아래 데이터를 기반으로 일일 시장 리포트의 총평 및 인사이트를 작성하세요.
 
-3개 섹션으로 구성:
-1. 시장 온도 (10줄 이내): 매크로 수치 해석 + 시장 분위기 판단
-2. 시장 내러티브 & 주목 테마: 흐름 스토리 + 테마 간 연결고리
-3. 주도주 분석: 테마별 핵심 종목 + 촉매 + 수급/거래량 근거
+작성할 섹션:
+1. 시장 온도 (Market Pulse): 매크로 수치 해석과 뉴스 흐름을 바탕으로 한 종합적인 시장 심리 및 분위기 판단 (5~10줄)
+2. 주요 인사이트 (Featured Analysis): 오늘의 발견된 테마와 촉매(뉴스), 특징주들을 엮어서 시장을 관통하는 핵심 시사점, 트렌드 이동, 리스크 요인 등을 전문적이고 입체적으로 분석 (1~2단락)
 
 매크로:
 {macro}

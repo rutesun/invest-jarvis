@@ -627,7 +627,7 @@ async def run_daily_report_v2(
 
 
 def format_daily_report_v2(report) -> str:
-    """DailyReport를 마크다운 문자열로 포맷팅한다."""
+    """DailyReport를 텔레그램 스타일로 디테일이 살아있는 마크다운 문자열로 렌더링한다."""
     from src.llm.daily_report_models import DailyReport
 
     if not isinstance(report, DailyReport):
@@ -636,18 +636,70 @@ def format_daily_report_v2(report) -> str:
     lines = [
         f"# Daily Market Report — {report.date}",
         "",
-        "## 시장 온도",
+        "## 1. 시장 온도 (Market Pulse)",
         "",
         report.market_pulse,
         "",
-        "## 시장 내러티브 & 주목 테마",
-        "",
-        report.narrative_and_themes,
-        "",
-        "## 주도주 분석",
-        "",
-        report.featured_analysis,
     ]
+    
+    lines.extend([
+        "## 2. 시장 내러티브 & 주목 테마",
+        ""
+    ])
+    
+    if not report.themes:
+        lines.append("- 특별히 감지된 테마가 없습니다.\n")
+    else:
+        for theme in report.themes:
+            lines.append(f"### {theme.name} ({theme.sentiment.upper()})")
+            lines.append(f"- **Summary**: {theme.narrative}")
+            lines.append(f"- **Stocks**: {', '.join(theme.stocks)}")
+            
+            # 원문(Evidence) 출력
+            if theme.source_ids and report.ref_lookup:
+                lines.append("")
+                lines.append("**[근거/원문]**")
+                for src_id in theme.source_ids:
+                    text = report.ref_lookup.get(src_id)
+                    if text:
+                        compact_text = " ".join(text.split())
+                        lines.append(f"- [{src_id}] {compact_text}")
+            lines.append("")
+
+    lines.extend([
+        "## 3. 주도주 및 촉매 분석",
+        ""
+    ])
+    
+    if not report.catalysts:
+        lines.append("- 분석된 주도주 촉매가 없습니다.\n")
+    else:
+        for cat in report.catalysts:
+            lines.append(f"### {cat.ticker}")
+            if cat.themes:
+                lines.append(f"- **관련 테마**: {', '.join(cat.themes)}")
+            
+            detail = report.stock_details.get(cat.ticker)
+            if detail:
+                flow = detail.flow_score if detail.flow_score is not None else "N/A"
+                mom = detail.volume_score if detail.volume_score is not None else "N/A"
+                lines.append(f"- **수급/모멘텀**: 기관/외인 순매수(금액) {flow}, 모멘텀 점수 {mom}")
+                
+            lines.append(f"- **촉매분석**: {cat.catalyst_summary}")
+            
+            if cat.news:
+                lines.append("")
+                lines.append("**[최신 뉴스]**")
+                for n in cat.news:
+                    lines.append(n if n.startswith("-") else f"- {n}")
+            lines.append("")
+            
+    lines.extend([
+        "## 4. 주요 인사이트 (Featured Analysis)",
+        "",
+        report.featured_analysis
+    ])
+
     return "\n".join(lines)
 
 

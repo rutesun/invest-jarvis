@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 from langchain_core.language_models import BaseChatModel
 
-from src.llm.daily_report_models import IssueExtract, StockCatalyst, DailyReport
+from src.llm.daily_report_models import IssueExtract, StockCatalyst, DailyReportInsights
 from src.llm.prompts.daily_report import DailyReportPrompts
 
 logger = logging.getLogger(__name__)
@@ -57,9 +57,9 @@ async def synthesize_report(
     themes: str,
     catalysts: str,
     metadata: dict | None = None,
-) -> DailyReport:
-    """전체 데이터를 통합하여 최종 리포트를 생성한다."""
-    structured_llm = llm.with_structured_output(DailyReport)
+) -> DailyReportInsights:
+    """전체 데이터를 통합하여 시황 요약 및 인사이트를 생성한다."""
+    structured_llm = llm.with_structured_output(DailyReportInsights)
     prompt = DailyReportPrompts.synthesize(macro, news, themes, catalysts)
     result = await structured_llm.ainvoke(
         prompt,

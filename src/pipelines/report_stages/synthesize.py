@@ -64,8 +64,8 @@ class SynthesizeStage:
         catalysts_data = [c.model_dump() for c in catalysts]
         catalysts_str = json.dumps(catalysts_data, ensure_ascii=False, indent=2)
 
-        logger.info("[Synthesize] LLM 최종 리포트 생성 호출")
-        report = await synthesize_report(
+        logger.info("[Synthesize] LLM 최종 인사이트 생성 호출")
+        insights = await synthesize_report(
             llm=self.llm,
             macro=macro_str,
             news=news_str,
@@ -74,9 +74,19 @@ class SynthesizeStage:
             metadata={"stage": "synthesize", "theme_count": len(shuffle.themes)},
         )
 
+        from datetime import datetime
+        report = DailyReport(
+            date=datetime.now().strftime("%Y-%m-%d"),
+            market_pulse=insights.market_pulse,
+            featured_analysis=insights.featured_analysis,
+            themes=shuffle.themes,
+            catalysts=catalysts,
+            stock_details=shuffle.stock_details,
+            ref_lookup=ingest.ref_lookup,
+        )
+
         logger.info("[Stage 5: Synthesize] 완료 - 날짜: %s", report.date)
-        logger.debug("[Synthesize] 리포트 길이 - 시장 온도: %d자, 내러티브: %d자, 분석: %d자",
-                    len(report.market_pulse), len(report.narrative_and_themes),
-                    len(report.featured_analysis))
+        logger.debug("[Synthesize] 리포트 길이 - 시장 온도: %d자, 분석: %d자",
+                    len(report.market_pulse), len(report.featured_analysis))
 
         return report

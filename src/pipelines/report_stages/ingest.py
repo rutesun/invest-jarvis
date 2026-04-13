@@ -37,6 +37,17 @@ class IngestStage:
         )
 
         telegram_messages = results[0] if not isinstance(results[0], Exception) else []
+        
+        ref_lookup: dict[int, str] = {}
+        for msg in telegram_messages:
+            msg_id = msg.get("id")
+            text = msg.get("message")
+            if msg_id is not None and text:
+                try:
+                    ref_lookup[int(msg_id)] = str(text)
+                except (ValueError, TypeError):
+                    pass
+
         macro_snapshot = results[1] if not isinstance(results[1], Exception) else {}
         market_news = results[2] if not isinstance(results[2], Exception) else []
         kr_flow = results[3] if not isinstance(results[3], Exception) else []
@@ -63,6 +74,7 @@ class IngestStage:
 
         return IngestResult(
             telegram_messages=telegram_messages,
+            ref_lookup=ref_lookup,
             macro_snapshot=macro_snapshot,
             market_news=market_news,
             kr_flow=kr_flow,

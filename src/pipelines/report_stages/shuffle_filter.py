@@ -95,10 +95,12 @@ class ShuffleStage:
             dominant_sentiment = sentiment_counts.most_common(1)[0][0]
 
             theme_tickers: dict[str, int] = Counter()
+            theme_source_ids: set[int] = set()
             for issue in theme_issue_list:
                 for raw_ticker in issue.tickers:
                     resolved = ticker_map.get(raw_ticker, raw_ticker)
                     theme_tickers[resolved] += 1
+                theme_source_ids.update(issue.source_ids)
 
             sorted_tickers = [t for t, _ in theme_tickers.most_common()]
             summaries = [i.summary for i in theme_issue_list]
@@ -110,6 +112,7 @@ class ShuffleStage:
                 sentiment=dominant_sentiment,
                 mention_count=len(theme_issue_list),
                 stocks=sorted_tickers,
+                source_ids=sorted(list(theme_source_ids)),
             ))
 
         kr_flow_map = {item["ticker"]: item for item in kr_flow}
@@ -172,6 +175,7 @@ class ShuffleStage:
                 sentiment="neutral",
                 mention_count=0,
                 stocks=market_only_tickers,
+                source_ids=[],
             ))
 
         logger.info("[Shuffle] Step 3: 시장 데이터 보강 완료 - %d개 종목 상세 정보",
