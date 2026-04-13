@@ -62,7 +62,7 @@ class TelegramCollector:
             if msg.text and not channel_config.should_include(msg.text):
                 continue
 
-            messages.append(await self._to_dict(msg, channel_name, date_str))
+            messages.append(await self._to_dict(msg, channel_name, date_str, channel_config.id))
 
         logger.info(
             "%s에서 %s일자 메시지 %d건 수집",
@@ -95,7 +95,7 @@ class TelegramCollector:
                 continue
 
             date_str = msg.date.strftime("%Y-%m-%d")
-            msg_dict = await self._to_dict(msg, channel_name, date_str)
+            msg_dict = await self._to_dict(msg, channel_name, date_str, channel_config.id)
             by_date.setdefault(date_str, []).append(msg_dict)
 
         logger.info(
@@ -104,28 +104,21 @@ class TelegramCollector:
         )
         return by_date
 
-    async def _to_dict(self, msg: Any, channel_name: str, date_str: str) -> dict:
-        """Telethon Message를 CSV 저장용 dict로 변환한다."""
+    async def _to_dict(self, msg: Any, channel_name: str, date_str: str, channel_id: str) -> dict:
+        """Telethon Message를 CSV 저장용 dict로 변환한다.
+
+        Args:
+            msg: Telethon Message 객체
+            channel_name: 채널 제목 (예: "epic AI - 투자 어시스턴트")
+            date_str: 날짜 문자열 (YYYY-MM-DD)
+            channel_id: 채널 ID (예: "ked_epic_ai")
+        """
         forward_from = ""
         if msg.forward:
             forward_from = str(getattr(msg.forward, "chat_id", ""))
 
-        # Author 정보 추출: 채널 제목 또는 사용자 이름
-        author = ""
-        if msg.sender:
-            # 채널인 경우: title 사용
-            if hasattr(msg.sender, 'title') and msg.sender.title:
-                author = msg.sender.title
-            # 사용자인 경우: username 또는 이름
-            elif hasattr(msg.sender, 'username') and msg.sender.username:
-                author = f"@{msg.sender.username}"
-            elif hasattr(msg.sender, 'first_name'):
-                parts = [msg.sender.first_name or "", msg.sender.last_name or ""]
-                author = " ".join(p for p in parts if p).strip()
-
-        # Fallback: sender_id
-        if not author:
-            author = str(msg.sender_id or "")
+        # Author: 채널 ID 사용 (config.yaml과 매칭 가능)
+        author = channel_id
 
         media_info = json.dumps(None)
         if msg.media and self._media_downloader:

@@ -176,7 +176,7 @@ async def test_message_dict_format(mock_client, channel_config):
         "message_id", "timestamp", "channel_name", "author", "content", "media_info", "forward_from",
     }
     assert row["message_id"] == 42
-    assert row["author"] == "123"
+    assert row["author"] == "test_channel"  # 채널 ID
     assert row["timestamp"] == "2026-04-13T09:30:00+00:00"
 
 
