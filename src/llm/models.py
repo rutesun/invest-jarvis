@@ -1,5 +1,6 @@
 from typing import Any
 from pydantic import BaseModel
+from src.tools.disclosure import DisclosureItem
 
 
 class LLMRequest(BaseModel):
@@ -87,3 +88,22 @@ class FundamentalSummaryOutput(BaseModel):
     weaknesses: list[str]
     valuation_assessment: str  # "저평가", "적정", "고평가"
     confidence: float  # 0-1
+
+
+# 종합 분석 I/O
+class IntegratedAnalysisInput(BaseModel):
+    """멀티팩터 종합 분석 입력."""
+    ticker: str
+    technical_recommendation: str        # "매수", "매도", "중립"
+    technical_rationale: str             # 기술적 분석 근거 자유 형식
+    fundamental_valuation: str | None = None   # "저평가", "적정", "고평가"
+    disclosure_items: list[dict[str, Any]] = []  # DisclosureItem dict 리스트
+    flow_summary: str | None = None      # 사전 포맷된 마크다운 테이블 또는 None
+
+
+class IntegratedAnalysisOutput(BaseModel):
+    """멀티팩터 종합 분석 출력."""
+    recommendation: str        # "매수", "매도", "중립"
+    rationale: list[str]       # 3-4개 근거, 각 항목은 "기술적:" / "기본적:" / "공시:" / "수급:" 접두사
+    risks: list[str]           # 2-3개 리스크 요인
+    action_summary: str        # 한 줄 한국어 요약

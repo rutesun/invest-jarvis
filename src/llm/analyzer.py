@@ -193,3 +193,51 @@ Provide summary with:
     })
 
     return result
+
+
+from src.llm.models import IntegratedAnalysisInput, IntegratedAnalysisOutput
+
+
+async def generate_integrated_analysis(
+    input_data: IntegratedAnalysisInput,
+    llm: BaseChatModel,
+) -> IntegratedAnalysisOutput:
+    """기술적·기본적·공시·수급 팩터를 통합한 종합 투자 분석을 생성한다."""
+    disclosure_text = "\n".join(
+        f"- [{d['form_type']}] {d['date']}: {d['description']}\n  URL: {d['url']}"
+        for d in input_data.disclosure_items
+    ) if input_data.disclosure_items else "해당 기간 주요 공시 없음"
+
+    flow_text = input_data.flow_summary or "수급 데이터 없음 (미국주식 또는 KIS 미설정)"
+
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", "당신은 한국 주식시장 종합 분석 전문가입니다. 실행 가능한 투자 인사이트를 제공하세요."),
+        ("user", """종합 투자 분석을 제공하세요. 종목: {ticker}
+
+**기술적 분석**: {technical_recommendation} — {technical_rationale}
+
+**기본적 분석 (밸류에이션)**: {fundamental_valuation}
+
+**공시 분석 (최근 3개월)**:
+{disclosure_text}
+
+**수급 동향**:
+{flow_text}
+
+다음 형식으로 분석하세요:
+- recommendation: "매수", "매도", 또는 "중립"
+- rationale: 3-4개 근거 (각 항목은 "기술적:", "기본적:", "공시:", "수급:" 중 하나로 시작)
+- risks: 2-3개 리스크 요인
+- action_summary: 한 줄 요약"""),
+    ])
+
+    chain = prompt | llm.with_structured_output(IntegratedAnalysisOutput)
+
+    return await chain.ainvoke({
+        "ticker": input_data.ticker,
+        "technical_recommendation": input_data.technical_recommendation,
+        "technical_rationale": input_data.technical_rationale,
+        "fundamental_valuation": input_data.fundamental_valuation or "N/A",
+        "disclosure_text": disclosure_text,
+        "flow_text": flow_text,
+    })
