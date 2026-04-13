@@ -2144,18 +2144,18 @@ git commit -m "feat: add DailyReportV2Pipeline orchestrator with stage caching"
 
 실행: `uv run pytest tests/pipelines/test_daily_report_v2.py -v` (Task 10 통과 확인)
 
-- [ ] **Step 2: V2 리포트 실행 함수 추가**
+- [ ] **Step 2: 파이프라인 팩토리 함수 추가**
 
 `src/cli/main.py`의 기존 `run_daily_report` 함수 아래에 추가:
 
 ```python
-async def run_daily_report_v2(
-    provider: str = "openai",
-    stage: str | None = None,
-    from_stage: str | None = None,
-    no_save: bool = False,
-) -> dict:
-    """V2 일일 리포트 파이프라인을 실행한다."""
+def create_daily_report_pipeline(provider: str) -> "DailyReportV2Pipeline":
+    """일일 리포트 파이프라인의 의존성을 조립하여 반환한다.
+    
+    테스트 및 스크립트에서 재사용 가능하도록 팩토리 패턴으로 분리.
+    """
+    import logging
+    import os
     from pathlib import Path
     from src.tools.macro import MacroTool
     from src.tools.news import NewsTool
@@ -2170,6 +2170,14 @@ async def run_daily_report_v2(
     from src.pipelines.report_stages.synthesize import SynthesizeStage
     from src.pipelines.report_stages.theme_config import ThemeConfig
 
+    logger = logging.getLogger(__name__)
+
+    # LLM API 키 사전 검증
+    api_key_env = "OPENAI_API_KEY" if provider == "openai" else "ANTHROPIC_API_KEY"
+    api_key = os.getenv(api_key_env)
+    if not api_key:
+        raise ValueError(f"Missing {api_key_env} environment variable")
+
     # LLM 프로바이더 (스테이지별 모델)
     map_llm = LLMProvider.create(provider="openai", model="gpt-4o-mini")
     catalyst_llm = LLMProvider.create(provider="openai", model="gpt-4o")
@@ -2181,17 +2189,28 @@ async def run_daily_report_v2(
     ticker_resolver = TickerResolver()
     theme_config = ThemeConfig(Path("themes.yaml"))
 
-    try:
-        kis_provider = KISProvider()
-    except Exception:
+    # KIS API 검증
+    kis_key = os.getenv("KIS_APP_KEY")
+    kis_secret = os.getenv("KIS_APP_SECRET")
+    if not (kis_key and kis_secret):
+        logger.warning(
+            "KIS credentials 설정되지 않았습니다. "
+            "한국주식 수급 데이터 및 모멘텀 랭킹이 제외됩니다."
+        )
         kis_provider = None
+    else:
+        kis_provider = KISProvider(app_key=kis_key, app_secret=kis_secret)
 
-    # 텔레그램 로더 스텁 (telegram-collection 구현 완료 후 교체)
+    # Telegram 스텁 경고
     class StubTelegramLoader:
         def load(self):
             return []
 
     telegram_loader = StubTelegramLoader()
+    logger.warning(
+        "Telegram 로더가 스텁 모드입니다. "
+        "telegram-collection 구현 완료 후 실제 데이터를 사용하려면 코드를 업데이트하세요."
+    )
 
     # 스테이지 조립
     ingest_stage = IngestStage(
@@ -2216,7 +2235,7 @@ async def run_daily_report_v2(
     )
     synthesize_stage = SynthesizeStage(llm=synthesize_llm)
 
-    pipeline = DailyReportV2Pipeline(
+    return DailyReportV2Pipeline(
         ingest_stage=ingest_stage,
         map_stage=map_stage,
         shuffle_stage=shuffle_stage,
@@ -2224,13 +2243,30 @@ async def run_daily_report_v2(
         synthesize_stage=synthesize_stage,
     )
 
+
+async def run_daily_report_v2(
+    provider: str = "openai",
+    stage: str | None = None,
+    from_stage: str | None = None,
+    no_save: bool = False,
+) -> dict:
+    """V2 일일 리포트 파이프라인을 실행한다."""
+    from datetime import datetime
+    from pathlib import Path
+
+    # 캐시 디렉토리 사전 생성 (Stage별 캐시 저장/로드 에러 방지)
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    cache_dir = Path(".cache/report") / date_str
+    cache_dir.mkdir(parents=True, exist_ok=True)
+
+    # 파이프라인 생성 및 실행
+    pipeline = create_daily_report_pipeline(provider)
     report = await pipeline.run(stage=stage, from_stage=from_stage)
 
     result = {"report": report, "no_save": no_save}
 
+    # 최종 리포트 저장 (전체 파이프라인 완료 시에만)
     if report and not no_save and not stage:
-        from datetime import datetime
-        date_str = datetime.now().strftime("%Y-%m-%d")
         month_str = datetime.now().strftime("%Y-%m")
         report_dir = Path("reports") / month_str
         report_dir.mkdir(parents=True, exist_ok=True)
