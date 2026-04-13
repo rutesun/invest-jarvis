@@ -203,11 +203,42 @@ async def run_deep_dive(ticker_or_name: str, provider: str) -> dict:
         temperature=0,
     )
 
+    # 공시 툴: SEC는 항상 사용 가능, DART는 API 키 있을 때만
+    from src.tools.disclosure import SECDisclosureFetcher, DARTDisclosureFetcher, DisclosureTool
+    sec_fetcher = SECDisclosureFetcher()
+    opendart_key = os.getenv("OPENDART_API_KEY")
+    if not opendart_key:
+        logger.warning(
+            "OPENDART_API_KEY가 설정되지 않았습니다. "
+            "한국주식 공시 데이터가 제외됩니다."
+        )
+    dart_fetcher = DARTDisclosureFetcher(api_key=opendart_key) if opendart_key else None
+    disclosure_tool = DisclosureTool(sec_fetcher=sec_fetcher, dart_fetcher=dart_fetcher)
+
+    # 수급 툴: KIS API (get_investor_trend) 사용. 키 없으면 FlowTool이 graceful failure 처리
+    from src.tools.flow import FlowTool
+    from src.providers.kis import KISProvider
+    kis_key = os.getenv("KIS_APP_KEY")
+    kis_secret = os.getenv("KIS_APP_SECRET")
+    if not (kis_key and kis_secret):
+        logger.warning(
+            "KIS_APP_KEY 또는 KIS_APP_SECRET이 설정되지 않았습니다. "
+            "한국주식 수급 데이터가 제외됩니다."
+        )
+    kis_provider = (
+        KISProvider(app_key=kis_key, app_secret=kis_secret)
+        if kis_key and kis_secret
+        else None
+    )
+    flow_tool = FlowTool(kis_provider=kis_provider)
+
     pipeline = DeepDivePipeline(
         technical_tool=technical_tool,
         news_tool=news_tool,
         llm=llm,
         fundamental_tool=fundamental_tool,
+        disclosure_tool=disclosure_tool,
+        flow_tool=flow_tool,
     )
 
     return await pipeline.run(ticker)
