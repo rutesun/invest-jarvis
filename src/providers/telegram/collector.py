@@ -46,14 +46,14 @@ class TelegramCollector:
         offset_date = target_date + timedelta(days=1)
 
         messages: list[dict] = []
-        async for msg in self._client.iter_messages(
-            entity,
-            offset_date=offset_date,
-            reverse=True,
-        ):
-            if msg.date < target_date:
-                continue
+        # offset_date: 이 날짜 이전의 메시지만 (reverse=True와 호환되지 않음)
+        # 따라서 limit으로 충분히 큰 수를 주고 날짜 필터링
+        async for msg in self._client.iter_messages(entity, limit=5000):
+            # offset_date 이후 메시지는 스킵 (최신 메시지부터 오므로)
             if msg.date >= offset_date:
+                continue
+            # target_date 이전 메시지는 중단 (더 이상 볼 필요 없음)
+            if msg.date < target_date:
                 break
 
             if msg.text is None and msg.media is None:
