@@ -178,9 +178,9 @@ uv run jarvis analyze AAPL
 uv run jarvis analyze Apple        # 회사명도 가능
 uv run jarvis analyze TSLA --provider anthropic
 
-# 일일 리포트 (LLM 필요)
+# 일일 리포트 (LLM 필요) - V2: 테마 중심
 uv run jarvis report
-uv run jarvis report --tickers=AAPL,GOOGL,META
+uv run jarvis report --provider anthropic
 
 # 포트폴리오 (KIS API 필요)
 uv run jarvis portfolio

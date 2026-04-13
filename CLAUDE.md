@@ -68,7 +68,7 @@ Providers → Tools → Pipelines → CLI (src/cli/main.py)
 ```bash
 uv run jarvis check AAPL        # 빠른 기술적 분석 (LLM 불필요)
 uv run jarvis analyze AAPL      # 심층 분석 (기술 + 뉴스 + LLM)
-uv run jarvis report            # 일일 시장 리포트
+uv run jarvis report            # 일일 시장 리포트 (V2: 테마 중심)
 uv run jarvis portfolio         # 포트폴리오 모니터링 (KIS API)
 uv run jarvis screen            # 시장 스크리너
 uv run jarvis telegram fetch    # 텔레그램 채널 메시지 수집

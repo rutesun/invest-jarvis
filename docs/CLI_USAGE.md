@@ -96,49 +96,45 @@ uv run jarvis analyze AAPL --provider anthropic
 
 ---
 
-### 3. report - 일일 시장 리포트
+### 3. report - 일일 시장 리포트 (V2)
 
 **특징:**
-- 매크로 지표 스냅샷
-- 다중 종목 기술적 분석
-- 시장 전반 요약
+- 텔레그램 + 뉴스 + 매크로 + 수급 데이터 병렬 수집
+- LLM Map-Reduce로 시장 테마/내러티브 추출
+- 주도주 촉매 뉴스 자동 매칭
+- Stage별 독립 실행으로 프롬프트 튜닝 가능
 
 **요구사항:**
-- `OPENAI_API_KEY` 또는 `ANTHROPIC_API_KEY` 필요
+- `OPENAI_API_KEY` 필요 (Map, Catalyst 단계)
+- `ANTHROPIC_API_KEY` 선택 (Synthesize 단계)
+- `KIS_APP_KEY`, `KIS_APP_SECRET` 선택 (수급 데이터)
 
 **사용법:**
 ```bash
-uv run jarvis report [OPTIONS]
-```
-
-**옵션:**
-- `--tickers, -t`: 분석할 티커 목록 (쉼표로 구분, 기본값: AAPL,MSFT,NVDA)
-- `--provider, -p`: LLM 제공자 선택 (openai|anthropic, 기본값: openai)
-
-**예시:**
-```bash
-# 기본 티커 사용
+# 전체 파이프라인 실행
 uv run jarvis report
-
-# 커스텀 티커
-uv run jarvis report --tickers "AAPL,GOOGL,META,TSLA"
-
-# Anthropic 사용
 uv run jarvis report --provider anthropic
+
+# Stage별 독립 실행 (튜닝용)
+uv run jarvis report --stage ingest
+uv run jarvis report --stage map
+uv run jarvis report --stage shuffle
+uv run jarvis report --stage catalyst
+uv run jarvis report --stage synthesize
+
+# 특정 Stage부터 이어서 실행
+uv run jarvis report --from shuffle
+
+# 파일 저장 안함
+uv run jarvis report --no-save
 ```
 
 **출력 내용:**
-- **매크로 스냅샷:**
-  - VIX (변동성 지수)
-  - Fear & Greed Index
-  - WTI Oil 가격
-  - US 10Y/2Y 금리
-  - Yield Spread
-  - DXY (달러 지수)
-- **티커 분석:**
-  - 각 종목 가격 및 변동률
-  - 종합 평가 및 신뢰도
-  - 시그널 및 경고
+- **시장 온도:** 매크로 수치 해석 + 시장 분위기 (10줄 이내)
+- **시장 내러티브 & 주목 테마:** 테마 간 연결고리, 부상 이유
+- **주도주 분석:** 테마별 핵심 종목 + 촉매 뉴스 + 수급 근거
+
+**리포트 저장:** `reports/YYYY-MM/YYYY-MM-DD.md`
 
 ---
 
