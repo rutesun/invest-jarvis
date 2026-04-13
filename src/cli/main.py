@@ -533,6 +533,7 @@ def create_daily_report_pipeline(provider: str):
     from src.pipelines.report_stages.catalyst import CatalystStage
     from src.pipelines.report_stages.synthesize import SynthesizeStage
     from src.pipelines.report_stages.theme_config import ThemeConfig
+    from src.tools.telegram_loader import TelegramMessageLoader
 
     logger = logging.getLogger(__name__)
 
@@ -561,15 +562,8 @@ def create_daily_report_pipeline(provider: str):
     else:
         kis_provider = KISProvider(app_key=kis_key, app_secret=kis_secret)
 
-    class StubTelegramLoader:
-        def load(self):
-            return []
-
-    telegram_loader = StubTelegramLoader()
-    logger.warning(
-        "Telegram 로더가 스텁 모드입니다. "
-        "telegram-collection 구현 완료 후 실제 데이터를 사용하려면 코드를 업데이트하세요."
-    )
+    telegram_loader = TelegramMessageLoader(data_dir=Path("data"))
+    logger.info("Telegram 메시지 로더 초기화 완료 (data/ 디렉토리)")
 
     ingest_stage = IngestStage(
         macro_tool=macro_tool,
