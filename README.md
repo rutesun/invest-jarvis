@@ -278,6 +278,30 @@ uv run pytest tests/integration/ -v -m integration
 uv run pytest tests/ --cov=src --cov-report=html
 ```
 
+### Daily Report V2 디버깅
+
+Stage별로 독립 실행하여 중간 결과 확인:
+
+```bash
+# 단일 Stage 실행
+uv run python scripts/debug_report_v2.py ingest      # 데이터 수집
+uv run python scripts/debug_report_v2.py map         # 이슈 추출
+uv run python scripts/debug_report_v2.py shuffle     # 테마 병합
+uv run python scripts/debug_report_v2.py catalyst    # 촉매 분석
+uv run python scripts/debug_report_v2.py synthesize  # 최종 합성
+
+# 특정 Stage부터 끝까지
+uv run python scripts/debug_report_v2.py --from shuffle
+
+# 전체 파이프라인
+uv run python scripts/debug_report_v2.py --all
+
+# Anthropic 사용
+uv run python scripts/debug_report_v2.py synthesize --provider anthropic
+```
+
+캐시 위치: `.cache/report/YYYY-MM-DD/`
+
 ### 새 전략 추가
 
 1. `src/tools/technical/strategies/` 에 새 전략 클래스 작성
