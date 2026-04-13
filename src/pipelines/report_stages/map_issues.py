@@ -32,12 +32,17 @@ class MapStage:
 
     async def run(self, messages: list[dict]) -> list[IssueExtract]:
         if not messages:
+            logger.info("[Stage 2: Map] 메시지 없음, 스킵")
             return []
 
         chunks = [
             messages[i : i + self.chunk_size]
             for i in range(0, len(messages), self.chunk_size)
         ]
+
+        logger.info("[Stage 2: Map] %d개 메시지를 %d개 청크로 분할 (청크 크기: %d)",
+                    len(messages), len(chunks), self.chunk_size)
+        logger.info("[Map] LLM 병렬 처리 시작 (%d개 청크)", len(chunks))
 
         tasks = [
             self._process_chunk(chunk, idx)
@@ -46,11 +51,18 @@ class MapStage:
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         all_issues: list[IssueExtract] = []
+        successful_chunks = 0
         for idx, result in enumerate(results):
             if isinstance(result, Exception):
-                logger.warning("Map 청크 %d 실패: %s", idx, result)
+                logger.warning("[Map] 청크 %d/%d 실패: %s", idx + 1, len(chunks), result)
                 continue
             all_issues.extend(result)
+            successful_chunks += 1
+            logger.debug("[Map] 청크 %d/%d 완료 - %d개 이슈 추출",
+                        idx + 1, len(chunks), len(result))
+
+        logger.info("[Stage 2: Map] 완료 - %d/%d 청크 성공, 총 %d개 이슈 추출",
+                    successful_chunks, len(chunks), len(all_issues))
         return all_issues
 
     async def _process_chunk(

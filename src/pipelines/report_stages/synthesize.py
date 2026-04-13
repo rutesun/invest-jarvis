@@ -28,6 +28,11 @@ class SynthesizeStage:
         shuffle: ShuffleResult,
         catalysts: list[StockCatalyst],
     ) -> DailyReport:
+        logger.info("[Stage 5: Synthesize] 최종 리포트 생성 시작")
+        logger.info("[Synthesize] 입력 데이터 - 매크로: %d개, 뉴스: %d개, 테마: %d개, 촉매: %d개",
+                    len(ingest.macro_snapshot), len(ingest.market_news),
+                    len(shuffle.themes), len(catalysts))
+
         macro_str = json.dumps(ingest.macro_snapshot, ensure_ascii=False, indent=2)
 
         news_lines = []
@@ -59,7 +64,8 @@ class SynthesizeStage:
         catalysts_data = [c.model_dump() for c in catalysts]
         catalysts_str = json.dumps(catalysts_data, ensure_ascii=False, indent=2)
 
-        return await synthesize_report(
+        logger.info("[Synthesize] LLM 최종 리포트 생성 호출")
+        report = await synthesize_report(
             llm=self.llm,
             macro=macro_str,
             news=news_str,
@@ -67,3 +73,10 @@ class SynthesizeStage:
             catalysts=catalysts_str,
             metadata={"stage": "synthesize", "theme_count": len(shuffle.themes)},
         )
+
+        logger.info("[Stage 5: Synthesize] 완료 - 날짜: %s", report.date)
+        logger.debug("[Synthesize] 리포트 길이 - 시장 온도: %d자, 내러티브: %d자, 분석: %d자",
+                    len(report.market_pulse), len(report.narrative_and_themes),
+                    len(report.featured_analysis))
+
+        return report

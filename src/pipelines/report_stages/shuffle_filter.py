@@ -40,25 +40,38 @@ class ShuffleStage:
         kr_flow: list[dict],
         momentum: list[dict],
     ) -> ShuffleResult:
+        logger.info("[Stage 3: Shuffle] 시작 - %d개 이슈, %d개 KR 수급, %d개 US 모멘텀",
+                    len(issues), len(kr_flow), len(momentum))
+
         raw_theme_names = list({issue.theme for issue in issues})
+        logger.info("[Shuffle] Step 1: 테마 병합 - 기존 %d개, 원본 %d개",
+                    len(self.known_themes), len(raw_theme_names))
+
         new_themes = [t for t in raw_theme_names if t not in self.known_themes]
         theme_mapping: dict[str, str] = {}
         if new_themes:
+            logger.info("[Shuffle] 새 테마 %d개 발견, LLM 병합 시작", len(new_themes))
             known_str = "\n".join(f"- {t}" for t in self.known_themes)
             new_str = "\n".join(f"- {t}" for t in new_themes)
             theme_mapping = await merge_themes_llm(self.merge_llm, known_str, new_str)
+            logger.debug("[Shuffle] 테마 매핑: %s", theme_mapping)
+        else:
+            logger.info("[Shuffle] 새 테마 없음, 병합 스킵")
 
+        logger.info("[Shuffle] Step 2: 티커 정규화 시작")
         all_raw_tickers: set[str] = set()
         for issue in issues:
             all_raw_tickers.update(issue.tickers)
 
+        logger.info("[Shuffle] %d개 고유 티커 발견, 정규화 진행", len(all_raw_tickers))
         ticker_map: dict[str, str] = {}
         for raw in all_raw_tickers:
             try:
                 resolution = await self.ticker_resolver.resolve(raw)
                 ticker_map[raw] = resolution.resolved_ticker
+                logger.debug("[Shuffle] 티커 변환: %s → %s", raw, resolution.resolved_ticker)
             except Exception as e:
-                logger.warning("티커 변환 실패 %s: %s", raw, e)
+                logger.warning("[Shuffle] 티커 변환 실패 %s: %s", raw, e)
                 ticker_map[raw] = raw
 
         theme_issues: dict[str, list[IssueExtract]] = defaultdict(list)
@@ -161,7 +174,18 @@ class ShuffleStage:
                 stocks=market_only_tickers,
             ))
 
+        logger.info("[Shuffle] Step 3: 시장 데이터 보강 완료 - %d개 종목 상세 정보",
+                    len(final_details))
+
         themes.sort(key=lambda t: t.mention_count, reverse=True)
+        logger.info("[Shuffle] Step 4: 상위 %d개 테마 선별 (전체 %d개)",
+                    min(self.top_n, len(themes)), len(themes))
         themes = themes[: self.top_n]
+
+        logger.info("[Stage 3: Shuffle] 완료 - %d개 테마, %d개 종목",
+                    len(themes), len(final_details))
+        for i, theme in enumerate(themes[:3], 1):
+            logger.debug("[Shuffle] Top %d: %s (%d회 언급, %d개 종목)",
+                        i, theme.name, theme.mention_count, len(theme.stocks))
 
         return ShuffleResult(themes=themes, stock_details=final_details)

@@ -22,9 +22,13 @@ class CatalystStage:
     stocks_per_theme: int = 3
 
     async def run(self, shuffle_result: ShuffleResult) -> list[StockCatalyst]:
+        logger.info("[Stage 4: Catalyst] 시작 - %d개 테마 처리", len(shuffle_result.themes))
+
         themes_for_prompt = []
+        total_stocks = 0
         for theme in shuffle_result.themes:
             top_stocks = theme.stocks[: self.stocks_per_theme]
+            total_stocks += len(top_stocks)
             stock_infos = []
             for ticker in top_stocks:
                 detail = shuffle_result.stock_details.get(ticker)
@@ -39,9 +43,15 @@ class CatalystStage:
                 "narrative": theme.narrative,
                 "stocks": stock_infos,
             })
+            logger.debug("[Catalyst] 테마 '%s': 상위 %d개 종목 선별",
+                        theme.name, len(top_stocks))
 
+        logger.info("[Catalyst] LLM tool calling 시작 - %d개 종목 뉴스 검색", total_stocks)
         themes_json = json.dumps(themes_for_prompt, ensure_ascii=False, indent=2)
-        return await self._run_agent(themes_json, shuffle_result.stock_details)
+        catalysts = await self._run_agent(themes_json, shuffle_result.stock_details)
+
+        logger.info("[Stage 4: Catalyst] 완료 - %d개 종목 촉매 분석", len(catalysts))
+        return catalysts
 
     async def _run_agent(self, themes_json: str, stock_details: dict) -> list[StockCatalyst]:
         news_tool_ref = self.news_tool

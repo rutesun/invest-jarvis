@@ -23,6 +23,8 @@ class IngestStage:
     telegram_loader: Any
 
     async def run(self) -> IngestResult:
+        logger.info("[Stage 1: Ingest] 데이터 수집 시작 (5개 소스 병렬)")
+
         telegram_task = asyncio.to_thread(self.telegram_loader.load)
         macro_task = self._fetch_macro()
         news_task = self._fetch_market_news()
@@ -40,9 +42,24 @@ class IngestStage:
         kr_flow = results[3] if not isinstance(results[3], Exception) else []
         momentum = results[4] if not isinstance(results[4], Exception) else []
 
+        source_names = ["Telegram", "Macro", "News", "KR Flow", "US Momentum"]
         for i, r in enumerate(results):
             if isinstance(r, Exception):
-                logger.warning("수집 소스 %d 실패: %s", i, r)
+                logger.warning("[Ingest] %s 수집 실패: %s", source_names[i], r)
+            else:
+                if i == 0:
+                    logger.info("[Ingest] %s: %d개 메시지 수집", source_names[i], len(telegram_messages))
+                elif i == 1:
+                    logger.info("[Ingest] %s: %d개 지표 수집", source_names[i], len(macro_snapshot))
+                elif i == 2:
+                    logger.info("[Ingest] %s: %d개 뉴스 수집", source_names[i], len(market_news))
+                elif i == 3:
+                    logger.info("[Ingest] %s: %d개 종목 수급", source_names[i], len(kr_flow))
+                elif i == 4:
+                    logger.info("[Ingest] %s: %d개 종목 모멘텀", source_names[i], len(momentum))
+
+        logger.info("[Stage 1: Ingest] 완료 - Telegram: %d, News: %d, KR: %d, US: %d",
+                    len(telegram_messages), len(market_news), len(kr_flow), len(momentum))
 
         return IngestResult(
             telegram_messages=telegram_messages,
