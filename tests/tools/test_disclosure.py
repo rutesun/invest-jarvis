@@ -173,3 +173,136 @@ async def test_sec_fetcher_uses_cache(sec_fetcher, sec_submissions_response, tmp
     # submissions 조회 1회만 호출 (CIK 조회 없음)
     assert mock_client.get.call_count == 1
     assert len(items) >= 1
+
+
+# ── DART Fetcher Tests ────────────────────────────────────────────────────────
+
+from src.tools.disclosure import DARTDisclosureFetcher
+
+
+@pytest.fixture
+def dart_fetcher(tmp_path):
+    fetcher = DARTDisclosureFetcher(api_key="test_key")
+    fetcher.CACHE_PATH = tmp_path / "dart_corp_code_cache.json"
+    return fetcher
+
+
+@pytest.fixture
+def dart_corp_response():
+    return {"status": "000", "corp_code": "00126380", "corp_name": "삼성전자"}
+
+
+@pytest.fixture
+def dart_list_response():
+    return {
+        "status": "000",
+        "list": [
+            {"report_nm": "수주계약 체결", "rcept_dt": "20260405", "rcp_no": "20260405000001"},
+            {"report_nm": "분기보고서", "rcept_dt": "20260401", "rcp_no": "20260401000002"},
+            {"report_nm": "유상증자결정", "rcept_dt": "20260320", "rcp_no": "20260320000003"},
+            {"report_nm": "사업보고서", "rcept_dt": "20260301", "rcp_no": "20260301000004"},
+            {"report_nm": "매출계약", "rcept_dt": "20260310", "rcp_no": "20260310000005"},
+        ],
+    }
+
+
+@pytest.mark.asyncio
+async def test_dart_fetcher_filters_by_score(
+    dart_fetcher, dart_corp_response, dart_list_response
+):
+    """score >= 1.0 인 공시만 반환, score 내림차순 정렬."""
+    with patch("httpx.AsyncClient") as mock_client_cls:
+        mock_client = AsyncMock()
+        mock_client_cls.return_value.__aenter__.return_value = mock_client
+
+        corp_resp = AsyncMock()
+        corp_resp.json = MagicMock(return_value=dart_corp_response)
+        corp_resp.status_code = 200
+        corp_resp.raise_for_status = MagicMock()
+
+        list_resp = AsyncMock()
+        list_resp.json = MagicMock(return_value=dart_list_response)
+        list_resp.raise_for_status = MagicMock()
+
+        mock_client.get.side_effect = [corp_resp, list_resp]
+
+        items = await dart_fetcher.fetch("005930")
+
+    # 분기보고서(-1.0), 사업보고서(-1.0)는 임계값 미달로 제외
+    report_names = [i.description for i in items]
+    assert "분기보고서" not in report_names
+    assert "사업보고서" not in report_names
+    # 수주계약(1.0), 유상증자결정(1.0), 매출계약(1.0)은 통과
+    assert len(items) == 3
+
+
+@pytest.mark.asyncio
+async def test_dart_fetcher_date_formatting(
+    dart_fetcher, dart_corp_response, dart_list_response
+):
+    """YYYYMMDD 날짜를 YYYY-MM-DD 형식으로 변환."""
+    with patch("httpx.AsyncClient") as mock_client_cls:
+        mock_client = AsyncMock()
+        mock_client_cls.return_value.__aenter__.return_value = mock_client
+
+        corp_resp = AsyncMock()
+        corp_resp.json = MagicMock(return_value=dart_corp_response)
+        corp_resp.status_code = 200
+        corp_resp.raise_for_status = MagicMock()
+
+        list_resp = AsyncMock()
+        list_resp.json = MagicMock(return_value=dart_list_response)
+        list_resp.raise_for_status = MagicMock()
+
+        mock_client.get.side_effect = [corp_resp, list_resp]
+
+        items = await dart_fetcher.fetch("005930")
+
+    for item in items:
+        assert len(item.date) == 10
+        assert item.date[4] == "-"
+        assert item.date[7] == "-"
+
+
+@pytest.mark.asyncio
+async def test_dart_fetcher_corp_not_found(dart_fetcher):
+    """종목코드에 해당하는 corp_code를 찾지 못하면 빈 리스트 반환."""
+    with patch("httpx.AsyncClient") as mock_client_cls:
+        mock_client = AsyncMock()
+        mock_client_cls.return_value.__aenter__.return_value = mock_client
+
+        corp_resp = AsyncMock()
+        corp_resp.json = MagicMock(return_value={"status": "013", "message": "조회된 데이터가 없습니다."})
+        corp_resp.status_code = 200
+        corp_resp.raise_for_status = MagicMock()
+
+        mock_client.get.return_value = corp_resp
+
+        items = await dart_fetcher.fetch("999999")
+
+    assert items == []
+
+
+@pytest.mark.asyncio
+async def test_dart_fetcher_uses_cache(dart_fetcher, dart_list_response, tmp_path):
+    """두 번째 조회 시 파일 캐시를 사용해 corp_code API 재호출을 방지한다."""
+    # 캐시 사전 저장: 005930 → 00126380
+    cache_data = {"005930": "00126380"}
+    dart_fetcher.CACHE_PATH.write_text(json.dumps(cache_data))
+    dart_fetcher.CACHE_PATH.touch()
+
+    with patch("httpx.AsyncClient") as mock_client_cls:
+        mock_client = AsyncMock()
+        mock_client_cls.return_value.__aenter__.return_value = mock_client
+
+        list_resp = AsyncMock()
+        list_resp.json = MagicMock(return_value=dart_list_response)
+        list_resp.raise_for_status = MagicMock()
+
+        mock_client.get.return_value = list_resp
+
+        items = await dart_fetcher.fetch("005930")
+
+    # list.json 조회 1회만 (company.json corp_code 조회 없음)
+    assert mock_client.get.call_count == 1
+    assert len(items) > 0

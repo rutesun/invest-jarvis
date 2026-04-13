@@ -129,3 +129,144 @@ class SECDisclosureFetcher:
         self.CACHE_PATH.write_text(
             json.dumps(mapping, ensure_ascii=False), encoding="utf-8"
         )
+
+
+_DART_API_BASE = "https://opendart.fss.or.kr/api"
+
+# DART 보고서명 키워드 가중치 테이블
+_DART_KEYWORD_WEIGHTS: dict[str, float] = {
+    # 고신호 이벤트: 각 키워드 +1.0
+    "계약": 1.0,
+    "수주": 1.0,
+    "실적": 1.0,
+    "매출": 1.0,
+    "영업이익": 1.0,
+    "투자": 1.0,
+    "유상증자": 1.0,
+    "자기주식": 1.0,
+    "소송": 1.0,
+    "내부자매도": 1.0,
+    # 정기 보고서 (저신호): -1.0
+    "사업보고서": -1.0,
+    "분기보고서": -1.0,
+    "반기보고서": -1.0,
+    # 금액 단위 포함 시 소폭 가산
+    "조": 0.5,
+    "억원": 0.5,
+}
+
+_DART_SCORE_THRESHOLD = 1.0
+_DART_MAX_RESULTS = 5
+
+
+def _score_dart_report(report_nm: str) -> float:
+    """DART 보고서명으로 관련도 점수 계산."""
+    score = 0.0
+    for keyword, weight in _DART_KEYWORD_WEIGHTS.items():
+        if keyword in report_nm:
+            score += weight
+    return score
+
+
+def _fmt_dart_date(rcept_dt: str) -> str:
+    """DART 날짜 형식 YYYYMMDD → YYYY-MM-DD 변환."""
+    if len(rcept_dt) == 8:
+        return f"{rcept_dt[:4]}-{rcept_dt[4:6]}-{rcept_dt[6:]}"
+    return rcept_dt
+
+
+class DARTDisclosureFetcher:
+    """OpenDART API로 한국주식 공시를 키워드 필터링하여 조회한다.
+
+    corp_code 조회 결과는 파일 캐시(6시간 TTL)에 저장해
+    같은 종목을 반복 분석할 때 불필요한 API 호출을 방지한다.
+    """
+
+    CACHE_PATH = Path("data/cache/dart_corp_code_cache.json")
+    CACHE_TTL = 6 * 3600  # 6시간
+
+    def __init__(self, api_key: str) -> None:
+        self.api_key = api_key
+
+    async def fetch(self, stock_code: str) -> list[DisclosureItem]:
+        """6자리 KRX 종목코드로 최근 3개월 스코어링된 공시 최대 5건을 반환한다."""
+        corp_code = await self._get_corp_code(stock_code)
+        if corp_code is None:
+            return []
+
+        end_date = datetime.now().strftime("%Y%m%d")
+        start_date = (datetime.now() - timedelta(days=90)).strftime("%Y%m%d")
+
+        params = {
+            "crtfc_key": self.api_key,
+            "corp_code": corp_code,
+            "bgn_de": start_date,
+            "end_de": end_date,
+            "page_count": 20,
+        }
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(f"{_DART_API_BASE}/list.json", params=params)
+            resp.raise_for_status()
+            data = resp.json()
+
+        if data.get("status") != "000":
+            return []
+
+        scored: list[tuple[float, DisclosureItem]] = []
+        for item in data.get("list", []):
+            report_nm = item.get("report_nm", "")
+            score = _score_dart_report(report_nm)
+            if score < _DART_SCORE_THRESHOLD:
+                continue
+            rcp_no = item.get("rcp_no", "")
+            disclosure = DisclosureItem(
+                form_type="DART",
+                date=_fmt_dart_date(item.get("rcept_dt", "")),
+                description=report_nm,
+                url=f"https://dart.fss.or.kr/dsaf001/main.do?rcpNo={rcp_no}",
+                score=score,
+            )
+            scored.append((score, disclosure))
+
+        scored.sort(key=lambda x: x[0], reverse=True)
+        return [item for _, item in scored[:_DART_MAX_RESULTS]]
+
+    async def _get_corp_code(self, stock_code: str) -> str | None:
+        """KRX 종목코드로 DART 내부 corp_code를 조회한다. 결과를 파일 캐시에 저장한다."""
+        # 캐시 확인
+        cache = self._load_cache()
+        if stock_code in cache:
+            return cache[stock_code]
+
+        params = {"crtfc_key": self.api_key, "stock_code": stock_code}
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(f"{_DART_API_BASE}/company.json", params=params)
+            if resp.status_code != 200:
+                return None
+            data = resp.json()
+            if data.get("status") != "000":
+                return None
+            corp_code = data.get("corp_code")
+
+        if corp_code:
+            cache[stock_code] = corp_code
+            self._save_cache(cache)
+
+        return corp_code
+
+    def _load_cache(self) -> dict[str, str]:
+        if not self.CACHE_PATH.exists():
+            return {}
+        try:
+            mtime = self.CACHE_PATH.stat().st_mtime
+            if time.time() - mtime > self.CACHE_TTL:
+                return {}
+            return json.loads(self.CACHE_PATH.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+
+    def _save_cache(self, mapping: dict[str, str]) -> None:
+        self.CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        self.CACHE_PATH.write_text(
+            json.dumps(mapping, ensure_ascii=False), encoding="utf-8"
+        )
