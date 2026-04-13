@@ -520,6 +520,143 @@ def analyze(
         raise typer.Exit(1)
 
 
+def create_daily_report_pipeline(provider: str):
+    """일일 리포트 파이프라인의 의존성을 조립하여 반환한다.
+
+    테스트 및 스크립트에서 재사용 가능하도록 팩토리 패턴으로 분리.
+    """
+    import logging
+    from src.pipelines.daily_report_v2 import DailyReportV2Pipeline
+    from src.pipelines.report_stages.ingest import IngestStage
+    from src.pipelines.report_stages.map_issues import MapStage
+    from src.pipelines.report_stages.shuffle_filter import ShuffleStage
+    from src.pipelines.report_stages.catalyst import CatalystStage
+    from src.pipelines.report_stages.synthesize import SynthesizeStage
+    from src.pipelines.report_stages.theme_config import ThemeConfig
+
+    logger = logging.getLogger(__name__)
+
+    api_key_env = "OPENAI_API_KEY" if provider == "openai" else "ANTHROPIC_API_KEY"
+    api_key = os.getenv(api_key_env)
+    if not api_key:
+        raise ValueError(f"Missing {api_key_env} environment variable")
+
+    map_llm = LLMProvider.create(provider="openai", model="gpt-4o-mini")
+    catalyst_llm = LLMProvider.create(provider="openai", model="gpt-4o")
+    synthesize_llm = LLMProvider.create(provider=provider)
+
+    macro_tool = MacroTool()
+    news_tool = NewsTool()
+    ticker_resolver = TickerResolver()
+    theme_config = ThemeConfig(Path("themes.yaml"))
+
+    kis_key = os.getenv("KIS_APP_KEY")
+    kis_secret = os.getenv("KIS_APP_SECRET")
+    if not (kis_key and kis_secret):
+        logger.warning(
+            "KIS credentials 설정되지 않았습니다. "
+            "한국주식 수급 데이터 및 모멘텀 랭킹이 제외됩니다."
+        )
+        kis_provider = None
+    else:
+        kis_provider = KISProvider(app_key=kis_key, app_secret=kis_secret)
+
+    class StubTelegramLoader:
+        def load(self):
+            return []
+
+    telegram_loader = StubTelegramLoader()
+    logger.warning(
+        "Telegram 로더가 스텁 모드입니다. "
+        "telegram-collection 구현 완료 후 실제 데이터를 사용하려면 코드를 업데이트하세요."
+    )
+
+    ingest_stage = IngestStage(
+        macro_tool=macro_tool,
+        news_tool=news_tool,
+        kis_provider=kis_provider,
+        telegram_loader=telegram_loader,
+    )
+    map_stage = MapStage(
+        llm=map_llm,
+        known_themes=theme_config.as_prompt_string(),
+    )
+    shuffle_stage = ShuffleStage(
+        ticker_resolver=ticker_resolver,
+        merge_llm=map_llm,
+        known_themes=theme_config.load(),
+    )
+    catalyst_stage = CatalystStage(
+        llm=catalyst_llm,
+        news_tool=news_tool,
+        ticker_resolver=ticker_resolver,
+    )
+    synthesize_stage = SynthesizeStage(llm=synthesize_llm)
+
+    return DailyReportV2Pipeline(
+        ingest_stage=ingest_stage,
+        map_stage=map_stage,
+        shuffle_stage=shuffle_stage,
+        catalyst_stage=catalyst_stage,
+        synthesize_stage=synthesize_stage,
+    )
+
+
+async def run_daily_report_v2(
+    provider: str = "openai",
+    stage: str | None = None,
+    from_stage: str | None = None,
+    no_save: bool = False,
+) -> dict:
+    """V2 일일 리포트 파이프라인을 실행한다."""
+    from datetime import datetime
+
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    cache_dir = Path(".cache/report") / date_str
+    cache_dir.mkdir(parents=True, exist_ok=True)
+
+    pipeline = create_daily_report_pipeline(provider)
+    report = await pipeline.run(stage=stage, from_stage=from_stage)
+
+    result = {"report": report, "no_save": no_save}
+
+    if report and not no_save and not stage:
+        month_str = datetime.now().strftime("%Y-%m")
+        report_dir = Path("reports") / month_str
+        report_dir.mkdir(parents=True, exist_ok=True)
+        report_path = report_dir / f"{date_str}.md"
+        md_content = format_daily_report_v2(report)
+        report_path.write_text(md_content, encoding="utf-8")
+        result["saved_to"] = str(report_path)
+
+    return result
+
+
+def format_daily_report_v2(report) -> str:
+    """DailyReport를 마크다운 문자열로 포맷팅한다."""
+    from src.llm.daily_report_models import DailyReport
+
+    if not isinstance(report, DailyReport):
+        return "리포트 생성에 실패했습니다."
+
+    lines = [
+        f"# Daily Market Report — {report.date}",
+        "",
+        "## 시장 온도",
+        "",
+        report.market_pulse,
+        "",
+        "## 시장 내러티브 & 주목 테마",
+        "",
+        report.narrative_and_themes,
+        "",
+        "## 주도주 분석",
+        "",
+        report.featured_analysis,
+    ]
+    return "\n".join(lines)
+
+
 async def run_daily_report(tickers: list[str], provider: str) -> dict:
     """Run daily report pipeline."""
     api_key_env = "OPENAI_API_KEY" if provider == "openai" else "ANTHROPIC_API_KEY"
@@ -609,30 +746,33 @@ def format_daily_report_output(result: dict) -> str:
 
 @app.command()
 def report(
-    tickers: str = typer.Option(
-        "AAPL,MSFT,NVDA",
-        "--tickers",
-        "-t",
-        help="Comma-separated ticker symbols",
-    ),
     provider: Literal["openai", "anthropic"] = typer.Option(
         "openai", "--provider", "-p", help="LLM provider"
     ),
+    stage: str = typer.Option(None, "--stage", help="단일 스테이지 실행 (ingest|map|shuffle|catalyst|synthesize)"),
+    from_stage: str = typer.Option(None, "--from", help="해당 스테이지부터 끝까지 실행"),
+    no_save: bool = typer.Option(False, "--no-save", help="리포트 파일 저장 생략"),
 ):
-    """Daily market report (macro snapshot + ticker analysis)."""
-    ticker_list = [t.strip() for t in tickers.split(",")]
-    console.print(f"[bold]Generating daily report for {len(ticker_list)} tickers...[/bold]\n")
+    """일일 시장 리포트 (V2: 테마 중심 내러티브)"""
+    console.print("\n[bold]Daily Market Report V2[/bold]\n")
 
-    try:
-        result = asyncio.run(run_daily_report(ticker_list, provider))
-        output = format_daily_report_output(result)
-        console.print(Markdown(output))
-    except ValueError as e:
-        console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(1)
-    except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(1)
+    result = asyncio.run(run_daily_report_v2(
+        provider=provider,
+        stage=stage,
+        from_stage=from_stage,
+        no_save=no_save,
+    ))
+
+    report_obj = result.get("report")
+    if report_obj:
+        md = format_daily_report_v2(report_obj)
+        console.print(Markdown(md))
+        if "saved_to" in result:
+            console.print(f"\n[dim]저장 위치: {result['saved_to']}[/dim]")
+    elif stage:
+        console.print(f"[green]스테이지 '{stage}' 완료. .cache/report/ 에서 결과를 확인하세요.[/green]")
+    else:
+        console.print("[red]리포트 생성에 실패했습니다.[/red]")
 
 
 async def run_portfolio_monitoring() -> dict:
