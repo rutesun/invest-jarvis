@@ -491,6 +491,53 @@ def format_deep_dive_output(result: dict) -> str:
         if news_analysis.key_themes:
             output += "**Key Themes**: " + ", ".join(news_analysis.key_themes) + "\n\n"
 
+    # ── 신규 섹션 ──────────────────────────────────────────────────────────────
+
+    disclosure = result.get("disclosure")
+    if disclosure:
+        output += "## 공시 분석\n\n"
+        output += f"최근 3개월 주요 공시 {len(disclosure)}건:\n\n"
+        for i, item in enumerate(disclosure, 1):
+            output += f"{i}. **[{item.form_type}] {item.description}** ({item.date})\n"
+            output += f"   → [공시 원문 보기]({item.url})\n\n"
+
+    flow = result.get("flow")
+    if flow:
+        output += "## 수급 동향\n\n"
+        output += "| 투자자 | 1일 | 5일 | 10일 | 10일 순매수 일수 |\n"
+        output += "|--------|-----|-----|------|------------------|\n"
+        output += (
+            f"| 외국인 "
+            f"| {flow.foreign_direction_1d} ({flow.foreign_net_1d:+,}) "
+            f"| {flow.foreign_direction_5d} ({flow.foreign_net_5d:+,}) "
+            f"| {flow.foreign_direction_10d} ({flow.foreign_net_10d:+,}) "
+            f"| {flow.foreign_buy_days}/10일 |\n"
+        )
+        output += (
+            f"| 기관 "
+            f"| {flow.institution_direction_1d} ({flow.institution_net_1d:+,}) "
+            f"| {flow.institution_direction_5d} ({flow.institution_net_5d:+,}) "
+            f"| {flow.institution_direction_10d} ({flow.institution_net_10d:+,}) "
+            f"| {flow.institution_buy_days}/10일 |\n"
+        )
+        output += "\n"
+
+    integrated = result.get("integrated_analysis")
+    if integrated:
+        output += "## 종합 인사이트\n\n"
+        output += f"**투자 추천**: {integrated.recommendation}\n\n"
+        output += f"**액션**: {integrated.action_summary}\n\n"
+        if integrated.rationale:
+            output += "**근거**:\n"
+            for r in integrated.rationale:
+                output += f"- {r}\n"
+            output += "\n"
+        if integrated.risks:
+            output += "**리스크**:\n"
+            for r in integrated.risks:
+                output += f"- {r}\n"
+            output += "\n"
+
     return output
 
 
