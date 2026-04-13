@@ -34,6 +34,8 @@ OPENAI_API_KEY=...
 ANTHROPIC_API_KEY=...       # optional, for --provider anthropic
 KIS_APP_KEY=...             # Korean stocks (KIS OpenAPI)
 KIS_APP_SECRET=...
+TELEGRAM_API_ID=...         # Telegram message collection
+TELEGRAM_API_HASH=...
 ```
 
 **Package manager**: Always use `uv`, never `pip` directly.
@@ -48,7 +50,7 @@ Providers → Tools → Pipelines → CLI (src/cli/main.py)
 
 | Layer | Location | Role |
 |-------|----------|------|
-| **Providers** | `src/providers/` | Raw data fetching (yfinance, KIS API, Naver) |
+| **Providers** | `src/providers/` | Raw data fetching (yfinance, KIS API, Naver, Telegram) |
 | **Tools** | `src/tools/` | Domain logic (technical analysis, macro, news, screener) |
 | **Pipelines** | `src/pipelines/` | Orchestration, combines tools into workflows |
 | **LLM** | `src/llm/` | OpenAI/Anthropic adapters, report generation |
@@ -69,6 +71,8 @@ uv run jarvis analyze AAPL      # 심층 분석 (기술 + 뉴스 + LLM)
 uv run jarvis report            # 일일 시장 리포트
 uv run jarvis portfolio         # 포트폴리오 모니터링 (KIS API)
 uv run jarvis screen            # 시장 스크리너
+uv run jarvis telegram fetch    # 텔레그램 채널 메시지 수집
+uv run jarvis telegram catch-up # 누락분 보충 수집
 ```
 
 ## Documentation Rules

@@ -60,7 +60,19 @@ jarvis cache clear         # 캐시 전체 삭제
 - 캐시는 ~/.cache/invest-jarvis/user_mappings.yaml에 저장
 - 200개 항목 제한, 6개월 후 자동 만료
 
-### 6. Claude Code Skills
+### 6. 텔레그램 채널 수집
+```bash
+jarvis telegram fetch               # 전날 메시지 수집
+jarvis telegram fetch 2026-04-12    # 특정 날짜 수집
+jarvis telegram catch-up            # 누락분 보충 수집
+```
+- Telegram 채널 메시지 자동 수집
+- include/exclude 정규식 필터링
+- 날짜별 CSV 저장 (중복 방지)
+- catch-up 모드로 누락분 자동 보충
+- 사진/PDF 자동 다운로드
+
+### 7. Claude Code Skills
 ```
 /invest-check AAPL
 /invest-analyze AAPL
@@ -115,6 +127,10 @@ ANTHROPIC_API_KEY=sk-ant-...
 KIS_APP_KEY=...
 KIS_APP_SECRET=...
 KIS_ACCOUNT_NO=...
+
+# Telegram API (telegram 명령어에 필요)
+TELEGRAM_API_ID=...
+TELEGRAM_API_HASH=...
 ```
 
 ### 2. 전략 설정 (선택)
