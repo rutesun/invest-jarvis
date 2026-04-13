@@ -207,6 +207,101 @@ uv run jarvis cache clear --yes  # 확인 없이 초기화
 
 ---
 
+### 7. telegram - 텔레그램 채널 수집
+
+**특징:**
+- Telethon 기반 채널 메시지 수집
+- include/exclude 정규식 필터링
+- 날짜별 CSV 저장 (중복 방지)
+- catch-up 모드로 누락분 자동 보충
+
+**요구사항:**
+- `TELEGRAM_API_ID`, `TELEGRAM_API_HASH` 필요
+- `config.yaml`에 `telegram.channels` 설정 필요
+- 첫 실행 시 Telegram 인증 (전화번호/코드) 필요
+
+**사용법:**
+```bash
+# 전날 메시지 수집 (기본)
+uv run jarvis telegram fetch
+
+# 특정 날짜 수집
+uv run jarvis telegram fetch 2026-04-12
+
+# 누락분 보충 수집
+uv run jarvis telegram catch-up
+
+# 커스텀 설정 파일
+uv run jarvis telegram fetch --config my_config.yaml
+```
+
+**데이터 저장:**
+- CSV: `data/YYYY-MM/YYYY-MM-DD-{channel}.csv`
+- 상태: `data/monitor_state.json`
+
+---
+
+### 첫 실행 가이드
+
+#### 1. Telegram API 자격증명 발급
+
+1. https://my.telegram.org/apps 접속
+2. 로그인 후 "Create application" 클릭
+3. `api_id`와 `api_hash`를 `.env`에 추가:
+
+```bash
+TELEGRAM_API_ID=12345678
+TELEGRAM_API_HASH=abcdef1234567890abcdef1234567890
+```
+
+#### 2. 첫 실행 (인증)
+
+**최초 1회만 필요**합니다:
+
+```bash
+$ uv run jarvis telegram fetch
+
+Please enter your phone (or bot token): +821012345678  # 국가코드 포함
+Please enter the code you received: 12345              # Telegram 앱에서 수신한 코드
+```
+
+인증 완료 후 `anon.session` 파일이 생성되며, **다음부터는 자동 로그인**됩니다.
+
+#### 3. 채널 설정
+
+`config.yaml`의 `telegram.channels`에 수집할 채널 추가:
+
+```yaml
+telegram:
+  channels:
+    - "channel_username"      # 공개 채널
+    - "1234567890"            # 비공개 채널 (ID)
+    - id: "filtered_channel"  # 필터 적용
+      include:
+        - "Breaking|Urgent"   # 정규식
+      exclude:
+        - "(?i)ad|광고"
+  output_dir: "data"
+```
+
+---
+
+### 문제 해결
+
+**Q: 전화번호 입력 후 "Phone number invalid" 에러**  
+A: 국가코드를 포함하세요 (한국: `+82`, 미국: `+1`)
+
+**Q: 세션 파일 위치 변경?**  
+A: `.env`에 `TELETHON_SESSION_NAME=my_session` 추가
+
+**Q: 채널 ID를 모르겠어요**  
+A: Telegram 앱에서 채널 정보 → "ID" 확인, 또는 `@channel_username` 사용
+
+**Q: 비공개 채널이 수집 안 됨**  
+A: 해당 Telegram 계정이 채널 멤버여야 수집 가능합니다
+
+---
+
 ## 환경 변수 설정
 
 ### LLM API 키 (.env)

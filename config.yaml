@@ -10,3 +10,19 @@ cache:
   quote_ttl: 60        # 1분
   history_ttl: 300     # 5분
   indicators_ttl: 300  # 5분
+
+telegram:
+  channels:
+    - "ked_epic_ai"
+    - "kiwoom_semibat"
+    - "kwusa"
+    - "jeilstock"
+    - "growthresearch"
+    - "hana_us_stock"
+    - "HANAStrategy"
+    - "HanaResearch"
+    - "shinhanresearch"
+    - "NeulBom"
+    - "Brain_And_Body_Research"
+    - "shsmallcap"
+  output_dir: "data"

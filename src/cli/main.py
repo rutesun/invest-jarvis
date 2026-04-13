@@ -784,5 +784,88 @@ def cache_clear(
     console.print("[green]✓ Cache cleared successfully.[/green]")
 
 
+# --- Telegram 서브커맨드 ---
+
+telegram_app = typer.Typer(help="Telegram 채널 메시지 수집")
+app.add_typer(telegram_app, name="telegram")
+
+
+async def run_telegram_fetch(date_str: str, config_path: str) -> dict:
+    """지정 날짜의 텔레그램 메시지를 수집한다."""
+    from src.pipelines.telegram_pipeline import TelegramPipeline
+
+    try:
+        pipeline = await TelegramPipeline.create(Path(config_path))
+        try:
+            total = await pipeline.fetch(date_str)
+            return {"success": True, "total": total, "date": date_str}
+        finally:
+            await pipeline.close()
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+async def run_telegram_catchup(config_path: str) -> dict:
+    """마지막 수집 이후 누락분을 보충한다."""
+    from src.pipelines.telegram_pipeline import TelegramPipeline
+
+    try:
+        pipeline = await TelegramPipeline.create(Path(config_path))
+        try:
+            total = await pipeline.catch_up()
+            return {"success": True, "total": total}
+        finally:
+            await pipeline.close()
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@telegram_app.command("fetch")
+def telegram_fetch(
+    date: str = typer.Argument(
+        None,
+        help="수집할 날짜 (YYYY-MM-DD). 미지정 시 전날.",
+    ),
+    config_path: str = typer.Option("config.yaml", "--config", "-c", help="config.yaml 경로"),
+):
+    """특정 날짜의 텔레그램 메시지를 일괄 수집한다."""
+    from datetime import datetime as dt, timedelta
+
+    if date is None:
+        date = (dt.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+
+    console.print(f"[bold]Telegram 메시지 수집 중... (날짜: {date})[/bold]\n")
+
+    try:
+        result = asyncio.run(run_telegram_fetch(date, config_path))
+        if result["success"]:
+            console.print(f"[green]완료: {result['total']}건 수집됨 ({result['date']})[/green]")
+        else:
+            console.print(f"[red]오류: {result['error']}[/red]")
+            raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[red]오류: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@telegram_app.command("catch-up")
+def telegram_catchup(
+    config_path: str = typer.Option("config.yaml", "--config", "-c", help="config.yaml 경로"),
+):
+    """마지막 수집 이후 누락분을 보충 수집한다."""
+    console.print("[bold]Telegram catch-up 수집 중...[/bold]\n")
+
+    try:
+        result = asyncio.run(run_telegram_catchup(config_path))
+        if result["success"]:
+            console.print(f"[green]완료: {result['total']}건 보충 수집됨[/green]")
+        else:
+            console.print(f"[red]오류: {result['error']}[/red]")
+            raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[red]오류: {e}[/red]")
+        raise typer.Exit(1)
+
+
 if __name__ == "__main__":
     app()
