@@ -1346,36 +1346,102 @@ uv run pytest tests/pipelines/test_deep_dive.py::test_deep_dive_includes_disclos
 ```
 예상: `TypeError: DeepDivePipeline.__init__() got an unexpected keyword argument 'disclosure_tool'`
 
-- [ ] **Step 3: `DeepDivePipeline` 전체 교체**
+- [ ] **Step 3: `DeepDivePipeline` 최소 변경**
 
-`src/pipelines/deep_dive.py` 전체를 아래로 교체:
+기존 파일의 인터페이스를 유지하면서 필요한 부분만 수정한다. 전체 파일 교체 대신 세 곳만 Edit:
+
+- [ ] **Step 3-1: `__init__` 파라미터에 optional 툴 추가**
+
+파일 상단에 신규 임포트 추가:
 
 ```python
-import asyncio
-import logging
-from langchain_core.language_models import BaseChatModel
-from src.tools.technical.tool import TechnicalAnalysisTool
-from src.tools.news import NewsTool, NewsArticle
-from src.tools.fundamental import FundamentalTool, FundamentalSnapshot
 from src.tools.disclosure import DisclosureTool, DisclosureItem, is_korean_ticker, extract_kr_code
 from src.tools.flow import FlowTool, InvestorFlow
-from src.tools.technical.models import TechnicalResult
-from src.llm import analyzer
-from src.llm.analyzer import generate_fundamental_summary
-from src.llm.models import (
-    TechnicalSummaryInput,
-    TechnicalSummaryOutput,
-    NewsAnalysisInput,
-    NewsAnalysisOutput,
-    FundamentalSummaryInput,
-    FundamentalSummaryOutput,
-    IntegratedAnalysisInput,
-    IntegratedAnalysisOutput,
-)
+from src.llm.models import IntegratedAnalysisInput, IntegratedAnalysisOutput
+```
 
-logger = logging.getLogger(__name__)
+`DeepDivePipeline.__init__()` 시그니처에 optional 파라미터 추가:
 
+```python
+def __init__(
+    self,
+    technical_tool: TechnicalAnalysisTool,
+    news_tool: NewsTool,
+    llm: BaseChatModel,
+    fundamental_tool: FundamentalTool | None = None,
+    disclosure_tool: DisclosureTool | None = None,  # 신규
+    flow_tool: FlowTool | None = None,              # 신규
+):
+    self.technical_tool = technical_tool
+    self.news_tool = news_tool
+    self.llm = llm
+    self.fundamental_tool = fundamental_tool
+    self.disclosure_tool = disclosure_tool  # 신규
+    self.flow_tool = flow_tool              # 신규
+```
 
+- [ ] **Step 3-2: `run()` 메서드에 선택적 툴 병렬 실행 추가**
+
+`run()` 메서드 중간에 뉴스 fetching 다음, LLM 분석 이전 위치에 삽입:
+
+```python
+# 선택적 툴 병렬 실행
+optional_coros = []
+optional_keys: list[str] = []
+
+if self.disclosure_tool:
+    optional_coros.append(self.disclosure_tool.execute(ticker))
+    optional_keys.append("disclosure")
+
+if self.flow_tool and is_korean_ticker(ticker):
+    optional_coros.append(self.flow_tool.execute(extract_kr_code(ticker)))
+    optional_keys.append("flow")
+
+optional_data: dict = {}
+if optional_coros:
+    opt_results = await asyncio.gather(*optional_coros, return_exceptions=True)
+    for key, res in zip(optional_keys, opt_results):
+        if not isinstance(res, Exception) and res.success:
+            optional_data[key] = res.data
+        else:
+            logger.warning("선택적 툴 '%s' 실패: %s", key, res)
+            optional_data[key] = None
+
+disclosure_items: list[DisclosureItem] | None = optional_data.get("disclosure")
+flow_data: InvestorFlow | None = optional_data.get("flow")
+```
+
+- [ ] **Step 3-3: integrated_analysis 생성 및 반환 dict 확장**
+
+`run()` 메서드의 return 문 이전에 종합 분석 로직 추가:
+
+```python
+# 공시 또는 수급 데이터가 있을 때만 종합 인사이트 생성
+integrated_analysis = None
+if disclosure_items is not None or flow_data is not None:
+    integrated_analysis = await self._generate_integrated_analysis(
+        ticker=ticker,
+        technical_summary=technical_summary,
+        fundamental_summary=fundamental_summary,
+        disclosure_items=disclosure_items,
+        flow_data=flow_data,
+    )
+```
+
+return dict에 세 키 추가:
+
+```python
+return {
+    # ... 기존 키들 ...
+    "disclosure": disclosure_items,
+    "flow": flow_data,
+    "integrated_analysis": integrated_analysis,
+}
+```
+
+`_generate_integrated_analysis()` 헬퍼 메서드 추가:
+
+```python
 def _format_flow_for_llm(flow: InvestorFlow) -> str:
     """InvestorFlow를 LLM 컨텍스트용 마크다운 테이블 문자열로 변환."""
     lines = [
@@ -1399,240 +1465,25 @@ def _format_flow_for_llm(flow: InvestorFlow) -> str:
     return "\n".join(lines)
 
 
-class DeepDivePipeline:
-    """LLM 통합 심층 분석 파이프라인."""
-
-    def __init__(
-        self,
-        technical_tool: TechnicalAnalysisTool,
-        news_tool: NewsTool,
-        llm: BaseChatModel,
-        fundamental_tool: FundamentalTool | None = None,
-        disclosure_tool: DisclosureTool | None = None,
-        flow_tool: FlowTool | None = None,
-    ):
-        self.technical_tool = technical_tool
-        self.news_tool = news_tool
-        self.llm = llm
-        self.fundamental_tool = fundamental_tool
-        self.disclosure_tool = disclosure_tool
-        self.flow_tool = flow_tool
-
-    async def run(self, ticker: str) -> dict:
-        """티커에 대한 심층 분석을 실행한다.
-
-        Returns:
-            dict 키:
-                - ticker: str
-                - technical: TechnicalResult
-                - technical_summary: TechnicalSummaryOutput
-                - news: list[NewsArticle]
-                - news_analysis: NewsAnalysisOutput | None
-                - fundamental: FundamentalSnapshot | None
-                - fundamental_summary: FundamentalSummaryOutput | None
-                - disclosure: list[DisclosureItem] | None
-                - flow: InvestorFlow | None
-                - integrated_analysis: IntegratedAnalysisOutput | None
-        """
-        # 기술적 분석 — 필수 (실패 시 예외)
-        tech_result = await self.technical_tool.execute(ticker)
-        if not tech_result.success:
-            raise RuntimeError(f"Technical analysis failed: {tech_result.error}")
-        technical_data: TechnicalResult = tech_result.data
-
-        # 뉴스 — 필수
-        news_result = await self.news_tool.execute(ticker, limit=10)
-        if not news_result.success:
-            raise RuntimeError(f"News fetch failed: {news_result.error}")
-        news_articles: list[NewsArticle] = news_result.data
-
-        # 선택적 툴 병렬 실행
-        optional_coros = []
-        optional_keys: list[str] = []
-
-        if self.disclosure_tool:
-            optional_coros.append(self.disclosure_tool.execute(ticker))
-            optional_keys.append("disclosure")
-
-        if self.flow_tool and is_korean_ticker(ticker):
-            optional_coros.append(self.flow_tool.execute(extract_kr_code(ticker)))
-            optional_keys.append("flow")
-
-        optional_data: dict = {}
-        if optional_coros:
-            opt_results = await asyncio.gather(*optional_coros, return_exceptions=True)
-            for key, res in zip(optional_keys, opt_results):
-                if not isinstance(res, Exception) and res.success:
-                    optional_data[key] = res.data
-                else:
-                    logger.warning("선택적 툴 '%s' 실패: %s", key, res)
-                    optional_data[key] = None
-
-        disclosure_items: list[DisclosureItem] | None = optional_data.get("disclosure")
-        flow_data: InvestorFlow | None = optional_data.get("flow")
-
-        # LLM 분석
-        technical_summary = await self._generate_technical_summary(technical_data)
-
-        news_analysis = None
-        if news_articles:
-            news_analysis = await self._analyze_news(ticker, news_articles)
-
-        fundamental_data = None
-        fundamental_summary = None
-        if self.fundamental_tool:
-            fund_result = await self.fundamental_tool.execute(ticker)
-            if fund_result.success:
-                fundamental_data = fund_result.data
-                fundamental_summary = await self._generate_fundamental_summary(
-                    ticker, fundamental_data
-                )
-            else:
-                logger.warning("기본적 분석 실패 %s: %s", ticker, fund_result.error)
-
-        # 공시 또는 수급 데이터가 있을 때만 종합 인사이트 생성
-        integrated_analysis = None
-        if disclosure_items is not None or flow_data is not None:
-            integrated_analysis = await self._generate_integrated_analysis(
-                ticker=ticker,
-                technical_summary=technical_summary,
-                fundamental_summary=fundamental_summary,
-                disclosure_items=disclosure_items,
-                flow_data=flow_data,
-            )
-
-        return {
-            "ticker": ticker,
-            "technical": technical_data,
-            "technical_summary": technical_summary,
-            "news": news_articles,
-            "news_analysis": news_analysis,
-            "fundamental": fundamental_data,
-            "fundamental_summary": fundamental_summary,
-            "disclosure": disclosure_items,
-            "flow": flow_data,
-            "integrated_analysis": integrated_analysis,
-        }
-
-    async def _generate_technical_summary(
-        self, technical_data: TechnicalResult
-    ) -> TechnicalSummaryOutput:
-        if technical_data.strategies:
-            strategies = [
-                {
-                    "name": s.name,
-                    "status": s.status,
-                    "confidence": s.confidence,
-                    "signals": s.signals,
-                    "evidence": s.evidence,
-                    "metrics": s.metrics,
-                }
-                for s in technical_data.strategies
-            ]
-        else:
-            strategies = [
-                {
-                    "name": name,
-                    "status": "N/A",
-                    "confidence": 0,
-                    "signals": comp["signals"],
-                    "evidence": comp["evidence"],
-                    "metrics": comp["metrics"],
-                }
-                for name, comp in technical_data.components.items()
-            ]
-
-        snapshot = technical_data.indicators or technical_data.snapshot
-        indicators = {}
-        if snapshot.sma_20 is not None:
-            indicators["sma_20"] = snapshot.sma_20
-        if snapshot.sma_50 is not None:
-            indicators["sma_50"] = snapshot.sma_50
-        if snapshot.rsi is not None:
-            indicators["rsi"] = snapshot.rsi
-        if snapshot.macd is not None:
-            indicators["macd"] = snapshot.macd
-
-        input_data = TechnicalSummaryInput(
-            ticker=technical_data.ticker or "UNKNOWN",
-            price=snapshot.price,
-            change_pct=snapshot.change_pct,
-            strategies=strategies,
-            indicators=indicators,
-        )
-        return await analyzer.generate_technical_summary(input_data, self.llm)
-
-    async def _analyze_news(
-        self, ticker: str, news_articles: list[NewsArticle]
-    ) -> NewsAnalysisOutput:
-        news_data = [
-            {
-                "title": article.title,
-                "published": article.published,
-                "summary": article.summary,
-                "url": article.url,
-            }
-            for article in news_articles
-        ]
-        input_data = NewsAnalysisInput(
-            ticker=ticker,
-            company_name=ticker,
-            news=news_data,
-        )
-        return await analyzer.analyze_news(input_data, self.llm)
-
-    async def _generate_fundamental_summary(
-        self, ticker: str, fundamental_data: FundamentalSnapshot
-    ) -> FundamentalSummaryOutput:
-        input_data = FundamentalSummaryInput(
-            ticker=ticker,
-            sector=fundamental_data.sector,
-            industry=fundamental_data.industry,
-            pe_ratio=fundamental_data.pe_ratio,
-            forward_pe=fundamental_data.forward_pe,
-            peg_ratio=fundamental_data.peg_ratio,
-            ev_ebitda=fundamental_data.ev_ebitda,
-            ps_ratio=fundamental_data.ps_ratio,
-            roe=fundamental_data.roe,
-            revenue_growth=fundamental_data.revenue_growth,
-            earnings_growth=fundamental_data.earnings_growth,
-            debt_to_equity=fundamental_data.debt_to_equity,
-            free_cash_flow=fundamental_data.free_cash_flow,
-            fcf_yield=fundamental_data.fcf_yield,
-            gross_margin=fundamental_data.gross_margin,
-            operating_margin=fundamental_data.operating_margin,
-        )
-        return await generate_fundamental_summary(input_data, self.llm)
-
-    async def _generate_integrated_analysis(
-        self,
-        ticker: str,
-        technical_summary: TechnicalSummaryOutput,
-        fundamental_summary: FundamentalSummaryOutput | None,
-        disclosure_items: list[DisclosureItem] | None,
-        flow_data: InvestorFlow | None,
-    ) -> IntegratedAnalysisOutput:
-        input_data = IntegratedAnalysisInput(
-            ticker=ticker,
-            technical_recommendation=technical_summary.recommendation,
-            technical_rationale=technical_summary.rationale,
-            fundamental_valuation=(
-                fundamental_summary.valuation_assessment if fundamental_summary else None
-            ),
-            disclosure_items=[
-                {
-                    "form_type": d.form_type,
-                    "date": d.date,
-                    "description": d.description,
-                    "url": d.url,
-                }
-                for d in disclosure_items
-            ]
-            if disclosure_items
-            else [],
-            flow_summary=_format_flow_for_llm(flow_data) if flow_data else None,
-        )
-        return await analyzer.generate_integrated_analysis(input_data, self.llm)
+async def _generate_integrated_analysis(
+    self,
+    ticker: str,
+    technical_summary: TechnicalSummaryOutput,
+    fundamental_summary: FundamentalSummaryOutput | None,
+    disclosure_items: list[DisclosureItem] | None,
+    flow_data: InvestorFlow | None,
+) -> IntegratedAnalysisOutput:
+    input_data = IntegratedAnalysisInput(
+        ticker=ticker,
+        technical_recommendation=technical_summary.recommendation,
+        technical_rationale=technical_summary.rationale,
+        fundamental_valuation=(
+            fundamental_summary.valuation_assessment if fundamental_summary else None
+        ),
+        disclosure_items=disclosure_items or [],  # 강타입: 직접 전달
+        flow_summary=_format_flow_for_llm(flow_data) if flow_data else None,
+    )
+    return await analyzer.generate_integrated_analysis(input_data, self.llm)
 ```
 
 - [ ] **Step 4: 파이프라인 테스트 전체 실행**
@@ -1711,6 +1562,12 @@ uv run pytest tests/llm/test_analyzer.py::test_generate_integrated_analysis_call
 
 - [ ] **Step 3: `src/llm/models.py`에 신규 모델 추가**
 
+파일 상단 임포트에 DisclosureItem 추가:
+
+```python
+from src.tools.disclosure import DisclosureItem
+```
+
 파일 끝에 추가:
 
 ```python
@@ -1721,7 +1578,7 @@ class IntegratedAnalysisInput(BaseModel):
     technical_recommendation: str        # "매수", "매도", "중립"
     technical_rationale: str             # 기술적 분석 근거 자유 형식
     fundamental_valuation: str | None = None   # "저평가", "적정", "고평가"
-    disclosure_items: list[dict[str, Any]] = []  # [{form_type, date, description, url}]
+    disclosure_items: list[DisclosureItem] = []  # 강타입: Pydantic 모델 리스트
     flow_summary: str | None = None      # 사전 포맷된 마크다운 테이블 또는 None
 
 
@@ -1932,12 +1789,22 @@ async def run_deep_dive(ticker_or_name: str, provider: str) -> dict:
     # 공시 툴: SEC는 항상 사용 가능, DART는 API 키 있을 때만
     sec_fetcher = SECDisclosureFetcher()
     opendart_key = os.getenv("OPENDART_API_KEY")
+    if not opendart_key:
+        logger.warning(
+            "OPENDART_API_KEY가 설정되지 않았습니다. "
+            "한국주식 공시 데이터가 제외됩니다."
+        )
     dart_fetcher = DARTDisclosureFetcher(api_key=opendart_key) if opendart_key else None
     disclosure_tool = DisclosureTool(sec_fetcher=sec_fetcher, dart_fetcher=dart_fetcher)
 
     # 수급 툴: KIS API (get_investor_trend) 사용. 키 없으면 FlowTool이 graceful failure 처리
     kis_key = os.getenv("KIS_APP_KEY")
     kis_secret = os.getenv("KIS_APP_SECRET")
+    if not (kis_key and kis_secret):
+        logger.warning(
+            "KIS_APP_KEY 또는 KIS_APP_SECRET이 설정되지 않았습니다. "
+            "한국주식 수급 데이터가 제외됩니다."
+        )
     kis_provider = (
         KISProvider(app_key=kis_key, app_secret=kis_secret)
         if kis_key and kis_secret
