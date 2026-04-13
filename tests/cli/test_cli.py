@@ -92,61 +92,23 @@ def test_cli_analyze_command():
 
 
 def test_cli_report_command():
-    mock_macro = MacroSnapshot(
-        timestamp=datetime.now(),
-        vix=15.5,
-        vix_change=-0.5,
-        fear_greed=65,
-        fear_greed_label="Greed",
-        wti=75.0,
-        wti_change=1.0,
-        us_10y=4.5,
-        us_2y=4.2,
-        yield_spread=0.3,
-        dxy=103.5,
-        dxy_change=0.2,
+    from src.llm.daily_report_models import DailyReport
+
+    mock_report = DailyReport(
+        date="2026-04-13",
+        market_pulse="시장은 안정적인 분위기입니다.",
+        narrative_and_themes="테크 주도의 상승세가 이어지고 있습니다.",
+        featured_analysis="NVDA가 AI 수요로 강세를 보이고 있습니다.",
     )
 
-    mock_snapshot = IndicatorSnapshot(
-        price=178.50,
-        change_pct=2.5,
-        sma_20=175.0,
-        sma_50=170.0,
-        rsi=58.3,
-    )
-    mock_technical = TechnicalResult(
-        ticker="AAPL",
-        timestamp=datetime.now(),
-        snapshot=mock_snapshot,
-        indicators=mock_snapshot,
-        components={},
-        total_score=75,
-        strategies=[],
-        overall_assessment="매수",
-        confidence_score=75.0,
-        key_insights=["골든크로스"],
-        warnings=[],
-    )
-
-    mock_result = {
-        "date": datetime.now(),
-        "macro": mock_macro,
-        "tickers": [
-            {
-                "ticker": "AAPL",
-                "technical": mock_technical,
-                "error": None,
-            }
-        ],
-    }
-
-    with patch("src.cli.main.run_daily_report", new_callable=AsyncMock) as mock_run:
-        mock_run.return_value = mock_result
-        result = runner.invoke(app, ["report", "--tickers", "AAPL"])
+    with patch("src.cli.main.create_daily_report_pipeline") as mock_create:
+        mock_pipeline = AsyncMock()
+        mock_pipeline.run = AsyncMock(return_value=mock_report)
+        mock_create.return_value = mock_pipeline
+        result = runner.invoke(app, ["report"])
 
     assert result.exit_code == 0
-    assert "Daily Market Report" in result.stdout
-    assert "Macro Snapshot" in result.stdout
+    assert "2026-04-13" in result.stdout or "시장은 안정적인 분위기" in result.stdout
 
 
 def test_cli_version():
