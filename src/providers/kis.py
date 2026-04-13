@@ -17,28 +17,33 @@ class KISProvider(BaseProvider):
         self.app_secret = app_secret
         self._token: KISToken | None = None
         self._token_expires: datetime | None = None
+        self._token_lock = asyncio.Lock()
 
     async def _get_access_token(self) -> KISToken:
         """Get or refresh access token."""
         if self._token and self._token_expires and datetime.now() < self._token_expires:
             return self._token
 
-        url = f"{self.BASE_URL}/oauth2/tokenP"
-        headers = {"content-type": "application/json"}
-        payload = {
-            "grant_type": "client_credentials",
-            "appkey": self.app_key,
-            "appsecret": self.app_secret,
-        }
+        async with self._token_lock:
+            if self._token and self._token_expires and datetime.now() < self._token_expires:
+                return self._token
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(url, headers=headers, json=payload)
-            response.raise_for_status()
-            data = response.json()
+            url = f"{self.BASE_URL}/oauth2/tokenP"
+            headers = {"content-type": "application/json"}
+            payload = {
+                "grant_type": "client_credentials",
+                "appkey": self.app_key,
+                "appsecret": self.app_secret,
+            }
 
-        self._token = KISToken(**data)
-        self._token_expires = datetime.now() + timedelta(seconds=data["expires_in"] - 60)
-        return self._token
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(url, headers=headers, json=payload)
+                response.raise_for_status()
+                data = response.json()
+
+            self._token = KISToken(**data)
+            self._token_expires = datetime.now() + timedelta(seconds=data["expires_in"] - 60)
+            return self._token
 
     async def get_quote(self, ticker: str) -> dict:
         """Get current quote for Korean stock."""

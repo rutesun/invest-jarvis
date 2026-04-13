@@ -32,14 +32,16 @@ jarvis analyze 구글        # 한글 회사명으로 검색
 - 투자 추천 및 근거 제시
 - OpenAI/Anthropic 지원
 
-### 3. 일일 시장 리포트 (Daily Report)
+### 3. 일일 시장 리포트 (Daily Report V2)
 ```bash
 jarvis report
-jarvis report --tickers=AAPL,MSFT,NVDA
+jarvis report --provider anthropic
+jarvis report --stage ingest    # Stage별 독립 실행
 ```
-- 매크로 지표 스냅샷 (VIX, Fear & Greed, WTI, 금리, DXY)
-- 다중 종목 기술적 분석
-- 시장 전반 요약
+- 텔레그램 + 뉴스 + 매크로 + 수급 데이터 병렬 수집
+- LLM Map-Reduce로 시장 테마/내러티브 추출
+- 주도주 촉매 뉴스 자동 매칭
+- Stage별 독립 실행으로 프롬프트 튜닝 가능
 
 ### 4. 포트폴리오 모니터링
 ```bash
@@ -350,6 +352,11 @@ invest-jarvis/
 ---
 
 ## 버전 히스토리
+
+### v0.4.1 (2026-04-13)
+- Daily Report V2 파이프라인 안정화
+- KIS API race condition 수정 (asyncio.Lock 추가)
+- Map stage 모델 변경 (gpt-4o-mini → gpt-4o, 게이트웨이 제한 해결)
 
 ### v0.4.0 (2026-04-09)
 - 회사명으로 티커 검색 (영문/한글 지원)

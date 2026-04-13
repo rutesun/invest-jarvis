@@ -542,7 +542,7 @@ def create_daily_report_pipeline(provider: str):
     if not api_key:
         raise ValueError(f"Missing {api_key_env} environment variable")
 
-    map_llm = LLMProvider.create(provider="openai", model="gpt-4o-mini")
+    map_llm = LLMProvider.create(provider="openai", model="gpt-4o")
     catalyst_llm = LLMProvider.create(provider="openai", model="gpt-4o")
     synthesize_llm = LLMProvider.create(provider=provider)
 
