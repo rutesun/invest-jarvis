@@ -4,6 +4,8 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass
+from typing import List
+from pydantic import BaseModel
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.tools import tool
@@ -12,6 +14,11 @@ from src.llm.daily_report_models import ShuffleResult, StockCatalyst
 from src.llm.prompts.daily_report import DailyReportPrompts
 
 logger = logging.getLogger(__name__)
+
+
+class CatalystListResult(BaseModel):
+    """Wrapper for list of catalysts to work with structured output."""
+    catalysts: List[StockCatalyst]
 
 
 @dataclass
@@ -76,7 +83,7 @@ class CatalystStage:
         prompt = DailyReportPrompts.catalyst(themes_json)
 
         llm_with_tools = self.llm.bind_tools([search_news, resolve_ticker])
-        structured = llm_with_tools.with_structured_output(list[StockCatalyst])
+        structured = llm_with_tools.with_structured_output(CatalystListResult)
 
         result = await structured.ainvoke(
             prompt,
@@ -85,4 +92,4 @@ class CatalystStage:
                 "metadata": {"stage": "catalyst"},
             },
         )
-        return result
+        return result.catalysts if result else []

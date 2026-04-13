@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, List
+from pydantic import BaseModel
 
 from langchain_core.language_models import BaseChatModel
 
@@ -10,6 +11,11 @@ from src.llm.daily_report_models import IssueExtract, StockCatalyst, DailyReport
 from src.llm.prompts.daily_report import DailyReportPrompts
 
 logger = logging.getLogger(__name__)
+
+
+class IssueListResult(BaseModel):
+    """Wrapper for list of issues to work with structured output."""
+    issues: List[IssueExtract]
 
 
 async def map_chunk(
@@ -20,13 +26,13 @@ async def map_chunk(
     metadata: dict | None = None,
 ) -> list[IssueExtract]:
     """단일 메시지 청크에서 이슈를 추출한다."""
-    structured_llm = llm.with_structured_output(list[IssueExtract])
+    structured_llm = llm.with_structured_output(IssueListResult)
     prompt = DailyReportPrompts.map_issues(known_themes, messages_text)
     result = await structured_llm.ainvoke(
         prompt,
         config={"run_name": run_name, "metadata": metadata or {}},
     )
-    return result
+    return result.issues if result else []
 
 
 async def merge_themes_llm(

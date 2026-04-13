@@ -3,6 +3,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from src.pipelines.report_stages.map_issues import MapStage
 from src.llm.daily_report_models import IssueExtract
+from src.llm.daily_report_analyzer import IssueListResult
 
 
 @pytest.fixture
@@ -17,7 +18,7 @@ def sample_messages():
 def mock_llm():
     llm = MagicMock()
     structured = MagicMock()
-    structured.ainvoke = AsyncMock(return_value=[
+    structured.ainvoke = AsyncMock(return_value=IssueListResult(issues=[
         IssueExtract(
             theme="CPO/광통신",
             tickers=["엔비디아", "LITE"],
@@ -25,7 +26,7 @@ def mock_llm():
             summary="CPO 수요 증가",
             source_ids=[1, 2],
         ),
-    ])
+    ]))
     llm.with_structured_output.return_value = structured
     return llm
 
@@ -56,12 +57,12 @@ async def test_map_stage_handles_chunk_failure(sample_messages, mock_llm):
         call_count += 1
         if call_count == 2:
             raise Exception("LLM timeout")
-        return [
+        return IssueListResult(issues=[
             IssueExtract(
                 theme="AI", tickers=["NVDA"], sentiment="bull",
                 summary="AI boom", source_ids=[1],
             ),
-        ]
+        ])
 
     mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(side_effect=side_effect)
     stage = MapStage(llm=mock_llm, known_themes="", chunk_size=50)
