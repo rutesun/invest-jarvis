@@ -11,7 +11,12 @@ import httpx
 logger = logging.getLogger(__name__)
 
 # 메시지 본문에서 URL 추출용 정규식
-URL_PATTERN = re.compile(r"(https?://\S+\.pdf(?:\?\S*)?)", re.IGNORECASE)
+# 마크다운 링크 [text](url) 및 일반 URL 모두 지원
+# .pdf, .pdf.do, .pdf?param 등 다양한 형식 지원
+URL_PATTERN = re.compile(
+    r"https?://[^\s\)\]]+\.pdf(?:\.[a-z]+)?(?:\?[^\s\)\]]*)?",
+    re.IGNORECASE,
+)
 
 
 class TelegramMediaDownloader:
@@ -94,6 +99,9 @@ class TelegramMediaDownloader:
         urls = URL_PATTERN.findall(content)
         if not urls:
             return []
+
+        # 중복 제거 (마크다운 링크에서 URL이 두 번 나타날 수 있음)
+        urls = list(dict.fromkeys(urls))
 
         dir_path = self._base_dir / "files" / date_str
         downloaded: list[str] = []

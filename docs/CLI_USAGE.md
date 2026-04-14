@@ -212,8 +212,10 @@ uv run jarvis cache clear --yes  # 확인 없이 초기화
 **특징:**
 - Telethon 기반 채널 메시지 수집
 - include/exclude 정규식 필터링
+- **채널별 timezone 설정 지원** (KST, UTC 등)
 - 날짜별 CSV 저장 (중복 방지)
 - catch-up 모드로 누락분 자동 보충
+- **사진/PDF 자동 다운로드** (첨부파일 + URL)
 
 **요구사항:**
 - `TELEGRAM_API_ID`, `TELEGRAM_API_HASH` 필요
@@ -225,7 +227,7 @@ uv run jarvis cache clear --yes  # 확인 없이 초기화
 # 전날 메시지 수집 (기본)
 uv run jarvis telegram fetch
 
-# 특정 날짜 수집
+# 특정 날짜 수집 (채널 timezone 기준)
 uv run jarvis telegram fetch 2026-04-12
 
 # 누락분 보충 수집
@@ -236,7 +238,9 @@ uv run jarvis telegram fetch --config my_config.yaml
 ```
 
 **데이터 저장:**
-- CSV: `data/YYYY-MM/YYYY-MM-DD-{channel}.csv`
+- CSV: `data/YYYY-MM/YYYY-MM-DD-{channel}.csv` (채널 timezone 기준)
+- 사진: `data/images/YYYY-MM-DD/{channel}_{msg_id}.jpg`
+- PDF: `data/files/YYYY-MM-DD/{channel}_url_{msg_id}_{filename}.pdf`
 - 상태: `data/monitor_state.json`
 
 ---
@@ -274,15 +278,32 @@ Please enter the code you received: 12345              # Telegram 앱에서 수�
 ```yaml
 telegram:
   channels:
-    - "channel_username"      # 공개 채널
-    - "1234567890"            # 비공개 채널 (ID)
-    - id: "filtered_channel"  # 필터 적용
+    - "channel_username"      # 간단한 형식 (timezone: UTC)
+    
+    - id: "korean_channel"    # 한국 채널 (KST)
+      timezone: "Asia/Seoul"
+    
+    - id: "filtered_channel"  # 필터 + timezone
+      timezone: "Asia/Seoul"
       include:
         - "Breaking|Urgent"   # 정규식
       exclude:
         - "(?i)ad|광고"
   output_dir: "data"
 ```
+
+**중요: Timezone 설정**
+
+메시지 timestamp는 UTC로 제공되지만, 채널 운영자는 보통 현지 시간대를 사용합니다.  
+`timezone` 설정으로 메시지를 올바른 날짜에 저장할 수 있습니다.
+
+**예시:**
+- UTC 2026-04-08 23:14 발송 메시지
+- `timezone: "Asia/Seoul"` 설정 시 → KST 2026-04-09 08:14
+- **2026-04-09** 폴더에 저장 ✅
+
+**지원 timezone:** [IANA Timezone Database](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones)  
+(예: `Asia/Seoul`, `America/New_York`, `Europe/London`, `UTC`)
 
 ---
 
