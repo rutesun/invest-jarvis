@@ -25,6 +25,10 @@
 ### 1.2 주요 특징
 
 - **Pipeline**: Map → Shuffle → Reduce → Wrapup (4단계)
+- **LLM Models**: 
+  - Map, Shuffle: gpt-4o (일관성 우선)
+  - Reduce, Wrapup: gpt-5.2 (창의성 + 분석력)
+- **뉴스 검색**: ddgs (DuckDuckGo Search)
 - **출력**: 한글 마크다운 리포트 (이모지, Impact 문구 포함)
 - **입력**: Telegram CSV + 매크로 지표 (VIX, Fear & Greed, 시장 변동폭)
 - **Location**: `src/pipelines/daily_report/`
@@ -143,8 +147,8 @@ class ShuffleResult(BaseModel):
 
 **처리**: 각 테마 그룹마다
 1. 이슈들에서 keywords 수집 (중복 제거)
-2. Keywords로 뉴스 검색 (yfinance, NewsAPI)
-3. LLM(gpt-4o) 분석
+2. Keywords로 뉴스 검색 (ddgs - DuckDuckGo Search)
+3. LLM(gpt-5.2) 분석
    - 입력: theme, issues, news_articles
    - 출력: NewsItem (한글, V1 스타일)
 4. 테마별 병렬 처리 (asyncio)
@@ -188,7 +192,7 @@ class NewsItem(BaseModel):
 **입력**: `List[NewsItem]`
 
 **처리**:
-1. 모든 NewsItem을 LLM(gpt-4o)에 전송
+1. 모든 NewsItem을 LLM(gpt-5.2)에 전송
 2. 여러 테마를 연결하는 메타 인사이트 3-5개 도출
 
 **출력**: `List[str]` (인사이트 리스트)
@@ -498,9 +502,9 @@ python -m src.pipelines.daily_report.stages.shuffle_stage --input map_output.jso
 **기존 모듈 재사용**:
 - `src/llm/`: OpenAI/Anthropic 클라이언트
 - `src/tools/macro.py`: VIX, Fear & Greed 수집
-- `src/providers/`: yfinance, NewsAPI 래퍼
 
-**새로운 의존성**: 없음 (추가 패키지 설치 불필요)
+**새로운 의존성**: 
+- `duckduckgo-search` (ddgs): 뉴스 검색용
 
 ## 8. 향후 확장
 
@@ -510,15 +514,15 @@ python -m src.pipelines.daily_report.stages.shuffle_stage --input map_output.jso
 ```python
 # reduce_stage.py
 def _search_news(keywords: List[str]) -> List[NewsArticle]:
-    return search_from_yfinance(keywords)
+    return search_from_ddgs(keywords)
 ```
 
 **Screen Data 추가 시**:
 ```python
 def _search_news(keywords: List[str]) -> List[NewsArticle]:
-    yf_news = search_from_yfinance(keywords)
+    ddgs_news = search_from_ddgs(keywords)
     screen_news = search_from_screen_db(keywords)  # ← 추가
-    return yf_news + screen_news
+    return ddgs_news + screen_news
 ```
 
 **통합 포인트**:
