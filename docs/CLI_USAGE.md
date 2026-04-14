@@ -238,10 +238,13 @@ uv run jarvis telegram fetch --config my_config.yaml
 ```
 
 **데이터 저장:**
-- CSV: `data/YYYY-MM/YYYY-MM-DD-{channel}.csv` (채널 timezone 기준)
-- 사진: `data/images/YYYY-MM-DD/{channel}_{msg_id}.jpg`
-- PDF: `data/files/YYYY-MM-DD/{channel}_url_{msg_id}_{filename}.pdf`
+- CSV: `data/YYYY-MM/YYYY-MM-DD-{channel_id}.csv` (채널 timezone 기준)
+- 사진: `data/images/YYYY-MM-DD/{channel_id}_{msg_id}.jpg`
+- 첨부 PDF: `data/files/YYYY-MM-DD/{channel_id}_{msg_id}_{filename}.pdf`
+- URL PDF: `data/files/YYYY-MM-DD/{channel_id}_url_{msg_id}_{filename}.pdf`
 - 상태: `data/monitor_state.json`
+
+**파일명 규칙:** `channel_id`는 `config.yaml`에 설정한 영문 ID (예: "shinhanresearch")를 사용합니다.
 
 ---
 

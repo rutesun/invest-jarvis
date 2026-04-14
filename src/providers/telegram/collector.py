@@ -137,7 +137,7 @@ class TelegramCollector:
         media_info = json.dumps(None)
         if msg.media and self._media_downloader:
             media_info = json.dumps(
-                await self._media_downloader.download(msg, channel_name, date_str)
+                await self._media_downloader.download(msg, channel_id, date_str)
             )
         elif msg.media:
             media_info = json.dumps({"type": type(msg.media).__name__})

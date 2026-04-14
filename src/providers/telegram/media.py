@@ -22,41 +22,48 @@ URL_PATTERN = re.compile(
 class TelegramMediaDownloader:
     """텔레그램 메시지의 사진/PDF를 로컬에 다운로드한다.
 
-    기존 telegram 프로젝트의 패턴을 계승:
-    - 사진: {base_dir}/images/YYYY-MM-DD/{channel}_{msg_id}.jpg
-    - PDF:  {base_dir}/files/YYYY-MM-DD/{channel}_{msg_id}_{filename}.pdf
-    - URL PDF: {base_dir}/files/YYYY-MM-DD/{channel}_url_{msg_id}_{filename}.pdf
+    파일명 규칙 (channel_id 사용):
+    - 사진: {base_dir}/images/YYYY-MM-DD/{channel_id}_{msg_id}.jpg
+    - PDF:  {base_dir}/files/YYYY-MM-DD/{channel_id}_{msg_id}_{filename}.pdf
+    - URL PDF: {base_dir}/files/YYYY-MM-DD/{channel_id}_url_{msg_id}_{filename}.pdf
+
+    channel_id는 config.yaml의 영문 ID (예: "shinhanresearch")
     """
 
     def __init__(self, client: Any, base_dir: Path) -> None:
         self._client = client
         self._base_dir = base_dir
 
-    async def download(self, msg: Any, channel_name: str, date_str: str) -> dict:
+    async def download(self, msg: Any, channel_id: str, date_str: str) -> dict:
         """메시지의 미디어를 다운로드하고 media_info dict를 반환한다.
 
         사진/PDF만 다운로드하고, 그 외 미디어는 type만 기록한다.
+
+        Args:
+            msg: Telethon Message 객체
+            channel_id: 채널 ID (영문, 예: "shinhanresearch")
+            date_str: 날짜 문자열 (YYYY-MM-DD)
         """
         media = msg.media
 
         # 사진
         if getattr(media, "photo", None):
-            return await self._download_photo(msg, channel_name, date_str)
+            return await self._download_photo(msg, channel_id, date_str)
 
         # 문서 (PDF만 다운로드)
         if getattr(media, "document", None):
             doc = media.document
             mime = getattr(doc, "mime_type", "")
             if mime == "application/pdf":
-                return await self._download_pdf(msg, channel_name, date_str)
+                return await self._download_pdf(msg, channel_id, date_str)
             return {"type": type(media).__name__, "mime_type": mime}
 
         return {"type": type(media).__name__}
 
-    async def _download_photo(self, msg: Any, channel: str, date_str: str) -> dict:
+    async def _download_photo(self, msg: Any, channel_id: str, date_str: str) -> dict:
         dir_path = self._base_dir / "images" / date_str
         dir_path.mkdir(parents=True, exist_ok=True)
-        file_path = dir_path / f"{channel}_{msg.id}.jpg"
+        file_path = dir_path / f"{channel_id}_{msg.id}.jpg"
         try:
             await self._client.download_media(msg, str(file_path))
             return {"type": "photo", "local_path": str(file_path)}
@@ -64,7 +71,7 @@ class TelegramMediaDownloader:
             logger.warning("사진 다운로드 실패 (msg=%d): %s", msg.id, e)
             return {"type": "photo"}
 
-    async def _download_pdf(self, msg: Any, channel: str, date_str: str) -> dict:
+    async def _download_pdf(self, msg: Any, channel_id: str, date_str: str) -> dict:
         dir_path = self._base_dir / "files" / date_str
         dir_path.mkdir(parents=True, exist_ok=True)
 
@@ -76,7 +83,7 @@ class TelegramMediaDownloader:
                 filename = f"{msg.id}_{attr.file_name}"
                 break
 
-        file_path = dir_path / f"{channel}_{filename}"
+        file_path = dir_path / f"{channel_id}_{filename}"
         try:
             await self._client.download_media(msg, str(file_path))
             return {
@@ -89,9 +96,15 @@ class TelegramMediaDownloader:
             return {"type": "document", "mime_type": "application/pdf"}
 
     async def download_url_pdfs(
-        self, content: str, channel: str, date_str: str, msg_id: int,
+        self, content: str, channel_id: str, date_str: str, msg_id: int,
     ) -> list[str]:
         """메시지 본문에서 PDF URL을 찾아 다운로드한다.
+
+        Args:
+            content: 메시지 본문
+            channel_id: 채널 ID (영문, 예: "shinhanresearch")
+            date_str: 날짜 문자열 (YYYY-MM-DD)
+            msg_id: 메시지 ID
 
         Returns:
             다운로드된 파일 경로 리스트
@@ -111,7 +124,7 @@ class TelegramMediaDownloader:
             url_filename = url.split("/")[-1].split("?")[0]
             if not url_filename.lower().endswith(".pdf"):
                 url_filename = f"{msg_id}.pdf"
-            file_path = dir_path / f"{channel}_url_{msg_id}_{url_filename}"
+            file_path = dir_path / f"{channel_id}_url_{msg_id}_{url_filename}"
 
             if await self._fetch_url_pdf(url, file_path):
                 downloaded.append(str(file_path))
