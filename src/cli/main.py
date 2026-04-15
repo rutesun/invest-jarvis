@@ -94,7 +94,7 @@ from src.tools.news import NewsTool
 from src.tools.portfolio import PortfolioTool
 from src.pipelines.quick_check import QuickCheckPipeline
 from src.pipelines.deep_dive import DeepDivePipeline
-from src.pipelines.daily_report import DailyReportPipeline
+from src.pipelines.daily_market_report import DailyReportPipeline
 from src.pipelines.portfolio import PortfolioPipeline
 from src.llm.provider import LLMProvider
 from src.utils.sector_metrics import SectorMetrics
@@ -862,6 +862,36 @@ def telegram_catchup(
         else:
             console.print(f"[red]오류: {result['error']}[/red]")
             raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[red]오류: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@telegram_app.command("report")
+def telegram_report(
+    date: str = typer.Argument(
+        None,
+        help="분석할 날짜 (YYYY-MM-DD). 미지정 시 전날.",
+    ),
+    data_dir: str = typer.Option("data", "--data-dir", "-d", help="데이터 디렉토리"),
+):
+    """텔레그램 메시지 기반 일일 시장 리포트 생성."""
+    from datetime import datetime as dt, timedelta
+    from src.pipelines.daily_report.pipeline import run_pipeline, format_report
+
+    if date is None:
+        date = (dt.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+
+    console.print(f"[bold]Daily Report 생성 중... (날짜: {date})[/bold]\n")
+
+    try:
+        report = run_pipeline(date, data_dir)
+        output = format_report(report)
+        console.print(Markdown(output))
+    except FileNotFoundError as e:
+        console.print(f"[red]오류: {e}[/red]")
+        console.print(f"[yellow]힌트: 먼저 'uv run jarvis telegram fetch {date}' 실행[/yellow]")
+        raise typer.Exit(1)
     except Exception as e:
         console.print(f"[red]오류: {e}[/red]")
         raise typer.Exit(1)
