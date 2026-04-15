@@ -9,7 +9,7 @@ from src.llm.provider import LLMProvider
 
 load_dotenv()
 from src.pipelines.daily_report.models import MappedIssue, ShuffleResult
-from src.pipelines.daily_report.prompts import SHUFFLE_PROMPT
+from src.pipelines.daily_report.prompts import SHUFFLE_SYSTEM_PROMPT, SHUFFLE_USER_PROMPT
 
 
 def shuffle_stage(
@@ -86,28 +86,9 @@ async def _normalize_themes(themes: List[str], date: str) -> Dict[str, List[str]
 
     themes_text = "\n".join([f"- {theme}" for theme in themes])
 
-    # System/User 메시지 분리 (캐싱 가능)
-    system_prompt = """다음은 여러 청크에서 추출된 테마들입니다.
-유사한 의미의 테마들을 하나의 정규화된 이름으로 통합하세요.
-
-**지침**:
-1. 의미가 같으면 통합 (예: "AI 전력", "AI DC 파워", "데이터센터 전력" → "AI 데이터센터 전력 인프라")
-2. 정규화 이름은 가장 포괄적이고 명확한 한글 표현 사용
-3. 너무 광범위하게 묶지 말 것 (예: "AI"로만 통합하면 안됨)
-4. 명확히 다른 주제는 분리 유지
-
-**출력 형식**: JSON object
-```json
-{
-  "정규화_테마1": ["원본_테마1", "원본_테마2", "원본_테마3"],
-  "정규화_테마2": ["원본_테마4", "원본_테마5"]
-}
-```"""
-
-    user_prompt = f"""**입력 테마 리스트**:
-{themes_text}
-
-위 테마들을 정규화하세요."""
+    # prompts.py에서 프롬프트 가져오기
+    system_prompt = SHUFFLE_SYSTEM_PROMPT
+    user_prompt = SHUFFLE_USER_PROMPT.format(themes=themes_text)
 
     # LangSmith 태깅
     run_name = f"Shuffle Stage - {date}"
