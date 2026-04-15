@@ -91,7 +91,7 @@ async def _analyze_theme(
     ])
 
     news_text = "\n\n".join([
-        f"**{article['title']}**\n{article['body']}\n출처: {article['href']}"
+        f"**{article['title']}**\n{article['body']}\n출처: {article['url']}"
         for article in news_articles
     ]) if news_articles else "관련 뉴스 없음"
 
@@ -161,12 +161,12 @@ def _search_news(theme: str, date: str, max_results: int) -> List[Dict]:
 
         ddgs = DDGS()
         results = ddgs.news(
-            keywords=query,
+            query,
             region="kr-kr",
             max_results=max_results,
         )
 
-        return results if results else []
+        return list(results) if results else []
     except Exception as e:
         print(f"⚠️  뉴스 검색 실패 ({theme}): {e}")
         return []
