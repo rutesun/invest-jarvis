@@ -9,7 +9,7 @@ from src.llm.provider import LLMProvider
 
 load_dotenv()
 from langsmith import traceable
-from src.pipelines.daily_report.models import NewsItem, DailyReport, MacroSnapshot
+from src.pipelines.daily_report.models import NewsItem, DailyReport, MacroSnapshot, KeyInsightsList
 from src.pipelines.daily_report.prompts import WRAPUP_SYSTEM_PROMPT, WRAPUP_USER_PROMPT
 
 
@@ -89,18 +89,11 @@ async def _generate_insights(
         SystemMessage(content=system_prompt),
         HumanMessage(content=user_prompt),
     ]
-    response = await llm.ainvoke(messages, config=config)
 
-    # JSON 파싱
     try:
-        content = response.content
-        if "```json" in content:
-            content = content.split("```json")[1].split("```")[0].strip()
-        elif "```" in content:
-            content = content.split("```")[1].split("```")[0].strip()
-
-        insights = json.loads(content)
-        return insights if isinstance(insights, list) else []
+        llm_with_output = llm.with_structured_output(KeyInsightsList)
+        response = await llm_with_output.ainvoke(messages, config=config)
+        return response.insights
     except Exception as e:
         print(f"⚠️  인사이트 생성 실패: {e}")
         return [

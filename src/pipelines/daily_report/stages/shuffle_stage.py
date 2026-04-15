@@ -9,7 +9,7 @@ from src.llm.provider import LLMProvider
 
 load_dotenv()
 from langsmith import traceable
-from src.pipelines.daily_report.models import MappedIssue, ShuffleResult
+from src.pipelines.daily_report.models import MappedIssue, ShuffleResult, ThemeMapping
 from src.pipelines.daily_report.prompts import SHUFFLE_SYSTEM_PROMPT, SHUFFLE_USER_PROMPT
 
 
@@ -108,18 +108,11 @@ async def _normalize_themes(themes: List[str], date: str) -> Dict[str, List[str]
         SystemMessage(content=system_prompt),
         HumanMessage(content=user_prompt),
     ]
-    response = await llm.ainvoke(messages, config=config)
 
-    # JSON 파싱
     try:
-        content = response.content
-        if "```json" in content:
-            content = content.split("```json")[1].split("```")[0].strip()
-        elif "```" in content:
-            content = content.split("```")[1].split("```")[0].strip()
-
-        theme_mapping = json.loads(content)
-        return theme_mapping
+        llm_with_output = llm.with_structured_output(ThemeMapping)
+        response = await llm_with_output.ainvoke(messages, config=config)
+        return response.mapping
     except Exception as e:
         print(f"⚠️  테마 정규화 실패: {e}")
         # fallback: 원본 테마 그대로 사용

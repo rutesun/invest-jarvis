@@ -12,7 +12,7 @@ from src.llm.provider import LLMProvider
 # LangSmith 추적을 위한 환경변수 로드
 load_dotenv()
 from langsmith import traceable
-from src.pipelines.daily_report.models import TelegramMessage, MappedIssue
+from src.pipelines.daily_report.models import TelegramMessage, MappedIssue, MappedIssueList
 from src.pipelines.daily_report.prompts import MAP_SYSTEM_PROMPT, MAP_USER_PROMPT
 from src.pipelines.daily_report.examples.map_examples import get_map_examples
 
@@ -109,11 +109,9 @@ async def _analyze_chunk(
 ) -> List[MappedIssue]:
     """LLM으로 단일 청크 분석."""
     # 프롬프트용 메시지 포맷팅
-    messages_text = "\n".join([f"[{msg.message_id}] {msg.text}" for msg in chunk])
+    messages_text = "\n".join([f"[{msg.channel_id}-{msg.message_id}] {msg.text}" for msg in chunk])
 
-    # 목표 이슈 개수 계산 (메시지의 15-20%)
     message_count = len(chunk)
-    target_count = max(int(message_count * 0.18), 5)  # 최소 5개
 
     # prompts.py에서 프롬프트 가져오기
     examples = get_map_examples()
@@ -121,7 +119,6 @@ async def _analyze_chunk(
     user_prompt = MAP_USER_PROMPT.format(
         message_count=message_count,
         messages=messages_text,
-        target_count=target_count,
     )
 
     # LangSmith 그룹핑을 위한 메타데이터 설정
@@ -134,7 +131,6 @@ async def _analyze_chunk(
             "date": date,
             "chunk_index": chunk_index,
             "message_count": message_count,
-            "target_count": target_count,
         },
     }
 
@@ -143,22 +139,13 @@ async def _analyze_chunk(
         SystemMessage(content=system_prompt),
         HumanMessage(content=user_prompt),
     ]
-    response = await llm.ainvoke(messages, config=config)
 
-    # JSON 응답 파싱
     try:
-        # 응답에서 JSON 추출 (마크다운 코드 블록 처리)
-        content = response.content
-        if "```json" in content:
-            content = content.split("```json")[1].split("```")[0].strip()
-        elif "```" in content:
-            content = content.split("```")[1].split("```")[0].strip()
-
-        issues_data = json.loads(content)
-        return [MappedIssue(**issue) for issue in issues_data]
+        llm_with_output = llm.with_structured_output(MappedIssueList)
+        response = await llm_with_output.ainvoke(messages, config=config)
+        return response.issues
     except Exception as e:
         print(f"⚠️  LLM 응답 파싱 실패: {e}")
-        print(f"응답: {response.content[:200]}...")
         return []
 
 
