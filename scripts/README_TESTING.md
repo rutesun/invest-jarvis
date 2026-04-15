@@ -18,7 +18,7 @@
 
 ### 1. Ingest Stage (CSV + 매크로 로드)
 ```bash
-python -m src.pipelines.daily_report.stages.ingest_stage 2026-04-14
+uv run python -m src.pipelines.daily_report.stages.ingest_stage 2026-04-14
 ```
 
 **출력:**
@@ -29,7 +29,7 @@ python -m src.pipelines.daily_report.stages.ingest_stage 2026-04-14
 
 ### 2. Map Stage (이슈 추출)
 ```bash
-python -m src.pipelines.daily_report.stages.map_stage 2026-04-14
+uv run python -m src.pipelines.daily_report.stages.map_stage 2026-04-14
 ```
 
 **출력:**
@@ -40,7 +40,7 @@ python -m src.pipelines.daily_report.stages.map_stage 2026-04-14
 
 ### 3. Shuffle Stage (테마 정규화)
 ```bash
-python -m src.pipelines.daily_report.stages.shuffle_stage 2026-04-14
+uv run python -m src.pipelines.daily_report.stages.shuffle_stage 2026-04-14
 ```
 
 **출력:**
@@ -50,7 +50,7 @@ python -m src.pipelines.daily_report.stages.shuffle_stage 2026-04-14
 
 ### 4. Reduce Stage (테마별 분석)
 ```bash
-python -m src.pipelines.daily_report.stages.reduce_stage 2026-04-14
+uv run python -m src.pipelines.daily_report.stages.reduce_stage 2026-04-14
 ```
 
 **출력:**
@@ -60,7 +60,7 @@ python -m src.pipelines.daily_report.stages.reduce_stage 2026-04-14
 
 ### 5. Wrapup Stage (최종 리포트)
 ```bash
-python -m src.pipelines.daily_report.stages.wrapup_stage 2026-04-14
+uv run python -m src.pipelines.daily_report.stages.wrapup_stage 2026-04-14
 ```
 
 **출력:**

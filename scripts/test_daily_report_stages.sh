@@ -14,27 +14,27 @@ echo ""
 
 # Ingest Stage
 echo "📥 [1/5] Ingest Stage..."
-python -m src.pipelines.daily_report.stages.ingest_stage $DATE 2>&1 | grep "^✓"
+uv run python -m src.pipelines.daily_report.stages.ingest_stage $DATE 2>&1 | grep "^✓"
 echo ""
 
 # Map Stage
 echo "🗺️  [2/5] Map Stage..."
-python -m src.pipelines.daily_report.stages.map_stage $DATE 2>&1 | grep "^✓"
+uv run python -m src.pipelines.daily_report.stages.map_stage $DATE 2>&1 | grep "^✓"
 echo ""
 
 # Shuffle Stage
 echo "🔀 [3/5] Shuffle Stage..."
-python -m src.pipelines.daily_report.stages.shuffle_stage $DATE 2>&1 | grep "^✓"
+uv run python -m src.pipelines.daily_report.stages.shuffle_stage $DATE 2>&1 | grep "^✓"
 echo ""
 
 # Reduce Stage
 echo "📰 [4/5] Reduce Stage..."
-python -m src.pipelines.daily_report.stages.reduce_stage $DATE 2>&1 | grep "^✓"
+uv run python -m src.pipelines.daily_report.stages.reduce_stage $DATE 2>&1 | grep "^✓"
 echo ""
 
 # Wrapup Stage
 echo "📋 [5/5] Wrapup Stage..."
-python -m src.pipelines.daily_report.stages.wrapup_stage $DATE 2>&1 | grep "^✓"
+uv run python -m src.pipelines.daily_report.stages.wrapup_stage $DATE 2>&1 | grep "^✓"
 echo ""
 
 # 결과 요약
