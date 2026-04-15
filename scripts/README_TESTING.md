@@ -8,8 +8,8 @@
 ```
 
 출력:
-- 각 Stage 진행 상황
-- 메트릭 요약 (압축률, 평균 소스/이슈, 테마 수)
+- 각 Stage 진행 상황 (Ingest → Map → Shuffle → Reduce → Wrapup)
+- 메트릭 요약 (압축률, 평균 소스/이슈, 테마 수, 인사이트 수)
 - 생성된 JSON 파일 목록
 
 ---
@@ -37,6 +37,36 @@ python -m src.pipelines.daily_report.stages.map_stage 2026-04-14
 - 테마 통계 (총/고유)
 - 평균 소스/이슈
 - 저장 경로: `tests/.../map_2026-04-14.json`
+
+### 3. Shuffle Stage (테마 정규화)
+```bash
+python -m src.pipelines.daily_report.stages.shuffle_stage 2026-04-14
+```
+
+**출력:**
+- 정규화된 테마 개수
+- 재그룹핑된 이슈 개수
+- 저장 경로: `tests/.../shuffle_2026-04-14.json`
+
+### 4. Reduce Stage (테마별 분석)
+```bash
+python -m src.pipelines.daily_report.stages.reduce_stage 2026-04-14
+```
+
+**출력:**
+- 분석된 테마 개수
+- 뉴스 검색 및 LLM 분석
+- 저장 경로: `tests/.../reduce_2026-04-14.json`
+
+### 5. Wrapup Stage (최종 리포트)
+```bash
+python -m src.pipelines.daily_report.stages.wrapup_stage 2026-04-14
+```
+
+**출력:**
+- 핵심 인사이트 개수
+- 메타 인사이트 출력
+- 저장 경로: `tests/.../wrapup_2026-04-14.json`
 
 ---
 
@@ -87,13 +117,23 @@ LANGSMITH_PROJECT=invest-jarvis
 ### LangSmith에서 확인
 1. https://smith.langchain.com 접속
 2. Projects → invest-jarvis
-3. Traces에서 Map Stage 실행 확인
+3. **Filters로 그룹핑:**
+   - Tags: `map_stage`, `shuffle_stage`, `reduce_stage`, `wrapup_stage`
+   - Tags: `date:2026-04-14` (날짜별 필터링)
+   - Tags: `theme:테마명` (Reduce stage에서 테마별 필터링)
+
+**Run Name 패턴:**
+- Map: "Map Stage - 2026-04-14 - Chunk 1"
+- Shuffle: "Shuffle Stage - 2026-04-14"
+- Reduce: "Reduce Stage - 2026-04-14 - 테마명"
+- Wrapup: "Wrapup Stage - 2026-04-14"
 
 **추적되는 정보:**
 - 프롬프트 입력/출력
 - 토큰 사용량
 - 실행 시간
 - 에러 로그
+- Metadata (stage, date, chunk_index, theme 등)
 
 ---
 

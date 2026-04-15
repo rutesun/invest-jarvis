@@ -13,13 +13,28 @@ echo "========================================="
 echo ""
 
 # Ingest Stage
-echo "📥 [1/2] Ingest Stage..."
+echo "📥 [1/5] Ingest Stage..."
 python -m src.pipelines.daily_report.stages.ingest_stage $DATE 2>&1 | grep "^✓"
 echo ""
 
 # Map Stage
-echo "🗺️  [2/2] Map Stage..."
+echo "🗺️  [2/5] Map Stage..."
 python -m src.pipelines.daily_report.stages.map_stage $DATE 2>&1 | grep "^✓"
+echo ""
+
+# Shuffle Stage
+echo "🔀 [3/5] Shuffle Stage..."
+python -m src.pipelines.daily_report.stages.shuffle_stage $DATE 2>&1 | grep "^✓"
+echo ""
+
+# Reduce Stage
+echo "📰 [4/5] Reduce Stage..."
+python -m src.pipelines.daily_report.stages.reduce_stage $DATE 2>&1 | grep "^✓"
+echo ""
+
+# Wrapup Stage
+echo "📋 [5/5] Wrapup Stage..."
+python -m src.pipelines.daily_report.stages.wrapup_stage $DATE 2>&1 | grep "^✓"
 echo ""
 
 # 결과 요약
@@ -41,6 +56,24 @@ if [ -f "$OUTPUT_DIR/map_$DATE.json" ]; then
     echo "  - 평균 소스/이슈: $AVG_SOURCES"
     echo "  - 고유 테마: $UNIQUE_THEMES개"
     echo "  - 압축률: $(echo "scale=1; $ISSUE_COUNT * 100 / $MSG_COUNT" | bc)%"
+fi
+
+if [ -f "$OUTPUT_DIR/shuffle_$DATE.json" ]; then
+    NORMALIZED_THEMES=$(jq '.canonical_themes | keys | length' "$OUTPUT_DIR/shuffle_$DATE.json")
+    THEME_GROUPS=$(jq '.theme_groups | keys | length' "$OUTPUT_DIR/shuffle_$DATE.json")
+    echo "✓ Shuffle: $NORMALIZED_THEMES개 정규화 테마, $THEME_GROUPS개 그룹"
+fi
+
+if [ -f "$OUTPUT_DIR/reduce_$DATE.json" ]; then
+    NEWS_COUNT=$(jq '. | length' "$OUTPUT_DIR/reduce_$DATE.json")
+    STOCK_COUNT=$(jq '[.[] | .stocks | length] | add' "$OUTPUT_DIR/reduce_$DATE.json")
+    echo "✓ Reduce: $NEWS_COUNT개 테마 분석"
+    echo "  - 관련 종목: $STOCK_COUNT개"
+fi
+
+if [ -f "$OUTPUT_DIR/wrapup_$DATE.json" ]; then
+    INSIGHT_COUNT=$(jq '.key_insights | length' "$OUTPUT_DIR/wrapup_$DATE.json")
+    echo "✓ Wrapup: $INSIGHT_COUNT개 핵심 인사이트"
 fi
 
 echo ""

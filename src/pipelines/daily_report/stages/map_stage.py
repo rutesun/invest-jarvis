@@ -17,6 +17,7 @@ from src.pipelines.daily_report.examples.map_examples import get_map_examples
 
 def map_stage(
     messages: List[TelegramMessage],
+    date: str = None,
     max_tokens_per_chunk: int = 15000,
 ) -> List[MappedIssue]:
     """
@@ -24,6 +25,7 @@ def map_stage(
 
     Args:
         messages: 텔레그램 메시지 리스트
+        date: 날짜 문자열 (LangSmith 그룹핑용, 선택)
         max_tokens_per_chunk: 청크당 최대 토큰 수 (대략)
 
     Returns:
@@ -32,11 +34,15 @@ def map_stage(
     if not messages:
         return []
 
+    # 날짜 추출 (없으면 첫 메시지에서)
+    if not date and messages:
+        date = messages[0].timestamp.strftime("%Y-%m-%d")
+
     chunks = _chunk_messages(messages, max_tokens_per_chunk)
 
     # 청크를 병렬로 처리
     loop = asyncio.get_event_loop()
-    results = loop.run_until_complete(_analyze_chunks_parallel(chunks))
+    results = loop.run_until_complete(_analyze_chunks_parallel(chunks, date))
 
     # 결과 flatten
     all_issues = []
@@ -80,17 +86,23 @@ def _chunk_messages(
 
 async def _analyze_chunks_parallel(
     chunks: List[List[TelegramMessage]],
+    date: str,
 ) -> List[List[MappedIssue]]:
     """asyncio로 청크를 병렬 분석."""
     llm = LLMProvider.create(provider="openai", model="gpt-4o", temperature=0.2)
 
-    tasks = [_analyze_chunk(chunk, llm) for chunk in chunks]
+    tasks = [
+        _analyze_chunk(chunk, llm, chunk_index, date)
+        for chunk_index, chunk in enumerate(chunks)
+    ]
     return await asyncio.gather(*tasks)
 
 
 async def _analyze_chunk(
     chunk: List[TelegramMessage],
     llm,
+    chunk_index: int,
+    date: str,
 ) -> List[MappedIssue]:
     """LLM으로 단일 청크 분석."""
     # 프롬프트용 메시지 포맷팅
@@ -111,8 +123,22 @@ async def _analyze_chunk(
         target_count=target_count,
     )
 
+    # LangSmith 그룹핑을 위한 메타데이터 설정
+    run_name = f"Map Stage - {date} - Chunk {chunk_index+1}"
+    config = {
+        "run_name": run_name,
+        "tags": ["daily_report", "map_stage", f"date:{date}"],
+        "metadata": {
+            "stage": "map",
+            "date": date,
+            "chunk_index": chunk_index,
+            "message_count": message_count,
+            "target_count": target_count,
+        },
+    }
+
     # LLM 호출
-    response = await llm.ainvoke([HumanMessage(content=prompt)])
+    response = await llm.ainvoke([HumanMessage(content=prompt)], config=config)
 
     # JSON 응답 파싱
     try:
@@ -143,7 +169,7 @@ if __name__ == "__main__":
     print(f"✓ {len(ingest_result.messages)}개 메시지 로드")
 
     # Map stage 실행
-    issues = map_stage(ingest_result.messages)
+    issues = map_stage(ingest_result.messages, date)
     print(f"✓ {len(issues)}개 이슈 추출")
 
     # 요약 출력

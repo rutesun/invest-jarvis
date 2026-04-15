@@ -109,7 +109,13 @@ MAP_PROMPT_V3 = """당신은 한국 금융 시장 전문 애널리스트입니�
 2. **테마**: 2-3개, 구체적으로
    - "반도체" (X) → "AI 메모리 업사이클" (O)
 
-3. **Source_ids**: 묶인 모든 메시지 ID 나열
+3. **Sentiment**: 정확히 이 3개 중 하나만 사용
+   - "bull" - 명확한 호재 (실적 개선, 계약 체결, 긍정 전망)
+   - "bear" - 명확한 악재 (실적 부진, 리스크, 부정 전망)
+   - "neutral" - 그 외 모든 경우 (정보, 불확실, 혼재)
+   - ⚠️ "mixed", "positive", "negative" 등 다른 값 사용 금지
+
+4. **Source_ids**: 묶인 모든 메시지 ID 나열
 
 **입력 ({message_count}개)**:
 {messages}
@@ -122,7 +128,7 @@ MAP_PROMPT_V3 = """당신은 한국 금융 시장 전문 애널리스트입니�
     "summary": "통합 요약 (2-3문장)",
     "themes": ["테마1", "테마2"],
     "keywords": ["종목", "기술용어"],
-    "sentiment": "bull|bear|neutral",
+    "sentiment": "bull",
     "source_ids": ["id1", "id2", "id3", ...]
   }}
 ]

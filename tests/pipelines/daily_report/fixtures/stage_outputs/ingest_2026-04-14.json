@@ -8,12 +8,12 @@
       "DOW": 0.66
     },
     "kr_markets": {
-      "KOSPI": 3.1,
-      "KOSDAQ": 2.99
+      "KOSPI": 2.07,
+      "KOSDAQ": 2.72
     },
-    "vix": 18.4,
+    "vix": 18.2,
     "fear_greed": 50,
-    "krw_usd": 1472.7
+    "krw_usd": 1477.0
   },
   "messages": [
     {

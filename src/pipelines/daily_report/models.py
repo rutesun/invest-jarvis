@@ -79,5 +79,5 @@ class DailyReport(BaseModel):
     """최종 리포트 출력."""
     date: str
     macro: MacroSnapshot
-    insights: List[str] = Field(description="한글 크로스 테마 인사이트")
-    news_items: List[NewsItem]
+    key_insights: List[str] = Field(description="한글 크로스 테마 인사이트")
+    news: List[NewsItem]
