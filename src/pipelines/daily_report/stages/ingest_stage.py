@@ -1,4 +1,6 @@
 """Ingest stage: 텔레그램 메시지 및 매크로 데이터 로드."""
+
+from langsmith import traceable
 import csv
 from pathlib import Path
 from datetime import datetime, timedelta
@@ -13,6 +15,9 @@ from src.pipelines.daily_report.models import (
     MacroSnapshot,
     TelegramMessage,
 )
+
+
+@traceable(name="Ingest Stage")
 def ingest(date: str, data_dir: str = "data") -> IngestResult:
     """
     주어진 날짜의 텔레그램 메시지와 매크로 데이터 로드.
@@ -166,7 +171,9 @@ if __name__ == "__main__":
     print(f"✓ 한국 시장: {result.macro.kr_markets}")
 
     # 다음 stage 테스트용으로 저장
-    output_file = f"tests/pipelines/daily_report/fixtures/stage_outputs/ingest_{date}.json"
+    output_file = (
+        f"tests/pipelines/daily_report/fixtures/stage_outputs/ingest_{date}.json"
+    )
     Path(output_file).parent.mkdir(parents=True, exist_ok=True)
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(result.model_dump(mode="json"), f, ensure_ascii=False, indent=2)

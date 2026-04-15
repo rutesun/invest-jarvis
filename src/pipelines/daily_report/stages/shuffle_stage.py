@@ -8,10 +8,12 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from src.llm.provider import LLMProvider
 
 load_dotenv()
+from langsmith import traceable
 from src.pipelines.daily_report.models import MappedIssue, ShuffleResult
 from src.pipelines.daily_report.prompts import SHUFFLE_SYSTEM_PROMPT, SHUFFLE_USER_PROMPT
 
 
+@traceable(name="Shuffle Stage")
 def shuffle_stage(
     issues: List[MappedIssue],
     date: str = None,

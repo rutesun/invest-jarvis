@@ -1,5 +1,6 @@
 """Daily Report 전체 파이프라인 통합."""
 
+from langsmith import get_current_run_tree
 from typing import Optional
 from src.pipelines.daily_report.models import DailyReport
 from src.pipelines.daily_report.stages.ingest_stage import ingest
@@ -10,7 +11,7 @@ from src.pipelines.daily_report.stages.wrapup_stage import wrapup_stage
 from langsmith import traceable
 
 
-@traceable
+@traceable(name="Daily Report Pipeline")
 def run_pipeline(date: str, data_dir: str = "data") -> DailyReport:
     """
     전체 5단계 파이프라인 실행.
@@ -25,6 +26,12 @@ def run_pipeline(date: str, data_dir: str = "data") -> DailyReport:
     Raises:
         FileNotFoundError: 텔레그램 데이터가 없을 때
     """
+
+    # 현재 실행 중인 트레이스(Run Tree)를 가져와서 런타임에 이름을 바꿀 수 있습니다.
+    run_tree = get_current_run_tree()
+    if run_tree:
+        run_tree.name = f"Daily Report Generation - {date}"
+
     # 1. Ingest: 텔레그램 메시지 + 매크로 로드
     print(f"[1/5] Ingest Stage...")
     ingest_result = ingest(date, data_dir)

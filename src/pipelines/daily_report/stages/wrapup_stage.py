@@ -8,10 +8,12 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from src.llm.provider import LLMProvider
 
 load_dotenv()
+from langsmith import traceable
 from src.pipelines.daily_report.models import NewsItem, DailyReport, MacroSnapshot
 from src.pipelines.daily_report.prompts import WRAPUP_SYSTEM_PROMPT, WRAPUP_USER_PROMPT
 
 
+@traceable(name="Wrapup Stage")
 def wrapup_stage(
     news_items: List[NewsItem],
     macro: MacroSnapshot,

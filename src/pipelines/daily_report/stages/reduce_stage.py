@@ -10,6 +10,7 @@ from ddgs import DDGS
 from src.llm.provider import LLMProvider
 
 load_dotenv()
+from langsmith import traceable
 from src.pipelines.daily_report.models import (
     MappedIssue,
     NewsItem,
@@ -19,6 +20,7 @@ from src.pipelines.daily_report.models import (
 from src.pipelines.daily_report.prompts import REDUCE_SYSTEM_PROMPT, REDUCE_USER_PROMPT
 
 
+@traceable(name="Reduce Stage")
 def reduce_stage(
     theme_groups: Dict[str, List[MappedIssue]],
     macro: MacroSnapshot,

@@ -1,4 +1,5 @@
 """Map stage: 텔레그램 메시지에서 테마를 가진 이슈 추출."""
+
 import asyncio
 import json
 import os
@@ -10,11 +11,13 @@ from src.llm.provider import LLMProvider
 
 # LangSmith 추적을 위한 환경변수 로드
 load_dotenv()
+from langsmith import traceable
 from src.pipelines.daily_report.models import TelegramMessage, MappedIssue
 from src.pipelines.daily_report.prompts import MAP_SYSTEM_PROMPT, MAP_USER_PROMPT
 from src.pipelines.daily_report.examples.map_examples import get_map_examples
 
 
+@traceable(name="Map Stage")
 def map_stage(
     messages: List[TelegramMessage],
     date: str = None,
@@ -106,10 +109,7 @@ async def _analyze_chunk(
 ) -> List[MappedIssue]:
     """LLM으로 단일 청크 분석."""
     # 프롬프트용 메시지 포맷팅
-    messages_text = "\n".join([
-        f"[{msg.message_id}] {msg.text}"
-        for msg in chunk
-    ])
+    messages_text = "\n".join([f"[{msg.message_id}] {msg.text}" for msg in chunk])
 
     # 목표 이슈 개수 계산 (메시지의 15-20%)
     message_count = len(chunk)
@@ -167,7 +167,7 @@ if __name__ == "__main__":
     import sys
     from src.pipelines.daily_report.stages.ingest_stage import ingest
 
-    date = sys.argv[1] if len(sys.argv) > 1 else "2026-04-14"
+    date = sys.argv[1] if len(sys.argv) > 1 else "2026-04-15"
 
     # 데이터 로드
     ingest_result = ingest(date)
@@ -180,7 +180,9 @@ if __name__ == "__main__":
     # 요약 출력
     total_themes = sum(len(issue.themes) for issue in issues)
     unique_themes = len(set(theme for issue in issues for theme in issue.themes))
-    avg_sources = sum(len(issue.source_ids) for issue in issues) / len(issues) if issues else 0
+    avg_sources = (
+        sum(len(issue.source_ids) for issue in issues) / len(issues) if issues else 0
+    )
 
     print(f"✓ 테마: {total_themes}개 총, {unique_themes}개 고유")
     print(f"✓ 이슈당 평균 소스 수: {avg_sources:.1f}")
@@ -189,5 +191,7 @@ if __name__ == "__main__":
     output_file = f"tests/pipelines/daily_report/fixtures/stage_outputs/map_{date}.json"
     Path(output_file).parent.mkdir(parents=True, exist_ok=True)
     with open(output_file, "w", encoding="utf-8") as f:
-        json.dump([issue.model_dump() for issue in issues], f, ensure_ascii=False, indent=2)
+        json.dump(
+            [issue.model_dump() for issue in issues], f, ensure_ascii=False, indent=2
+        )
     print(f"✓ {output_file}에 저장")
