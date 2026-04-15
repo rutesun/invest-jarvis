@@ -35,24 +35,24 @@ def run_pipeline(date: str, data_dir: str = "data") -> DailyReport:
     issues = map_stage(ingest_result.messages, date)
     print(f"  ✓ {len(issues)}개 이슈 추출")
 
-    # # 3. Shuffle: 테마 정규화
-    # print(f"[3/5] Shuffle Stage...")
-    # shuffle_result = shuffle_stage(issues, date)
-    # print(f"  ✓ {len(shuffle_result.canonical_themes)}개 정규화 테마")
+    # 3. Shuffle: 테마 정규화
+    print(f"[3/5] Shuffle Stage...")
+    shuffle_result = shuffle_stage(issues, date)
+    print(f"  ✓ {len(shuffle_result.canonical_themes)}개 정규화 테마")
 
-    # # 4. Reduce: 테마별 분석
-    # print(f"[4/5] Reduce Stage...")
-    # news_items = reduce_stage(
-    #     shuffle_result.theme_groups,
-    #     ingest_result.macro,
-    #     date,
-    # )
-    # print(f"  ✓ {len(news_items)}개 테마 분석")
+    # 4. Reduce: 테마별 분석
+    print(f"[4/5] Reduce Stage...")
+    news_items = reduce_stage(
+        shuffle_result.theme_groups,
+        ingest_result.macro,
+        date,
+    )
+    print(f"  ✓ {len(news_items)}개 테마 분석")
 
-    # # 5. Wrapup: 최종 리포트
-    # print(f"[5/5] Wrapup Stage...")
-    # report = wrapup_stage(news_items, ingest_result.macro, date)
-    # print(f"  ✓ {len(report.key_insights)}개 핵심 인사이트")
+    # 5. Wrapup: 최종 리포트
+    print(f"[5/5] Wrapup Stage...")
+    report = wrapup_stage(news_items, ingest_result.macro, date)
+    print(f"  ✓ {len(report.key_insights)}개 핵심 인사이트")
 
     return report
 

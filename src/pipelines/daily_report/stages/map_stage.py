@@ -5,7 +5,7 @@ import os
 from typing import List
 from pathlib import Path
 from dotenv import load_dotenv
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from src.llm.provider import LLMProvider
 
 # LangSmith 추적을 위한 환경변수 로드
@@ -18,7 +18,7 @@ from src.pipelines.daily_report.examples.map_examples import get_map_examples
 def map_stage(
     messages: List[TelegramMessage],
     date: str = None,
-    max_tokens_per_chunk: int = 15000,
+    max_tokens_per_chunk: int = 80000,
 ) -> List[MappedIssue]:
     """
     청크 단위로 텔레그램 메시지에서 이슈 추출.
@@ -115,13 +115,47 @@ async def _analyze_chunk(
     message_count = len(chunk)
     target_count = max(int(message_count * 0.18), 5)  # 최소 5개
 
-    # 프롬프트 구성
-    prompt = MAP_PROMPT.format(
-        examples=get_map_examples(),
-        messages=messages_text,
-        message_count=message_count,
-        target_count=target_count,
-    )
+    # 프롬프트 분리: 예시는 SystemMessage로 (캐싱 가능)
+    examples = get_map_examples()
+    system_prompt = f"""당신은 한국 금융 시장 전문 애널리스트입니다.
+
+**작업**: 메시지를 이슈로 압축
+
+**클러스터링 방법** (Few-shot):
+{examples}
+
+**지침**:
+1. **먼저 그룹핑**: 모든 메시지를 읽고 유사한 것들끼리 묶기
+   - 같은 기업: "블룸 에너지", "오라클-블룸", "Bloom Energy" → 하나
+   - 같은 산업: "삼성 HBM", "SK하이닉스 HBM", "마이크론 가격" → 하나
+   - 같은 트렌드: "AI 데이터센터 전력", "전력 인프라 투자" → 하나
+
+2. **테마**: 2-3개, 구체적으로
+   - "반도체" (X) → "AI 메모리 업사이클" (O)
+
+3. **Sentiment**: 정확히 이 3개 중 하나만 사용
+   - "bull" - 명확한 호재 (실적 개선, 계약 체결, 긍정 전망)
+   - "bear" - 명확한 악재 (실적 부진, 리스크, 부정 전망)
+   - "neutral" - 그 외 모든 경우 (정보, 불확실, 혼재)
+
+4. **Source_ids**: 묶인 모든 메시지 ID 나열"""
+
+    user_prompt = f"""**입력 ({message_count}개 메시지)**:
+{messages_text}
+
+**출력 (정확히 {target_count}개 이슈)**:
+```json
+[
+  {{
+    "title": "한글 제목",
+    "summary": "통합 요약 (2-3문장)",
+    "themes": ["테마1", "테마2"],
+    "keywords": ["종목", "기술용어"],
+    "sentiment": "bull",
+    "source_ids": ["id1", "id2", "id3", ...]
+  }}
+]
+```"""
 
     # LangSmith 그룹핑을 위한 메타데이터 설정
     run_name = f"Map Stage - {date} - Chunk {chunk_index+1}"
@@ -137,8 +171,12 @@ async def _analyze_chunk(
         },
     }
 
-    # LLM 호출
-    response = await llm.ainvoke([HumanMessage(content=prompt)], config=config)
+    # LLM 호출 (예시를 SystemMessage로 분리하여 캐싱 가능)
+    messages = [
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=user_prompt),
+    ]
+    response = await llm.ainvoke(messages, config=config)
 
     # JSON 응답 파싱
     try:

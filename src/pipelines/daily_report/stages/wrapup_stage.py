@@ -4,7 +4,7 @@ import json
 from typing import List
 from pathlib import Path
 from dotenv import load_dotenv
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from src.llm.provider import LLMProvider
 
 load_dotenv()
@@ -65,7 +65,29 @@ async def _generate_insights(
         for item in news_items
     ])
 
-    prompt = WRAPUP_PROMPT.format(news_items=news_text)
+    # System/User 메시지 분리 (캐싱 가능)
+    system_prompt = """당신은 시장 전략가입니다.
+여러 테마들을 종합하여 오늘의 핵심 시장 내러티브를 도출하세요.
+
+**작성 지침**:
+1. 한글로 작성
+2. 여러 테마를 연결하는 메타 인사이트 3-5개 도출
+3. 각 인사이트는 2-3줄로 간결하게
+4. 이모지 활용 (🔥💡🌊⚠️ 등)
+5. 단순 요약 금지 - 테마 간 연결과 시사점 도출
+
+**출력 형식**: JSON array of strings
+```json
+[
+  "🔥 AI 슈퍼사이클: 데이터센터 전력 인프라 + 반도체 메모리 업사이클 + 전력기기 수주 급증 → 통합 투자 테마 형성",
+  "💡 공급망 리쇼어링: 미국 CHIPS Act + 한국 전력기기 수출 + 일본 소재 확대 → 비중국 밸류체인 재편 가속"
+]
+```"""
+
+    user_prompt = f"""**테마별 분석**:
+{news_text}
+
+위 테마들을 종합하여 핵심 시장 내러티브를 도출하세요."""
 
     # LangSmith 태깅
     run_name = f"Wrapup Stage - {date}"
@@ -81,7 +103,11 @@ async def _generate_insights(
         },
     }
 
-    response = await llm.ainvoke([HumanMessage(content=prompt)], config=config)
+    messages = [
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=user_prompt),
+    ]
+    response = await llm.ainvoke(messages, config=config)
 
     # JSON 파싱
     try:

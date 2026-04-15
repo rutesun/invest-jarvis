@@ -5,7 +5,7 @@ from typing import List, Dict
 from pathlib import Path
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from ddgs import DDGS
 from src.llm.provider import LLMProvider
 
@@ -95,12 +95,49 @@ async def _analyze_theme(
         for article in news_articles
     ]) if news_articles else "관련 뉴스 없음"
 
-    prompt = REDUCE_PROMPT.format(
-        theme=theme,
-        issues=issues_text,
-        news_articles=news_text,
-        examples="",
-    )
+    # System/User 메시지 분리 (캐싱 가능)
+    system_prompt = """당신은 한국 금융 시장 전문 애널리스트입니다.
+특정 테마에 대한 분석 리포트를 작성하세요.
+
+**작성 지침**:
+1. 한글로 작성
+2. 이모지 사용:
+   - 🚀 강세/호재
+   - 📈 상승 추세
+   - ⚠️ 주의/리스크
+   - 📉 약세
+   - ℹ️ 중립/정보
+   - ⚡ 긴급/중요
+3. Summary: 단일 문자열로, 줄바꿈(\\n)으로 구분된 bullet points (이모지 포함)
+4. Impact: 시장 영향 평가 (단일 문자열)
+5. 관련 종목이 있으면 StockDetail 포함 (종목명, 티커, 촉매 뉴스)"""
+
+    user_prompt = f"""**테마**: {theme}
+
+**관련 이슈들**:
+{issues_text}
+
+**관련 뉴스**:
+{news_text}
+
+**출력 형식**: JSON object
+```json
+{{
+  "theme": "{theme}",
+  "emoji": "⚡",
+  "summary": "🔋 첫 번째 포인트\\n📈 두 번째 포인트\\n⚡ 세 번째 포인트",
+  "impact": "시장 영향 평가 문장",
+  "stocks": [
+    {{
+      "name": "종목명",
+      "ticker": "티커",
+      "catalyst": "촉매 뉴스"
+    }}
+  ]
+}}
+```
+
+⚠️ 주의: summary와 impact는 반드시 문자열(string)이어야 합니다. 배열이 아닙니다."""
 
     # LangSmith 태깅
     run_name = f"Reduce Stage - {date} - {theme[:30]}"
@@ -116,7 +153,11 @@ async def _analyze_theme(
         },
     }
 
-    response = await llm.ainvoke([HumanMessage(content=prompt)], config=config)
+    messages = [
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=user_prompt),
+    ]
+    response = await llm.ainvoke(messages, config=config)
 
     # JSON 파싱
     try:
