@@ -3,7 +3,11 @@ import csv
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import List
+from dotenv import load_dotenv
 import yfinance as yf
+
+# 환경변수 로드
+load_dotenv()
 from src.pipelines.daily_report.models import (
     IngestResult,
     MacroSnapshot,

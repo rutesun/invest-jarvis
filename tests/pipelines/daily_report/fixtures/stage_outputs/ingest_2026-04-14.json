@@ -3,17 +3,17 @@
   "macro": {
     "date": "2026-04-14",
     "us_markets": {
-      "S&P500": 0.97,
-      "NASDAQ": 1.71,
-      "DOW": 0.48
+      "S&P500": 1.18,
+      "NASDAQ": 1.96,
+      "DOW": 0.66
     },
     "kr_markets": {
-      "KOSPI": NaN,
-      "KOSDAQ": NaN
+      "KOSPI": 3.1,
+      "KOSDAQ": 2.99
     },
-    "vix": 18.5,
+    "vix": 18.4,
     "fear_greed": 50,
-    "krw_usd": 1471.8
+    "krw_usd": 1472.7
   },
   "messages": [
     {

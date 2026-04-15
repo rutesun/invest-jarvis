@@ -1,10 +1,15 @@
 """Map stage: 텔레그램 메시지에서 테마를 가진 이슈 추출."""
 import asyncio
 import json
+import os
 from typing import List
 from pathlib import Path
+from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage
 from src.llm.provider import LLMProvider
+
+# LangSmith 추적을 위한 환경변수 로드
+load_dotenv()
 from src.pipelines.daily_report.models import TelegramMessage, MappedIssue
 from src.pipelines.daily_report.prompts import MAP_PROMPT
 from src.pipelines.daily_report.examples.map_examples import get_map_examples
