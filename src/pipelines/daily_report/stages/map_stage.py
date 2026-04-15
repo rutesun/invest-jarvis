@@ -12,7 +12,7 @@ from src.pipelines.daily_report.examples.map_examples import get_map_examples
 
 def map_stage(
     messages: List[TelegramMessage],
-    max_tokens_per_chunk: int = 6000,
+    max_tokens_per_chunk: int = 15000,
 ) -> List[MappedIssue]:
     """
     청크 단위로 텔레그램 메시지에서 이슈 추출.
@@ -77,7 +77,7 @@ async def _analyze_chunks_parallel(
     chunks: List[List[TelegramMessage]],
 ) -> List[List[MappedIssue]]:
     """asyncio로 청크를 병렬 분석."""
-    llm = LLMProvider.create(provider="openai", model="gpt-4o", temperature=0.3)
+    llm = LLMProvider.create(provider="openai", model="gpt-4o", temperature=0.2)
 
     tasks = [_analyze_chunk(chunk, llm) for chunk in chunks]
     return await asyncio.gather(*tasks)
@@ -94,10 +94,16 @@ async def _analyze_chunk(
         for msg in chunk
     ])
 
+    # 목표 이슈 개수 계산 (메시지의 15-20%)
+    message_count = len(chunk)
+    target_count = max(int(message_count * 0.18), 5)  # 최소 5개
+
     # 프롬프트 구성
     prompt = MAP_PROMPT.format(
         examples=get_map_examples(),
         messages=messages_text,
+        message_count=message_count,
+        target_count=target_count,
     )
 
     # LLM 호출

@@ -46,12 +46,19 @@ def test_map_stage_with_real_data():
     # 실제 데이터는 이슈를 생성해야 함
     assert len(issues) > 0
 
-    # 클러스터링 품질 체크 (프롬프트 튜닝 필요 - 현재는 기본 검증만)
+    # 압축률 체크
+    message_count = len(ingest_result.messages)
+    compression_rate = len(issues) / message_count
+    print(f"\n압축률: {message_count}개 → {len(issues)}개 ({compression_rate:.1%})")
+    assert compression_rate < 0.7  # 최소 30% 압축
+
+    # 클러스터링 품질 체크
     avg_sources = sum(len(issue.source_ids) for issue in issues) / len(issues)
-    print(f"\n평균 소스/이슈: {avg_sources:.1f}")
-    assert avg_sources >= 1  # 최소한 각 이슈는 1개 이상의 소스
+    print(f"평균 소스/이슈: {avg_sources:.1f}")
+    assert avg_sources >= 1.5  # 평균 1.5개 이상의 소스
 
     # 테마 다양성 체크
     unique_themes = len(set(theme for issue in issues for theme in issue.themes))
-    print(f"고유 테마 수: {unique_themes}")
-    assert unique_themes >= 5  # 최소 5개 이상의 고유 테마
+    total_themes = sum(len(issue.themes) for issue in issues)
+    print(f"테마: {total_themes}개 총, {unique_themes}개 고유")
+    assert unique_themes >= 20  # 최소 20개 이상의 고유 테마
