@@ -65,6 +65,7 @@ def shuffle_stage(
             title=issue.title,
             summary=issue.summary,
             themes=normalized_themes,
+            impact=issue.impact,
             keywords=issue.keywords,
             sentiment=issue.sentiment,
             source_ids=issue.source_ids,

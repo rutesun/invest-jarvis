@@ -82,7 +82,7 @@ async def _analyze_theme(
     news_articles = _search_news(theme, date, max_news)
 
     # 2. LLM 분석
-    llm = LLMProvider.create(provider="openai", model="gpt-4o", temperature=0.3)
+    llm = LLMProvider.create(provider="anthropic", model="us.anthropic.claude-haiku-4-5-20251001-v1:0", temperature=0.3)
 
     # 프롬프트 구성
     issues_text = "\n\n".join([

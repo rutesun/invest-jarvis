@@ -58,7 +58,7 @@ async def _generate_insights(
     date: str,
 ) -> List[str]:
     """LLM으로 메타 인사이트 생성."""
-    llm = LLMProvider.create(provider="openai", model="gpt-4o", temperature=0.4)
+    llm = LLMProvider.create(provider="anthropic", model="us.anthropic.claude-haiku-4-5-20251001-v1:0", temperature=0.4)
 
     # 프롬프트 구성
     news_text = "\n\n".join([
