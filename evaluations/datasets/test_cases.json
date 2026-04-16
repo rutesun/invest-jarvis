@@ -9,11 +9,28 @@
       "expected": {
         "num_issues_min": 2,
         "num_issues_max": 2,
-        "must_preserve_numbers": ["10%", "5.6%"],
-        "must_preserve_companies": ["테슬라", "오라클", "블룸에너지"],
+        "must_preserve_numbers": [
+          "10%",
+          "5.6%"
+        ],
+        "must_preserve_companies": [
+          "테슬라",
+          "오라클",
+          "블룸에너지"
+        ],
         "must_split": true,
-        "expected_themes": ["전기차 수요 둔화", "AI 전력"],
-        "expected_keywords": ["테슬라", "오라클", "블룸에너지", "데이터센터", "연료전지"]
+        "expected_themes": [
+          "전기차 수요 둔화",
+          "AI 전력"
+        ],
+        "expected_keywords": [
+          "테슬라",
+          "인력 감축",
+          "오라클",
+          "블룸에너지",
+          "데이터센터",
+          "연료전지"
+        ]
       }
     },
     {
@@ -23,11 +40,21 @@
       "expected": {
         "num_issues_min": 1,
         "num_issues_max": 1,
-        "must_preserve_numbers": ["6"],
-        "must_preserve_companies": ["삼성전자"],
+        "must_preserve_numbers": [
+          "6"
+        ],
+        "must_preserve_companies": [
+          "삼성전자"
+        ],
         "must_split": false,
-        "expected_themes": ["반도체 메모리"],
-        "expected_keywords": ["삼성전자", "HBM", "HBM4"]
+        "expected_themes": [
+          "반도체 메모리"
+        ],
+        "expected_keywords": [
+          "삼성전자",
+          "HBM",
+          "HBM4"
+        ]
       }
     },
     {
@@ -37,11 +64,29 @@
       "expected": {
         "num_issues_min": 3,
         "num_issues_max": 3,
-        "must_preserve_numbers": ["0.7%", "0.3%", "1,620억", "49%"],
-        "must_preserve_companies": ["삼양식품", "엔비디아"],
+        "must_preserve_numbers": [
+          "0.7%",
+          "0.3%",
+          "1,620억",
+          "49%"
+        ],
+        "must_preserve_companies": [
+          "삼양식품",
+          "엔비디아"
+        ],
         "must_split": true,
-        "expected_themes": ["인플레이션", "K-푸드 수출", "양자컴퓨터"],
-        "expected_keywords": ["소매판매", "삼양식품", "라면", "엔비디아", "양자암호"]
+        "expected_themes": [
+          "인플레이션",
+          "K-푸드 수출",
+          "양자컴퓨터"
+        ],
+        "expected_keywords": [
+          "소매판매",
+          "삼양식품",
+          "라면",
+          "엔비디아",
+          "양자암호"
+        ]
       }
     },
     {
@@ -51,11 +96,30 @@
       "expected": {
         "num_issues_min": 1,
         "num_issues_max": 2,
-        "must_preserve_numbers": ["29.79%", "29.93%", "29.91%"],
-        "must_preserve_companies": ["엔비디아", "라닉스", "엑스게이트", "케이씨에스"],
+        "must_preserve_numbers": [
+          "29.79%",
+          "29.93%",
+          "29.91%"
+        ],
+        "must_preserve_companies": [
+          "엔비디아",
+          "라닉스",
+          "엑스게이트",
+          "케이씨에스"
+        ],
         "must_split": false,
-        "expected_themes": ["양자보안"],
-        "expected_keywords": ["엔비디아", "라닉스", "엑스게이트", "케이씨에스", "드림시큐리티", "아이씨티케이", "양자암호"]
+        "expected_themes": [
+          "양자보안"
+        ],
+        "expected_keywords": [
+          "엔비디아",
+          "라닉스",
+          "엑스게이트",
+          "케이씨에스",
+          "드림시큐리티",
+          "아이씨티케이",
+          "양자암호"
+        ]
       }
     },
     {
@@ -65,11 +129,132 @@
       "expected": {
         "num_issues_min": 1,
         "num_issues_max": 1,
-        "must_preserve_numbers": ["24.2GWh", "32.9%", "12.6GWh", "62.0%", "0.3GWh", "79.7%", "3.8GWh", "13.5%"],
+        "must_preserve_numbers": [
+          "24.2GWh",
+          "32.9%",
+          "12.6GWh",
+          "62.0%",
+          "0.3GWh",
+          "79.7%",
+          "3.8GWh",
+          "13.5%"
+        ],
         "must_preserve_companies": [],
         "must_split": false,
-        "expected_themes": ["ESS 시장"],
-        "expected_keywords": ["ESS", "에너지저장장치"]
+        "expected_themes": [
+          "ESS 시장"
+        ],
+        "expected_keywords": [
+          "ESS",
+          "에너지저장장치"
+        ]
+      }
+    },
+    {
+      "id": "case_csv_003",
+      "name": "한화에어로스페이스_목표가_상향",
+      "input": "한화에어로스페이스 목표주가 1,460,000원 >> 1,750,000원 상향(하나증권). 지상방산 수주잔고 37.2조원(4.6년치 일감) 확보. 1분기 수주 성과 3.7조원(노르웨이 천무 1.3조원, 폴란드 천무 2.4조원) 기록.",
+      "expected": {
+        "num_issues_min": 1,
+        "num_issues_max": 1,
+        "must_preserve_numbers": [
+          "1,750,000원",
+          "37.2조원",
+          "4.6년",
+          "3.7조원"
+        ],
+        "must_preserve_companies": [
+          "한화에어로스페이스",
+          "하나증권"
+        ],
+        "expected_themes": [
+          "방위산업",
+          "실적 전망"
+        ],
+        "expected_keywords": [
+          "목표주가",
+          "수주잔고",
+          "천무",
+          "지상방산"
+        ]
+      }
+    },
+    {
+      "id": "case_csv_004",
+      "name": "반도체_HBM_공급망_분석",
+      "input": "[신한 반도체 남궁현] 마이크론이 HBM3E 8단 제품을 엔비디아에 공급하기 시작하며 점유율 확대를 꾀하고 있습니다. 이에 대응해 SK하이닉스는 12단 제품 양산을 앞당기고 있으며, 관련 장비사인 한미반도체의 TC-Bonder 수주 모멘텀이 강화될 전망입니다. 삼성전자는 6세대 HBM4 개발에 박차를 가하고 있습니다.",
+      "expected": {
+        "num_issues_min": 1,
+        "num_issues_max": 2,
+        "must_split": false,
+        "must_preserve_companies": [
+          "마이크론",
+          "SK하이닉스",
+          "한미반도체",
+          "삼성전자"
+        ],
+        "expected_themes": [
+          "반도체 HBM 경쟁"
+        ],
+        "expected_keywords": [
+          "HBM3E",
+          "HBM4",
+          "TC-Bonder",
+          "엔비디아",
+          "공급망"
+        ]
+      }
+    },
+    {
+      "id": "case_csv_005",
+      "name": "매크로_금리_및_성장주_반응",
+      "input": "[시황/전략] 미 10년물 국채금리가 4.5%를 돌파하며 기술주 전반에 하방 압력을 가하고 있습니다. 특히 금리에 민감한 알테오젠, 리그켐바이오 등 바이오 섹터의 낙폭이 두드러졌습니다. 반면 인플레이션 수혜주인 원자재 관련주들은 소폭 반등하며 지수를 방어했습니다.",
+      "expected": {
+        "num_issues_min": 2,
+        "num_issues_max": 2,
+        "must_split": true,
+        "must_preserve_numbers": [
+          "4.5%"
+        ],
+        "must_preserve_companies": [
+          "알테오젠",
+          "리그켐바이오"
+        ],
+        "expected_themes": [
+          "금리 상승",
+          "바이오/기술주 하락",
+          "원자재 수혜"
+        ],
+        "expected_keywords": [
+          "국채금리",
+          "인플레이션",
+          "성장주",
+          "하방 압력"
+        ]
+      }
+    },
+    {
+      "id": "case_csv_006",
+      "name": "중소형주_대규모_공급계약",
+      "input": "그로쓰리서치 확인 결과, A사는 오늘 유럽 완성차 업체와 1,250억 규모의 EV용 배터리 케이스 공급 계약을 체결했습니다. 이는 전년 매출액 대비 45.3%에 해당하는 규모이며, 계약 기간은 2028년 12월까지입니다. 이번 계약으로 북미 시장 진출의 교두보를 마련했다는 평가입니다.",
+      "expected": {
+        "num_issues_min": 1,
+        "num_issues_max": 1,
+        "must_preserve_numbers": [
+          "1,250억",
+          "45.3%",
+          "2028년 12월"
+        ],
+        "expected_themes": [
+          "공급계약 체결",
+          "EV 부품"
+        ],
+        "expected_keywords": [
+          "배터리 케이스",
+          "매출액 대비",
+          "유럽 완성차",
+          "북미 진출"
+        ]
       }
     }
   ]
