@@ -1,4 +1,5 @@
 """LLM provider factory for creating langchain chat models."""
+
 import os
 from typing import Literal
 from langchain_openai import ChatOpenAI
@@ -81,15 +82,10 @@ class LLMProvider:
         temperature: float,
     ) -> BaseChatModel:
         """Create Bedrock chat model with custom endpoint."""
-        try:
-            import boto3
-            from botocore.config import Config
-            from langchain_aws import ChatBedrockConverse
-        except ImportError as e:
-            raise ImportError(
-                "langchain-aws is required for Bedrock support. "
-                "Install it with: uv pip install langchain-aws"
-            ) from e
+
+        import boto3
+        from botocore.config import Config
+        from langchain_aws import ChatBedrockConverse
 
         # 환경 변수에서 Bedrock 설정 읽기
         region = os.getenv("AWS_REGION", "us-east-1")

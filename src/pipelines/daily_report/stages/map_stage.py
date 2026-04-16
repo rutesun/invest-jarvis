@@ -92,7 +92,7 @@ async def _analyze_chunks_parallel(
     date: str,
 ) -> List[List[MappedIssue]]:
     """asyncio로 청크를 병렬 분석."""
-    llm = LLMProvider.create(provider="openai", model="gpt-4o", temperature=0.2)
+    llm = LLMProvider.create(provider="anthropic", model="us.anthropic.claude-haiku-4-5-20251001-v1:0", temperature=0.2)
 
     tasks = [
         _analyze_chunk(chunk, llm, chunk_index, date)

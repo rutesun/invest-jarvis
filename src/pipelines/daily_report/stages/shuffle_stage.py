@@ -84,7 +84,7 @@ def shuffle_stage(
 
 async def _normalize_themes(themes: List[str], date: str) -> Dict[str, List[str]]:
     """LLM으로 테마 정규화."""
-    llm = LLMProvider.create(provider="openai", model="gpt-4o", temperature=0.1)
+    llm = LLMProvider.create(provider="anthropic", model="us.anthropic.claude-haiku-4-5-20251001-v1:0", temperature=0.1)
 
     themes_text = "\n".join([f"- {theme}" for theme in themes])
 
