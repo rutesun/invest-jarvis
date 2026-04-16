@@ -194,7 +194,12 @@ TEST_SYSTEM_PROMPT = """
 """
 
 
-async def run_test(model_name: str, temperature: float, provider: str = "openai", use_bedrock: bool = True):
+async def run_test(
+    model_name: str,
+    temperature: float,
+    provider: str = "openai",
+    use_bedrock: bool = True,
+):
     # Bedrock 사용 여부 명시적 설정
     if not use_bedrock:
         os.environ["CLAUDE_CODE_USE_BEDROCK"] = "0"
@@ -211,6 +216,8 @@ async def run_test(model_name: str, temperature: float, provider: str = "openai"
         + COMPLEX_MESSAGE3
         + COMPLEX_MESSAGE4
     )
+
+    message = COMPLEX_MESSAGE2
 
     # 채널명-메시지ID 형태로 가상 포맷팅
     formatted_msg = f"[MorningBrief-101] {message.strip()}"
@@ -249,6 +256,9 @@ async def run_test(model_name: str, temperature: float, provider: str = "openai"
 
         for idx, issue in enumerate(response.issues, 1):
             print(f"  [{idx}] {issue.title} ({issue.sentiment.upper()})")
+            print(f"            keywords: {issue.keywords}")
+            print(f"            themes: {issue.themes}")
+            print(f"            impact: {issue.impact}")
 
     except Exception as e:
         print(f"⚠️ 에러 발생 ({model_name}, T={temperature}): {e}")
@@ -257,7 +267,7 @@ async def run_test(model_name: str, temperature: float, provider: str = "openai"
 if __name__ == "__main__":
     # 테스트할 조합 설정
     target_models = [
-        "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+        # "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
         "us.anthropic.claude-haiku-4-5-20251001-v1:0",
     ]
     target_temperatures = [0.1]
