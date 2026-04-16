@@ -19,6 +19,15 @@ from langsmith.schemas import Example, Run
 from src.pipelines.daily_report.models import TelegramMessage, MappedIssue
 from src.pipelines.daily_report.stages.map_stage import map_stage
 from src.llm.provider import LLMProvider
+from evaluations.metrics import (
+    split_accuracy as _split_accuracy,
+    number_preservation as _number_preservation,
+    company_preservation as _company_preservation,
+    keyword_coverage as _keyword_coverage,
+    must_split_check as _must_split_check,
+    _issues_to_text,
+    ThemeMatchResult,
+)
 
 # LangSmith 클라이언트
 client = Client()
@@ -80,83 +89,42 @@ def run_map_stage_for_eval(inputs: Dict) -> Dict:
     }
 
 
-def _issues_to_text(issues: List[MappedIssue]) -> str:
-    """이슈 리스트를 단일 텍스트로 변환."""
-    parts = []
-    for issue in issues:
-        parts.append(issue.title)
-        parts.append(issue.summary)
-        parts.append(issue.impact)
-        parts.extend(issue.themes)
-        parts.extend(issue.keywords)
-    return " ".join(parts)
-
-
 # ============================================================
-# Rule-based Evaluators
+# Rule-based Evaluators — metrics.py 함수를 래핑
 # ============================================================
 
 def split_accuracy(run: Run, example: Example) -> Dict:
     """이슈 분리 정확도."""
-    outputs = run.outputs or {}
-    expected = example.outputs or {}
-
-    actual_count = outputs.get("num_issues", 0)
-    min_expected = expected.get("num_issues_min", 1)
-    max_expected = expected.get("num_issues_max", 1)
-
-    score = 1.0 if min_expected <= actual_count <= max_expected else 0.0
+    issues = [MappedIssue(**i) for i in (run.outputs or {}).get("issues", [])]
+    score = _split_accuracy(issues, example.outputs or {})
     return {"key": "split_accuracy", "score": score}
+
+
+def must_split_check(run: Run, example: Example) -> Dict:
+    """분리 필요 여부 충족 검사."""
+    issues = [MappedIssue(**i) for i in (run.outputs or {}).get("issues", [])]
+    score = _must_split_check(issues, example.outputs or {})
+    return {"key": "must_split_check", "score": score}
 
 
 def number_preservation(run: Run, example: Example) -> Dict:
     """숫자 보존율."""
-    outputs = run.outputs or {}
-    expected = example.outputs or {}
-
-    expected_numbers = expected.get("must_preserve_numbers", [])
-    if not expected_numbers:
-        return {"key": "number_preservation", "score": 1.0}
-
-    output_text = outputs.get("all_text", "")
-    preserved = sum(1 for n in expected_numbers if n in output_text)
-    score = preserved / len(expected_numbers)
-
+    issues = [MappedIssue(**i) for i in (run.outputs or {}).get("issues", [])]
+    score = _number_preservation(issues, example.outputs or {})
     return {"key": "number_preservation", "score": score}
 
 
 def company_preservation(run: Run, example: Example) -> Dict:
     """기업명 보존율."""
-    outputs = run.outputs or {}
-    expected = example.outputs or {}
-
-    expected_companies = expected.get("must_preserve_companies", [])
-    if not expected_companies:
-        return {"key": "company_preservation", "score": 1.0}
-
-    output_text = outputs.get("all_text", "")
-    preserved = sum(1 for c in expected_companies if c in output_text)
-    score = preserved / len(expected_companies)
-
+    issues = [MappedIssue(**i) for i in (run.outputs or {}).get("issues", [])]
+    score = _company_preservation(issues, example.outputs or {})
     return {"key": "company_preservation", "score": score}
 
 
 def keyword_coverage(run: Run, example: Example) -> Dict:
     """키워드 커버리지."""
-    outputs = run.outputs or {}
-    expected = example.outputs or {}
-
-    expected_keywords = expected.get("expected_keywords", [])
-    if not expected_keywords:
-        return {"key": "keyword_coverage", "score": 1.0}
-
-    output_text = outputs.get("all_text", "")
-    all_keywords = outputs.get("all_keywords", [])
-    search_text = output_text + " " + " ".join(all_keywords)
-
-    covered = sum(1 for kw in expected_keywords if kw in search_text)
-    score = covered / len(expected_keywords)
-
+    issues = [MappedIssue(**i) for i in (run.outputs or {}).get("issues", [])]
+    score = _keyword_coverage(issues, example.outputs or {})
     return {"key": "keyword_coverage", "score": score}
 
 
@@ -166,12 +134,7 @@ def keyword_coverage(run: Run, example: Example) -> Dict:
 
 def theme_relevance_llm(run: Run, example: Example) -> Dict:
     """LLM-as-Judge로 테마 의미적 유사도 평가."""
-    from pydantic import BaseModel, Field
     from langchain_core.messages import HumanMessage, SystemMessage
-
-    class ThemeMatchResult(BaseModel):
-        score: float = Field(description="매칭 점수 (0.0 ~ 1.0)", ge=0.0, le=1.0)
-        reasoning: str = Field(description="판단 근거")
 
     outputs = run.outputs or {}
     expected = example.outputs or {}
@@ -199,13 +162,12 @@ def theme_relevance_llm(run: Run, example: Example) -> Dict:
 - 예: "전기차 수요 둔화" ≈ "EV 시장 성장 둔화"
 - 부분적으로 관련있는 것은 매칭 아님
 
-각 예상 테마가 실제 테마 중 하나와 매칭되면 1점, 아니면 0점.
-전체 예상 테마 중 매칭된 비율을 score로 반환하세요."""
+JSON 형식으로 응답하세요."""
 
     user_prompt = f"""예상 테마: {expected_themes}
 실제 테마: {actual_themes}
 
-매칭 점수와 판단 근거를 제공하세요."""
+각 예상 테마가 실제 테마 중 하나와 의미적으로 일치하는지 판단하세요."""
 
     messages = [
         SystemMessage(content=system_prompt),
@@ -215,10 +177,11 @@ def theme_relevance_llm(run: Run, example: Example) -> Dict:
     try:
         llm_with_output = llm.with_structured_output(ThemeMatchResult)
         result = llm_with_output.invoke(messages)
+        reasoning = result.matches[0].get("reason", "") if result.matches else ""
         return {
             "key": "theme_relevance",
             "score": result.score,
-            "comment": result.reasoning,
+            "comment": reasoning,
         }
     except Exception as e:
         print(f"⚠️  LLM 테마 평가 실패: {e}")
@@ -236,6 +199,7 @@ def run_evaluation(experiment_prefix: str):
         data=DATASET_NAME,
         evaluators=[
             split_accuracy,
+            must_split_check,
             number_preservation,
             company_preservation,
             keyword_coverage,

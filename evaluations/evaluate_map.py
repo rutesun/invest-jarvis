@@ -70,7 +70,8 @@ def run_evaluation(
         print(f"\n{'='*60}")
         print(f"📋 {case_id}: {case_name}")
         print(f"{'='*60}")
-        print(f"Input: {input_text[:80]}...")
+        suffix = "..." if len(input_text) > 80 else ""
+        print(f"Input: {input_text[:80]}{suffix}")
 
         # TelegramMessage로 변환
         message = create_telegram_message(input_text, case_id)

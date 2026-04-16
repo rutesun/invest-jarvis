@@ -146,13 +146,27 @@ def keyword_coverage(
     if not expected_keywords:
         return 1.0
 
-    # keywords 필드 + summary + title에서 검색
-    output_text = _issues_to_text(issues)
-    actual_keywords = [kw for issue in issues for kw in issue.keywords]
-    all_text = output_text + " " + " ".join(actual_keywords)
+    # _issues_to_text에 이미 keywords가 포함됨 — 중복 없이 단일 검색
+    all_text = _issues_to_text(issues)
 
     covered = sum(1 for kw in expected_keywords if kw in all_text)
     return covered / len(expected_keywords)
+
+
+def must_split_check(
+    issues: List[MappedIssue],
+    expected: Dict[str, Any],
+) -> float:
+    """분리 필요 여부 충족 검사.
+
+    must_split=True인 경우 이슈가 num_issues_min 이상으로 분리됐는지 확인.
+    must_split=False이거나 필드가 없으면 항상 1.0.
+    """
+    if not expected.get("must_split", False):
+        return 1.0
+
+    min_expected = expected.get("num_issues_min", 2)
+    return 1.0 if len(issues) >= min_expected else 0.0
 
 
 def _issues_to_text(issues: List[MappedIssue]) -> str:
@@ -170,6 +184,7 @@ def _issues_to_text(issues: List[MappedIssue]) -> str:
 # 규칙 기반 메트릭
 RULE_BASED_METRICS = {
     "split_accuracy": split_accuracy,
+    "must_split_check": must_split_check,
     "number_preservation": number_preservation,
     "company_preservation": company_preservation,
     "theme_relevance": theme_relevance,
