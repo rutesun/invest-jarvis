@@ -199,21 +199,10 @@ async def run_test(model_name: str, temperature: float, provider: str = "openai"
     if not use_bedrock:
         os.environ["CLAUDE_CODE_USE_BEDROCK"] = "0"
 
-    # 디버깅: 사용될 설정 출력
-    print(f"🔧 Debug Info:")
-    print(f"   USE_BEDROCK: {os.getenv('CLAUDE_CODE_USE_BEDROCK')}")
-    print(f"   BEDROCK_URL: {os.getenv('ANTHROPIC_BEDROCK_BASE_URL')}")
-    print(f"   SESSION_TOKEN: {os.getenv('AWS_SESSION_TOKEN', 'NOT SET')[:30]}...")
-    print()
-
     # 모델 정의
-    try:
-        llm = LLMProvider.create(
-            provider=provider, model=model_name, temperature=temperature
-        )
-    except Exception as e:
-        print(f"❌ LLMProvider 생성 실패: {e}")
-        raise
+    llm = LLMProvider.create(
+        provider=provider, model=model_name, temperature=temperature
+    )
 
     message = (
         COMPLEX_MESSAGE
@@ -274,19 +263,9 @@ if __name__ == "__main__":
     target_temperatures = [0.1]
 
     async def main():
-        # Bedrock 환경 변수 확인
-        print("=" * 60)
-        print("🔍 환경 변수 확인")
-        print("=" * 60)
-        print(f"CLAUDE_CODE_USE_BEDROCK: {os.getenv('CLAUDE_CODE_USE_BEDROCK', 'not set')}")
-        print(f"AWS_SESSION_TOKEN: {os.getenv('AWS_SESSION_TOKEN', 'not set')[:20] if os.getenv('AWS_SESSION_TOKEN') else 'not set'}")
-        print(f"ANTHROPIC_BEDROCK_BASE_URL: {os.getenv('ANTHROPIC_BEDROCK_BASE_URL', 'not set')}")
-        print()
-
         for model in target_models:
             for temp in target_temperatures:
-                # use_bedrock=True: Bedrock 사용, use_bedrock=False: 일반 Anthropic API 사용
-                await run_test(model, temp, provider="anthropic", use_bedrock=True)
+                await run_test(model, temp, provider="anthropic")
 
     asyncio.run(main())
 
