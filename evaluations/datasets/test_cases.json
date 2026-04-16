@@ -1,0 +1,76 @@
+{
+  "version": "1.0",
+  "description": "Daily report map stage evaluation test cases",
+  "test_cases": [
+    {
+      "id": "case_001",
+      "name": "복합_메시지_테슬라_오라클",
+      "input": "[MorningBrief] 테슬라는 글로벌 수요 부진으로 전 세계 인력의 10% 이상을 감축하겠다고 발표하며 주가가 5.6% 급락했습니다. 반면 오라클은 폭증하는 데이터센터 전력 수요를 감당하기 위해 블룸에너지와 연료전지 공급 계약을 체결했다는 소식이 전해졌습니다.",
+      "expected": {
+        "num_issues_min": 2,
+        "num_issues_max": 2,
+        "must_preserve_numbers": ["10%", "5.6%"],
+        "must_preserve_companies": ["테슬라", "오라클", "블룸에너지"],
+        "must_split": true,
+        "expected_themes": ["전기차 수요 둔화", "AI 전력"],
+        "expected_keywords": ["테슬라", "오라클", "블룸에너지", "데이터센터", "연료전지"]
+      }
+    },
+    {
+      "id": "case_002",
+      "name": "단순_메시지_삼성전자_HBM",
+      "input": "삼성전자가 HBM 메모리의 주도권을 되찾기 위해 6세대 HBM(HBM4) 양산을 예정보다 앞당길 것이라 시사했습니다.",
+      "expected": {
+        "num_issues_min": 1,
+        "num_issues_max": 1,
+        "must_preserve_numbers": ["6"],
+        "must_preserve_companies": ["삼성전자"],
+        "must_split": false,
+        "expected_themes": ["반도체 메모리"],
+        "expected_keywords": ["삼성전자", "HBM", "HBM4"]
+      }
+    },
+    {
+      "id": "case_003",
+      "name": "복합_메시지_3개_테마",
+      "input": "[데일리 브리핑] 미 소매판매가 전월비 0.7% 급증하며 예상치(0.3%)를 크게 상회해 인플레이션 고착화 우려를 자극했습니다. 국내에서는 삼양식품 트래픽으로 대변되는 라면 3월 수출액이 1,620억 원으로 전년 동기 대비 49% 폭증하며 역대 최대치를 경신했습니다. AI 업계에서는 엔비디아가 양자컴퓨터 AI 모델을 공개하며 양자암호 관련주들이 급등했습니다.",
+      "expected": {
+        "num_issues_min": 3,
+        "num_issues_max": 3,
+        "must_preserve_numbers": ["0.7%", "0.3%", "1,620억", "49%"],
+        "must_preserve_companies": ["삼양식품", "엔비디아"],
+        "must_split": true,
+        "expected_themes": ["인플레이션", "K-푸드 수출", "양자컴퓨터"],
+        "expected_keywords": ["소매판매", "삼양식품", "라면", "엔비디아", "양자암호"]
+      }
+    },
+    {
+      "id": "case_004",
+      "name": "개별_기업_다수_언급",
+      "input": "엔비디아의 양자컴퓨터 AI 공개로 라닉스, 엑스게이트, 케이씨에스, 드림시큐리티, 아이씨티케이 등 양자암호 및 보안 관련주들이 동반 상한가를 기록했습니다. 라닉스는 29.79%, 엑스게이트는 29.93%, 케이씨에스는 29.91% 상승했습니다.",
+      "expected": {
+        "num_issues_min": 1,
+        "num_issues_max": 2,
+        "must_preserve_numbers": ["29.79%", "29.93%", "29.91%"],
+        "must_preserve_companies": ["엔비디아", "라닉스", "엑스게이트", "케이씨에스"],
+        "must_split": false,
+        "expected_themes": ["양자보안"],
+        "expected_keywords": ["엔비디아", "라닉스", "엑스게이트", "케이씨에스", "드림시큐리티", "아이씨티케이", "양자암호"]
+      }
+    },
+    {
+      "id": "case_005",
+      "name": "숫자_많은_메시지",
+      "input": "3월 글로벌 ESS 신규 설치량은 24.2GWh로 전년 대비 32.9% 증가했습니다. 독립형은 12.6GWh로 62.0% 증가, 풍력 연계는 0.3GWh로 79.7% 증가했으나 태양광 연계는 3.8GWh로 13.5% 감소했습니다.",
+      "expected": {
+        "num_issues_min": 1,
+        "num_issues_max": 1,
+        "must_preserve_numbers": ["24.2GWh", "32.9%", "12.6GWh", "62.0%", "0.3GWh", "79.7%", "3.8GWh", "13.5%"],
+        "must_preserve_companies": [],
+        "must_split": false,
+        "expected_themes": ["ESS 시장"],
+        "expected_keywords": ["ESS", "에너지저장장치"]
+      }
+    }
+  ]
+}
