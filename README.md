@@ -129,6 +129,19 @@ ANTHROPIC_API_KEY=sk-ant-...
 # 공시 API (한국주식 공시 조회용, 선택)
 OPENDART_API_KEY=...
 
+# LLM Model Configuration (optional, 사내 모델명 사용 시)
+OPENAI_MODEL=gpt-5-mini
+ANTHROPIC_MODEL=us.anthropic.claude-haiku-4-5-20251001-v1:0
+
+# AWS Bedrock Configuration (Anthropic 모델을 Bedrock으로 사용 시)
+CLAUDE_CODE_USE_BEDROCK=1
+ANTHROPIC_BEDROCK_BASE_URL=https://genai-gateway.flava-cloud.com/
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=anything_is_fine
+AWS_SECRET_ACCESS_KEY=anything_is_fine
+AWS_SESSION_TOKEN=ck-...
+API_TIMEOUT_MS=600000
+
 # KIS API (한국 주식, portfolio 명령어에 필요)
 KIS_APP_KEY=...
 KIS_APP_SECRET=...
