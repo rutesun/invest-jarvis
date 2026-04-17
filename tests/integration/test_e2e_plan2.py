@@ -19,7 +19,7 @@ def test_analyze_command_integration():
 
     assert result.exit_code == 0
     assert "AAPL" in result.stdout
-    assert "Technical Analysis" in result.stdout
+    assert "기술적 지표" in result.stdout
     assert "News Analysis" in result.stdout or "Deep Dive Analysis" in result.stdout
 
 
@@ -56,4 +56,4 @@ def test_analyze_with_anthropic():
 
     assert result.exit_code == 0
     assert "AAPL" in result.stdout
-    assert "Technical Analysis" in result.stdout
+    assert "기술적 지표" in result.stdout

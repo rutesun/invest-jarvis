@@ -29,6 +29,9 @@ jarvis analyze 구글        # 한글 회사명으로 검색
 - 티커 또는 회사명으로 검색 가능
 - 기술적 분석 + LLM 해석
 - 최근 뉴스 감성 분석
+- **공시 분석**: SEC EDGAR 10-Q/8-K (미국주식) + OpenDART 키워드 필터링 (한국주식) — 최근 3개월
+- **수급 동향**: 외국인/기관 순매수 1d/5d/10d 추이 (한국주식, KIS OpenAPI)
+- **종합 인사이트**: 기술적 + 기본적 + 공시 + 수급 통합 LLM 분석
 - 투자 추천 및 근거 제시
 - OpenAI/Anthropic 지원
 
@@ -125,6 +128,9 @@ cp .env.example .env
 OPENAI_API_KEY=sk-...
 # 또는
 ANTHROPIC_API_KEY=sk-ant-...
+
+# 공시 API (한국주식 공시 조회용, 선택)
+OPENDART_API_KEY=...
 
 # LLM Model Configuration (optional, 사내 모델명 사용 시)
 OPENAI_MODEL=gpt-5-mini

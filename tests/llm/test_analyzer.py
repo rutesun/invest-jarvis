@@ -4,6 +4,7 @@ from src.llm.analyzer import (
     analyze_news,
     generate_fundamental_summary,
     generate_technical_summary,
+    generate_integrated_analysis,
 )
 from src.llm.models import (
     FundamentalSummaryInput,
@@ -12,6 +13,8 @@ from src.llm.models import (
     NewsAnalysisOutput,
     TechnicalSummaryInput,
     TechnicalSummaryOutput,
+    IntegratedAnalysisInput,
+    IntegratedAnalysisOutput,
 )
 
 
@@ -231,3 +234,37 @@ async def test_generate_fundamental_summary_with_no_metrics():
         assert result is not None
         assert captured_metrics_text is not None
         assert "No financial metrics available" in captured_metrics_text
+
+
+@pytest.mark.asyncio
+async def test_generate_integrated_analysis_calls_llm():
+    """generate_integrated_analysis가 모든 팩터를 LLM에 전달하고 구조화된 결과를 반환한다."""
+    mock_llm = AsyncMock()
+    expected_output = IntegratedAnalysisOutput(
+        recommendation="매수",
+        rationale=["기술적: 골든크로스", "공시: 수주계약 체결"],
+        risks=["RSI 과열 구간 접근"],
+        action_summary="단기 매수 기회 포착",
+    )
+
+    with patch("src.llm.analyzer.ChatPromptTemplate") as mock_template:
+        mock_chain = AsyncMock()
+        mock_chain.ainvoke.return_value = expected_output
+        mock_template.from_messages.return_value.__or__ = MagicMock(return_value=mock_chain)
+
+        input_data = IntegratedAnalysisInput(
+            ticker="AAPL",
+            technical_recommendation="매수",
+            technical_rationale="골든크로스 발생",
+            fundamental_valuation="저평가",
+            disclosure_items=[
+                {"form_type": "8-K", "date": "2026-04-05", "description": "Q1 results", "url": "https://sec.gov/..."}
+            ],
+            flow_summary=None,
+        )
+
+        result = await generate_integrated_analysis(input_data, mock_llm)
+
+    assert result.recommendation == "매수"
+    assert len(result.rationale) == 2
+    assert result.action_summary == "단기 매수 기회 포착"

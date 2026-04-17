@@ -204,11 +204,42 @@ async def run_deep_dive(ticker_or_name: str, provider: str) -> dict:
         temperature=0,
     )
 
+    # 공시 툴: SEC는 항상 사용 가능, DART는 API 키 있을 때만
+    from src.tools.disclosure import SECDisclosureFetcher, DARTDisclosureFetcher, DisclosureTool
+    sec_fetcher = SECDisclosureFetcher()
+    opendart_key = os.getenv("OPENDART_API_KEY")
+    if not opendart_key:
+        logger.warning(
+            "OPENDART_API_KEY가 설정되지 않았습니다. "
+            "한국주식 공시 데이터가 제외됩니다."
+        )
+    dart_fetcher = DARTDisclosureFetcher(api_key=opendart_key) if opendart_key else None
+    disclosure_tool = DisclosureTool(sec_fetcher=sec_fetcher, dart_fetcher=dart_fetcher)
+
+    # 수급 툴: KIS API (get_investor_trend) 사용. 키 없으면 FlowTool이 graceful failure 처리
+    from src.tools.flow import FlowTool
+    from src.providers.kis import KISProvider
+    kis_key = os.getenv("KIS_APP_KEY")
+    kis_secret = os.getenv("KIS_APP_SECRET")
+    if not (kis_key and kis_secret):
+        logger.warning(
+            "KIS_APP_KEY 또는 KIS_APP_SECRET이 설정되지 않았습니다. "
+            "한국주식 수급 데이터가 제외됩니다."
+        )
+    kis_provider = (
+        KISProvider(app_key=kis_key, app_secret=kis_secret)
+        if kis_key and kis_secret
+        else None
+    )
+    flow_tool = FlowTool(kis_provider=kis_provider)
+
     pipeline = DeepDivePipeline(
         technical_tool=technical_tool,
         news_tool=news_tool,
         llm=llm,
         fundamental_tool=fundamental_tool,
+        disclosure_tool=disclosure_tool,
+        flow_tool=flow_tool,
     )
 
     return await pipeline.run(ticker)
@@ -491,6 +522,53 @@ def format_deep_dive_output(result: dict) -> str:
 
         if news_analysis.key_themes:
             output += "**Key Themes**: " + ", ".join(news_analysis.key_themes) + "\n\n"
+
+    # ── 신규 섹션 ──────────────────────────────────────────────────────────────
+
+    disclosure = result.get("disclosure")
+    if disclosure:
+        output += "## 공시 분석\n\n"
+        output += f"최근 3개월 주요 공시 {len(disclosure)}건:\n\n"
+        for i, item in enumerate(disclosure, 1):
+            output += f"{i}. **[{item.form_type}] {item.description}** ({item.date})\n"
+            output += f"   → [공시 원문 보기]({item.url})\n\n"
+
+    flow = result.get("flow")
+    if flow:
+        output += "## 수급 동향\n\n"
+        output += "| 투자자 | 1일 | 5일 | 10일 | 10일 순매수 일수 |\n"
+        output += "|--------|-----|-----|------|------------------|\n"
+        output += (
+            f"| 외국인 "
+            f"| {flow.foreign_direction_1d} ({flow.foreign_net_1d:+,}) "
+            f"| {flow.foreign_direction_5d} ({flow.foreign_net_5d:+,}) "
+            f"| {flow.foreign_direction_10d} ({flow.foreign_net_10d:+,}) "
+            f"| {flow.foreign_buy_days}/10일 |\n"
+        )
+        output += (
+            f"| 기관 "
+            f"| {flow.institution_direction_1d} ({flow.institution_net_1d:+,}) "
+            f"| {flow.institution_direction_5d} ({flow.institution_net_5d:+,}) "
+            f"| {flow.institution_direction_10d} ({flow.institution_net_10d:+,}) "
+            f"| {flow.institution_buy_days}/10일 |\n"
+        )
+        output += "\n"
+
+    integrated = result.get("integrated_analysis")
+    if integrated:
+        output += "## 종합 인사이트\n\n"
+        output += f"**투자 추천**: {integrated.recommendation}\n\n"
+        output += f"**액션**: {integrated.action_summary}\n\n"
+        if integrated.rationale:
+            output += "**근거**:\n"
+            for r in integrated.rationale:
+                output += f"- {r}\n"
+            output += "\n"
+        if integrated.risks:
+            output += "**리스크**:\n"
+            for r in integrated.risks:
+                output += f"- {r}\n"
+            output += "\n"
 
     return output
 

@@ -66,6 +66,8 @@ Providers → Tools → Pipelines → CLI (src/cli/main.py)
 - `src/tools/technical/` — 5 strategy system (Trend, Oscillator, Divergence, Disparity, Risk) with 15+ indicators
 - `src/providers/ticker_resolver.py` — LLM-based name→ticker resolution with 6-month cache
 - `src/tools/screener/` — Universe building from Naver themes + KIS rankings, evidence scoring
+- `src/tools/disclosure.py` — SEC EDGAR + DART 통합 공시 페처
+- `src/tools/flow.py` — KIS API 수급 데이터 (외인/기관 순매수)
 
 ## Common Commands
 
