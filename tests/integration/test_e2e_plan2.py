@@ -1,7 +1,10 @@
 import os
+
 import pytest
 from typer.testing import CliRunner
+
 from src.cli.main import app
+
 
 runner = CliRunner()
 
@@ -32,9 +35,7 @@ def test_report_command_integration():
     if not os.getenv(api_key_env):
         pytest.skip(f"{api_key_env} not set")
 
-    result = runner.invoke(
-        app, ["report", "--tickers", "AAPL,MSFT", "--provider", provider]
-    )
+    result = runner.invoke(app, ["report", "--tickers", "AAPL,MSFT", "--provider", provider])
 
     assert result.exit_code == 0
     assert "Daily Market Report" in result.stdout

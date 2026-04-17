@@ -1,5 +1,6 @@
 import pandas as pd
 
+
 SOURCE_WEIGHTS = {
     "theme": 1.0,
     "volume_rank": 1.5,
@@ -68,7 +69,7 @@ def score_momentum(df: pd.DataFrame, lookback: int = 50) -> dict:
     close = float(latest["Close"])
 
     # Breakout: close > previous N days high
-    prev_high = df["High"].iloc[-(lookback + 1):-1].max()
+    prev_high = df["High"].iloc[-(lookback + 1) : -1].max()
     if not pd.isna(prev_high) and close > float(prev_high):
         result["breakout"] = 12.0
 

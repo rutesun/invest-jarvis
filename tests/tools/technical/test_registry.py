@@ -1,4 +1,3 @@
-import pytest
 from src.tools.technical.registry import StrategyRegistry
 from src.tools.technical.strategies.trend import TrendStrategy
 

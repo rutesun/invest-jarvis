@@ -1,7 +1,8 @@
-from pathlib import Path
-from typing import Optional
-import yaml
 from datetime import datetime, timedelta
+from pathlib import Path
+
+import yaml
+
 from src.providers.ticker_models import CachedMapping
 
 
@@ -9,10 +10,7 @@ class UserMappingCache:
     """Manages user ticker mapping cache"""
 
     def __init__(
-        self,
-        cache_path: Optional[Path] = None,
-        max_entries: int = 200,
-        expiry_days: int = 180
+        self, cache_path: Path | None = None, max_entries: int = 200, expiry_days: int = 180
     ):
         self.cache_path = cache_path or self._default_cache_path()
         self.max_entries = max_entries
@@ -33,17 +31,17 @@ class UserMappingCache:
             return
 
         try:
-            with open(self.cache_path, 'r') as f:
+            with open(self.cache_path) as f:
                 data = yaml.safe_load(f) or {}
 
-            mappings_data = data.get('mappings', {})
+            mappings_data = data.get("mappings", {})
             for query, mapping_dict in mappings_data.items():
                 self.mappings[query] = CachedMapping(
-                    ticker=mapping_dict['ticker'],
-                    display_name=mapping_dict['display_name'],
-                    created_at=datetime.fromisoformat(mapping_dict['created_at']),
-                    last_used=datetime.fromisoformat(mapping_dict['last_used']),
-                    use_count=mapping_dict['use_count']
+                    ticker=mapping_dict["ticker"],
+                    display_name=mapping_dict["display_name"],
+                    created_at=datetime.fromisoformat(mapping_dict["created_at"]),
+                    last_used=datetime.fromisoformat(mapping_dict["last_used"]),
+                    use_count=mapping_dict["use_count"],
                 )
         except Exception:
             # If corrupted, start fresh
@@ -52,25 +50,21 @@ class UserMappingCache:
 
     def _save(self):
         """Save cache to disk"""
-        data = {
-            'version': 1,
-            'last_cleanup': datetime.now().isoformat(),
-            'mappings': {}
-        }
+        data = {"version": 1, "last_cleanup": datetime.now().isoformat(), "mappings": {}}
 
         for query, mapping in self.mappings.items():
-            data['mappings'][query] = {
-                'ticker': mapping.ticker,
-                'display_name': mapping.display_name,
-                'created_at': mapping.created_at.isoformat(),
-                'last_used': mapping.last_used.isoformat(),
-                'use_count': mapping.use_count
+            data["mappings"][query] = {
+                "ticker": mapping.ticker,
+                "display_name": mapping.display_name,
+                "created_at": mapping.created_at.isoformat(),
+                "last_used": mapping.last_used.isoformat(),
+                "use_count": mapping.use_count,
             }
 
-        with open(self.cache_path, 'w') as f:
+        with open(self.cache_path, "w") as f:
             yaml.dump(data, f, default_flow_style=False)
 
-    def get(self, query: str) -> Optional[CachedMapping]:
+    def get(self, query: str) -> CachedMapping | None:
         """Get cached mapping if exists"""
         return self.mappings.get(query)
 
@@ -88,11 +82,7 @@ class UserMappingCache:
         else:
             # Create new
             self.mappings[query] = CachedMapping(
-                ticker=ticker,
-                display_name=display_name,
-                created_at=now,
-                last_used=now,
-                use_count=1
+                ticker=ticker, display_name=display_name, created_at=now, last_used=now, use_count=1
             )
 
         self._save()
@@ -111,19 +101,14 @@ class UserMappingCache:
         cutoff = now - timedelta(days=self.expiry_days)
 
         # Remove entries not used within expiry_days
-        self.mappings = {
-            k: v for k, v in self.mappings.items()
-            if v.last_used > cutoff
-        }
+        self.mappings = {k: v for k, v in self.mappings.items() if v.last_used > cutoff}
 
         # Enforce max_entries via LRU
         if len(self.mappings) > self.max_entries:
             sorted_entries = sorted(
-                self.mappings.items(),
-                key=lambda x: x[1].last_used,
-                reverse=True
+                self.mappings.items(), key=lambda x: x[1].last_used, reverse=True
             )
-            self.mappings = dict(sorted_entries[:self.max_entries])
+            self.mappings = dict(sorted_entries[: self.max_entries])
 
         self._save()
 
@@ -131,17 +116,17 @@ class UserMappingCache:
         """Return all cached mappings as list of dicts"""
         result = []
         for query, mapping in sorted(
-            self.mappings.items(),
-            key=lambda x: x[1].use_count,
-            reverse=True
+            self.mappings.items(), key=lambda x: x[1].use_count, reverse=True
         ):
-            result.append({
-                'query': query,
-                'ticker': mapping.ticker,
-                'display_name': mapping.display_name,
-                'use_count': mapping.use_count,
-                'last_used': mapping.last_used
-            })
+            result.append(
+                {
+                    "query": query,
+                    "ticker": mapping.ticker,
+                    "display_name": mapping.display_name,
+                    "use_count": mapping.use_count,
+                    "last_used": mapping.last_used,
+                }
+            )
         return result
 
     def evict(self, query: str):

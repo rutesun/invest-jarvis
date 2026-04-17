@@ -1,6 +1,8 @@
 """LLM-based analysis functions using langchain."""
+
 from langchain_core.language_models import BaseChatModel
 from langchain_core.prompts import ChatPromptTemplate
+
 from src.llm.models import (
     FundamentalSummaryInput,
     FundamentalSummaryOutput,
@@ -25,13 +27,14 @@ async def analyze_news(
     Returns:
         News analysis output with sentiment and insights
     """
-    news_text = "\n".join(
-        [f"- {n['title']}: {n.get('summary', '')}" for n in input_data.news]
-    )
+    news_text = "\n".join([f"- {n['title']}: {n.get('summary', '')}" for n in input_data.news])
 
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", "You are a financial news analyst."),
-        ("user", """Analyze the following news for {ticker} ({company_name}):
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", "You are a financial news analyst."),
+            (
+                "user",
+                """Analyze the following news for {ticker} ({company_name}):
 
 {news_text}
 
@@ -40,16 +43,20 @@ Provide analysis with:
 - confidence: 0.0-1.0
 - key_themes: list of main themes
 - summary: brief summary in Korean
-- impact_assessment: impact analysis in Korean""")
-    ])
+- impact_assessment: impact analysis in Korean""",
+            ),
+        ]
+    )
 
     chain = prompt | llm.with_structured_output(NewsAnalysisOutput)
 
-    result = await chain.ainvoke({
-        "ticker": input_data.ticker,
-        "company_name": input_data.company_name,
-        "news_text": news_text,
-    })
+    result = await chain.ainvoke(
+        {
+            "ticker": input_data.ticker,
+            "company_name": input_data.company_name,
+            "news_text": news_text,
+        }
+    )
 
     return result
 
@@ -75,13 +82,14 @@ async def generate_technical_summary(
         ]
     )
 
-    indicators_text = "\n".join(
-        [f"- {k}: {v:.2f}" for k, v in input_data.indicators.items()]
-    )
+    indicators_text = "\n".join([f"- {k}: {v:.2f}" for k, v in input_data.indicators.items()])
 
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", "You are a technical analysis expert."),
-        ("user", """Analyze the following technical data for {ticker}:
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", "You are a technical analysis expert."),
+            (
+                "user",
+                """Analyze the following technical data for {ticker}:
 
 **Current Price**: ${price:.2f} ({change_pct:+.2f}%)
 
@@ -96,18 +104,22 @@ Provide summary with:
 - key_insights: list of 2-3 key insights
 - recommendation: "매수", "매도", or "중립"
 - confidence: 0.0-1.0
-- rationale: reasoning in Korean""")
-    ])
+- rationale: reasoning in Korean""",
+            ),
+        ]
+    )
 
     chain = prompt | llm.with_structured_output(TechnicalSummaryOutput)
 
-    result = await chain.ainvoke({
-        "ticker": input_data.ticker,
-        "price": input_data.price,
-        "change_pct": input_data.change_pct,
-        "strategies_text": strategies_text,
-        "indicators_text": indicators_text,
-    })
+    result = await chain.ainvoke(
+        {
+            "ticker": input_data.ticker,
+            "price": input_data.price,
+            "change_pct": input_data.change_pct,
+            "strategies_text": strategies_text,
+            "indicators_text": indicators_text,
+        }
+    )
 
     return result
 
@@ -152,12 +164,21 @@ async def generate_fundamental_summary(
             prefix = "[핵심] " if metric_name in priority_metrics else ""
 
             # 포맷팅
-            if metric_name in ["revenue_growth", "earnings_growth", "gross_margin",
-                              "operating_margin", "profit_margin", "fcf_yield",
-                              "dividend_yield", "roe", "roa", "payout_ratio"]:
-                formatted = f"{value*100:.1f}%"
+            if metric_name in [
+                "revenue_growth",
+                "earnings_growth",
+                "gross_margin",
+                "operating_margin",
+                "profit_margin",
+                "fcf_yield",
+                "dividend_yield",
+                "roe",
+                "roa",
+                "payout_ratio",
+            ]:
+                formatted = f"{value * 100:.1f}%"
             elif metric_name == "free_cash_flow":
-                formatted = f"${value/1e9:.1f}B"
+                formatted = f"${value / 1e9:.1f}B"
             else:
                 formatted = f"{value:.1f}" if abs(value) > 10 else f"{value:.2f}"
 
@@ -166,9 +187,12 @@ async def generate_fundamental_summary(
     if not metrics_text:
         metrics_text.append("No financial metrics available")
 
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", "You are a fundamental analysis expert."),
-        ("user", """Analyze the following fundamental data for {ticker}:
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", "You are a fundamental analysis expert."),
+            (
+                "user",
+                """Analyze the following fundamental data for {ticker}:
 
 **Sector**: {sector} / {industry}
 
@@ -180,17 +204,21 @@ Provide summary with:
 - strengths: list of 2-3 key strengths (핵심 지표를 중심으로)
 - weaknesses: list of 2-3 key weaknesses
 - valuation_assessment: "저평가", "적정", or "고평가"
-- confidence: 0.0-1.0""")
-    ])
+- confidence: 0.0-1.0""",
+            ),
+        ]
+    )
 
     chain = prompt | llm.with_structured_output(FundamentalSummaryOutput)
 
-    result = await chain.ainvoke({
-        "ticker": input_data.ticker,
-        "sector": input_data.sector or "N/A",
-        "industry": input_data.industry or "N/A",
-        "metrics_text": "\n".join(f"- {m}" for m in metrics_text),
-    })
+    result = await chain.ainvoke(
+        {
+            "ticker": input_data.ticker,
+            "sector": input_data.sector or "N/A",
+            "industry": input_data.industry or "N/A",
+            "metrics_text": "\n".join(f"- {m}" for m in metrics_text),
+        }
+    )
 
     return result
 
@@ -203,16 +231,26 @@ async def generate_integrated_analysis(
     llm: BaseChatModel,
 ) -> IntegratedAnalysisOutput:
     """기술적·기본적·공시·수급 팩터를 통합한 종합 투자 분석을 생성한다."""
-    disclosure_text = "\n".join(
-        f"- [{d['form_type']}] {d['date']}: {d['description']}\n  URL: {d['url']}"
-        for d in input_data.disclosure_items
-    ) if input_data.disclosure_items else "해당 기간 주요 공시 없음"
+    disclosure_text = (
+        "\n".join(
+            f"- [{d['form_type']}] {d['date']}: {d['description']}\n  URL: {d['url']}"
+            for d in input_data.disclosure_items
+        )
+        if input_data.disclosure_items
+        else "해당 기간 주요 공시 없음"
+    )
 
     flow_text = input_data.flow_summary or "수급 데이터 없음 (미국주식 또는 KIS 미설정)"
 
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", "당신은 한국 주식시장 종합 분석 전문가입니다. 실행 가능한 투자 인사이트를 제공하세요."),
-        ("user", """종합 투자 분석을 제공하세요. 종목: {ticker}
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                "당신은 한국 주식시장 종합 분석 전문가입니다. 실행 가능한 투자 인사이트를 제공하세요.",
+            ),
+            (
+                "user",
+                """종합 투자 분석을 제공하세요. 종목: {ticker}
 
 **기술적 분석**: {technical_recommendation} — {technical_rationale}
 
@@ -228,16 +266,20 @@ async def generate_integrated_analysis(
 - recommendation: "매수", "매도", 또는 "중립"
 - rationale: 3-4개 근거 (각 항목은 "기술적:", "기본적:", "공시:", "수급:" 중 하나로 시작)
 - risks: 2-3개 리스크 요인
-- action_summary: 한 줄 요약"""),
-    ])
+- action_summary: 한 줄 요약""",
+            ),
+        ]
+    )
 
     chain = prompt | llm.with_structured_output(IntegratedAnalysisOutput)
 
-    return await chain.ainvoke({
-        "ticker": input_data.ticker,
-        "technical_recommendation": input_data.technical_recommendation,
-        "technical_rationale": input_data.technical_rationale,
-        "fundamental_valuation": input_data.fundamental_valuation or "N/A",
-        "disclosure_text": disclosure_text,
-        "flow_text": flow_text,
-    })
+    return await chain.ainvoke(
+        {
+            "ticker": input_data.ticker,
+            "technical_recommendation": input_data.technical_recommendation,
+            "technical_rationale": input_data.technical_rationale,
+            "fundamental_valuation": input_data.fundamental_valuation or "N/A",
+            "disclosure_text": disclosure_text,
+            "flow_text": flow_text,
+        }
+    )

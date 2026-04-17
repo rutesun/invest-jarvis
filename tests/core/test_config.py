@@ -1,9 +1,3 @@
-import pytest
-import tempfile
-import os
-from pathlib import Path
-
-
 def test_load_config_from_yaml(tmp_path):
     config_content = """
 technical:
@@ -17,6 +11,7 @@ cache:
     config_file.write_text(config_content)
 
     from src.core.config import load_config
+
     config = load_config(config_file)
 
     assert config.technical.strategies == ["trend", "oscillator"]
@@ -24,7 +19,8 @@ cache:
 
 
 def test_load_config_default():
-    from src.core.config import load_config, AppConfig
+    from src.core.config import AppConfig, load_config
+
     config = load_config(None)
     assert isinstance(config, AppConfig)
     assert config.cache.quote_ttl == 60

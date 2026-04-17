@@ -1,5 +1,7 @@
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
 from src.providers.llm_ticker_agent import LLMTickerAgent
 from src.providers.ticker_models import TickerNotFoundError
 
@@ -16,13 +18,19 @@ async def test_resolve_with_single_tool_call():
 
     tool_response = MagicMock()
     tool_response.tool_calls = [
-        {"id": "call_1", "name": "duckduckgo_search", "args": {"query": "삼성전자 stock ticker KRX"}}
+        {
+            "id": "call_1",
+            "name": "duckduckgo_search",
+            "args": {"query": "삼성전자 stock ticker KRX"},
+        }
     ]
     tool_response.content = ""
 
     final_response = MagicMock()
     final_response.tool_calls = []
-    final_response.content = '{"ticker": "005930.KS", "display_name": "Samsung Electronics Co., Ltd."}'
+    final_response.content = (
+        '{"ticker": "005930.KS", "display_name": "Samsung Electronics Co., Ltd."}'
+    )
 
     mock_bound_llm = AsyncMock()
     mock_bound_llm.ainvoke = AsyncMock(side_effect=[tool_response, final_response])

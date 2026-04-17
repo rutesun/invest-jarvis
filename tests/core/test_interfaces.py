@@ -1,7 +1,8 @@
 # tests/core/test_interfaces.py
-import pytest
 import pandas as pd
-from src.core.interfaces import BaseTool, BaseProvider
+import pytest
+
+from src.core.interfaces import BaseProvider, BaseTool
 from src.core.models import ToolResult
 
 

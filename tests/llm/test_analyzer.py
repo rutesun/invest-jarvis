@@ -1,20 +1,22 @@
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
 from src.llm.analyzer import (
     analyze_news,
     generate_fundamental_summary,
-    generate_technical_summary,
     generate_integrated_analysis,
+    generate_technical_summary,
 )
 from src.llm.models import (
     FundamentalSummaryInput,
     FundamentalSummaryOutput,
+    IntegratedAnalysisInput,
+    IntegratedAnalysisOutput,
     NewsAnalysisInput,
     NewsAnalysisOutput,
     TechnicalSummaryInput,
     TechnicalSummaryOutput,
-    IntegratedAnalysisInput,
-    IntegratedAnalysisOutput,
 )
 
 
@@ -258,7 +260,12 @@ async def test_generate_integrated_analysis_calls_llm():
             technical_rationale="골든크로스 발생",
             fundamental_valuation="저평가",
             disclosure_items=[
-                {"form_type": "8-K", "date": "2026-04-05", "description": "Q1 results", "url": "https://sec.gov/..."}
+                {
+                    "form_type": "8-K",
+                    "date": "2026-04-05",
+                    "description": "Q1 results",
+                    "url": "https://sec.gov/...",
+                }
             ],
             flow_summary=None,
         )

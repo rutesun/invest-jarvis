@@ -1,10 +1,11 @@
 from typing import Any
+
 from pydantic import BaseModel
-from src.tools.disclosure import DisclosureItem
 
 
 class LLMRequest(BaseModel):
     """LLM request with reproducible parameters."""
+
     model: str
     messages: list[dict[str, str]]
     temperature: float = 0
@@ -14,6 +15,7 @@ class LLMRequest(BaseModel):
 
 class LLMResponse(BaseModel):
     """LLM response."""
+
     content: str
     model: str
     usage: dict[str, int]
@@ -22,6 +24,7 @@ class LLMResponse(BaseModel):
 # News Analysis I/O
 class NewsAnalysisInput(BaseModel):
     """Input for news analysis."""
+
     ticker: str
     company_name: str
     news: list[dict[str, Any]]  # [{title, published, summary, url?}]
@@ -29,6 +32,7 @@ class NewsAnalysisInput(BaseModel):
 
 class NewsAnalysisOutput(BaseModel):
     """Output from news analysis."""
+
     sentiment: str  # "긍정", "부정", "중립"
     confidence: float  # 0-1
     key_themes: list[str]
@@ -39,6 +43,7 @@ class NewsAnalysisOutput(BaseModel):
 # Technical Summary I/O
 class TechnicalSummaryInput(BaseModel):
     """Input for technical summary."""
+
     ticker: str
     price: float
     change_pct: float
@@ -48,6 +53,7 @@ class TechnicalSummaryInput(BaseModel):
 
 class TechnicalSummaryOutput(BaseModel):
     """Output from technical summary."""
+
     summary: str
     key_insights: list[str]
     recommendation: str  # "매수", "매도", "중립"
@@ -58,6 +64,7 @@ class TechnicalSummaryOutput(BaseModel):
 # Fundamental Summary I/O
 class FundamentalSummaryInput(BaseModel):
     """Input for fundamental summary."""
+
     ticker: str
     sector: str | None = None
     industry: str | None = None
@@ -83,6 +90,7 @@ class FundamentalSummaryInput(BaseModel):
 
 class FundamentalSummaryOutput(BaseModel):
     """Output from fundamental summary."""
+
     summary: str
     strengths: list[str]
     weaknesses: list[str]
@@ -93,17 +101,19 @@ class FundamentalSummaryOutput(BaseModel):
 # 종합 분석 I/O
 class IntegratedAnalysisInput(BaseModel):
     """멀티팩터 종합 분석 입력."""
+
     ticker: str
-    technical_recommendation: str        # "매수", "매도", "중립"
-    technical_rationale: str             # 기술적 분석 근거 자유 형식
-    fundamental_valuation: str | None = None   # "저평가", "적정", "고평가"
+    technical_recommendation: str  # "매수", "매도", "중립"
+    technical_rationale: str  # 기술적 분석 근거 자유 형식
+    fundamental_valuation: str | None = None  # "저평가", "적정", "고평가"
     disclosure_items: list[dict[str, Any]] = []  # DisclosureItem dict 리스트
-    flow_summary: str | None = None      # 사전 포맷된 마크다운 테이블 또는 None
+    flow_summary: str | None = None  # 사전 포맷된 마크다운 테이블 또는 None
 
 
 class IntegratedAnalysisOutput(BaseModel):
     """멀티팩터 종합 분석 출력."""
-    recommendation: str        # "매수", "매도", "중립"
-    rationale: list[str]       # 3-4개 근거, 각 항목은 "기술적:" / "기본적:" / "공시:" / "수급:" 접두사
-    risks: list[str]           # 2-3개 리스크 요인
-    action_summary: str        # 한 줄 한국어 요약
+
+    recommendation: str  # "매수", "매도", "중립"
+    rationale: list[str]  # 3-4개 근거, 각 항목은 "기술적:" / "기본적:" / "공시:" / "수급:" 접두사
+    risks: list[str]  # 2-3개 리스크 요인
+    action_summary: str  # 한 줄 한국어 요약

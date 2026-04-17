@@ -5,7 +5,9 @@ KIS API 수급 툴 — 한국주식의 외인/기관 일별 순매수 데이터�
 KISProvider.get_investor_trend()를 래핑하여 10일치 InvestorFlow 모델을 생성한다.
 1일·5일·10일 구간별 방향 판단 및 10일 중 순매수 일수를 제공한다.
 """
+
 from dataclasses import dataclass, field
+
 from src.core.models import ToolResult
 
 
@@ -33,8 +35,8 @@ def _net_sum(entries: list, attr: str) -> int:
 class InvestorFlowEntry:
     """하루치 투자자 순매수 데이터 (KIS API 기준, 단위: 주)."""
 
-    date: str            # "YYYY-MM-DD", 최신일이 index 0
-    foreign_net: int     # 양수=순매수, 음수=순매도
+    date: str  # "YYYY-MM-DD", 최신일이 index 0
+    foreign_net: int  # 양수=순매수, 음수=순매도
     institution_net: int
 
 

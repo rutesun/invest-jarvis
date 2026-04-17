@@ -3,6 +3,7 @@ from pydantic import BaseModel
 
 class UniverseStock(BaseModel):
     """A stock in the screener universe."""
+
     ticker: str
     name: str
     market: str  # "KOSPI", "KOSDAQ", "NAS", "NYS"
@@ -15,6 +16,7 @@ class UniverseStock(BaseModel):
 
 class ScreenerEvidence(BaseModel):
     """Scored evidence for a stock."""
+
     stock: UniverseStock
     accumulation_score: float = 0.0
     # Daily net buy (most recent trading day)

@@ -5,13 +5,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from src.providers.telegram import (
-    TelegramConfig,
-    ChannelConfig,
     TelegramClientWrapper,
     TelegramCollector,
+    TelegramConfig,
     TelegramMediaDownloader,
-    TelegramStorage,
     TelegramState,
+    TelegramStorage,
 )
 
 
@@ -26,7 +25,7 @@ class TelegramPipeline:
     state: TelegramState
 
     @classmethod
-    async def create(cls, config_path: Path) -> "TelegramPipeline":
+    async def create(cls, config_path: Path) -> TelegramPipeline:
         """설정 파일로부터 파이프라인을 생성한다."""
         config = TelegramConfig.from_yaml(config_path)
         if not config.channels:
@@ -36,10 +35,12 @@ class TelegramPipeline:
         await wrapper.start()
 
         media_downloader = TelegramMediaDownloader(
-            client=wrapper.client, base_dir=config.output_dir,
+            client=wrapper.client,
+            base_dir=config.output_dir,
         )
         collector = TelegramCollector(
-            client=wrapper.client, media_downloader=media_downloader,
+            client=wrapper.client,
+            media_downloader=media_downloader,
         )
         storage = TelegramStorage(output_dir=config.output_dir)
         state = TelegramState(config.output_dir / "monitor_state.json")

@@ -1,5 +1,7 @@
 from datetime import datetime
+
 from langchain_core.language_models import BaseChatModel
+
 from src.tools.macro import MacroTool, TickerMacroSnapshot
 from src.tools.technical.tool import TechnicalAnalysisTool
 

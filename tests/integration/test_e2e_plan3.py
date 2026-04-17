@@ -1,7 +1,10 @@
+import os
+
 import pytest
 from typer.testing import CliRunner
+
 from src.cli.main import app
-import os
+
 
 runner = CliRunner()
 

@@ -1,12 +1,14 @@
 """Integration test for Plan 4: Advanced Technical Indicators + Component-based Scoring."""
-import pytest
-import pandas as pd
-import numpy as np
+
 from datetime import datetime
+
+import numpy as np
+import pandas as pd
+import pytest
+
 from src.tools.technical.indicators import IndicatorCalculator
 from src.tools.technical.scorer import TechnicalScorer
 from src.tools.technical.tool import TechnicalAnalysisTool
-from src.core.models import ToolResult
 
 
 class MockProvider:
@@ -23,13 +25,16 @@ class MockProvider:
         noise = np.random.randn(250) * 2
         close = trend + noise
 
-        df = pd.DataFrame({
-            "Open": close - np.random.rand(250) * 0.5,
-            "High": close + np.random.rand(250) * 2,
-            "Low": close - np.random.rand(250) * 2,
-            "Close": close,
-            "Volume": np.random.randint(1000000, 5000000, 250),
-        }, index=dates)
+        df = pd.DataFrame(
+            {
+                "Open": close - np.random.rand(250) * 0.5,
+                "High": close + np.random.rand(250) * 2,
+                "Low": close - np.random.rand(250) * 2,
+                "Close": close,
+                "Volume": np.random.randint(1000000, 5000000, 250),
+            },
+            index=dates,
+        )
 
         return df
 
@@ -109,13 +114,16 @@ async def test_plan4_minervini_stage2_detection():
             dates = pd.date_range(end=datetime.now(), periods=252, freq="D")
             # Perfect Stage 2: consistent uptrend, all MAs aligned
             close = 100 + np.arange(252) * 0.2
-            df = pd.DataFrame({
-                "Open": close - 0.1,
-                "High": close + 0.5,
-                "Low": close - 0.5,
-                "Close": close,
-                "Volume": [2000000] * 252,
-            }, index=dates)
+            df = pd.DataFrame(
+                {
+                    "Open": close - 0.1,
+                    "High": close + 0.5,
+                    "Low": close - 0.5,
+                    "Close": close,
+                    "Volume": [2000000] * 252,
+                },
+                index=dates,
+            )
             return df
 
     provider = Stage2Provider()

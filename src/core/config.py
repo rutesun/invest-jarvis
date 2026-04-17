@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Optional
+
 import yaml
 from pydantic import BaseModel
 
@@ -19,7 +19,7 @@ class AppConfig(BaseModel):
     cache: CacheConfig = CacheConfig()
 
 
-def load_config(config_path: Optional[Path] = None) -> AppConfig:
+def load_config(config_path: Path | None = None) -> AppConfig:
     """Load configuration from YAML file or use defaults."""
     if config_path is None:
         config_path = Path("config.yaml")

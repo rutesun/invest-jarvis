@@ -1,8 +1,8 @@
-import pytest
 import pandas as pd
-from datetime import datetime
-from src.tools.technical.tool import TechnicalAnalysisTool
+import pytest
+
 from src.tools.technical.scorer import TechnicalScorer
+from src.tools.technical.tool import TechnicalAnalysisTool
 
 
 class MockProvider:
@@ -12,13 +12,15 @@ class MockProvider:
         """Return mock OHLCV data."""
         data = []
         for i in range(250):
-            data.append({
-                "Open": 100 + i * 0.1,
-                "High": 101 + i * 0.1,
-                "Low": 99 + i * 0.1,
-                "Close": 100.5 + i * 0.1,
-                "Volume": 1000000 + i * 1000,
-            })
+            data.append(
+                {
+                    "Open": 100 + i * 0.1,
+                    "High": 101 + i * 0.1,
+                    "Low": 99 + i * 0.1,
+                    "Close": 100.5 + i * 0.1,
+                    "Volume": 1000000 + i * 1000,
+                }
+            )
         return pd.DataFrame(data)
 
 

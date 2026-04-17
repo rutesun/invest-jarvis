@@ -1,5 +1,7 @@
-import pytest
 from datetime import datetime
+
+import pytest
+
 from src.tools.macro import MacroTool, TickerMacroSnapshot
 
 

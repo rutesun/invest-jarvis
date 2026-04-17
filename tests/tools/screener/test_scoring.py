@@ -1,12 +1,12 @@
-import pytest
-import pandas as pd
 import numpy as np
+import pandas as pd
+
 from src.tools.screener.scoring import (
     score_accumulation,
+    score_momentum,
+    score_source_diversity,
     score_up_days,
     score_volume_burst,
-    score_source_diversity,
-    score_momentum,
 )
 
 
@@ -39,10 +39,12 @@ def test_score_accumulation_negative_sum():
 
 
 def test_score_up_days():
-    df = pd.DataFrame({
-        "Open": [100, 101, 102, 100, 99],
-        "Close": [101, 100, 103, 101, 98],  # up, down, up, up, down
-    })
+    df = pd.DataFrame(
+        {
+            "Open": [100, 101, 102, 100, 99],
+            "Close": [101, 100, 103, 101, 98],  # up, down, up, up, down
+        }
+    )
     days = score_up_days(df, window=5)
     assert days == 3
 
@@ -81,13 +83,16 @@ def test_score_momentum_breakout():
     close = np.concatenate([np.random.uniform(98, 102, 55), [103, 105, 107, 110, 112]])
     high = close + 1
     low = close - 1
-    df = pd.DataFrame({
-        "Open": close - 0.5,
-        "High": high,
-        "Low": low,
-        "Close": close,
-        "Volume": [1000000] * 60,
-    }, index=dates)
+    df = pd.DataFrame(
+        {
+            "Open": close - 0.5,
+            "High": high,
+            "Low": low,
+            "Close": close,
+            "Volume": [1000000] * 60,
+        },
+        index=dates,
+    )
     result = score_momentum(df)
     assert "breakout" in result
     assert "momentum_total" in result

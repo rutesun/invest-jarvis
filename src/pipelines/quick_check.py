@@ -1,4 +1,5 @@
 from typing import Any
+
 from src.tools.technical.tool import TechnicalAnalysisTool
 
 
@@ -36,12 +37,14 @@ class QuickCheckPipeline:
         components_list = []
         if tech.components:
             for name, comp in tech.components.items():
-                components_list.append({
-                    "name": name,
-                    "score": comp.get("score", 0),
-                    "signals": comp.get("signals", []),
-                    "evidence": comp.get("evidence", []),
-                })
+                components_list.append(
+                    {
+                        "name": name,
+                        "score": comp.get("score", 0),
+                        "signals": comp.get("signals", []),
+                        "evidence": comp.get("evidence", []),
+                    }
+                )
         elif tech.strategies:
             components_list = [
                 {
@@ -103,11 +106,13 @@ class QuickCheckPipeline:
                         for sig in comp["signals"][:3]:  # Top 3 signals per component
                             lines.append(f"  - {sig}")
                     if comp.get("evidence"):
-                        lines.append(f"  근거:")
+                        lines.append("  근거:")
                         for ev in comp["evidence"][:5]:  # Top 5 evidence per component
                             lines.append(f"  - {ev}")
                 else:  # Legacy format
-                    lines.append(f"- **{comp['name']}**: {comp.get('status', 'N/A')} ({comp.get('confidence', 0):.0f}%)")
+                    lines.append(
+                        f"- **{comp['name']}**: {comp.get('status', 'N/A')} ({comp.get('confidence', 0):.0f}%)"
+                    )
             lines.append("")
 
         # Indicators

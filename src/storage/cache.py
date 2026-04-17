@@ -1,5 +1,6 @@
 import time
-from typing import Any, Callable, Awaitable, Optional
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 
 class MemoryCache:
@@ -8,7 +9,7 @@ class MemoryCache:
     def __init__(self):
         self._cache: dict[str, tuple[Any, float]] = {}
 
-    async def get(self, key: str) -> Optional[Any]:
+    async def get(self, key: str) -> Any | None:
         """Get value from cache if not expired."""
         if key not in self._cache:
             return None

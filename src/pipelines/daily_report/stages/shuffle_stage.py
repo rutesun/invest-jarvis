@@ -1,21 +1,25 @@
 """Shuffle stage: 테마 정규화 및 클러스터 재구성."""
+
 import asyncio
 import json
-from typing import List, Dict
 from pathlib import Path
+
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage, SystemMessage
+
 from src.llm.provider import LLMProvider
+
 
 load_dotenv()
 from langsmith import traceable
+
 from src.pipelines.daily_report.models import MappedIssue, ShuffleResult, ThemeMapping
 from src.pipelines.daily_report.prompts import SHUFFLE_SYSTEM_PROMPT, SHUFFLE_USER_PROMPT
 
 
 @traceable(name="Shuffle Stage")
 def shuffle_stage(
-    issues: List[MappedIssue],
+    issues: list[MappedIssue],
     date: str = None,
 ) -> ShuffleResult:
     """
@@ -40,9 +44,7 @@ def shuffle_stage(
 
     # LLM으로 테마 정규화
     loop = asyncio.get_event_loop()
-    theme_mapping = loop.run_until_complete(
-        _normalize_themes(unique_themes, date)
-    )
+    theme_mapping = loop.run_until_complete(_normalize_themes(unique_themes, date))
 
     # 이슈 테마 업데이트 및 그룹핑
     theme_groups = {}
@@ -83,9 +85,11 @@ def shuffle_stage(
     )
 
 
-async def _normalize_themes(themes: List[str], date: str) -> Dict[str, List[str]]:
+async def _normalize_themes(themes: list[str], date: str) -> dict[str, list[str]]:
     """LLM으로 테마 정규화."""
-    llm = LLMProvider.create(provider="anthropic", model="us.anthropic.claude-haiku-4-5-20251001-v1:0", temperature=0.1)
+    llm = LLMProvider.create(
+        provider="anthropic", model="us.anthropic.claude-haiku-4-5-20251001-v1:0", temperature=0.1
+    )
 
     themes_text = "\n".join([f"- {theme}" for theme in themes])
 
@@ -128,7 +132,7 @@ if __name__ == "__main__":
 
     # Map stage 출력 로드
     map_file = f"tests/pipelines/daily_report/fixtures/stage_outputs/map_{date}.json"
-    with open(map_file, "r", encoding="utf-8") as f:
+    with open(map_file, encoding="utf-8") as f:
         issues_data = json.load(f)
     issues = [MappedIssue(**issue) for issue in issues_data]
 
@@ -142,9 +146,7 @@ if __name__ == "__main__":
     print(f"✓ {len(result.theme_groups)}개 그룹, 총 {total_issues}개 이슈")
 
     # 출력 저장 (JSON 직렬화를 위해 theme_groups를 dict로 변환)
-    output_file = (
-        f"tests/pipelines/daily_report/fixtures/stage_outputs/shuffle_{date}.json"
-    )
+    output_file = f"tests/pipelines/daily_report/fixtures/stage_outputs/shuffle_{date}.json"
     Path(output_file).parent.mkdir(parents=True, exist_ok=True)
 
     output_data = {

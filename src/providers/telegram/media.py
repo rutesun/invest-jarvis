@@ -8,6 +8,7 @@ from typing import Any
 
 import httpx
 
+
 logger = logging.getLogger(__name__)
 
 # 메시지 본문에서 URL 추출용 정규식
@@ -96,7 +97,11 @@ class TelegramMediaDownloader:
             return {"type": "document", "mime_type": "application/pdf"}
 
     async def download_url_pdfs(
-        self, content: str, channel_id: str, date_str: str, msg_id: int,
+        self,
+        content: str,
+        channel_id: str,
+        date_str: str,
+        msg_id: int,
     ) -> list[str]:
         """메시지 본문에서 PDF URL을 찾아 다운로드한다.
 

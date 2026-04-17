@@ -1,11 +1,13 @@
-import pytest
-from typer.testing import CliRunner
-from unittest.mock import patch, AsyncMock
 from datetime import datetime
+from unittest.mock import AsyncMock, patch
+
+from typer.testing import CliRunner
+
 from src.cli.main import app
+from src.llm.models import NewsAnalysisOutput, TechnicalSummaryOutput
 from src.tools.macro import TickerMacroSnapshot
-from src.tools.technical.models import TechnicalResult, IndicatorSnapshot
-from src.llm.models import TechnicalSummaryOutput, NewsAnalysisOutput
+from src.tools.technical.models import IndicatorSnapshot, TechnicalResult
+
 
 runner = CliRunner()
 
@@ -25,8 +27,10 @@ def test_cli_check_command():
         "total_score": 75,
     }
 
-    with patch("src.cli.main.run_quick_check", new_callable=AsyncMock) as mock_run, \
-         patch("src.cli.main.resolve_ticker", new_callable=AsyncMock) as mock_resolve:
+    with (
+        patch("src.cli.main.run_quick_check", new_callable=AsyncMock) as mock_run,
+        patch("src.cli.main.resolve_ticker", new_callable=AsyncMock) as mock_resolve,
+    ):
         mock_resolve.return_value = "AAPL"
         mock_run.return_value = mock_result
         result = runner.invoke(app, ["check", "AAPL"])
@@ -80,8 +84,10 @@ def test_cli_analyze_command():
         "news_analysis": mock_news_analysis,
     }
 
-    with patch("src.cli.main.run_deep_dive", new_callable=AsyncMock) as mock_run, \
-         patch("src.cli.main.resolve_ticker", new_callable=AsyncMock) as mock_resolve:
+    with (
+        patch("src.cli.main.run_deep_dive", new_callable=AsyncMock) as mock_run,
+        patch("src.cli.main.resolve_ticker", new_callable=AsyncMock) as mock_resolve,
+    ):
         mock_resolve.return_value = "AAPL"
         mock_run.return_value = mock_result
         result = runner.invoke(app, ["analyze", "AAPL"])

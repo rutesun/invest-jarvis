@@ -1,4 +1,5 @@
 import pandas as pd
+
 from src.tools.technical.models import ComponentResult
 
 
@@ -6,7 +7,10 @@ def analyze_patterns(df: pd.DataFrame) -> ComponentResult:
     """Analyze chart patterns (VCP, Breakout, Candlestick)."""
     if df.empty or len(df) < 3:
         return ComponentResult(
-            signals=[], evidence=[], metrics={}, score=0,
+            signals=[],
+            evidence=[],
+            metrics={},
+            score=0,
         )
 
     signals = []
@@ -36,7 +40,10 @@ def analyze_patterns(df: pd.DataFrame) -> ComponentResult:
     metrics.update(candle_result["metrics"])
 
     return ComponentResult(
-        signals=signals, evidence=evidence, metrics=metrics, score=score,
+        signals=signals,
+        evidence=evidence,
+        metrics=metrics,
+        score=score,
     )
 
 
@@ -67,7 +74,7 @@ def _detect_vcp(df: pd.DataFrame) -> dict:
     if contraction_ratio > 0.20:
         return {
             "signals": ["VCP (에너지 응축)"],
-            "evidence": [f"ATR 수축률 {contraction_ratio*100:.1f}% (20% 이상)"],
+            "evidence": [f"ATR 수축률 {contraction_ratio * 100:.1f}% (20% 이상)"],
             "metrics": metrics,
             "score": 15,
         }

@@ -1,6 +1,8 @@
 import numpy as np
 import pandas as pd
+
 from src.tools.technical.models import ComponentResult
+
 
 SLOPE_THRESHOLD = 0.05
 ACCEL_THRESHOLD = 0.02
@@ -10,13 +12,19 @@ def analyze_velocity(df: pd.DataFrame) -> ComponentResult:
     """Analyze MA slope and acceleration."""
     if "SMA_20" not in df.columns or len(df) < 15:
         return ComponentResult(
-            signals=[], evidence=["데이터 부족"], metrics={}, score=0,
+            signals=[],
+            evidence=["데이터 부족"],
+            metrics={},
+            score=0,
         )
 
     sma_20_series = df["SMA_20"].dropna()
     if len(sma_20_series) < 15:
         return ComponentResult(
-            signals=[], evidence=["SMA_20 데이터 부족"], metrics={}, score=0,
+            signals=[],
+            evidence=["SMA_20 데이터 부족"],
+            metrics={},
+            score=0,
         )
 
     recent_15 = sma_20_series.iloc[-15:].values
@@ -29,7 +37,10 @@ def analyze_velocity(df: pd.DataFrame) -> ComponentResult:
     sma_20_latest = recent_15[-1]
     if sma_20_latest == 0:
         return ComponentResult(
-            signals=[], evidence=["SMA_20 값 0"], metrics={}, score=0,
+            signals=[],
+            evidence=["SMA_20 값 0"],
+            metrics={},
+            score=0,
         )
 
     norm_slope = (current_slope / sma_20_latest) * 100
@@ -83,7 +94,10 @@ def analyze_velocity(df: pd.DataFrame) -> ComponentResult:
         score += 15
 
     return ComponentResult(
-        signals=signals, evidence=evidence, metrics=metrics, score=score,
+        signals=signals,
+        evidence=evidence,
+        metrics=metrics,
+        score=score,
     )
 
 

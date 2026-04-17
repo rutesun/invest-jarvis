@@ -1,9 +1,12 @@
 import asyncio
 import logging
 from functools import partial
+
 import pandas as pd
 import yfinance as yf
+
 from src.core.interfaces import BaseProvider
+
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +36,7 @@ class YFinanceProvider(BaseProvider):
     async def get_price_history(self, ticker: str, period: str = "1y") -> pd.DataFrame:
         """Get historical price data."""
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            None, partial(self._get_history_sync, ticker, period)
-        )
+        return await loop.run_in_executor(None, partial(self._get_history_sync, ticker, period))
 
     def _get_history_sync(self, ticker: str, period: str) -> pd.DataFrame:
         """Synchronous history fetching."""

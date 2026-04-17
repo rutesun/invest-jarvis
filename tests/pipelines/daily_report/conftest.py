@@ -1,10 +1,13 @@
 """Daily report 파이프라인 공유 테스트 픽스처."""
-import pytest
+
 from datetime import datetime
+
+import pytest
+
 from src.pipelines.daily_report.models import (
     MacroSnapshot,
-    TelegramMessage,
     MappedIssue,
+    TelegramMessage,
 )
 
 

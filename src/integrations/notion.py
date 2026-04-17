@@ -1,8 +1,9 @@
 """Notion API integration for Daily Report upload."""
 
 import os
-from typing import Optional
+
 from notion_client import Client
+
 from src.pipelines.daily_report.models import DailyReport
 
 
@@ -31,8 +32,7 @@ def update_daily_report(report: DailyReport, date: str) -> str:
 
     if not notion_token:
         raise ValueError(
-            "NOTION_TOKEN이 설정되지 않았습니다. "
-            ".env 파일에 NOTION_TOKEN=secret_xxx 추가하세요."
+            "NOTION_TOKEN이 설정되지 않았습니다. .env 파일에 NOTION_TOKEN=secret_xxx 추가하세요."
         )
 
     if not database_id:
@@ -69,15 +69,11 @@ def update_daily_report(report: DailyReport, date: str) -> str:
     )
 
     # US Markets
-    us_markets_text = " | ".join(
-        [f"{k}: {v:+.2f}%" for k, v in report.macro.us_markets.items()]
-    )
+    us_markets_text = " | ".join([f"{k}: {v:+.2f}%" for k, v in report.macro.us_markets.items()])
     children.append(_paragraph(f"🇺🇸 **US Markets**: {us_markets_text}"))
 
     # KR Markets
-    kr_markets_text = " | ".join(
-        [f"{k}: {v:+.2f}%" for k, v in report.macro.kr_markets.items()]
-    )
+    kr_markets_text = " | ".join([f"{k}: {v:+.2f}%" for k, v in report.macro.kr_markets.items()])
     children.append(_paragraph(f"🇰🇷 **KR Markets**: {kr_markets_text}"))
 
     children.append(_divider())
@@ -106,9 +102,7 @@ def update_daily_report(report: DailyReport, date: str) -> str:
             children.append(_paragraph("**관련 종목**:"))
             for stock in news_item.stocks[:5]:
                 children.append(
-                    _bullet_item(
-                        f"**{stock.name}** ({stock.ticker}): {stock.catalyst}"
-                    )
+                    _bullet_item(f"**{stock.name}** ({stock.ticker}): {stock.catalyst}")
                 )
 
         children.append(_divider())

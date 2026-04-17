@@ -1,10 +1,10 @@
 # tests/tools/test_disclosure.py
 import json
-import time
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from pathlib import Path
-from unittest.mock import AsyncMock, patch, MagicMock
-from src.tools.disclosure import DisclosureItem, is_korean_ticker, extract_kr_code
+
+from src.tools.disclosure import DisclosureItem, extract_kr_code, is_korean_ticker
 
 
 def test_disclosure_item_defaults():
@@ -207,9 +207,7 @@ def dart_list_response():
 
 
 @pytest.mark.asyncio
-async def test_dart_fetcher_filters_by_score(
-    dart_fetcher, dart_corp_response, dart_list_response
-):
+async def test_dart_fetcher_filters_by_score(dart_fetcher, dart_corp_response, dart_list_response):
     """score >= 1.0 인 공시만 반환, score 내림차순 정렬."""
     with patch("httpx.AsyncClient") as mock_client_cls:
         mock_client = AsyncMock()
@@ -237,9 +235,7 @@ async def test_dart_fetcher_filters_by_score(
 
 
 @pytest.mark.asyncio
-async def test_dart_fetcher_date_formatting(
-    dart_fetcher, dart_corp_response, dart_list_response
-):
+async def test_dart_fetcher_date_formatting(dart_fetcher, dart_corp_response, dart_list_response):
     """YYYYMMDD 날짜를 YYYY-MM-DD 형식으로 변환."""
     with patch("httpx.AsyncClient") as mock_client_cls:
         mock_client = AsyncMock()
@@ -272,7 +268,9 @@ async def test_dart_fetcher_corp_not_found(dart_fetcher):
         mock_client_cls.return_value.__aenter__.return_value = mock_client
 
         corp_resp = AsyncMock()
-        corp_resp.json = MagicMock(return_value={"status": "013", "message": "조회된 데이터가 없습니다."})
+        corp_resp.json = MagicMock(
+            return_value={"status": "013", "message": "조회된 데이터가 없습니다."}
+        )
         corp_resp.status_code = 200
         corp_resp.raise_for_status = MagicMock()
 
@@ -311,7 +309,6 @@ async def test_dart_fetcher_uses_cache(dart_fetcher, dart_list_response, tmp_pat
 # ── DisclosureTool Integration Tests ──────────────────────────────────────────
 
 from src.tools.disclosure import DisclosureTool
-from src.core.models import ToolResult
 
 
 @pytest.mark.asyncio
@@ -319,7 +316,9 @@ async def test_disclosure_tool_routes_us_to_sec():
     """미국 티커는 SEC 페처로 라우팅."""
     mock_sec = AsyncMock()
     mock_sec.fetch.return_value = [
-        DisclosureItem(form_type="8-K", date="2026-04-05", description="q1.htm", url="https://sec.gov/...")
+        DisclosureItem(
+            form_type="8-K", date="2026-04-05", description="q1.htm", url="https://sec.gov/..."
+        )
     ]
     mock_dart = AsyncMock()
 
@@ -338,7 +337,12 @@ async def test_disclosure_tool_routes_kr_to_dart():
     mock_sec = AsyncMock()
     mock_dart = AsyncMock()
     mock_dart.fetch.return_value = [
-        DisclosureItem(form_type="DART", date="2026-04-05", description="수주계약", url="https://dart.fss.or.kr/...")
+        DisclosureItem(
+            form_type="DART",
+            date="2026-04-05",
+            description="수주계약",
+            url="https://dart.fss.or.kr/...",
+        )
     ]
 
     tool = DisclosureTool(sec_fetcher=mock_sec, dart_fetcher=mock_dart)

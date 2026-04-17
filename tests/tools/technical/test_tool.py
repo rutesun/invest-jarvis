@@ -1,9 +1,11 @@
-import pytest
-import pandas as pd
+from unittest.mock import AsyncMock
+
 import numpy as np
-from unittest.mock import AsyncMock, MagicMock
-from src.tools.technical.tool import TechnicalAnalysisTool
+import pandas as pd
+import pytest
+
 from src.tools.technical.scorer import TechnicalScorer
+from src.tools.technical.tool import TechnicalAnalysisTool
 
 
 @pytest.fixture
@@ -11,13 +13,16 @@ def mock_provider():
     provider = AsyncMock()
     dates = pd.date_range("2024-01-01", periods=100, freq="D")
     close = 100 + np.arange(100) * 0.5
-    provider.get_price_history.return_value = pd.DataFrame({
-        "Open": close - 0.5,
-        "High": close + 1,
-        "Low": close - 1,
-        "Close": close,
-        "Volume": [1000000] * 100,
-    }, index=dates)
+    provider.get_price_history.return_value = pd.DataFrame(
+        {
+            "Open": close - 0.5,
+            "High": close + 1,
+            "Low": close - 1,
+            "Close": close,
+            "Volume": [1000000] * 100,
+        },
+        index=dates,
+    )
     return provider
 
 

@@ -35,12 +35,14 @@ class TelegramLoader:
             with open(csv_file, encoding="utf-8") as f:
                 reader = csv.DictReader(f)
                 for row in reader:
-                    messages.append({
-                        "id": int(row["message_id"]),
-                        "channel": row["channel_name"],
-                        "text": row["content"],
-                        "timestamp": row["timestamp"],
-                    })
+                    messages.append(
+                        {
+                            "id": int(row["message_id"]),
+                            "channel": row["channel_name"],
+                            "text": row["content"],
+                            "timestamp": row["timestamp"],
+                        }
+                    )
 
         messages.sort(key=lambda m: m["timestamp"])
         return messages

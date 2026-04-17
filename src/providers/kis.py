@@ -1,6 +1,8 @@
+from datetime import datetime, timedelta
+
 import httpx
 import pandas as pd
-from datetime import datetime, timedelta
+
 from src.core.interfaces import BaseProvider
 from src.providers.kis_models import KISToken
 
@@ -107,14 +109,16 @@ class KISProvider(BaseProvider):
 
         records = []
         for item in data.get("output", []):
-            records.append({
-                "Date": pd.to_datetime(item["stck_bsop_date"]),
-                "Open": float(item["stck_oprc"]),
-                "High": float(item["stck_hgpr"]),
-                "Low": float(item["stck_lwpr"]),
-                "Close": float(item["stck_clpr"]),
-                "Volume": int(item["acml_vol"]),
-            })
+            records.append(
+                {
+                    "Date": pd.to_datetime(item["stck_bsop_date"]),
+                    "Open": float(item["stck_oprc"]),
+                    "High": float(item["stck_hgpr"]),
+                    "Low": float(item["stck_lwpr"]),
+                    "Close": float(item["stck_clpr"]),
+                    "Volume": int(item["acml_vol"]),
+                }
+            )
 
         df = pd.DataFrame(records)
         if not df.empty:
@@ -159,15 +163,17 @@ class KISProvider(BaseProvider):
 
         positions = []
         for item in output1:
-            positions.append({
-                "ticker": item["pdno"],
-                "name": item["prdt_name"],
-                "quantity": int(item["hldg_qty"]),
-                "avg_price": float(item["pchs_avg_pric"]),
-                "current_price": float(item["prpr"]),
-                "profit_loss": float(item["evlu_pfls_amt"]),
-                "profit_loss_pct": float(item["evlu_pfls_rt"]),
-            })
+            positions.append(
+                {
+                    "ticker": item["pdno"],
+                    "name": item["prdt_name"],
+                    "quantity": int(item["hldg_qty"]),
+                    "avg_price": float(item["pchs_avg_pric"]),
+                    "current_price": float(item["prpr"]),
+                    "profit_loss": float(item["evlu_pfls_amt"]),
+                    "profit_loss_pct": float(item["evlu_pfls_rt"]),
+                }
+            )
 
         return {
             "total_assets": float(output2.get("tot_evlu_amt", 0)),
@@ -212,12 +218,14 @@ class KISProvider(BaseProvider):
 
         results = []
         for item in data.get("output", [])[:top_n]:
-            results.append({
-                "ticker": item.get("mksc_shrn_iscd", ""),
-                "name": item.get("hts_kor_isnm", ""),
-                "net_buy_volume": int(item.get("frgn_ntby_qty", 0)),
-                "net_buy_amount": int(item.get("frgn_ntby_tr_pbmn", 0)),
-            })
+            results.append(
+                {
+                    "ticker": item.get("mksc_shrn_iscd", ""),
+                    "name": item.get("hts_kor_isnm", ""),
+                    "net_buy_volume": int(item.get("frgn_ntby_qty", 0)),
+                    "net_buy_amount": int(item.get("frgn_ntby_tr_pbmn", 0)),
+                }
+            )
         return results
 
     async def get_us_ranking_updown(
@@ -265,19 +273,19 @@ class KISProvider(BaseProvider):
         # output2 contains the actual stock list
         output2 = data.get("output2", [])
         for item in output2[:top_n]:
-            results.append({
-                "ticker": item.get("symb", ""),
-                "name": item.get("name", ""),
-                "change_pct": float(item.get("rate", 0)),
-                "price": float(item.get("last", 0)),
-                "volume": int(item.get("tvol", 0)),
-                "exchange": exchange,
-            })
+            results.append(
+                {
+                    "ticker": item.get("symb", ""),
+                    "name": item.get("name", ""),
+                    "change_pct": float(item.get("rate", 0)),
+                    "price": float(item.get("last", 0)),
+                    "volume": int(item.get("tvol", 0)),
+                    "exchange": exchange,
+                }
+            )
         return results
 
-    async def get_us_ranking_volume(
-        self, exchange: str = "NAS", top_n: int = 30
-    ) -> list[dict]:
+    async def get_us_ranking_volume(self, exchange: str = "NAS", top_n: int = 30) -> list[dict]:
         """Get US stock volume ranking.
 
         Args:
@@ -316,13 +324,15 @@ class KISProvider(BaseProvider):
         # output2 contains the actual stock list
         output2 = data.get("output2", [])
         for item in output2[:top_n]:
-            results.append({
-                "ticker": item.get("symb", ""),
-                "name": item.get("name", ""),
-                "price": float(item.get("last", 0)),
-                "volume": int(item.get("tvol", 0)),
-                "exchange": exchange,
-            })
+            results.append(
+                {
+                    "ticker": item.get("symb", ""),
+                    "name": item.get("name", ""),
+                    "price": float(item.get("last", 0)),
+                    "volume": int(item.get("tvol", 0)),
+                    "exchange": exchange,
+                }
+            )
         return results
 
     async def get_investor_trend(self, ticker: str, days: int = 10) -> list[dict]:
@@ -352,19 +362,33 @@ class KISProvider(BaseProvider):
             foreign_val = item.get("frgn_ntby_qty", "0") or "0"
             institution_val = item.get("orgn_ntby_qty", "0") or "0"
             try:
-                foreign_net = int(foreign_val.strip()) if isinstance(foreign_val, str) and foreign_val.strip() else int(foreign_val) if foreign_val else 0
+                foreign_net = (
+                    int(foreign_val.strip())
+                    if isinstance(foreign_val, str) and foreign_val.strip()
+                    else int(foreign_val)
+                    if foreign_val
+                    else 0
+                )
             except (ValueError, AttributeError):
                 foreign_net = 0
             try:
-                institution_net = int(institution_val.strip()) if isinstance(institution_val, str) and institution_val.strip() else int(institution_val) if institution_val else 0
+                institution_net = (
+                    int(institution_val.strip())
+                    if isinstance(institution_val, str) and institution_val.strip()
+                    else int(institution_val)
+                    if institution_val
+                    else 0
+                )
             except (ValueError, AttributeError):
                 institution_net = 0
-            results.append({
-                "date": item.get("stck_bsop_date", ""),
-                "foreign_net": foreign_net,
-                "institution_net": institution_net,
-                "total_net": foreign_net + institution_net,
-            })
+            results.append(
+                {
+                    "date": item.get("stck_bsop_date", ""),
+                    "foreign_net": foreign_net,
+                    "institution_net": institution_net,
+                    "total_net": foreign_net + institution_net,
+                }
+            )
         return results
 
     async def get_program_trade(self, ticker: str, days: int = 10) -> list[dict]:
@@ -402,11 +426,19 @@ class KISProvider(BaseProvider):
             # Handle empty strings from API
             program_val = item.get("whol_smtn_ntby_qty", "0") or "0"
             try:
-                program_net = int(program_val.strip()) if isinstance(program_val, str) and program_val.strip() else int(program_val) if program_val else 0
+                program_net = (
+                    int(program_val.strip())
+                    if isinstance(program_val, str) and program_val.strip()
+                    else int(program_val)
+                    if program_val
+                    else 0
+                )
             except (ValueError, AttributeError):
                 program_net = 0
-            results.append({
-                "date": item.get("stck_bsop_date", ""),
-                "program_net": program_net,
-            })
+            results.append(
+                {
+                    "date": item.get("stck_bsop_date", ""),
+                    "program_net": program_net,
+                }
+            )
         return results

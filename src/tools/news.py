@@ -1,8 +1,11 @@
 import logging
-from pydantic import BaseModel
+
 import yfinance as yf
+from pydantic import BaseModel
+
 from src.core.interfaces import BaseTool
 from src.core.models import ToolResult
+
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +45,7 @@ class NewsTool(BaseTool):
                 published = item.get("providerPublishTime", "")
                 if isinstance(published, int):
                     from datetime import datetime
+
                     published = datetime.fromtimestamp(published).isoformat()
 
                 article = NewsArticle(
