@@ -843,6 +843,7 @@ dependencies = [
     { name = "langchain-aws" },
     { name = "langchain-core" },
     { name = "langchain-openai" },
+    { name = "notion-client" },
     { name = "pandas", version = "2.3.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.14'" },
     { name = "pandas", version = "3.0.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.14'" },
     { name = "pandas-ta" },
@@ -877,6 +878,7 @@ requires-dist = [
     { name = "langchain-aws", specifier = ">=1.4.4" },
     { name = "langchain-core", specifier = ">=1.2.28" },
     { name = "langchain-openai", specifier = ">=1.1.12" },
+    { name = "notion-client", specifier = ">=2.0.0" },
     { name = "opik", marker = "extra == 'dev'", specifier = ">=1.11.0" },
     { name = "pandas", specifier = ">=2.0.0" },
     { name = "pandas-ta", specifier = ">=0.3.14b0" },
@@ -1435,6 +1437,18 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/71/e0/4f43d520e47ae75d7d1650792e2f8930a710c01c22647d9c8ed439d2193c/mypy_boto3_bedrock_runtime-1.42.82.tar.gz", hash = "sha256:889fa422df0b64b24c134df52e873554cb54582f7a9664bb81a5507b4b908081", size = 29909, upload-time = "2026-04-02T19:59:11.835Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/76/61/7d76a3713232ed5f7f319fa2345da07d45a31e39f44d113e525d96a0ba44/mypy_boto3_bedrock_runtime-1.42.82-py3-none-any.whl", hash = "sha256:a8beda7040f38fb41b738b2ae66c71bf38c638eaecadd20599caf114a84bf639", size = 36162, upload-time = "2026-04-02T19:59:10.627Z" },
+]
+
+[[package]]
+name = "notion-client"
+version = "3.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "httpx" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/a5/39/60afcbc0148c3dafaaefe851ae3f058077db49d66288dfb218a11a57b997/notion_client-3.0.0.tar.gz", hash = "sha256:05c4d2b4fa3491dc0de21c9c826277202ea8b8714077ee7f51a6e1a09ab23d0f", size = 31357, upload-time = "2026-02-16T11:15:48.024Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/aa/ce/6b03f9aedd2edfcc28e23ced5c2582d543f6ddbb2be5c570533f02890b27/notion_client-3.0.0-py2.py3-none-any.whl", hash = "sha256:177fc3d2ace7e8ef69cf96f46269e8a66071c2c7c526194bf06ce7925853e759", size = 18746, upload-time = "2026-02-16T11:15:46.602Z" },
 ]
 
 [[package]]

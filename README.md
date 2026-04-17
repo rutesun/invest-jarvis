@@ -34,12 +34,14 @@ jarvis analyze 구글        # 한글 회사명으로 검색
 
 ### 3. 일일 시장 리포트 (Daily Report)
 ```bash
-jarvis report
-jarvis report --tickers=AAPL,MSFT,NVDA
+jarvis report ticker --tickers=AAPL,MSFT,NVDA   # 티커 기반 리포트
+jarvis report daily 2026-04-17                  # 텔레그램 기반 리포트
+jarvis report daily 2026-04-17 --notion         # Notion 업로드
 ```
-- 매크로 지표 스냅샷 (VIX, Fear & Greed, WTI, 금리, DXY)
-- 다중 종목 기술적 분석
-- 시장 전반 요약
+- 티커 기반: 매크로 지표 + 종목 분석
+- 텔레그램 기반: 메시지 수집 → 테마 클러스터링 → 인사이트 추출
+- `reports/YYYY-MM/daily_YYYY-MM-DD.md` 자동 저장
+- Notion 연동 지원
 
 ### 4. 포트폴리오 모니터링
 ```bash

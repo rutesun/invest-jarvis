@@ -7,8 +7,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **invest-jarvis** - Korean/US stock investment analysis CLI tool.
 Replacing the previous `telegram` project (built with Codex/ANTIGRAVITY). Full feature migration in progress.
 
-**Current version**: 0.3.0
-
 ## Development Setup
 
 ```bash
@@ -40,6 +38,14 @@ TELEGRAM_API_HASH=...
 
 **Package manager**: Always use `uv`, never `pip` directly.
 
+## Code Design Principles
+Apply the following principles on every code change and refactor:
+- Martin Fowler: identify code smells, favor small safe refactorings, and make intent explicit in design.
+- Robert C. Martin: enforce SOLID, keep functions/classes small with single responsibility, and keep dependency direction coherent.
+- Kent Beck: choose the simplest design that works, remove duplication, and optimize for testability.
+- Michael Feathers: identify hard-to-change code and propose seams to create testable boundaries before invasive edits.
+- DDD / Eric Evans (when applicable): keep domain model and ubiquitous language consistent with business concepts.
+
 ## Architecture
 
 Layered architecture — data flows one way:
@@ -63,24 +69,14 @@ Providers → Tools → Pipelines → CLI (src/cli/main.py)
 
 ## Common Commands
 
-전체 CLI 사용법: [@docs/CLI_USAGE.md](docs/CLI_USAGE.md)
-
-```bash
-uv run jarvis check AAPL        # 빠른 기술적 분석 (LLM 불필요)
-uv run jarvis analyze AAPL      # 심층 분석 (기술 + 뉴스 + LLM)
-uv run jarvis report            # 일일 시장 리포트
-uv run jarvis portfolio         # 포트폴리오 모니터링 (KIS API)
-uv run jarvis screen            # 시장 스크리너
-uv run jarvis telegram fetch    # 텔레그램 채널 메시지 수집
-uv run jarvis telegram catch-up # 누락분 보충 수집
-```
+전체 CLI 사용법: [CLI_USAGE.md](docs/CLI_USAGE.md)
 
 ## Documentation Rules
 
 모든 구현 작업 시 아래 규칙을 반드시 따를 것:
 
 - **새 기능/파이프라인 추가** → `README.md`의 Features 섹션 업데이트
-- **새 CLI 커맨드 추가** → `README.md`의 Commands 섹션에 커맨드 + 설명 + 예시 추가
+- **새 CLI 커맨드 추가** → `docs/CLI_USAGE.md`의 Commands 섹션에 커맨드 + 설명 + 예시 추가
 - **새 모듈/패키지 추가** → `docs/` 아래 대응하는 문서 생성 또는 기존 문서 업데이트
 - **아키텍처 변경** → 이 파일(CLAUDE.md)의 Architecture 섹션 업데이트
 - **의존성 추가** → `README.md`의 설치/설정 섹션 반영
@@ -90,5 +86,4 @@ uv run jarvis telegram catch-up # 누락분 보충 수집
 ## Skills
 
 Location: `.claude/skills/`
-
 **Rule**: Simple CLI wrappers only. Show command + brief description + example. Keep under 20 lines.

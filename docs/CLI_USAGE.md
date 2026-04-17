@@ -50,13 +50,6 @@ uv run jarvis check MSFT
 uv run jarvis check NVDA
 ```
 
-**출력 내용:**
-- 현재 가격 및 변동률
-- 종합 평가 (매수/매도/중립)
-- 신뢰도 점수
-- 주요 지표 (SMA, RSI, ADX)
-- 시그널 및 경고
-
 ---
 
 ### 2. analyze - 심층 분석 (LLM)
@@ -86,17 +79,11 @@ uv run jarvis analyze AAPL
 uv run jarvis analyze AAPL --provider anthropic
 ```
 
-**출력 내용:**
-- 가격 및 변동률
-- 기술적 분석 요약
-- 투자 추천 (매수/매도/중립)
-- 추천 근거 및 핵심 인사이트
-- 뉴스 감성 분석
-- 영향 평가 및 주요 테마
-
 ---
 
 ### 3. report - 일일 시장 리포트
+
+#### 3-1. report ticker - 티커 기반 리포트
 
 **특징:**
 - 매크로 지표 스냅샷
@@ -108,7 +95,7 @@ uv run jarvis analyze AAPL --provider anthropic
 
 **사용법:**
 ```bash
-uv run jarvis report [OPTIONS]
+uv run jarvis report ticker [OPTIONS]
 ```
 
 **옵션:**
@@ -118,27 +105,80 @@ uv run jarvis report [OPTIONS]
 **예시:**
 ```bash
 # 기본 티커 사용
-uv run jarvis report
+uv run jarvis report ticker
 
 # 커스텀 티커
-uv run jarvis report --tickers "AAPL,GOOGL,META,TSLA"
+uv run jarvis report ticker --tickers "AAPL,GOOGL,META,TSLA"
 
 # Anthropic 사용
-uv run jarvis report --provider anthropic
+uv run jarvis report ticker --provider anthropic
 ```
 
-**출력 내용:**
-- **매크로 스냅샷:**
-  - VIX (변동성 지수)
-  - Fear & Greed Index
-  - WTI Oil 가격
-  - US 10Y/2Y 금리
-  - Yield Spread
-  - DXY (달러 지수)
-- **티커 분석:**
-  - 각 종목 가격 및 변동률
-  - 종합 평가 및 신뢰도
-  - 시그널 및 경고
+---
+
+#### 3-2. report daily - 텔레그램 기반 일일 리포트
+
+**특징:**
+- 텔레그램 채널 메시지 자동 수집 및 분석
+- MapReduce 패턴 5단계 파이프라인 (Ingest → Map → Shuffle → Reduce → Wrapup)
+- 테마별 클러스터링 및 투자 인사이트 추출
+- Claude Haiku 4.5 사용으로 비용 최적화
+- `reports/YYYY-MM/daily_YYYY-MM-DD.md` 자동 저장
+- Notion Database 연동 지원 (선택)
+
+**요구사항:**
+- 텔레그램 데이터 필요: `uv run jarvis telegram fetch <날짜>` 먼저 실행
+- `OPENAI_API_KEY` 또는 `ANTHROPIC_API_KEY` 필요
+- Notion 업로드 시: `NOTION_TOKEN`, `NOTION_DATABASE_ID` 필요 ([설정 가이드](../README_NOTION.md))
+
+**사용법:**
+```bash
+uv run jarvis report daily [날짜] [OPTIONS]
+```
+
+**옵션:**
+- `날짜`: 분석할 날짜 (YYYY-MM-DD). 미지정 시 전날
+- `--data-dir, -d`: 데이터 디렉토리 (기본값: data)
+- `--notion`: Notion에 업로드
+
+**예시:**
+```bash
+# 전날 리포트 (MD 파일만 저장)
+uv run jarvis report daily
+
+# 특정 날짜 리포트
+uv run jarvis report daily 2026-04-17
+
+# Notion에도 업로드
+uv run jarvis report daily 2026-04-17 --notion
+```
+
+**워크플로우:**
+```bash
+# 1. 텔레그램 메시지 수집 (먼저 실행 필요)
+uv run jarvis telegram fetch 2026-04-17
+
+# 2. 일일 리포트 생성
+uv run jarvis report daily 2026-04-17
+```
+
+**출력 파일:**
+- `reports/2026-04/daily_2026-04-17.md`
+
+**스테이지별 테스트:**
+```bash
+# 전체 파이프라인 한번에
+./scripts/test_daily_report_stages.sh 2026-04-17
+
+# 개별 스테이지 실행
+uv run python -m src.pipelines.daily_report.stages.ingest_stage 2026-04-17
+uv run python -m src.pipelines.daily_report.stages.map_stage 2026-04-17
+uv run python -m src.pipelines.daily_report.stages.shuffle_stage 2026-04-17
+uv run python -m src.pipelines.daily_report.stages.reduce_stage 2026-04-17
+uv run python -m src.pipelines.daily_report.stages.wrapup_stage 2026-04-17
+```
+
+**상세 테스트 가이드:** [scripts/README_TESTING.md](../scripts/README_TESTING.md)
 
 ---
 

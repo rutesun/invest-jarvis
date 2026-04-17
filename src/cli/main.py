@@ -796,9 +796,11 @@ def report_daily(
         help="분석할 날짜 (YYYY-MM-DD). 미지정 시 전날.",
     ),
     data_dir: str = typer.Option("data", "--data-dir", "-d", help="데이터 디렉토리"),
+    notion: bool = typer.Option(False, "--notion", help="Notion에 업데이트"),
 ):
     """텔레그램 메시지 기반 일일 시장 리포트 생성."""
     from datetime import datetime as dt, timedelta
+    from pathlib import Path
     from src.pipelines.daily_report.pipeline import run_pipeline, format_report
 
     if date is None:
@@ -807,9 +809,33 @@ def report_daily(
     console.print(f"[bold]Daily Report 생성 중... (날짜: {date})[/bold]\n")
 
     try:
+        # 파이프라인 실행
         report = run_pipeline(date, data_dir)
         output = format_report(report)
+
+        # 터미널 출력
         console.print(Markdown(output))
+
+        # MD 파일 저장 (필수)
+        year_month = date[:7]  # YYYY-MM
+        report_dir = Path(f"reports/{year_month}")
+        report_dir.mkdir(parents=True, exist_ok=True)
+
+        output_file = report_dir / f"daily_{date}.md"
+        output_file.write_text(output, encoding="utf-8")
+        console.print(f"\n[green]✓ 리포트 저장: {output_file}[/green]")
+
+        # Notion 업데이트 (옵션)
+        if notion:
+            try:
+                from src.integrations.notion import update_daily_report
+                update_daily_report(report, date)
+                console.print(f"[green]✓ Notion 업데이트 완료[/green]")
+            except ImportError:
+                console.print(f"[yellow]⚠ Notion 연동 모듈이 없습니다. 구현 필요: src/integrations/notion.py[/yellow]")
+            except Exception as e:
+                console.print(f"[red]✗ Notion 업데이트 실패: {e}[/red]")
+
     except FileNotFoundError as e:
         console.print(f"[red]오류: {e}[/red]")
         console.print(f"[yellow]힌트: 먼저 'uv run jarvis telegram fetch {date}' 실행[/yellow]")
