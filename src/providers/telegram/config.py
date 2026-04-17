@@ -14,6 +14,7 @@ class ChannelConfig(BaseModel):
     id: str
     include: list[str] = []
     exclude: list[str] = []
+    timezone: str = "UTC"
 
     def should_include(self, text: str) -> bool:
         """메시지가 include/exclude 필터를 통과하는지 확인한다."""
@@ -51,6 +52,7 @@ class TelegramConfig(BaseModel):
                     id=str(ch["id"]),
                     include=ch.get("include", []),
                     exclude=ch.get("exclude", []),
+                    timezone=ch.get("timezone", "UTC"),
                 ))
 
         output_dir = Path(tg.get("output_dir", "data"))

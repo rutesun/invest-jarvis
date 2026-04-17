@@ -63,14 +63,15 @@ jarvis cache clear         # 캐시 전체 삭제
 ### 6. 텔레그램 채널 수집
 ```bash
 jarvis telegram fetch               # 전날 메시지 수집
-jarvis telegram fetch 2026-04-12    # 특정 날짜 수집
+jarvis telegram fetch 2026-04-12    # 특정 날짜 수집 (채널 timezone 기준)
 jarvis telegram catch-up            # 누락분 보충 수집
 ```
 - Telegram 채널 메시지 자동 수집
+- **채널별 timezone 설정 지원** (KST, UTC 등)
 - include/exclude 정규식 필터링
 - 날짜별 CSV 저장 (중복 방지)
 - catch-up 모드로 누락분 자동 보충
-- 사진/PDF 자동 다운로드
+- **사진/PDF 자동 다운로드** (첨부파일 + URL)
 
 ### 7. Claude Code Skills
 ```
@@ -122,6 +123,19 @@ cp .env.example .env
 OPENAI_API_KEY=sk-...
 # 또는
 ANTHROPIC_API_KEY=sk-ant-...
+
+# LLM Model Configuration (optional, 사내 모델명 사용 시)
+OPENAI_MODEL=gpt-5-mini
+ANTHROPIC_MODEL=us.anthropic.claude-haiku-4-5-20251001-v1:0
+
+# AWS Bedrock Configuration (Anthropic 모델을 Bedrock으로 사용 시)
+CLAUDE_CODE_USE_BEDROCK=1
+ANTHROPIC_BEDROCK_BASE_URL=https://genai-gateway.flava-cloud.com/
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=anything_is_fine
+AWS_SECRET_ACCESS_KEY=anything_is_fine
+AWS_SESSION_TOKEN=ck-...
+API_TIMEOUT_MS=600000
 
 # KIS API (한국 주식, portfolio 명령어에 필요)
 KIS_APP_KEY=...

@@ -94,7 +94,7 @@ from src.tools.news import NewsTool
 from src.tools.portfolio import PortfolioTool
 from src.pipelines.quick_check import QuickCheckPipeline
 from src.pipelines.deep_dive import DeepDivePipeline
-from src.pipelines.daily_report import DailyReportPipeline
+from src.pipelines.daily_market_report import DailyReportPipeline
 from src.pipelines.portfolio import PortfolioPipeline
 from src.llm.provider import LLMProvider
 from src.utils.sector_metrics import SectorMetrics
@@ -104,6 +104,7 @@ from src.tools.screener.evidence import EvidenceCollector
 from src.pipelines.screener import ScreenerPipeline
 
 app = typer.Typer(help="Invest Jarvis - Financial Analysis CLI")
+report_app = typer.Typer(help="리포트 생성")
 console = Console()
 
 
@@ -607,8 +608,8 @@ def format_daily_report_output(result: dict) -> str:
     return output
 
 
-@app.command()
-def report(
+@report_app.command("ticker")
+def report_ticker(
     tickers: str = typer.Option(
         "AAPL,MSFT,NVDA",
         "--tickers",
@@ -619,7 +620,7 @@ def report(
         "openai", "--provider", "-p", help="LLM provider"
     ),
 ):
-    """Daily market report (macro snapshot + ticker analysis)."""
+    """티커 기반 시장 리포트 (매크로 + 티커 분석)."""
     ticker_list = [t.strip() for t in tickers.split(",")]
     console.print(f"[bold]Generating daily report for {len(ticker_list)} tickers...[/bold]\n")
 
@@ -782,6 +783,40 @@ def cache_clear(
     cache = UserMappingCache()
     cache.clear()
     console.print("[green]✓ Cache cleared successfully.[/green]")
+
+
+# --- Report 서브커맨드 ---
+app.add_typer(report_app, name="report")
+
+
+@report_app.command("daily")
+def report_daily(
+    date: str = typer.Argument(
+        None,
+        help="분석할 날짜 (YYYY-MM-DD). 미지정 시 전날.",
+    ),
+    data_dir: str = typer.Option("data", "--data-dir", "-d", help="데이터 디렉토리"),
+):
+    """텔레그램 메시지 기반 일일 시장 리포트 생성."""
+    from datetime import datetime as dt, timedelta
+    from src.pipelines.daily_report.pipeline import run_pipeline, format_report
+
+    if date is None:
+        date = (dt.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+
+    console.print(f"[bold]Daily Report 생성 중... (날짜: {date})[/bold]\n")
+
+    try:
+        report = run_pipeline(date, data_dir)
+        output = format_report(report)
+        console.print(Markdown(output))
+    except FileNotFoundError as e:
+        console.print(f"[red]오류: {e}[/red]")
+        console.print(f"[yellow]힌트: 먼저 'uv run jarvis telegram fetch {date}' 실행[/yellow]")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[red]오류: {e}[/red]")
+        raise typer.Exit(1)
 
 
 # --- Telegram 서브커맨드 ---
