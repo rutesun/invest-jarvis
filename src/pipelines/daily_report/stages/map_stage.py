@@ -2,7 +2,6 @@
 
 import asyncio
 import json
-import os
 from typing import List
 from pathlib import Path
 from dotenv import load_dotenv

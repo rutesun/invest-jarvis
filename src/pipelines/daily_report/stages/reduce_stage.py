@@ -3,7 +3,7 @@ import asyncio
 import json
 from typing import List, Dict
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage, SystemMessage
 from ddgs import DDGS

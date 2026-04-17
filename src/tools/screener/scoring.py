@@ -1,5 +1,4 @@
 import pandas as pd
-import numpy as np
 
 SOURCE_WEIGHTS = {
     "theme": 1.0,

@@ -1,10 +1,8 @@
-import asyncio
-from functools import lru_cache
 import httpx
 import pandas as pd
 from datetime import datetime, timedelta
 from src.core.interfaces import BaseProvider
-from src.providers.kis_models import KISToken, KISQuote
+from src.providers.kis_models import KISToken
 
 
 class KISProvider(BaseProvider):
