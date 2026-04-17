@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock
 from datetime import datetime
-from src.pipelines.daily_report import DailyReportPipeline
+from src.pipelines.ticker_report import TickerReportPipeline
 from src.tools.macro import MacroTool, MacroSnapshot
 from src.tools.technical.tool import TechnicalAnalysisTool
 from src.tools.technical.models import TechnicalResult, IndicatorSnapshot, StrategyResult
@@ -81,7 +81,7 @@ def mock_llm():
 async def test_daily_report_pipeline_success(
     mock_macro_tool, mock_technical_tool, mock_llm
 ):
-    pipeline = DailyReportPipeline(
+    pipeline = TickerReportPipeline(
         macro_tool=mock_macro_tool,
         technical_tool=mock_technical_tool,
         llm=mock_llm,
@@ -114,7 +114,7 @@ async def test_daily_report_pipeline_macro_failure(
         success=False, data=None, error="Failed to fetch macro data"
     )
 
-    pipeline = DailyReportPipeline(
+    pipeline = TickerReportPipeline(
         macro_tool=mock_macro_tool,
         technical_tool=mock_technical_tool,
         llm=mock_llm,
@@ -153,7 +153,7 @@ async def test_daily_report_pipeline_technical_failure(
 
     mock_technical_tool.execute.side_effect = execute_mock_with_failure
 
-    pipeline = DailyReportPipeline(
+    pipeline = TickerReportPipeline(
         macro_tool=mock_macro_tool,
         technical_tool=mock_technical_tool,
         llm=mock_llm,
@@ -173,7 +173,7 @@ async def test_daily_report_pipeline_technical_failure(
 async def test_daily_report_pipeline_empty_tickers(
     mock_macro_tool, mock_technical_tool, mock_llm
 ):
-    pipeline = DailyReportPipeline(
+    pipeline = TickerReportPipeline(
         macro_tool=mock_macro_tool,
         technical_tool=mock_technical_tool,
         llm=mock_llm,

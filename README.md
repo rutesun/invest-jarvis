@@ -269,7 +269,7 @@ Claude: /invest-report
 **Pipelines** - 워크플로우
 - `QuickCheckPipeline`: 빠른 기술 분석 (LLM 불필요)
 - `DeepDivePipeline`: 기술 + 뉴스 + LLM 해석
-- `DailyReportPipeline`: 매크로 + 다중 종목 분석
+- `TickerReportPipeline`: 매크로 + 다중 종목 분석
 - `PortfolioPipeline`: 포트폴리오 모니터링
 
 **LLM Client** - AI 분석

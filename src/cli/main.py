@@ -94,7 +94,7 @@ from src.tools.news import NewsTool
 from src.tools.portfolio import PortfolioTool
 from src.pipelines.quick_check import QuickCheckPipeline
 from src.pipelines.deep_dive import DeepDivePipeline
-from src.pipelines.daily_market_report import DailyReportPipeline
+from src.pipelines.ticker_report import TickerReportPipeline
 from src.pipelines.portfolio import PortfolioPipeline
 from src.llm.provider import LLMProvider
 from src.utils.sector_metrics import SectorMetrics
@@ -619,7 +619,7 @@ async def run_daily_report(tickers: list[str], provider: str) -> dict:
         temperature=0,
     )
 
-    pipeline = DailyReportPipeline(
+    pipeline = TickerReportPipeline(
         macro_tool=macro_tool,
         technical_tool=technical_tool,
         llm=llm,

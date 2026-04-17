@@ -5,8 +5,8 @@ from src.tools.technical.tool import TechnicalAnalysisTool
 from src.tools.technical.models import TechnicalResult
 
 
-class DailyReportPipeline:
-    """Daily market report pipeline with macro snapshot and technical analysis."""
+class TickerReportPipeline:
+    """Ticker-based report pipeline with macro snapshot and technical analysis."""
 
     def __init__(
         self,
