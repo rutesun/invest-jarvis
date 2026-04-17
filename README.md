@@ -46,7 +46,18 @@ jarvis report daily 2026-04-17 --notion         # Notion 업로드
 - `reports/YYYY-MM/daily_YYYY-MM-DD.md` 자동 저장
 - Notion 연동 지원
 
-### 4. 포트폴리오 모니터링
+### 4. 종목 스크리닝 (Screener)
+```bash
+jarvis screen --market kr          # 한국 시장 스크리닝
+jarvis screen --market us          # 미국 시장 스크리닝
+jarvis screen --top 20             # 상위 20개만
+```
+- 테마/급등주/거래량/기관매수 데이터 수집
+- 외국인/기관 순매수 분석
+- 모멘텀 시그널 스코어링
+- 다중 소스 증거 기반 랭킹
+
+### 5. 포트폴리오 모니터링
 ```bash
 jarvis portfolio
 ```
@@ -55,7 +66,7 @@ jarvis portfolio
 - 최근 뉴스 요약
 - 수익률 추적
 
-### 5. 티커 캐시 관리
+### 6. 티커 캐시 관리
 ```bash
 jarvis cache list          # 캐시된 매핑 목록 보기
 jarvis cache clear         # 캐시 전체 삭제
@@ -78,7 +89,7 @@ jarvis telegram catch-up            # 누락분 보충 수집
 - catch-up 모드로 누락분 자동 보충
 - **사진/PDF 자동 다운로드** (첨부파일 + URL)
 
-### 7. Claude Code Skills
+### 8. Claude Code Skills
 ```
 /invest-check AAPL
 /invest-analyze AAPL
@@ -204,6 +215,10 @@ uv run jarvis analyze TSLA --provider anthropic
 uv run jarvis report
 uv run jarvis report --tickers=AAPL,GOOGL,META
 
+# 종목 스크리닝
+uv run jarvis screen --market kr    # 한국 시장
+uv run jarvis screen --market us    # 미국 시장
+
 # 포트폴리오 (KIS API 필요)
 uv run jarvis portfolio
 
@@ -255,9 +270,11 @@ Claude: /invest-report
 
 **Tools** - 분석 도구
 - `TechnicalAnalysisTool`: 5개 전략 기반 기술 분석
+- `FundamentalTool`: 재무제표 및 주요 지표 (EPS, P/E, ROE 등)
 - `MacroTool`: 매크로 지표 (VIX, Fear & Greed, 금리 등)
 - `NewsTool`: 뉴스 수집
 - `PortfolioTool`: 포트폴리오 조회
+- `ScreenerTool`: 종목 발굴 (테마, 급등주, 거래량, 수급)
 
 **Strategies** - 기술적 분석 전략
 - `TrendStrategy`: 이동평균선, ADX, Supertrend
