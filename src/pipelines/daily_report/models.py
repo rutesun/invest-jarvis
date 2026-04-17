@@ -6,6 +6,37 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
+# 고정 카테고리 (클러스터링 키)
+IssueCategory = Literal[
+    # 기술/제조
+    "반도체",
+    "디스플레이",
+    "이차전지",
+    "소재/화학",
+    # 산업
+    "자동차",
+    "조선/중공업",
+    "방산",
+    # 소프트웨어/서비스
+    "AI/소프트웨어",
+    "통신",
+    # 헬스케어
+    "바이오/제약",
+    # 소비
+    "유통/소비재",
+    "K-푸드",
+    # 에너지/인프라
+    "에너지",
+    "건설/부동산",
+    # 금융/거시
+    "금융/보험",
+    "매크로",
+    "정책/규제",
+    # 기타
+    "기타",
+]
+
+
 class MacroSnapshot(BaseModel):
     """시장 매크로 지표 스냅샷."""
 
@@ -35,12 +66,13 @@ class IngestResult(BaseModel):
 
 
 class MappedIssue(BaseModel):
+    category: IssueCategory = Field(description="고정 카테고리 (클러스터링 키)")
     title: str = Field(description="이슈를 관통하는 핵심 한글 제목")
     summary: str = Field(
         description="숫자와 팩트 중심의 통합 요약 (2-3문장). 구체적 수치 반드시 포함."
     )
     themes: list[str] = Field(
-        description="의미론적 테마 (예: 'AI 전력 인프라', '1c나노 공정 전환')",
+        description="투자 내러티브 테마 (예: 'HBM 선단공정 전환 가속', 'DRAM 업사이클')",
         min_length=1,
         max_length=3,
     )
@@ -51,10 +83,11 @@ class MappedIssue(BaseModel):
 
 
 class ShuffleResult(BaseModel):
-    """Shuffle stage 출력 (테마 정규화)."""
+    """Shuffle stage 출력 (카테고리 그룹핑 + 테마 정규화)."""
 
-    canonical_themes: dict[str, list[str]] = Field(description="정규화명 → 원본 테마명 매핑")
-    theme_groups: dict[str, list[MappedIssue]] = Field(description="정규화 테마별로 그룹핑된 이슈")
+    category_groups: dict[str, dict[str, list[MappedIssue]]] = Field(
+        description="{ category: { theme: [issues] } } 2단계 그룹핑"
+    )
 
 
 class StockDetail(BaseModel):
@@ -68,6 +101,7 @@ class StockDetail(BaseModel):
 class NewsItem(BaseModel):
     """Reduce stage의 테마별 분석."""
 
+    category: IssueCategory = Field(description="카테고리 (정렬/필터링용)")
     theme: str = Field(description="한글 정규화 테마명")
     emoji: str = Field(description="단일 이모지: 🚀📈⚠️ℹ️📉⚡")
     summary: str = Field(description="한글 bullet points")

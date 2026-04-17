@@ -19,11 +19,11 @@ Usage:
 
     # IDE 디버그: 이 파일을 열고 F5 (Run and Debug)
 """
+
 import argparse
 import time
 from datetime import datetime
-from typing import List, Dict, Any
-from urllib.parse import urlparse
+from typing import Any
 
 from ddgs import DDGS
 from ddgs.exceptions import DDGSException
@@ -32,8 +32,8 @@ from ddgs.exceptions import DDGSException
 def format_datetime(date_str: str) -> str:
     """ISO 8601 날짜를 읽기 쉬운 형식으로 변환"""
     try:
-        dt = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
-        return dt.strftime('%Y-%m-%d %H:%M')
+        dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+        return dt.strftime("%Y-%m-%d %H:%M")
     except:
         return date_str
 
@@ -45,7 +45,7 @@ def search_news(
     timelimit: str = "d",
     max_results: int = 10,
     retries: int = 3,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """DuckDuckGo 뉴스 검색 (재시도 로직 포함)
 
     Args:
@@ -98,7 +98,7 @@ def search_text(
     timelimit: str | None = None,
     max_results: int = 10,
     retries: int = 3,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """DuckDuckGo 일반 웹 검색 (재시도 로직 포함)
 
     Args:
@@ -146,12 +146,12 @@ def search_text(
 
 def search_multiple_sites(
     keyword: str,
-    sites: List[str],
+    sites: list[str],
     search_type: str = "news",
     timelimit: str = "d",
     max_results: int = 20,
     retries: int = 3,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """여러 사이트에서 OR 검색 (재시도 로직 포함)
 
     Args:
@@ -205,7 +205,7 @@ def search_multiple_sites(
     return []
 
 
-def print_news_results(results: List[Dict[str, Any]]) -> None:
+def print_news_results(results: list[dict[str, Any]]) -> None:
     """뉴스 검색 결과 출력"""
     if not results:
         print("❌ 검색 결과가 없습니다.\n")
@@ -215,11 +215,11 @@ def print_news_results(results: List[Dict[str, Any]]) -> None:
     print("=" * 80)
 
     for i, article in enumerate(results, 1):
-        date = format_datetime(article.get('date', ''))
-        source = article.get('source', 'Unknown')
-        title = article.get('title', 'No title')
-        url = article.get('url', '')
-        body = article.get('body', '')[:150]
+        date = format_datetime(article.get("date", ""))
+        source = article.get("source", "Unknown")
+        title = article.get("title", "No title")
+        url = article.get("url", "")
+        body = article.get("body", "")[:150]
 
         print(f"\n[{i}] {title}")
         print(f"    📅 {date} | 📰 {source}")
@@ -230,7 +230,7 @@ def print_news_results(results: List[Dict[str, Any]]) -> None:
     print("\n" + "=" * 80)
 
 
-def print_text_results(results: List[Dict[str, Any]]) -> None:
+def print_text_results(results: list[dict[str, Any]]) -> None:
     """일반 검색 결과 출력"""
     if not results:
         print("❌ 검색 결과가 없습니다.\n")
@@ -240,9 +240,9 @@ def print_text_results(results: List[Dict[str, Any]]) -> None:
     print("=" * 80)
 
     for i, item in enumerate(results, 1):
-        title = item.get('title', 'No title')
-        url = item.get('href', '')
-        body = item.get('body', '')[:150]
+        title = item.get("title", "No title")
+        url = item.get("href", "")
+        body = item.get("body", "")[:150]
 
         print(f"\n[{i}] {title}")
         print(f"    🔗 {url}")
@@ -313,19 +313,22 @@ Examples:
     )
 
     parser.add_argument(
-        "--keyword", "-k",
+        "--keyword",
+        "-k",
         type=str,
         help="검색 키워드",
     )
     parser.add_argument(
-        "--type", "-t",
+        "--type",
+        "-t",
         type=str,
         choices=["news", "text"],
         default="news",
         help="검색 타입 (기본: news)",
     )
     parser.add_argument(
-        "--site", "-s",
+        "--site",
+        "-s",
         type=str,
         help="특정 사이트로 제약 (예: mk.co.kr)",
     )
@@ -335,7 +338,8 @@ Examples:
         help="여러 사이트 (쉼표로 구분, 예: mk.co.kr,hankyung.com)",
     )
     parser.add_argument(
-        "--region", "-r",
+        "--region",
+        "-r",
         type=str,
         default="kr-kr",
         help="지역 코드 (기본: kr-kr)",
@@ -348,7 +352,8 @@ Examples:
         help="시간 제한: d(일), w(주), m(월), y(년) (기본: d)",
     )
     parser.add_argument(
-        "--max-results", "-n",
+        "--max-results",
+        "-n",
         type=int,
         default=10,
         help="최대 결과 수 (기본: 10)",

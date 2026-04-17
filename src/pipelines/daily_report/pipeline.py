@@ -41,15 +41,16 @@ def run_pipeline(date: str, data_dir: str = "data") -> DailyReport:
     issues = map_stage(ingest_result.messages, date)
     print(f"  ✓ {len(issues)}개 이슈 추출")
 
-    # 3. Shuffle: 테마 정규화
+    # 3. Shuffle: 카테고리 그룹핑 + 테마 정규화
     print("[3/5] Shuffle Stage...")
     shuffle_result = shuffle_stage(issues, date)
-    print(f"  ✓ {len(shuffle_result.canonical_themes)}개 정규화 테마")
+    total_themes = sum(len(t) for t in shuffle_result.category_groups.values())
+    print(f"  ✓ {len(shuffle_result.category_groups)}개 카테고리, {total_themes}개 테마")
 
     # 4. Reduce: 테마별 분석
     print("[4/5] Reduce Stage...")
     news_items = reduce_stage(
-        shuffle_result.theme_groups,
+        shuffle_result.category_groups,
         ingest_result.macro,
         date,
     )

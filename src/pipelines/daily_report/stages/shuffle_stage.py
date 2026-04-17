@@ -1,4 +1,4 @@
-"""Shuffle stage: 테마 정규화 및 클러스터 재구성."""
+"""Shuffle stage: 카테고리 그룹핑 + 테마 정규화."""
 
 import asyncio
 import json
@@ -23,88 +23,110 @@ def shuffle_stage(
     date: str = None,
 ) -> ShuffleResult:
     """
-    테마를 정규화하고 이슈를 재그룹핑.
+    2단계 그룹핑: 카테고리 버킷팅 → 카테고리 내 테마 정규화.
 
     Args:
         issues: Map stage 출력 이슈 리스트
         date: 날짜 문자열 (LangSmith 그룹핑용)
 
     Returns:
-        정규화된 테마와 재그룹핑된 이슈
+        category_groups: { category: { theme: [issues] } }
     """
     if not issues:
-        return ShuffleResult(theme_mapping={}, regrouped_issues=issues)
+        return ShuffleResult(category_groups={})
 
-    # 모든 테마 추출
+    # 1단계: 결정론적 카테고리 그룹핑 (LLM 불필요)
+    category_buckets: dict[str, list[MappedIssue]] = {}
+    for issue in issues:
+        category_buckets.setdefault(issue.category, []).append(issue)
+
+    # 2단계: 카테고리 내 테마 정규화 (LLM, 병렬)
+    loop = asyncio.get_event_loop()
+    category_groups = loop.run_until_complete(_normalize_themes_by_category(category_buckets, date))
+
+    return ShuffleResult(category_groups=category_groups)
+
+
+async def _normalize_themes_by_category(
+    category_buckets: dict[str, list[MappedIssue]],
+    date: str,
+) -> dict[str, dict[str, list[MappedIssue]]]:
+    """카테고리별 병렬 테마 정규화."""
+    tasks = [
+        _normalize_themes_for_category(category, issues, date)
+        for category, issues in category_buckets.items()
+    ]
+    results = await asyncio.gather(*tasks)
+
+    return {category: theme_map for category, theme_map in zip(category_buckets.keys(), results)}
+
+
+async def _normalize_themes_for_category(
+    category: str,
+    issues: list[MappedIssue],
+    date: str,
+) -> dict[str, list[MappedIssue]]:
+    """단일 카테고리 내 테마 정규화."""
+    # 카테고리 내 모든 테마 수집
     all_themes = []
     for issue in issues:
         all_themes.extend(issue.themes)
-
     unique_themes = list(set(all_themes))
 
-    # LLM으로 테마 정규화
-    loop = asyncio.get_event_loop()
-    theme_mapping = loop.run_until_complete(_normalize_themes(unique_themes, date))
+    # 테마가 적으면 정규화 생략
+    if len(unique_themes) <= 2:
+        theme_mapping = {theme: [theme] for theme in unique_themes}
+    else:
+        theme_mapping = await _normalize_themes(unique_themes, category, date)
 
-    # 이슈 테마 업데이트 및 그룹핑
-    theme_groups = {}
+    # 이슈를 정규화된 테마로 그룹핑
+    theme_groups: dict[str, list[MappedIssue]] = {}
+
     for issue in issues:
-        normalized_themes = []
-        for theme in issue.themes:
-            # theme_mapping에서 정규화된 테마 찾기
-            for norm_theme, orig_themes in theme_mapping.items():
-                if theme in orig_themes:
-                    normalized_themes.append(norm_theme)
-                    break
-            else:
-                # 매핑 없으면 원본 유지
-                normalized_themes.append(theme)
+        # 이슈의 첫 번째 테마로 대표 테마 결정
+        primary_theme = issue.themes[0] if issue.themes else "기타"
 
-        # 중복 제거
-        normalized_themes = list(set(normalized_themes))[:3]  # 최대 3개
+        # 정규화된 테마 찾기
+        normalized_theme = primary_theme
+        for norm_theme, orig_themes in theme_mapping.items():
+            if primary_theme in orig_themes:
+                normalized_theme = norm_theme
+                break
 
-        new_issue = MappedIssue(
-            title=issue.title,
-            summary=issue.summary,
-            themes=normalized_themes,
-            impact=issue.impact,
-            keywords=issue.keywords,
-            sentiment=issue.sentiment,
-            source_ids=issue.source_ids,
-        )
+        # 그룹에 추가
+        if normalized_theme not in theme_groups:
+            theme_groups[normalized_theme] = []
+        theme_groups[normalized_theme].append(issue)
 
-        # 각 테마별로 그룹핑
-        for theme in normalized_themes:
-            if theme not in theme_groups:
-                theme_groups[theme] = []
-            theme_groups[theme].append(new_issue)
-
-    return ShuffleResult(
-        canonical_themes=theme_mapping,
-        theme_groups=theme_groups,
-    )
+    return theme_groups
 
 
-async def _normalize_themes(themes: list[str], date: str) -> dict[str, list[str]]:
+async def _normalize_themes(
+    themes: list[str],
+    category: str,
+    date: str,
+) -> dict[str, list[str]]:
     """LLM으로 테마 정규화."""
     llm = LLMProvider.create(
-        provider="anthropic", model="us.anthropic.claude-haiku-4-5-20251001-v1:0", temperature=0.1
+        provider="anthropic",
+        model="us.anthropic.claude-haiku-4-5-20251001-v1:0",
+        temperature=0.1,
     )
 
     themes_text = "\n".join([f"- {theme}" for theme in themes])
 
-    # prompts.py에서 프롬프트 가져오기
     system_prompt = SHUFFLE_SYSTEM_PROMPT
     user_prompt = SHUFFLE_USER_PROMPT.format(themes=themes_text)
 
     # LangSmith 태깅
-    run_name = f"Shuffle Stage - {date}"
+    run_name = f"Shuffle Stage - {date} - {category}"
     config = {
         "run_name": run_name,
-        "tags": ["daily_report", "shuffle_stage", f"date:{date}"],
+        "tags": ["daily_report", "shuffle_stage", f"date:{date}", f"category:{category}"],
         "metadata": {
             "stage": "shuffle",
             "date": date,
+            "category": category,
             "theme_count": len(themes),
         },
     }
@@ -119,8 +141,7 @@ async def _normalize_themes(themes: list[str], date: str) -> dict[str, list[str]
         response = await llm_with_output.ainvoke(messages, config=config)
         return response.mapping
     except Exception as e:
-        print(f"⚠️  테마 정규화 실패: {e}")
-        # fallback: 원본 테마 그대로 사용
+        print(f"⚠️  [{category}] 테마 정규화 실패: {e}")
         return {theme: [theme] for theme in themes}
 
 
@@ -141,22 +162,36 @@ if __name__ == "__main__":
     # Shuffle stage 실행
     result = shuffle_stage(issues, date)
 
-    print(f"✓ {len(result.canonical_themes)}개 정규화 테마")
-    total_issues = sum(len(group) for group in result.theme_groups.values())
-    print(f"✓ {len(result.theme_groups)}개 그룹, 총 {total_issues}개 이슈")
+    # 통계 출력
+    total_categories = len(result.category_groups)
+    total_themes = sum(len(themes) for themes in result.category_groups.values())
+    total_issues = sum(
+        len(issues) for themes in result.category_groups.values() for issues in themes.values()
+    )
 
-    # 출력 저장 (JSON 직렬화를 위해 theme_groups를 dict로 변환)
+    print(f"✓ {total_categories}개 카테고리")
+    print(f"✓ {total_themes}개 테마 그룹")
+    print(f"✓ 총 {total_issues}개 이슈")
+
+    for category, theme_map in result.category_groups.items():
+        print(f"\n[{category}]")
+        for theme, issues in theme_map.items():
+            print(f"  - {theme}: {len(issues)}개 이슈")
+
+    # 출력 저장
     output_file = f"tests/pipelines/daily_report/fixtures/stage_outputs/shuffle_{date}.json"
     Path(output_file).parent.mkdir(parents=True, exist_ok=True)
 
     output_data = {
-        "canonical_themes": result.canonical_themes,
-        "theme_groups": {
-            theme: [issue.model_dump() for issue in issues]
-            for theme, issues in result.theme_groups.items()
+        "category_groups": {
+            category: {
+                theme: [issue.model_dump() for issue in issues]
+                for theme, issues in theme_map.items()
+            }
+            for category, theme_map in result.category_groups.items()
         },
     }
 
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(output_data, f, ensure_ascii=False, indent=2)
-    print(f"✓ {output_file}에 저장")
+    print(f"\n✓ {output_file}에 저장")
