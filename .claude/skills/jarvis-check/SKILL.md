@@ -1,5 +1,5 @@
 ---
-name: quick-check
+name: jarvis-check
 description: Run quick technical analysis for a ticker
 args: ticker symbol (e.g., AAPL, MSFT, 005930.KS)
 ---
