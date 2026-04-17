@@ -275,6 +275,8 @@ Claude: /invest-report
 - `NewsTool`: 뉴스 수집
 - `PortfolioTool`: 포트폴리오 조회
 - `ScreenerTool`: 종목 발굴 (테마, 급등주, 거래량, 수급)
+- `DisclosureTool`: SEC EDGAR (미국) + OpenDART (한국) 공시 조회
+- `FlowTool`: 외국인/기관 수급 동향 (KIS API, 한국주식)
 
 **Strategies** - 기술적 분석 전략
 - `TrendStrategy`: 이동평균선, ADX, Supertrend
@@ -314,6 +316,32 @@ uv run pytest tests/integration/ -v -m integration
 # 커버리지 포함
 uv run pytest tests/ --cov=src --cov-report=html
 ```
+
+### 코드 위생(Import/Unused) 점검
+
+```bash
+# 개발 도구 설치
+uv sync --dev
+
+# 임포트/정적 점검
+uv run --group dev ruff check src tests
+
+# 미사용 코드 후보 탐지
+uv run --group dev vulture src --min-confidence 80
+
+# 한 번에 실행
+./scripts/check_hygiene.sh
+```
+
+PR 전에는 최소 1회 `check_hygiene.sh` 실행을 권장한다.
+
+### 문서 유지 정책
+
+코드 변경과 문서 변경은 같은 PR에서 함께 반영:
+- CLI 동작 변경: `docs/CLI_USAGE.md`
+- 기능/사용 예시 변경: `README.md`
+- 아키텍처 변경: `AGENTS.md`
+- 개발 프로세스 변경: `docs/DEVELOPMENT.md`
 
 ### 새 전략 추가
 
@@ -422,4 +450,3 @@ invest-jarvis/
 MIT
 
 ---
-

@@ -1,14 +1,11 @@
 import asyncio
 import logging
 import os
-
-logger = logging.getLogger(__name__)
 from pathlib import Path
 from typing import Optional, Literal
 import typer
 from rich.console import Console
 from rich.markdown import Markdown
-from rich.table import Table
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -89,7 +86,7 @@ from src.providers.kis import KISProvider
 from src.providers.ticker_resolver import TickerResolver
 from src.tools.technical.scorer import TechnicalScorer
 from src.tools.technical.tool import TechnicalAnalysisTool
-from src.tools.fundamental import FundamentalTool, QuarterlyData
+from src.tools.fundamental import FundamentalTool
 from src.tools.macro import MacroTool
 from src.tools.news import NewsTool
 from src.tools.portfolio import PortfolioTool
@@ -103,6 +100,8 @@ from src.providers.naver import NaverProvider
 from src.tools.screener.universe import UniverseBuilder
 from src.tools.screener.evidence import EvidenceCollector
 from src.pipelines.screener import ScreenerPipeline
+
+logger = logging.getLogger(__name__)
 
 app = typer.Typer(help="Invest Jarvis - Financial Analysis CLI")
 report_app = typer.Typer(help="리포트 생성")
