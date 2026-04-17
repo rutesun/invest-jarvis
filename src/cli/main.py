@@ -1,6 +1,8 @@
 import asyncio
 import logging
 import os
+
+logger = logging.getLogger(__name__)
 from pathlib import Path
 from typing import Optional, Literal
 import typer
