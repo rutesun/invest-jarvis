@@ -1,5 +1,6 @@
 """Map stage 평가 메트릭."""
 
+from collections import Counter
 from typing import List, Dict, Any
 from pydantic import BaseModel, Field
 from src.pipelines.daily_report.models import MappedIssue
@@ -29,13 +30,25 @@ def number_preservation(
     issues: List[MappedIssue],
     expected: Dict[str, Any],
 ) -> float:
-    """숫자 보존율: 원문 숫자가 출력에 포함되었는지."""
+    """숫자 보존율: 원문 숫자가 출력에 포함되었는지.
+
+    경계 검증: "5.6%"가 "25.6%"에서 매칭되지 않도록
+    숫자 앞에 다른 숫자가 없어야 매칭으로 인정.
+    """
+    import re
+
     expected_numbers = expected.get("must_preserve_numbers", [])
     if not expected_numbers:
         return 1.0
 
     output_text = _issues_to_text(issues)
-    preserved = sum(1 for n in expected_numbers if n in output_text)
+    preserved = 0
+    for n in expected_numbers:
+        # 숫자 앞에 다른 숫자가 없어야 매칭 (negative lookbehind)
+        # 예: "5.6%"는 "25.6%"에서 매칭 안됨, " 5.6%"나 문장 시작에서는 매칭됨
+        pattern = r"(?<![0-9])" + re.escape(n)
+        if re.search(pattern, output_text):
+            preserved += 1
     return preserved / len(expected_numbers)
 
 
@@ -89,6 +102,7 @@ def theme_relevance_llm(
         (score, match_details) - 점수와 상세 매칭 결과
     """
     from langchain_core.messages import HumanMessage, SystemMessage
+    from src.pipelines.daily_report.prompts import THEME_JUDGE_SYSTEM_PROMPT
 
     expected_themes = expected.get("expected_themes", [])
     if not expected_themes:
@@ -107,24 +121,13 @@ def theme_relevance_llm(
             temperature=0,
         )
 
-    system_prompt = """당신은 테마 매칭 평가자입니다.
-예상 테마와 실제 테마가 의미적으로 일치하는지 판단하세요.
-
-규칙:
-- 정확히 같은 단어가 아니어도 의미가 같으면 매칭됨
-- 예: "양자보안" ≈ "Post-Quantum Cryptography" ≈ "양자암호"
-- 예: "전기차 수요 둔화" ≈ "EV 시장 성장 둔화"
-- 부분적으로 관련있는 것은 매칭 아님
-
-JSON 형식으로 응답하세요."""
-
     user_prompt = f"""예상 테마: {expected_themes}
 실제 테마: {actual_themes}
 
 각 예상 테마가 실제 테마 중 하나와 의미적으로 일치하는지 판단하세요."""
 
     messages = [
-        SystemMessage(content=system_prompt),
+        SystemMessage(content=THEME_JUDGE_SYSTEM_PROMPT),
         HumanMessage(content=user_prompt),
     ]
 
@@ -169,6 +172,51 @@ def must_split_check(
     return 1.0 if len(issues) >= min_expected else 0.0
 
 
+def category_accuracy(
+    issues: List[MappedIssue],
+    expected: Dict[str, Any],
+) -> float:
+    """카테고리 정확도: 예상 카테고리와 실제 카테고리 일치 여부.
+
+    Counter 기반 Jaccard 유사도 사용:
+    - intersection: 각 카테고리별 min(expected, actual) 합
+    - union: 각 카테고리별 max(expected, actual) 합
+    - score = intersection / union
+    """
+    expected_category = expected.get("expected_category")
+    if not expected_category:
+        return 1.0
+
+    if not issues:
+        return 0.0
+
+    actual_categories = [issue.category for issue in issues]
+
+    # expected_category가 리스트인 경우 (복수 이슈)
+    if isinstance(expected_category, list):
+        expected_counter = Counter(expected_category)
+        actual_counter = Counter(actual_categories)
+
+        # 모든 카테고리 키
+        all_categories = set(expected_counter.keys()) | set(actual_counter.keys())
+
+        # intersection: 각 카테고리별 min
+        intersection = sum(
+            min(expected_counter.get(cat, 0), actual_counter.get(cat, 0))
+            for cat in all_categories
+        )
+        # union: 각 카테고리별 max
+        union = sum(
+            max(expected_counter.get(cat, 0), actual_counter.get(cat, 0))
+            for cat in all_categories
+        )
+        return intersection / union if union > 0 else 1.0
+
+    # 단일 카테고리인 경우
+    matched = sum(1 for c in actual_categories if c == expected_category)
+    return matched / len(actual_categories)
+
+
 def _issues_to_text(issues: List[MappedIssue]) -> str:
     """이슈 리스트를 단일 텍스트로 변환."""
     parts = []
@@ -189,6 +237,7 @@ RULE_BASED_METRICS = {
     "company_preservation": company_preservation,
     "theme_relevance": theme_relevance,
     "keyword_coverage": keyword_coverage,
+    "category_accuracy": category_accuracy,
 }
 
 

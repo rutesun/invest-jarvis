@@ -1,65 +1,30 @@
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-## Project Overview
-
-**invest-jarvis** - Korean/US stock investment analysis CLI tool.
-Replacing the previous `telegram` project (built with Codex/ANTIGRAVITY). Full feature migration in progress.
-
-**Current version**: 0.3.0
-
 ## Development Setup
 
 ```bash
-# Install dependencies
-uv sync
-
-# Install with dev dependencies
-uv sync --dev
-
-# Run CLI
-uv run jarvis --help
-
-# Run tests
-uv run pytest
-
-# Run tests with coverage
-uv run pytest --cov=src
+uv sync              # Install dependencies
+uv run jarvis --help # Run CLI
+uv run pytest        # Run tests
 ```
 
-**Required environment variables** (`.env` file):
-```
-OPENAI_API_KEY=...
-ANTHROPIC_API_KEY=...       # optional, for --provider anthropic
-KIS_APP_KEY=...             # Korean stocks (KIS OpenAPI)
-KIS_APP_SECRET=...
-TELEGRAM_API_ID=...         # Telegram message collection
-TELEGRAM_API_HASH=...
-```
+**Environment variables**: `.env` 파일 생성 (OPENAI_API_KEY, KIS_APP_KEY 등)
 
 **Package manager**: Always use `uv`, never `pip` directly.
 
+**자세한 가이드**: [@docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
+
 ## Architecture
 
-Layered architecture — data flows one way:
-
 ```
-Providers → Tools → Pipelines → CLI (src/cli/main.py)
+Providers → Tools → Pipelines → CLI
 ```
 
-| Layer | Location | Role |
-|-------|----------|------|
-| **Providers** | `src/providers/` | Raw data fetching (yfinance, KIS API, Naver, Telegram) |
-| **Tools** | `src/tools/` | Domain logic (technical analysis, macro, news, screener) |
-| **Pipelines** | `src/pipelines/` | Orchestration, combines tools into workflows |
-| **LLM** | `src/llm/` | OpenAI/Anthropic adapters, report generation |
-| **CLI** | `src/cli/main.py` | Typer-based entrypoint, rich output |
+- **Providers**: 데이터 수집 (yfinance, KIS API, Naver, Telegram)
+- **Tools**: 도메인 로직 (technical, macro, news, screener)
+- **Pipelines**: 워크플로우 오케스트레이션
+- **LLM**: OpenAI/Anthropic 어댑터
+- **CLI**: Typer 기반 진입점
 
-**Key modules**:
-- `src/tools/technical/` — 5 strategy system (Trend, Oscillator, Divergence, Disparity, Risk) with 15+ indicators
-- `src/providers/ticker_resolver.py` — LLM-based name→ticker resolution with 6-month cache
-- `src/tools/screener/` — Universe building from Naver themes + KIS rankings, evidence scoring
+**상세 아키텍처**: [@docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
 ## Common Commands
 
@@ -77,15 +42,16 @@ uv run jarvis telegram catch-up # 누락분 보충 수집
 
 ## Documentation Rules
 
-모든 구현 작업 시 아래 규칙을 반드시 따를 것:
+**모든 구현 작업 시 반드시 문서 업데이트 (같은 커밋에 포함)**:
 
-- **새 기능/파이프라인 추가** → `README.md`의 Features 섹션 업데이트
-- **새 CLI 커맨드 추가** → `README.md`의 Commands 섹션에 커맨드 + 설명 + 예시 추가
-- **새 모듈/패키지 추가** → `docs/` 아래 대응하는 문서 생성 또는 기존 문서 업데이트
-- **아키텍처 변경** → 이 파일(CLAUDE.md)의 Architecture 섹션 업데이트
-- **의존성 추가** → `README.md`의 설치/설정 섹션 반영
+| 변경 | 업데이트 문서 |
+|------|---------------|
+| 새 기능/파이프라인 | `README.md` Features 섹션 |
+| 새 CLI 커맨드 | `docs/CLI_USAGE.md` |
+| 아키텍처 변경 | `docs/ARCHITECTURE.md` |
+| 개발 프로세스 변경 | `docs/DEVELOPMENT.md` |
 
-문서 업데이트는 코드 변경과 **같은 커밋**에 포함할 것.
+**상세 가이드**: [@docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
 
 ## Skills
 

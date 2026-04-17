@@ -17,6 +17,7 @@ from evaluations.metrics import (
 def make_issue(
     title="테스트 이슈",
     summary="요약",
+    category="기타",
     themes=None,
     keywords=None,
     impact="영향",
@@ -26,6 +27,7 @@ def make_issue(
     return MappedIssue(
         title=title,
         summary=summary,
+        category=category,
         themes=themes or ["테마1"],
         keywords=keywords or ["키워드1"],
         impact=impact,
@@ -170,5 +172,6 @@ def test_rule_based_metrics_all_keys():
         "company_preservation",
         "theme_relevance",
         "keyword_coverage",
+        "category_accuracy",
     }
     assert expected_keys == set(RULE_BASED_METRICS.keys())

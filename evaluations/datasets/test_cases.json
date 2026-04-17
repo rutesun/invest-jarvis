@@ -19,6 +19,10 @@
           "블룸에너지"
         ],
         "must_split": true,
+        "expected_category": [
+          "자동차",
+          "AI/소프트웨어"
+        ],
         "expected_themes": [
           "전기차 수요 둔화",
           "AI 전력"
@@ -47,6 +51,7 @@
           "삼성전자"
         ],
         "must_split": false,
+        "expected_category": "반도체",
         "expected_themes": [
           "반도체 메모리"
         ],
@@ -75,6 +80,11 @@
           "엔비디아"
         ],
         "must_split": true,
+        "expected_category": [
+          "매크로",
+          "K-푸드",
+          "AI/소프트웨어"
+        ],
         "expected_themes": [
           "인플레이션",
           "K-푸드 수출",
@@ -108,6 +118,7 @@
           "케이씨에스"
         ],
         "must_split": false,
+        "expected_category": "AI/소프트웨어",
         "expected_themes": [
           "양자보안"
         ],
@@ -141,6 +152,7 @@
         ],
         "must_preserve_companies": [],
         "must_split": false,
+        "expected_category": "에너지",
         "expected_themes": [
           "ESS 시장"
         ],
@@ -167,6 +179,8 @@
           "한화에어로스페이스",
           "하나증권"
         ],
+        "must_split": false,
+        "expected_category": "방산",
         "expected_themes": [
           "방위산업",
           "실적 전망"
@@ -193,15 +207,16 @@
           "한미반도체",
           "삼성전자"
         ],
+        "expected_category": "반도체",
         "expected_themes": [
-          "반도체 HBM 경쟁"
+          "반도체 HBM 경쟁",
+          "HBM3E 시장 선점 및 점유율 경쟁"
         ],
         "expected_keywords": [
-          "HBM3E",
-          "HBM4",
-          "TC-Bonder",
-          "엔비디아",
-          "공급망"
+          "마이크론 HBM3E 엔비디아 공급 시작 영향",
+          "SK하이닉스 HBM3E 12단 양산 일정 및 로드맵",
+          "한미반도체 TC-Bonder 수주 모멘텀 분석",
+          "삼성전자 HBM4 개발 현황 및 샘플 공급 시점"
         ]
       }
     },
@@ -210,8 +225,8 @@
       "name": "매크로_금리_및_성장주_반응",
       "input": "[시황/전략] 미 10년물 국채금리가 4.5%를 돌파하며 기술주 전반에 하방 압력을 가하고 있습니다. 특히 금리에 민감한 알테오젠, 리그켐바이오 등 바이오 섹터의 낙폭이 두드러졌습니다. 반면 인플레이션 수혜주인 원자재 관련주들은 소폭 반등하며 지수를 방어했습니다.",
       "expected": {
-        "num_issues_min": 2,
-        "num_issues_max": 2,
+        "num_issues_min": 1,
+        "num_issues_max": 1,
         "must_split": true,
         "must_preserve_numbers": [
           "4.5%"
@@ -220,16 +235,18 @@
           "알테오젠",
           "리그켐바이오"
         ],
+        "expected_category": [
+          "매크로"
+        ],
         "expected_themes": [
-          "금리 상승",
-          "바이오/기술주 하락",
-          "원자재 수혜"
+          "국채금리 4.5% 돌파",
+          "바이오 섹터 투심 위축",
+          "인플레이션 헤지"
         ],
         "expected_keywords": [
-          "국채금리",
-          "인플레이션",
-          "성장주",
-          "하방 압력"
+          "미 10년물 국채금리 4.5% 돌파 영향",
+          "알테오젠 리그켐바이오 주가 하락",
+          "인플레이션 수혜 원자재 관련주"
         ]
       }
     },
@@ -245,15 +262,18 @@
           "45.3%",
           "2028년 12월"
         ],
+        "must_preserve_companies": [],
+        "must_split": false,
+        "expected_category": "이차전지",
         "expected_themes": [
           "공급계약 체결",
-          "EV 부품"
+          "북미 시장 진출",
+          "EV 배터리 부품 수주"
         ],
         "expected_keywords": [
-          "배터리 케이스",
-          "매출액 대비",
-          "유럽 완성차",
-          "북미 진출"
+          "A사 유럽 완성차 배터리 케이스 공급계약",
+          "A사 1250억 규모 EV 부품 수주 내역",
+          "A사 북미 시장 진출 전략"
         ]
       }
     }

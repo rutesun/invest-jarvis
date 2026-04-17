@@ -25,6 +25,7 @@ from evaluations.metrics import (
     company_preservation as _company_preservation,
     keyword_coverage as _keyword_coverage,
     must_split_check as _must_split_check,
+    category_accuracy as _category_accuracy,
     _issues_to_text,
     ThemeMatchResult,
 )
@@ -33,6 +34,21 @@ from evaluations.metrics import (
 client = Client()
 
 DATASET_NAME = "map-stage-eval"
+
+# LLM-as-Judge용 lazy singleton
+_theme_judge_llm = None
+
+
+def _get_theme_judge_llm():
+    """Lazy initialization으로 LLM 인스턴스 재사용."""
+    global _theme_judge_llm
+    if _theme_judge_llm is None:
+        _theme_judge_llm = LLMProvider.create(
+            provider="anthropic",
+            model="us.anthropic.claude-haiku-4-5-20251001-v1:0",
+            temperature=0,
+        )
+    return _theme_judge_llm
 
 
 def create_dataset_from_test_cases(
@@ -86,6 +102,7 @@ def run_map_stage_for_eval(inputs: Dict) -> Dict:
         "all_text": _issues_to_text(issues),
         "all_themes": [theme for issue in issues for theme in issue.themes],
         "all_keywords": [kw for issue in issues for kw in issue.keywords],
+        "all_categories": [issue.category for issue in issues],
     }
 
 
@@ -128,6 +145,13 @@ def keyword_coverage(run: Run, example: Example) -> Dict:
     return {"key": "keyword_coverage", "score": score}
 
 
+def category_accuracy(run: Run, example: Example) -> Dict:
+    """카테고리 정확도."""
+    issues = [MappedIssue(**i) for i in (run.outputs or {}).get("issues", [])]
+    score = _category_accuracy(issues, example.outputs or {})
+    return {"key": "category_accuracy", "score": score}
+
+
 # ============================================================
 # LLM-as-Judge Evaluator
 # ============================================================
@@ -135,6 +159,7 @@ def keyword_coverage(run: Run, example: Example) -> Dict:
 def theme_relevance_llm(run: Run, example: Example) -> Dict:
     """LLM-as-Judge로 테마 의미적 유사도 평가."""
     from langchain_core.messages import HumanMessage, SystemMessage
+    from src.pipelines.daily_report.prompts import THEME_JUDGE_SYSTEM_PROMPT
 
     outputs = run.outputs or {}
     expected = example.outputs or {}
@@ -147,22 +172,7 @@ def theme_relevance_llm(run: Run, example: Example) -> Dict:
     if not actual_themes:
         return {"key": "theme_relevance", "score": 0.0}
 
-    llm = LLMProvider.create(
-        provider="anthropic",
-        model="us.anthropic.claude-haiku-4-5-20251001-v1:0",
-        temperature=0,
-    )
-
-    system_prompt = """당신은 테마 매칭 평가자입니다.
-예상 테마와 실제 테마가 의미적으로 일치하는지 판단하세요.
-
-규칙:
-- 정확히 같은 단어가 아니어도 의미가 같으면 매칭됨
-- 예: "양자보안" ≈ "Post-Quantum Cryptography" ≈ "양자암호"
-- 예: "전기차 수요 둔화" ≈ "EV 시장 성장 둔화"
-- 부분적으로 관련있는 것은 매칭 아님
-
-JSON 형식으로 응답하세요."""
+    llm = _get_theme_judge_llm()
 
     user_prompt = f"""예상 테마: {expected_themes}
 실제 테마: {actual_themes}
@@ -170,7 +180,7 @@ JSON 형식으로 응답하세요."""
 각 예상 테마가 실제 테마 중 하나와 의미적으로 일치하는지 판단하세요."""
 
     messages = [
-        SystemMessage(content=system_prompt),
+        SystemMessage(content=THEME_JUDGE_SYSTEM_PROMPT),
         HumanMessage(content=user_prompt),
     ]
 
@@ -203,6 +213,7 @@ def run_evaluation(experiment_prefix: str):
             number_preservation,
             company_preservation,
             keyword_coverage,
+            category_accuracy,
             theme_relevance_llm,
         ],
         experiment_prefix=experiment_prefix,
