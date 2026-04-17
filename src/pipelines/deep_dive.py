@@ -54,6 +54,9 @@ class DeepDivePipeline:
                 - news_analysis: NewsAnalysisOutput | None
                 - fundamental: FundamentalSnapshot | None
                 - fundamental_summary: FundamentalSummaryOutput | None
+                - disclosure: list[DisclosureItem] | None (SEC 10-Q/8-K or OpenDART)
+                - flow: InvestorFlow | None (외국인/기관 순매수 동향, 한국주식만)
+                - integrated_analysis: IntegratedAnalysisOutput | None (종합 인사이트)
         """
         tech_result = await self.technical_tool.execute(ticker)
         if not tech_result.success:

@@ -84,7 +84,6 @@ def _format_metric_value(metric_name: str, value: float) -> str:
         # Remove trailing zeros after decimal point
         return formatted.rstrip('0').rstrip('.') if '.' in formatted else formatted
 
-from src.core.config import load_config
 from src.providers.yfinance_provider import YFinanceProvider
 from src.providers.kis import KISProvider
 from src.providers.ticker_resolver import TickerResolver
@@ -246,83 +245,6 @@ async def run_deep_dive(ticker_or_name: str, provider: str) -> dict:
 
     return await pipeline.run(ticker)
 
-
-def _render_quarterly_table(quarterly_data: list[QuarterlyData]) -> str:
-    """Render quarterly data as Rich Table"""
-    if not quarterly_data or len(quarterly_data) == 0:
-        return ""
-
-    table = Table(title="분기별 추이 (최근 4분기)", show_header=True, header_style="bold cyan")
-
-    # Add columns
-    table.add_column("Metric", style="white", no_wrap=True)
-    for q in quarterly_data:
-        table.add_column(q.period, justify="right")
-
-    # Revenue row
-    revenue_values = []
-    for q in quarterly_data:
-        if q.revenue is not None:
-            revenue_values.append(f"${q.revenue/1e9:.2f}B")
-        else:
-            revenue_values.append("N/A")
-    table.add_row("Revenue", *revenue_values)
-
-    # Revenue YoY row
-    yoy_values = []
-    for q in quarterly_data:
-        if q.revenue_yoy is not None:
-            color = "green" if q.revenue_yoy >= 0 else "red"
-            yoy_values.append(f"[{color}]{q.revenue_yoy*100:+.2f}%[/{color}]")
-        else:
-            yoy_values.append("N/A")
-    table.add_row("YoY Growth %", *yoy_values)
-
-    # Revenue QoQ row
-    qoq_values = []
-    for q in quarterly_data:
-        if q.revenue_qoq is not None:
-            color = "green" if q.revenue_qoq >= 0 else "red"
-            qoq_values.append(f"[{color}]{q.revenue_qoq*100:+.2f}%[/{color}]")
-        else:
-            qoq_values.append("N/A")
-    table.add_row("QoQ Growth %", *qoq_values)
-
-    # Earnings row
-    earnings_values = []
-    for q in quarterly_data:
-        if q.earnings is not None:
-            earnings_values.append(f"${q.earnings/1e9:.2f}B")
-        else:
-            earnings_values.append("N/A")
-    table.add_row("Earnings", *earnings_values)
-
-    # Earnings YoY row
-    yoy_e_values = []
-    for q in quarterly_data:
-        if q.earnings_yoy is not None:
-            color = "green" if q.earnings_yoy >= 0 else "red"
-            yoy_e_values.append(f"[{color}]{q.earnings_yoy*100:+.2f}%[/{color}]")
-        else:
-            yoy_e_values.append("N/A")
-    table.add_row("YoY Growth %", *yoy_e_values)
-
-    # Earnings QoQ row
-    qoq_e_values = []
-    for q in quarterly_data:
-        if q.earnings_qoq is not None:
-            color = "green" if q.earnings_qoq >= 0 else "red"
-            qoq_e_values.append(f"[{color}]{q.earnings_qoq*100:+.2f}%[/{color}]")
-        else:
-            qoq_e_values.append("N/A")
-    table.add_row("QoQ Growth %", *qoq_e_values)
-
-    from io import StringIO
-    from rich.console import Console
-    buffer = StringIO()
-    console = Console(file=buffer, force_terminal=True)
-    console.print(table)
-    return buffer.getvalue()
 
 
 def _format_growth_rate(value: float | None) -> str:
@@ -582,7 +504,7 @@ def analyze(
         "openai", "--provider", "-p", help="LLM provider"
     ),
 ):
-    """Deep dive analysis with LLM (technical + news)."""
+    """Deep dive analysis with LLM (technical + news + disclosure + flow)."""
     console.print(f"[bold]Resolving '{query}'...[/bold]")
 
     try:
