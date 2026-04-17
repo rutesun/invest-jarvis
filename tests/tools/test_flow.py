@@ -1,21 +1,22 @@
 # tests/tools/test_flow.py
-import pytest
 from unittest.mock import AsyncMock
-from src.tools.flow import InvestorFlowEntry, InvestorFlow, FlowTool
-from src.core.models import ToolResult
+
+import pytest
+
+from src.tools.flow import FlowTool, InvestorFlow, InvestorFlowEntry
 
 
 # 10일치 샘플 데이터 (최신일이 index 0)
 SAMPLE_10D = [
-    {"date": "20260411", "foreign_net":  500, "institution_net":  300, "total_net":  800},
-    {"date": "20260410", "foreign_net": -200, "institution_net":  100, "total_net": -100},
-    {"date": "20260409", "foreign_net":  300, "institution_net": -150, "total_net":  150},
-    {"date": "20260408", "foreign_net":  400, "institution_net":  200, "total_net":  600},
+    {"date": "20260411", "foreign_net": 500, "institution_net": 300, "total_net": 800},
+    {"date": "20260410", "foreign_net": -200, "institution_net": 100, "total_net": -100},
+    {"date": "20260409", "foreign_net": 300, "institution_net": -150, "total_net": 150},
+    {"date": "20260408", "foreign_net": 400, "institution_net": 200, "total_net": 600},
     {"date": "20260407", "foreign_net": -100, "institution_net": -200, "total_net": -300},
-    {"date": "20260404", "foreign_net":  200, "institution_net":  100, "total_net":  300},
-    {"date": "20260403", "foreign_net": -300, "institution_net":  250, "total_net":  -50},
-    {"date": "20260402", "foreign_net":  150, "institution_net": -100, "total_net":   50},
-    {"date": "20260401", "foreign_net":  100, "institution_net":  200, "total_net":  300},
+    {"date": "20260404", "foreign_net": 200, "institution_net": 100, "total_net": 300},
+    {"date": "20260403", "foreign_net": -300, "institution_net": 250, "total_net": -50},
+    {"date": "20260402", "foreign_net": 150, "institution_net": -100, "total_net": 50},
+    {"date": "20260401", "foreign_net": 100, "institution_net": 200, "total_net": 300},
     {"date": "20260331", "foreign_net": -400, "institution_net": -300, "total_net": -700},
 ]
 
@@ -40,6 +41,7 @@ def _make_flow(raw: list[dict]) -> InvestorFlow:
 
 # ── 1일 방향 ──────────────────────────────────────────────────────────────────
 
+
 def test_foreign_direction_1d_buy():
     flow = _make_flow(SAMPLE_10D)
     # 최신일(index 0) foreign_net=500 → 매수
@@ -54,6 +56,7 @@ def test_institution_direction_1d_buy():
 
 # ── 5일 방향 ──────────────────────────────────────────────────────────────────
 
+
 def test_foreign_direction_5d():
     flow = _make_flow(SAMPLE_10D)
     # 최근 5일: 500, -200, 300, 400, -100 → 순매수 3일, 순매도 2일 → 매수
@@ -67,6 +70,7 @@ def test_institution_direction_5d():
 
 
 # ── 10일 방향 ─────────────────────────────────────────────────────────────────
+
 
 def test_foreign_direction_10d():
     flow = _make_flow(SAMPLE_10D)
@@ -84,6 +88,7 @@ def test_institution_direction_10d():
 
 # ── 순매수 일수 ───────────────────────────────────────────────────────────────
 
+
 def test_foreign_buy_days():
     flow = _make_flow(SAMPLE_10D)
     # 500,300,400,200,150,100 = 6일
@@ -97,6 +102,7 @@ def test_institution_buy_days():
 
 
 # ── 구간별 순매수 합계 ─────────────────────────────────────────────────────────
+
 
 def test_foreign_net_1d():
     flow = _make_flow(SAMPLE_10D)
@@ -119,6 +125,7 @@ def test_institution_net_5d():
 
 
 # ── FlowTool ──────────────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_flow_tool_fetches_10_days():

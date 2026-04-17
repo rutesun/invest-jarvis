@@ -1,11 +1,14 @@
 # src/core/interfaces.py
 from abc import ABC, abstractmethod
+
 import pandas as pd
+
 from src.core.models import ToolResult
 
 
 class BaseTool(ABC):
     """Abstract base class for all analysis tools."""
+
     name: str
     description: str
 

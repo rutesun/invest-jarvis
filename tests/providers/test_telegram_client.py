@@ -1,6 +1,8 @@
 # tests/providers/test_telegram_client.py
-import pytest
 from unittest.mock import patch
+
+import pytest
+
 from src.providers.telegram.client import TelegramClientWrapper
 
 
@@ -20,12 +22,17 @@ def test_missing_api_hash_raises_error():
 
 def test_valid_env_creates_client():
     """환경변수가 올바르면 클라이언트 생성 성공"""
-    with patch.dict("os.environ", {
-        "TELEGRAM_API_ID": "12345",
-        "TELEGRAM_API_HASH": "abc123",
-        "TELETHON_SESSION_NAME": "test",
-    }):
-        with patch("src.providers.telegram.client.TelegramClient") as mock_client:
-            wrapper = TelegramClientWrapper()
-            assert wrapper.client is not None
-            mock_client.assert_called_once_with("test", 12345, "abc123")
+    with (
+        patch.dict(
+            "os.environ",
+            {
+                "TELEGRAM_API_ID": "12345",
+                "TELEGRAM_API_HASH": "abc123",
+                "TELETHON_SESSION_NAME": "test",
+            },
+        ),
+        patch("src.providers.telegram.client.TelegramClient") as mock_client,
+    ):
+        wrapper = TelegramClientWrapper()
+        assert wrapper.client is not None
+        mock_client.assert_called_once_with("test", 12345, "abc123")

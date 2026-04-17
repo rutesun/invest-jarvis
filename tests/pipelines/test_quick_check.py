@@ -1,11 +1,11 @@
-import pytest
-from unittest.mock import AsyncMock, MagicMock
-import pandas as pd
-import numpy as np
-from src.pipelines.quick_check import QuickCheckPipeline
-from src.tools.technical.models import TechnicalResult, IndicatorSnapshot, StrategyResult
-from src.core.models import ToolResult
 from datetime import datetime
+from unittest.mock import AsyncMock
+
+import pytest
+
+from src.core.models import ToolResult
+from src.pipelines.quick_check import QuickCheckPipeline
+from src.tools.technical.models import IndicatorSnapshot, StrategyResult, TechnicalResult
 
 
 @pytest.fixture

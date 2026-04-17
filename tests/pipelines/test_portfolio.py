@@ -1,5 +1,7 @@
-import pytest
 from unittest.mock import AsyncMock
+
+import pytest
+
 from src.pipelines.portfolio import PortfolioPipeline
 
 
@@ -25,8 +27,9 @@ def mock_portfolio_tool():
 @pytest.fixture
 def mock_technical_tool():
     tool = AsyncMock()
-    from src.tools.technical.models import IndicatorSnapshot, StrategyResult, TechnicalResult
     from datetime import datetime
+
+    from src.tools.technical.models import IndicatorSnapshot, StrategyResult, TechnicalResult
 
     snapshot = IndicatorSnapshot(price=70000, change_pct=1.5)
     tech_result = TechnicalResult(
@@ -67,9 +70,7 @@ def mock_news_tool():
 
 
 @pytest.mark.asyncio
-async def test_portfolio_pipeline_run(
-    mock_portfolio_tool, mock_technical_tool, mock_news_tool
-):
+async def test_portfolio_pipeline_run(mock_portfolio_tool, mock_technical_tool, mock_news_tool):
     pipeline = PortfolioPipeline(
         portfolio_tool=mock_portfolio_tool,
         technical_tool=mock_technical_tool,

@@ -1,12 +1,13 @@
 """Ingest stage: 텔레그램 메시지 및 매크로 데이터 로드."""
 
-from langsmith import traceable
 import csv
-from pathlib import Path
 from datetime import datetime, timedelta
-from typing import List
-from dotenv import load_dotenv
+from pathlib import Path
+
 import yfinance as yf
+from dotenv import load_dotenv
+from langsmith import traceable
+
 
 # 환경변수 로드
 load_dotenv()
@@ -57,9 +58,7 @@ def _fetch_macro(date: str) -> MacroSnapshot:
             data = yf.Ticker(ticker).history(period="2d")
             if len(data) >= 2:
                 pct_change = (
-                    (data["Close"].iloc[-1] - data["Close"].iloc[-2])
-                    / data["Close"].iloc[-2]
-                    * 100
+                    (data["Close"].iloc[-1] - data["Close"].iloc[-2]) / data["Close"].iloc[-2] * 100
                 )
                 us_markets[name] = round(pct_change, 2)
             else:
@@ -75,9 +74,7 @@ def _fetch_macro(date: str) -> MacroSnapshot:
             data = yf.Ticker(ticker).history(period="2d")
             if len(data) >= 2:
                 pct_change = (
-                    (data["Close"].iloc[-1] - data["Close"].iloc[-2])
-                    / data["Close"].iloc[-2]
-                    * 100
+                    (data["Close"].iloc[-1] - data["Close"].iloc[-2]) / data["Close"].iloc[-2] * 100
                 )
                 kr_markets[name] = round(pct_change, 2)
             else:
@@ -121,7 +118,7 @@ def _fetch_macro(date: str) -> MacroSnapshot:
     )
 
 
-def _load_telegram_csvs(date: str, data_dir: str) -> List[TelegramMessage]:
+def _load_telegram_csvs(date: str, data_dir: str) -> list[TelegramMessage]:
     """주어진 날짜의 모든 텔레그램 CSV 로드."""
     date_obj = datetime.strptime(date, "%Y-%m-%d")
     year_month = date_obj.strftime("%Y-%m")
@@ -139,7 +136,7 @@ def _load_telegram_csvs(date: str, data_dir: str) -> List[TelegramMessage]:
         # 파일명에서 channel_id 추출 (예: "2026-04-14-shinhanresearch.csv")
         channel_id = csv_file.stem.split("-", 3)[-1]
 
-        with open(csv_file, "r", encoding="utf-8") as f:
+        with open(csv_file, encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
                 # content가 비어있으면 스킵
@@ -159,8 +156,8 @@ def _load_telegram_csvs(date: str, data_dir: str) -> List[TelegramMessage]:
 
 # 테스트용 CLI 진입점
 if __name__ == "__main__":
-    import sys
     import json
+    import sys
 
     date = sys.argv[1] if len(sys.argv) > 1 else "2026-04-14"
     result = ingest(date)
@@ -171,9 +168,7 @@ if __name__ == "__main__":
     print(f"✓ 한국 시장: {result.macro.kr_markets}")
 
     # 다음 stage 테스트용으로 저장
-    output_file = (
-        f"tests/pipelines/daily_report/fixtures/stage_outputs/ingest_{date}.json"
-    )
+    output_file = f"tests/pipelines/daily_report/fixtures/stage_outputs/ingest_{date}.json"
     Path(output_file).parent.mkdir(parents=True, exist_ok=True)
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(result.model_dump(mode="json"), f, ensure_ascii=False, indent=2)

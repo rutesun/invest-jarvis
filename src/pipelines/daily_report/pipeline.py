@@ -1,14 +1,13 @@
 """Daily Report 전체 파이프라인 통합."""
 
-from langsmith import get_current_run_tree
-from typing import Optional
+from langsmith import get_current_run_tree, traceable
+
 from src.pipelines.daily_report.models import DailyReport
 from src.pipelines.daily_report.stages.ingest_stage import ingest
 from src.pipelines.daily_report.stages.map_stage import map_stage
-from src.pipelines.daily_report.stages.shuffle_stage import shuffle_stage
 from src.pipelines.daily_report.stages.reduce_stage import reduce_stage
+from src.pipelines.daily_report.stages.shuffle_stage import shuffle_stage
 from src.pipelines.daily_report.stages.wrapup_stage import wrapup_stage
-from langsmith import traceable
 
 
 @traceable(name="Daily Report Pipeline")
@@ -33,22 +32,22 @@ def run_pipeline(date: str, data_dir: str = "data") -> DailyReport:
         run_tree.name = f"Daily Report Generation - {date}"
 
     # 1. Ingest: 텔레그램 메시지 + 매크로 로드
-    print(f"[1/5] Ingest Stage...")
+    print("[1/5] Ingest Stage...")
     ingest_result = ingest(date, data_dir)
     print(f"  ✓ {len(ingest_result.messages)}개 메시지 로드")
 
     # 2. Map: 이슈 추출
-    print(f"[2/5] Map Stage...")
+    print("[2/5] Map Stage...")
     issues = map_stage(ingest_result.messages, date)
     print(f"  ✓ {len(issues)}개 이슈 추출")
 
     # 3. Shuffle: 테마 정규화
-    print(f"[3/5] Shuffle Stage...")
+    print("[3/5] Shuffle Stage...")
     shuffle_result = shuffle_stage(issues, date)
     print(f"  ✓ {len(shuffle_result.canonical_themes)}개 정규화 테마")
 
     # 4. Reduce: 테마별 분석
-    print(f"[4/5] Reduce Stage...")
+    print("[4/5] Reduce Stage...")
     news_items = reduce_stage(
         shuffle_result.theme_groups,
         ingest_result.macro,
@@ -57,7 +56,7 @@ def run_pipeline(date: str, data_dir: str = "data") -> DailyReport:
     print(f"  ✓ {len(news_items)}개 테마 분석")
 
     # 5. Wrapup: 최종 리포트
-    print(f"[5/5] Wrapup Stage...")
+    print("[5/5] Wrapup Stage...")
     report = wrapup_stage(news_items, ingest_result.macro, date)
     print(f"  ✓ {len(report.key_insights)}개 핵심 인사이트")
 

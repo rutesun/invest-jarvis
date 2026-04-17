@@ -1,8 +1,9 @@
 # tests/providers/test_telegram_collector.py
-import json
+from datetime import UTC, datetime
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+
 from src.providers.telegram.collector import TelegramCollector
 from src.providers.telegram.config import ChannelConfig
 
@@ -38,10 +39,10 @@ def channel_config_with_filter():
 
 @pytest.mark.asyncio
 async def test_fetch_messages_for_date(mock_client, channel_config):
-    target_date = datetime(2026, 4, 13, tzinfo=timezone.utc)
+    target_date = datetime(2026, 4, 13, tzinfo=UTC)
     messages = [
-        _make_tg_message(1, "첫 번째 메시지", datetime(2026, 4, 13, 9, 0, tzinfo=timezone.utc)),
-        _make_tg_message(2, "두 번째 메시지", datetime(2026, 4, 13, 10, 0, tzinfo=timezone.utc)),
+        _make_tg_message(1, "첫 번째 메시지", datetime(2026, 4, 13, 9, 0, tzinfo=UTC)),
+        _make_tg_message(2, "두 번째 메시지", datetime(2026, 4, 13, 10, 0, tzinfo=UTC)),
     ]
 
     entity = MagicMock()
@@ -61,9 +62,9 @@ async def test_fetch_messages_for_date(mock_client, channel_config):
 @pytest.mark.asyncio
 async def test_fetch_applies_include_filter(mock_client, channel_config_with_filter):
     messages = [
-        _make_tg_message(1, "중요한 소식입니다", datetime(2026, 4, 13, 9, 0, tzinfo=timezone.utc)),
-        _make_tg_message(2, "일반 잡담", datetime(2026, 4, 13, 10, 0, tzinfo=timezone.utc)),
-        _make_tg_message(3, "Breaking: 속보", datetime(2026, 4, 13, 11, 0, tzinfo=timezone.utc)),
+        _make_tg_message(1, "중요한 소식입니다", datetime(2026, 4, 13, 9, 0, tzinfo=UTC)),
+        _make_tg_message(2, "일반 잡담", datetime(2026, 4, 13, 10, 0, tzinfo=UTC)),
+        _make_tg_message(3, "Breaking: 속보", datetime(2026, 4, 13, 11, 0, tzinfo=UTC)),
     ]
 
     entity = MagicMock()
@@ -83,8 +84,8 @@ async def test_fetch_applies_include_filter(mock_client, channel_config_with_fil
 async def test_fetch_skips_none_text_and_no_media(mock_client, channel_config):
     """text=None이고 media도 None이면 스킵."""
     messages = [
-        _make_tg_message(1, None, datetime(2026, 4, 13, 9, 0, tzinfo=timezone.utc)),
-        _make_tg_message(2, "유효한 메시지", datetime(2026, 4, 13, 10, 0, tzinfo=timezone.utc)),
+        _make_tg_message(1, None, datetime(2026, 4, 13, 9, 0, tzinfo=UTC)),
+        _make_tg_message(2, "유효한 메시지", datetime(2026, 4, 13, 10, 0, tzinfo=UTC)),
     ]
 
     entity = MagicMock()
@@ -102,7 +103,7 @@ async def test_fetch_skips_none_text_and_no_media(mock_client, channel_config):
 @pytest.mark.asyncio
 async def test_fetch_keeps_media_only_message(mock_client, channel_config):
     """text=None이지만 media가 있으면 수집한다."""
-    msg_with_media = _make_tg_message(1, None, datetime(2026, 4, 13, 9, 0, tzinfo=timezone.utc))
+    msg_with_media = _make_tg_message(1, None, datetime(2026, 4, 13, 9, 0, tzinfo=UTC))
     msg_with_media.media = MagicMock()  # media 존재
 
     entity = MagicMock()
@@ -119,7 +120,7 @@ async def test_fetch_keeps_media_only_message(mock_client, channel_config):
 
 @pytest.mark.asyncio
 async def test_fetch_includes_forward_info(mock_client, channel_config):
-    msg = _make_tg_message(1, "포워드 메시지", datetime(2026, 4, 13, 9, 0, tzinfo=timezone.utc))
+    msg = _make_tg_message(1, "포워드 메시지", datetime(2026, 4, 13, 9, 0, tzinfo=UTC))
     fwd = MagicMock()
     fwd.chat_id = 99999
     msg.forward = fwd
@@ -139,9 +140,9 @@ async def test_fetch_includes_forward_info(mock_client, channel_config):
 async def test_fetch_since_returns_grouped_by_date(mock_client, channel_config):
     """fetch_since는 날짜별로 그룹핑된 dict를 반환한다."""
     messages = [
-        _make_tg_message(10, "msg1", datetime(2026, 4, 12, 10, 0, tzinfo=timezone.utc)),
-        _make_tg_message(11, "msg2", datetime(2026, 4, 13, 9, 0, tzinfo=timezone.utc)),
-        _make_tg_message(12, "msg3", datetime(2026, 4, 13, 10, 0, tzinfo=timezone.utc)),
+        _make_tg_message(10, "msg1", datetime(2026, 4, 12, 10, 0, tzinfo=UTC)),
+        _make_tg_message(11, "msg2", datetime(2026, 4, 13, 9, 0, tzinfo=UTC)),
+        _make_tg_message(12, "msg3", datetime(2026, 4, 13, 10, 0, tzinfo=UTC)),
     ]
 
     entity = MagicMock()
@@ -161,7 +162,7 @@ async def test_fetch_since_returns_grouped_by_date(mock_client, channel_config):
 
 @pytest.mark.asyncio
 async def test_message_dict_format(mock_client, channel_config):
-    msg = _make_tg_message(42, "테스트", datetime(2026, 4, 13, 9, 30, tzinfo=timezone.utc))
+    msg = _make_tg_message(42, "테스트", datetime(2026, 4, 13, 9, 30, tzinfo=UTC))
 
     entity = MagicMock()
     entity.title = "test_channel"
@@ -173,7 +174,13 @@ async def test_message_dict_format(mock_client, channel_config):
 
     row = result[0]
     assert set(row.keys()) == {
-        "message_id", "timestamp", "channel_name", "author", "content", "media_info", "forward_from",
+        "message_id",
+        "timestamp",
+        "channel_name",
+        "author",
+        "content",
+        "media_info",
+        "forward_from",
     }
     assert row["message_id"] == 42
     assert row["author"] == "test_channel"  # 채널 ID

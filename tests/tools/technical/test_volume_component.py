@@ -1,6 +1,7 @@
-import pytest
-import pandas as pd
 import numpy as np
+import pandas as pd
+import pytest
+
 from src.tools.technical.components.volume import analyze_volume
 from src.tools.technical.indicators import IndicatorCalculator
 
@@ -10,13 +11,16 @@ def volume_spike_df():
     dates = pd.date_range("2024-01-01", periods=100, freq="D")
     close = 100 + np.arange(100) * 0.3
     volume = [1000000] * 99 + [5000000]  # spike on last day
-    df = pd.DataFrame({
-        "Open": close - 0.5,
-        "High": close + 1,
-        "Low": close - 1,
-        "Close": close,
-        "Volume": volume,
-    }, index=dates)
+    df = pd.DataFrame(
+        {
+            "Open": close - 0.5,
+            "High": close + 1,
+            "Low": close - 1,
+            "Close": close,
+            "Volume": volume,
+        },
+        index=dates,
+    )
     calculator = IndicatorCalculator()
     return calculator.calculate(df)
 

@@ -1,16 +1,18 @@
 import asyncio
+
 import pandas as pd
-from src.tools.screener.models import UniverseStock, ScreenerEvidence
-from src.tools.screener.scoring import (
-    score_accumulation,
-    score_up_days,
-    score_volume_burst,
-    score_source_diversity,
-    score_momentum,
-)
-from src.tools.technical.indicators import IndicatorCalculator
+
 from src.providers.kis import KISProvider
 from src.providers.yfinance_provider import YFinanceProvider
+from src.tools.screener.models import ScreenerEvidence, UniverseStock
+from src.tools.screener.scoring import (
+    score_accumulation,
+    score_momentum,
+    score_source_diversity,
+    score_up_days,
+    score_volume_burst,
+)
+from src.tools.technical.indicators import IndicatorCalculator
 
 
 class EvidenceCollector:
@@ -29,10 +31,10 @@ class EvidenceCollector:
 
     async def collect_and_score(self, universe: list[UniverseStock]) -> list[ScreenerEvidence]:
         """Collect evidence and score all stocks in universe.
-        
+
         Args:
             universe: List of UniverseStock objects to score
-            
+
         Returns:
             Ranked list of ScreenerEvidence objects sorted by momentum and total score
         """
@@ -57,12 +59,12 @@ class EvidenceCollector:
 
     async def score_tickers(self, tickers: list[str]) -> list[ScreenerEvidence]:
         """Score arbitrary tickers without universe building.
-        
+
         This is a reusable interface to score any list of tickers directly.
-        
+
         Args:
             tickers: List of ticker symbols to score
-            
+
         Returns:
             Ranked list of ScreenerEvidence objects
         """
@@ -79,10 +81,10 @@ class EvidenceCollector:
 
     async def _collect_one(self, stock: UniverseStock) -> ScreenerEvidence:
         """Collect evidence for a single stock.
-        
+
         Args:
             stock: UniverseStock object to collect evidence for
-            
+
         Returns:
             ScreenerEvidence with calculated scores
         """
@@ -116,6 +118,7 @@ class EvidenceCollector:
             except Exception as e:
                 # Log but continue - program trade may not be available for all stocks
                 import logging
+
                 logging.debug(f"Program trade data not available for {stock.ticker}: {e}")
 
         # 4. Score
@@ -176,10 +179,10 @@ class EvidenceCollector:
 
     def _detect_market(self, ticker: str) -> str:
         """Detect market from ticker format.
-        
+
         Args:
             ticker: Ticker symbol
-            
+
         Returns:
             Market code: "KOSPI", "KOSDAQ", or "US"
         """

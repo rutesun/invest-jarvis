@@ -1,5 +1,7 @@
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
+
 from src.providers.naver import NaverProvider
 
 
@@ -43,7 +45,9 @@ async def test_get_themes(mock_theme_list_response, mock_theme_stocks_response):
         mock_response_stocks.raise_for_status = MagicMock()
 
         mock_instance = AsyncMock()
-        mock_instance.get = AsyncMock(side_effect=[mock_response_list, mock_response_stocks, mock_response_stocks])
+        mock_instance.get = AsyncMock(
+            side_effect=[mock_response_list, mock_response_stocks, mock_response_stocks]
+        )
         mock_client.return_value.__aenter__.return_value = mock_instance
 
         provider = NaverProvider()

@@ -1,5 +1,6 @@
 import asyncio
 import re
+
 import httpx
 
 
@@ -34,12 +35,14 @@ class NaverProvider:
             for theme in themes_raw:
                 theme_id = theme.get("no", "")
                 stocks = await self._fetch_theme_stocks(client, theme_id)
-                themes.append({
-                    "name": theme.get("name", ""),
-                    "change_rate": float(theme.get("changeRate", 0)),
-                    "theme_id": theme_id,
-                    "stocks": stocks,
-                })
+                themes.append(
+                    {
+                        "name": theme.get("name", ""),
+                        "change_rate": float(theme.get("changeRate", 0)),
+                        "theme_id": theme_id,
+                        "stocks": stocks,
+                    }
+                )
 
             return themes
 
@@ -57,11 +60,13 @@ class NaverProvider:
         for item in stocks_raw:
             sosok = item.get("sosok", "0")
             market = "KOSPI" if sosok == "0" else "KOSDAQ"
-            stocks.append({
-                "code": item.get("itemcode", ""),
-                "name": item.get("itemname", ""),
-                "market": market,
-            })
+            stocks.append(
+                {
+                    "code": item.get("itemcode", ""),
+                    "name": item.get("itemname", ""),
+                    "market": market,
+                }
+            )
         return stocks
 
     async def get_volume_ranking(self, top_n: int = 30) -> list[dict]:
@@ -82,7 +87,7 @@ class NaverProvider:
             url = f"{self.FINANCE_BASE}/sise/sise_quant.naver?sosok={sosok}"
             items = await self._parse_ranking_html(url, market)
             results.extend(items[:top_n])
-        return results[:top_n * 2]  # top_n from KOSPI + top_n from KOSDAQ
+        return results[: top_n * 2]  # top_n from KOSPI + top_n from KOSDAQ
 
     async def get_rise_ranking(self, top_n: int = 30) -> list[dict]:
         """Get KOSPI+KOSDAQ rise ranking by HTML parsing.
@@ -102,7 +107,7 @@ class NaverProvider:
             url = f"{self.FINANCE_BASE}/sise/sise_rise.naver?sosok={sosok}"
             items = await self._parse_ranking_html(url, market)
             results.extend(items[:top_n])
-        return results[:top_n * 2]  # top_n from KOSPI + top_n from KOSDAQ
+        return results[: top_n * 2]  # top_n from KOSPI + top_n from KOSDAQ
 
     async def _parse_ranking_html(self, url: str, market: str, retries: int = 3) -> list[dict]:
         """Parse Naver ranking HTML table."""
@@ -125,7 +130,8 @@ class NaverProvider:
         # Find type_2 table
         table_match = re.search(
             r"<table[^>]*class=['\"][^'\"]*type_2[^'\"]*['\"][^>]*>(.*?)</table>",
-            html, re.S | re.I,
+            html,
+            re.S | re.I,
         )
         if not table_match:
             return []
@@ -142,7 +148,8 @@ class NaverProvider:
             # Extract code and name from link
             link_match = re.search(
                 r"<a[^>]*href=['\"][^'\"]*code=(\d{6})[^'\"]*['\"][^>]*>(.*?)</a>",
-                row, re.S | re.I,
+                row,
+                re.S | re.I,
             )
             if not link_match:
                 continue
@@ -155,14 +162,16 @@ class NaverProvider:
             volume = self._to_int(self._strip_tags(cells[5]))
 
             if code and name:
-                results.append({
-                    "code": code,
-                    "name": name,
-                    "market": market,
-                    "price": price,
-                    "change_pct": change_pct,
-                    "volume": volume,
-                })
+                results.append(
+                    {
+                        "code": code,
+                        "name": name,
+                        "market": market,
+                        "price": price,
+                        "change_pct": change_pct,
+                        "volume": volume,
+                    }
+                )
 
         return results
 

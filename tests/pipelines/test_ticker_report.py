@@ -1,17 +1,19 @@
-import pytest
-from unittest.mock import AsyncMock
 from datetime import datetime
-from src.pipelines.daily_report import DailyReportPipeline
-from src.tools.macro import MacroTool, MacroSnapshot
-from src.tools.technical.tool import TechnicalAnalysisTool
-from src.tools.technical.models import TechnicalResult, IndicatorSnapshot, StrategyResult
+from unittest.mock import AsyncMock
+
+import pytest
+
 from src.core.models import ToolResult
+from src.pipelines.ticker_report import TickerReportPipeline
+from src.tools.macro import MacroTool, TickerMacroSnapshot
+from src.tools.technical.models import IndicatorSnapshot, StrategyResult, TechnicalResult
+from src.tools.technical.tool import TechnicalAnalysisTool
 
 
 @pytest.fixture
 def mock_macro_tool():
     tool = AsyncMock(spec=MacroTool)
-    macro_snapshot = MacroSnapshot(
+    macro_snapshot = TickerMacroSnapshot(
         timestamp=datetime.now(),
         vix=15.5,
         vix_change=-0.5,
@@ -78,10 +80,8 @@ def mock_llm():
 
 
 @pytest.mark.asyncio
-async def test_daily_report_pipeline_success(
-    mock_macro_tool, mock_technical_tool, mock_llm
-):
-    pipeline = DailyReportPipeline(
+async def test_daily_report_pipeline_success(mock_macro_tool, mock_technical_tool, mock_llm):
+    pipeline = TickerReportPipeline(
         macro_tool=mock_macro_tool,
         technical_tool=mock_technical_tool,
         llm=mock_llm,
@@ -107,14 +107,12 @@ async def test_daily_report_pipeline_success(
 
 
 @pytest.mark.asyncio
-async def test_daily_report_pipeline_macro_failure(
-    mock_macro_tool, mock_technical_tool, mock_llm
-):
+async def test_daily_report_pipeline_macro_failure(mock_macro_tool, mock_technical_tool, mock_llm):
     mock_macro_tool.execute.return_value = ToolResult(
         success=False, data=None, error="Failed to fetch macro data"
     )
 
-    pipeline = DailyReportPipeline(
+    pipeline = TickerReportPipeline(
         macro_tool=mock_macro_tool,
         technical_tool=mock_technical_tool,
         llm=mock_llm,
@@ -130,9 +128,7 @@ async def test_daily_report_pipeline_technical_failure(
 ):
     async def execute_mock_with_failure(ticker: str):
         if ticker == "AAPL":
-            return ToolResult(
-                success=False, data=None, error="Failed to fetch AAPL data"
-            )
+            return ToolResult(success=False, data=None, error="Failed to fetch AAPL data")
         snapshot = IndicatorSnapshot(price=450.0, change_pct=-1.2)
         return ToolResult(
             success=True,
@@ -153,7 +149,7 @@ async def test_daily_report_pipeline_technical_failure(
 
     mock_technical_tool.execute.side_effect = execute_mock_with_failure
 
-    pipeline = DailyReportPipeline(
+    pipeline = TickerReportPipeline(
         macro_tool=mock_macro_tool,
         technical_tool=mock_technical_tool,
         llm=mock_llm,
@@ -170,10 +166,8 @@ async def test_daily_report_pipeline_technical_failure(
 
 
 @pytest.mark.asyncio
-async def test_daily_report_pipeline_empty_tickers(
-    mock_macro_tool, mock_technical_tool, mock_llm
-):
-    pipeline = DailyReportPipeline(
+async def test_daily_report_pipeline_empty_tickers(mock_macro_tool, mock_technical_tool, mock_llm):
+    pipeline = TickerReportPipeline(
         macro_tool=mock_macro_tool,
         technical_tool=mock_technical_tool,
         llm=mock_llm,

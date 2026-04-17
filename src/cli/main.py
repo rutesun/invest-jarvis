@@ -2,12 +2,13 @@ import asyncio
 import logging
 import os
 from pathlib import Path
-from typing import Optional, Literal
+from typing import Literal
+
 import typer
+from dotenv import load_dotenv
 from rich.console import Console
 from rich.markdown import Markdown
-from rich.table import Table
-from dotenv import load_dotenv
+
 
 # Load environment variables from .env file
 load_dotenv()
@@ -66,42 +67,54 @@ def _format_metric_value(metric_name: str, value: float) -> str:
         포맷팅된 문자열
     """
     # 퍼센트 지표
-    if metric_name in ["revenue_growth", "earnings_growth", "gross_margin",
-                       "operating_margin", "profit_margin", "fcf_yield",
-                       "dividend_yield", "roe", "roa", "payout_ratio"]:
-        return f"{value*100:.1f}%"
+    if metric_name in [
+        "revenue_growth",
+        "earnings_growth",
+        "gross_margin",
+        "operating_margin",
+        "profit_margin",
+        "fcf_yield",
+        "dividend_yield",
+        "roe",
+        "roa",
+        "payout_ratio",
+    ]:
+        return f"{value * 100:.1f}%"
 
     # 달러 금액 (10억 단위)
     elif metric_name in ["free_cash_flow", "operating_cash_flow", "market_cap"]:
-        return f"${value/1e9:.1f}B"
+        return f"${value / 1e9:.1f}B"
 
     # 일반 숫자
     else:
         # Format with appropriate precision: 2 decimals if value < 10, else 1
         formatted = f"{value:.2f}" if abs(value) < 10 else f"{value:.1f}"
         # Remove trailing zeros after decimal point
-        return formatted.rstrip('0').rstrip('.') if '.' in formatted else formatted
+        return formatted.rstrip("0").rstrip(".") if "." in formatted else formatted
 
-from src.core.config import load_config
-from src.providers.yfinance_provider import YFinanceProvider
+
+from src.llm.provider import LLMProvider
+from src.pipelines.deep_dive import DeepDivePipeline
+from src.pipelines.portfolio import PortfolioPipeline
+from src.pipelines.quick_check import QuickCheckPipeline
+from src.pipelines.screener import ScreenerPipeline
+from src.pipelines.ticker_report import TickerReportPipeline
 from src.providers.kis import KISProvider
+from src.providers.naver import NaverProvider
 from src.providers.ticker_resolver import TickerResolver
-from src.tools.technical.scorer import TechnicalScorer
-from src.tools.technical.tool import TechnicalAnalysisTool
-from src.tools.fundamental import FundamentalTool, QuarterlyData
+from src.providers.yfinance_provider import YFinanceProvider
+from src.tools.fundamental import FundamentalTool
 from src.tools.macro import MacroTool
 from src.tools.news import NewsTool
 from src.tools.portfolio import PortfolioTool
-from src.pipelines.quick_check import QuickCheckPipeline
-from src.pipelines.deep_dive import DeepDivePipeline
-from src.pipelines.daily_market_report import DailyReportPipeline
-from src.pipelines.portfolio import PortfolioPipeline
-from src.llm.provider import LLMProvider
-from src.utils.sector_metrics import SectorMetrics
-from src.providers.naver import NaverProvider
-from src.tools.screener.universe import UniverseBuilder
 from src.tools.screener.evidence import EvidenceCollector
-from src.pipelines.screener import ScreenerPipeline
+from src.tools.screener.universe import UniverseBuilder
+from src.tools.technical.scorer import TechnicalScorer
+from src.tools.technical.tool import TechnicalAnalysisTool
+from src.utils.sector_metrics import SectorMetrics
+
+
+logger = logging.getLogger(__name__)
 
 app = typer.Typer(help="Invest Jarvis - Financial Analysis CLI")
 report_app = typer.Typer(help="리포트 생성")
@@ -116,7 +129,7 @@ def version_callback(value: bool):
 
 @app.callback()
 def main(
-    version: Optional[bool] = typer.Option(
+    version: bool | None = typer.Option(
         None, "--version", "-v", callback=version_callback, is_eager=True
     ),
     verbose: bool = typer.Option(False, "--verbose", "-V", help="Enable debug logging"),
@@ -205,20 +218,19 @@ async def run_deep_dive(ticker_or_name: str, provider: str) -> dict:
     )
 
     # 공시 툴: SEC는 항상 사용 가능, DART는 API 키 있을 때만
-    from src.tools.disclosure import SECDisclosureFetcher, DARTDisclosureFetcher, DisclosureTool
+    from src.tools.disclosure import DARTDisclosureFetcher, DisclosureTool, SECDisclosureFetcher
+
     sec_fetcher = SECDisclosureFetcher()
     opendart_key = os.getenv("OPENDART_API_KEY")
     if not opendart_key:
-        logger.warning(
-            "OPENDART_API_KEY가 설정되지 않았습니다. "
-            "한국주식 공시 데이터가 제외됩니다."
-        )
+        logger.warning("OPENDART_API_KEY가 설정되지 않았습니다. 한국주식 공시 데이터가 제외됩니다.")
     dart_fetcher = DARTDisclosureFetcher(api_key=opendart_key) if opendart_key else None
     disclosure_tool = DisclosureTool(sec_fetcher=sec_fetcher, dart_fetcher=dart_fetcher)
 
     # 수급 툴: KIS API (get_investor_trend) 사용. 키 없으면 FlowTool이 graceful failure 처리
-    from src.tools.flow import FlowTool
     from src.providers.kis import KISProvider
+    from src.tools.flow import FlowTool
+
     kis_key = os.getenv("KIS_APP_KEY")
     kis_secret = os.getenv("KIS_APP_SECRET")
     if not (kis_key and kis_secret):
@@ -227,9 +239,7 @@ async def run_deep_dive(ticker_or_name: str, provider: str) -> dict:
             "한국주식 수급 데이터가 제외됩니다."
         )
     kis_provider = (
-        KISProvider(app_key=kis_key, app_secret=kis_secret)
-        if kis_key and kis_secret
-        else None
+        KISProvider(app_key=kis_key, app_secret=kis_secret) if kis_key and kis_secret else None
     )
     flow_tool = FlowTool(kis_provider=kis_provider)
 
@@ -245,89 +255,11 @@ async def run_deep_dive(ticker_or_name: str, provider: str) -> dict:
     return await pipeline.run(ticker)
 
 
-def _render_quarterly_table(quarterly_data: list[QuarterlyData]) -> str:
-    """Render quarterly data as Rich Table"""
-    if not quarterly_data or len(quarterly_data) == 0:
-        return ""
-
-    table = Table(title="분기별 추이 (최근 4분기)", show_header=True, header_style="bold cyan")
-
-    # Add columns
-    table.add_column("Metric", style="white", no_wrap=True)
-    for q in quarterly_data:
-        table.add_column(q.period, justify="right")
-
-    # Revenue row
-    revenue_values = []
-    for q in quarterly_data:
-        if q.revenue is not None:
-            revenue_values.append(f"${q.revenue/1e9:.2f}B")
-        else:
-            revenue_values.append("N/A")
-    table.add_row("Revenue", *revenue_values)
-
-    # Revenue YoY row
-    yoy_values = []
-    for q in quarterly_data:
-        if q.revenue_yoy is not None:
-            color = "green" if q.revenue_yoy >= 0 else "red"
-            yoy_values.append(f"[{color}]{q.revenue_yoy*100:+.2f}%[/{color}]")
-        else:
-            yoy_values.append("N/A")
-    table.add_row("YoY Growth %", *yoy_values)
-
-    # Revenue QoQ row
-    qoq_values = []
-    for q in quarterly_data:
-        if q.revenue_qoq is not None:
-            color = "green" if q.revenue_qoq >= 0 else "red"
-            qoq_values.append(f"[{color}]{q.revenue_qoq*100:+.2f}%[/{color}]")
-        else:
-            qoq_values.append("N/A")
-    table.add_row("QoQ Growth %", *qoq_values)
-
-    # Earnings row
-    earnings_values = []
-    for q in quarterly_data:
-        if q.earnings is not None:
-            earnings_values.append(f"${q.earnings/1e9:.2f}B")
-        else:
-            earnings_values.append("N/A")
-    table.add_row("Earnings", *earnings_values)
-
-    # Earnings YoY row
-    yoy_e_values = []
-    for q in quarterly_data:
-        if q.earnings_yoy is not None:
-            color = "green" if q.earnings_yoy >= 0 else "red"
-            yoy_e_values.append(f"[{color}]{q.earnings_yoy*100:+.2f}%[/{color}]")
-        else:
-            yoy_e_values.append("N/A")
-    table.add_row("YoY Growth %", *yoy_e_values)
-
-    # Earnings QoQ row
-    qoq_e_values = []
-    for q in quarterly_data:
-        if q.earnings_qoq is not None:
-            color = "green" if q.earnings_qoq >= 0 else "red"
-            qoq_e_values.append(f"[{color}]{q.earnings_qoq*100:+.2f}%[/{color}]")
-        else:
-            qoq_e_values.append("N/A")
-    table.add_row("QoQ Growth %", *qoq_e_values)
-
-    from io import StringIO
-    from rich.console import Console
-    buffer = StringIO()
-    console = Console(file=buffer, force_terminal=True)
-    console.print(table)
-    return buffer.getvalue()
-
-
 def _format_growth_rate(value: float | None) -> str:
     """Format growth rate with +/- sign"""
     if value is None:
         return "N/A"
-    return f"{value*100:+.2f}%"
+    return f"{value * 100:+.2f}%"
 
 
 def format_deep_dive_output(result: dict) -> str:
@@ -453,12 +385,28 @@ def format_deep_dive_output(result: dict) -> str:
 
         # 나머지 지표 렌더링
         all_metric_names = [
-            "market_cap", "pe_ratio", "forward_pe", "peg_ratio", "pb_ratio",
-            "ps_ratio", "ev_ebitda", "roe", "roa", "gross_margin",
-            "operating_margin", "profit_margin", "revenue_growth",
-            "earnings_growth", "debt_to_equity", "current_ratio",
-            "quick_ratio", "free_cash_flow", "operating_cash_flow",
-            "fcf_yield", "dividend_yield", "payout_ratio"
+            "market_cap",
+            "pe_ratio",
+            "forward_pe",
+            "peg_ratio",
+            "pb_ratio",
+            "ps_ratio",
+            "ev_ebitda",
+            "roe",
+            "roa",
+            "gross_margin",
+            "operating_margin",
+            "profit_margin",
+            "revenue_growth",
+            "earnings_growth",
+            "debt_to_equity",
+            "current_ratio",
+            "quick_ratio",
+            "free_cash_flow",
+            "operating_cash_flow",
+            "fcf_yield",
+            "dividend_yield",
+            "payout_ratio",
         ]
 
         remaining_metrics = [m for m in all_metric_names if m not in priority_metrics]
@@ -480,7 +428,7 @@ def format_deep_dive_output(result: dict) -> str:
             output += "**매출 추이:**\n\n"
             for q in fundamental.quarterly_data:
                 if q.revenue is not None:
-                    revenue_str = f"${q.revenue/1e9:.2f}B"
+                    revenue_str = f"${q.revenue / 1e9:.2f}B"
                     yoy_str = _format_growth_rate(q.revenue_yoy)
                     qoq_str = _format_growth_rate(q.revenue_qoq)
                     output += f"- {q.period}: {revenue_str} (YoY {yoy_str}, QoQ {qoq_str})\n"
@@ -491,7 +439,7 @@ def format_deep_dive_output(result: dict) -> str:
             output += "**이익 추이:**\n\n"
             for q in fundamental.quarterly_data:
                 if q.earnings is not None:
-                    earnings_str = f"${q.earnings/1e9:.2f}B"
+                    earnings_str = f"${q.earnings / 1e9:.2f}B"
                     yoy_str = _format_growth_rate(q.earnings_yoy)
                     qoq_str = _format_growth_rate(q.earnings_qoq)
                     output += f"- {q.period}: {earnings_str} (YoY {yoy_str}, QoQ {qoq_str})\n"
@@ -580,7 +528,7 @@ def analyze(
         "openai", "--provider", "-p", help="LLM provider"
     ),
 ):
-    """Deep dive analysis with LLM (technical + news)."""
+    """Deep dive analysis with LLM (technical + news + disclosure + flow)."""
     console.print(f"[bold]Resolving '{query}'...[/bold]")
 
     try:
@@ -619,7 +567,7 @@ async def run_daily_report(tickers: list[str], provider: str) -> dict:
         temperature=0,
     )
 
-    pipeline = DailyReportPipeline(
+    pipeline = TickerReportPipeline(
         macro_tool=macro_tool,
         technical_tool=technical_tool,
         llm=llm,
@@ -634,7 +582,7 @@ def format_daily_report_output(result: dict) -> str:
     macro = result["macro"]
     tickers = result["tickers"]
 
-    output = f"# Daily Market Report\n\n"
+    output = "# Daily Market Report\n\n"
     output += f"**Date**: {date}\n\n"
 
     output += "## Macro Snapshot\n\n"
@@ -845,9 +793,7 @@ def cache_list():
 
 @cache_app.command("clear")
 def cache_clear(
-    confirm: bool = typer.Option(
-        False, "--yes", "-y", help="Skip confirmation prompt"
-    )
+    confirm: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
 ):
     """Clear all cached ticker mappings."""
     from src.providers.ticker_cache import UserMappingCache
@@ -877,9 +823,11 @@ def report_daily(
     notion: bool = typer.Option(False, "--notion", help="Notion에 업데이트"),
 ):
     """텔레그램 메시지 기반 일일 시장 리포트 생성."""
-    from datetime import datetime as dt, timedelta
+    from datetime import datetime as dt
+    from datetime import timedelta
     from pathlib import Path
-    from src.pipelines.daily_report.pipeline import run_pipeline, format_report
+
+    from src.pipelines.daily_report.pipeline import format_report, run_pipeline
 
     if date is None:
         date = (dt.now() - timedelta(days=1)).strftime("%Y-%m-%d")
@@ -907,10 +855,13 @@ def report_daily(
         if notion:
             try:
                 from src.integrations.notion import update_daily_report
+
                 update_daily_report(report, date)
-                console.print(f"[green]✓ Notion 업데이트 완료[/green]")
+                console.print("[green]✓ Notion 업데이트 완료[/green]")
             except ImportError:
-                console.print(f"[yellow]⚠ Notion 연동 모듈이 없습니다. 구현 필요: src/integrations/notion.py[/yellow]")
+                console.print(
+                    "[yellow]⚠ Notion 연동 모듈이 없습니다. 구현 필요: src/integrations/notion.py[/yellow]"
+                )
             except Exception as e:
                 console.print(f"[red]✗ Notion 업데이트 실패: {e}[/red]")
 
@@ -968,7 +919,8 @@ def telegram_fetch(
     config_path: str = typer.Option("config.yaml", "--config", "-c", help="config.yaml 경로"),
 ):
     """특정 날짜의 텔레그램 메시지를 일괄 수집한다."""
-    from datetime import datetime as dt, timedelta
+    from datetime import datetime as dt
+    from datetime import timedelta
 
     if date is None:
         date = (dt.now() - timedelta(days=1)).strftime("%Y-%m-%d")

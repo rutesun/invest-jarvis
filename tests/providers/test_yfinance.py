@@ -1,6 +1,8 @@
-import pytest
+from unittest.mock import MagicMock, patch
+
 import pandas as pd
-from unittest.mock import patch, MagicMock
+import pytest
+
 from src.providers.yfinance_provider import YFinanceProvider
 
 
@@ -27,13 +29,15 @@ async def test_get_quote():
 async def test_get_price_history():
     provider = YFinanceProvider()
 
-    mock_df = pd.DataFrame({
-        "Open": [170.0, 172.0],
-        "High": [175.0, 178.0],
-        "Low": [169.0, 171.0],
-        "Close": [174.0, 177.0],
-        "Volume": [1000000, 1200000],
-    })
+    mock_df = pd.DataFrame(
+        {
+            "Open": [170.0, 172.0],
+            "High": [175.0, 178.0],
+            "Low": [169.0, 171.0],
+            "Close": [174.0, 177.0],
+            "Volume": [1000000, 1200000],
+        }
+    )
 
     mock_ticker = MagicMock()
     mock_ticker.history.return_value = mock_df

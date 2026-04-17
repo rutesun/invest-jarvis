@@ -1,5 +1,5 @@
-import pytest
 import pandas as pd
+
 from src.tools.technical.base import BaseStrategy
 from src.tools.technical.models import StrategyResult
 

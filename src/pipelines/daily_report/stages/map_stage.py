@@ -2,27 +2,29 @@
 
 import asyncio
 import json
-import os
-from typing import List
 from pathlib import Path
+
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage, SystemMessage
+
 from src.llm.provider import LLMProvider
+
 
 # LangSmith 추적을 위한 환경변수 로드
 load_dotenv()
 from langsmith import traceable
-from src.pipelines.daily_report.models import TelegramMessage, MappedIssue, MappedIssueList
-from src.pipelines.daily_report.prompts import MAP_SYSTEM_PROMPT, MAP_USER_PROMPT
+
 from src.pipelines.daily_report.examples.map_examples import get_map_examples
+from src.pipelines.daily_report.models import MappedIssue, MappedIssueList, TelegramMessage
+from src.pipelines.daily_report.prompts import MAP_SYSTEM_PROMPT, MAP_USER_PROMPT
 
 
 @traceable(name="Map Stage")
 def map_stage(
-    messages: List[TelegramMessage],
+    messages: list[TelegramMessage],
     date: str = None,
     max_tokens_per_chunk: int = 80000,
-) -> List[MappedIssue]:
+) -> list[MappedIssue]:
     """
     청크 단위로 텔레그램 메시지에서 이슈 추출.
 
@@ -56,9 +58,9 @@ def map_stage(
 
 
 def _chunk_messages(
-    messages: List[TelegramMessage],
+    messages: list[TelegramMessage],
     max_tokens: int,
-) -> List[List[TelegramMessage]]:
+) -> list[list[TelegramMessage]]:
     """
     토큰 추정치 기반으로 메시지를 청크로 분할.
 
@@ -88,25 +90,26 @@ def _chunk_messages(
 
 
 async def _analyze_chunks_parallel(
-    chunks: List[List[TelegramMessage]],
+    chunks: list[list[TelegramMessage]],
     date: str,
-) -> List[List[MappedIssue]]:
+) -> list[list[MappedIssue]]:
     """asyncio로 청크를 병렬 분석."""
-    llm = LLMProvider.create(provider="anthropic", model="us.anthropic.claude-haiku-4-5-20251001-v1:0", temperature=0.2)
+    llm = LLMProvider.create(
+        provider="anthropic", model="us.anthropic.claude-haiku-4-5-20251001-v1:0", temperature=0.2
+    )
 
     tasks = [
-        _analyze_chunk(chunk, llm, chunk_index, date)
-        for chunk_index, chunk in enumerate(chunks)
+        _analyze_chunk(chunk, llm, chunk_index, date) for chunk_index, chunk in enumerate(chunks)
     ]
     return await asyncio.gather(*tasks)
 
 
 async def _analyze_chunk(
-    chunk: List[TelegramMessage],
+    chunk: list[TelegramMessage],
     llm,
     chunk_index: int,
     date: str,
-) -> List[MappedIssue]:
+) -> list[MappedIssue]:
     """LLM으로 단일 청크 분석."""
     # 프롬프트용 메시지 포맷팅
     messages_text = "\n".join([f"[{msg.channel_id}-{msg.message_id}] {msg.text}" for msg in chunk])
@@ -122,7 +125,7 @@ async def _analyze_chunk(
     )
 
     # LangSmith 그룹핑을 위한 메타데이터 설정
-    run_name = f"Map Stage - {date} - Chunk {chunk_index+1}"
+    run_name = f"Map Stage - {date} - Chunk {chunk_index + 1}"
     config = {
         "run_name": run_name,
         "tags": ["daily_report", "map_stage", f"date:{date}"],
@@ -152,6 +155,7 @@ async def _analyze_chunk(
 # 테스트용 CLI 진입점
 if __name__ == "__main__":
     import sys
+
     from src.pipelines.daily_report.stages.ingest_stage import ingest
 
     date = sys.argv[1] if len(sys.argv) > 1 else "2026-04-15"
@@ -167,9 +171,7 @@ if __name__ == "__main__":
     # 요약 출력
     total_themes = sum(len(issue.themes) for issue in issues)
     unique_themes = len(set(theme for issue in issues for theme in issue.themes))
-    avg_sources = (
-        sum(len(issue.source_ids) for issue in issues) / len(issues) if issues else 0
-    )
+    avg_sources = sum(len(issue.source_ids) for issue in issues) / len(issues) if issues else 0
 
     print(f"✓ 테마: {total_themes}개 총, {unique_themes}개 고유")
     print(f"✓ 이슈당 평균 소스 수: {avg_sources:.1f}")
@@ -178,7 +180,5 @@ if __name__ == "__main__":
     output_file = f"tests/pipelines/daily_report/fixtures/stage_outputs/map_{date}.json"
     Path(output_file).parent.mkdir(parents=True, exist_ok=True)
     with open(output_file, "w", encoding="utf-8") as f:
-        json.dump(
-            [issue.model_dump() for issue in issues], f, ensure_ascii=False, indent=2
-        )
+        json.dump([issue.model_dump() for issue in issues], f, ensure_ascii=False, indent=2)
     print(f"✓ {output_file}에 저장")

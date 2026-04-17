@@ -1,8 +1,10 @@
 """Map stage 테스트."""
+
 import pytest
+
 from src.pipelines.daily_report.stages.map_stage import (
-    map_stage,
     _chunk_messages,
+    map_stage,
 )
 
 

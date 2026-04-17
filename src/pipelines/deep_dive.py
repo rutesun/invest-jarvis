@@ -1,24 +1,27 @@
 import asyncio
 import logging
+
 from langchain_core.language_models import BaseChatModel
-from src.tools.technical.tool import TechnicalAnalysisTool
-from src.tools.news import NewsTool, NewsArticle
-from src.tools.fundamental import FundamentalTool, FundamentalSnapshot
-from src.tools.technical.models import TechnicalResult
-from src.tools.disclosure import DisclosureTool, DisclosureItem, is_korean_ticker, extract_kr_code
-from src.tools.flow import FlowTool, InvestorFlow
+
 from src.llm import analyzer
 from src.llm.analyzer import generate_fundamental_summary
 from src.llm.models import (
-    TechnicalSummaryInput,
-    TechnicalSummaryOutput,
-    NewsAnalysisInput,
-    NewsAnalysisOutput,
     FundamentalSummaryInput,
     FundamentalSummaryOutput,
     IntegratedAnalysisInput,
     IntegratedAnalysisOutput,
+    NewsAnalysisInput,
+    NewsAnalysisOutput,
+    TechnicalSummaryInput,
+    TechnicalSummaryOutput,
 )
+from src.tools.disclosure import DisclosureItem, DisclosureTool, extract_kr_code, is_korean_ticker
+from src.tools.flow import FlowTool, InvestorFlow
+from src.tools.fundamental import FundamentalSnapshot, FundamentalTool
+from src.tools.news import NewsArticle, NewsTool
+from src.tools.technical.models import TechnicalResult
+from src.tools.technical.tool import TechnicalAnalysisTool
+
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +57,9 @@ class DeepDivePipeline:
                 - news_analysis: NewsAnalysisOutput | None
                 - fundamental: FundamentalSnapshot | None
                 - fundamental_summary: FundamentalSummaryOutput | None
+                - disclosure: list[DisclosureItem] | None (SEC 10-Q/8-K or OpenDART)
+                - flow: InvestorFlow | None (외국인/기관 순매수 동향, 한국주식만)
+                - integrated_analysis: IntegratedAnalysisOutput | None (종합 인사이트)
         """
         tech_result = await self.technical_tool.execute(ticker)
         if not tech_result.success:
@@ -79,7 +85,9 @@ class DeepDivePipeline:
             fund_result = await self.fundamental_tool.execute(ticker)
             if fund_result.success:
                 fundamental_data = fund_result.data
-                fundamental_summary = await self._generate_fundamental_summary(ticker, fundamental_data)
+                fundamental_summary = await self._generate_fundamental_summary(
+                    ticker, fundamental_data
+                )
             else:
                 logger.warning(f"Fundamental data fetch failed for {ticker}: {fund_result.error}")
 
@@ -268,12 +276,14 @@ class DeepDivePipeline:
         disclosure_dicts = []
         if disclosure_items:
             for item in disclosure_items:
-                disclosure_dicts.append({
-                    "form_type": item.form_type,
-                    "date": item.date,
-                    "description": item.description,
-                    "url": item.url,
-                })
+                disclosure_dicts.append(
+                    {
+                        "form_type": item.form_type,
+                        "date": item.date,
+                        "description": item.description,
+                        "url": item.url,
+                    }
+                )
 
         input_data = IntegratedAnalysisInput(
             ticker=ticker,

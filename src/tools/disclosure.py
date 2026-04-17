@@ -2,22 +2,24 @@
 """
 공시 데이터 툴: SEC EDGAR (미국주식) 및 DART (한국주식).
 """
+
 import json
 import re
 import time
-import httpx
-from datetime import datetime, timedelta, date
+from datetime import date, datetime, timedelta
 from pathlib import Path
+
+import httpx
 from pydantic import BaseModel
 
 
 class DisclosureItem(BaseModel):
     """공시 1건 (SEC 8-K/10-Q 또는 DART 보고서)."""
 
-    form_type: str    # "8-K", "10-Q", "DART"
-    date: str         # "YYYY-MM-DD"
+    form_type: str  # "8-K", "10-Q", "DART"
+    date: str  # "YYYY-MM-DD"
     description: str  # 공시 제목 또는 1차 문서명
-    url: str          # 원문 링크
+    url: str  # 원문 링크
     score: float = 1.0  # 관련도 점수 (DART 키워드 스코어링)
 
 
@@ -65,8 +67,7 @@ class SECDisclosureFetcher:
             data = resp.json()
 
         mapping: dict[str, int] = {
-            entry["ticker"].upper(): entry["cik_str"]
-            for entry in data.values()
+            entry["ticker"].upper(): entry["cik_str"] for entry in data.values()
         }
         self._save_cache(mapping)
         return mapping.get(ticker)
@@ -96,10 +97,7 @@ class SECDisclosureFetcher:
                 continue
 
             accession_clean = accession.replace("-", "")
-            filing_url = (
-                f"https://www.sec.gov/Archives/edgar/data/{cik}"
-                f"/{accession_clean}/{doc}"
-            )
+            filing_url = f"https://www.sec.gov/Archives/edgar/data/{cik}/{accession_clean}/{doc}"
             results.append(
                 DisclosureItem(
                     form_type=form,
@@ -126,9 +124,7 @@ class SECDisclosureFetcher:
 
     def _save_cache(self, mapping: dict[str, int]) -> None:
         self.CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        self.CACHE_PATH.write_text(
-            json.dumps(mapping, ensure_ascii=False), encoding="utf-8"
-        )
+        self.CACHE_PATH.write_text(json.dumps(mapping, ensure_ascii=False), encoding="utf-8")
 
 
 _DART_API_BASE = "https://opendart.fss.or.kr/api"
@@ -267,9 +263,7 @@ class DARTDisclosureFetcher:
 
     def _save_cache(self, mapping: dict[str, str]) -> None:
         self.CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        self.CACHE_PATH.write_text(
-            json.dumps(mapping, ensure_ascii=False), encoding="utf-8"
-        )
+        self.CACHE_PATH.write_text(json.dumps(mapping, ensure_ascii=False), encoding="utf-8")
 
 
 from src.core.models import ToolResult

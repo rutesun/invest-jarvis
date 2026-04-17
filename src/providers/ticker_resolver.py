@@ -1,12 +1,12 @@
+import logging
 import os
 import re
-import logging
-from typing import Optional
 from pathlib import Path
 
-from src.providers.ticker_models import TickerResolution, TickerNotFoundError, TickerResolutionError
-from src.providers.ticker_cache import UserMappingCache
 from src.providers.llm_ticker_agent import LLMTickerAgent
+from src.providers.ticker_cache import UserMappingCache
+from src.providers.ticker_models import TickerResolution
+
 
 logger = logging.getLogger(__name__)
 
@@ -16,8 +16,8 @@ class TickerResolver:
 
     def __init__(
         self,
-        user_cache_path: Optional[Path] = None,
-        openai_api_key: Optional[str] = None,
+        user_cache_path: Path | None = None,
+        openai_api_key: str | None = None,
     ):
         self.user_cache = UserMappingCache(user_cache_path)
         api_key = openai_api_key or os.getenv("OPENAI_API_KEY", "")
@@ -70,14 +70,14 @@ class TickerResolver:
 
     def _is_direct_ticker(self, query: str) -> bool:
         patterns = [
-            r'^[A-Z]{1,5}$',
-            r'^\d{6}\.KS$',
-            r'^\d{6}\.KQ$',
-            r'^\d{6}$',
+            r"^[A-Z]{1,5}$",
+            r"^\d{6}\.KS$",
+            r"^\d{6}\.KQ$",
+            r"^\d{6}$",
         ]
         return any(re.match(p, query) for p in patterns)
 
     def _normalize_ticker(self, query: str) -> str:
-        if re.match(r'^\d{6}$', query):
+        if re.match(r"^\d{6}$", query):
             return f"{query}.KS"
         return query

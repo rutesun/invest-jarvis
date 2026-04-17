@@ -1,6 +1,7 @@
-import pytest
-import pandas as pd
 import numpy as np
+import pandas as pd
+import pytest
+
 from src.tools.technical.components.minervini import analyze_minervini
 from src.tools.technical.indicators import IndicatorCalculator
 
@@ -11,13 +12,16 @@ def stage2_df():
     dates = pd.date_range("2024-01-01", periods=252, freq="D")
     # Steady uptrend from 100 to 200
     close = 100 + np.arange(252) * 0.4
-    df = pd.DataFrame({
-        "Open": close - 0.5,
-        "High": close + 1,
-        "Low": close - 1,
-        "Close": close,
-        "Volume": [1000000] * 252,
-    }, index=dates)
+    df = pd.DataFrame(
+        {
+            "Open": close - 0.5,
+            "High": close + 1,
+            "Low": close - 1,
+            "Close": close,
+            "Volume": [1000000] * 252,
+        },
+        index=dates,
+    )
     calculator = IndicatorCalculator()
     return calculator.calculate(df)
 

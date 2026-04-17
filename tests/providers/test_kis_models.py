@@ -1,9 +1,8 @@
-import pytest
 from src.providers.kis_models import (
-    KISToken,
-    KISQuote,
     KISBalance,
     KISPosition,
+    KISQuote,
+    KISToken,
 )
 
 

@@ -1,13 +1,11 @@
 """Daily report Pydantic 모델 테스트."""
+
 import pytest
-from datetime import datetime
+
 from src.pipelines.daily_report.models import (
     MacroSnapshot,
-    TelegramMessage,
     MappedIssue,
-    ShuffleResult,
     NewsItem,
-    DailyReport,
 )
 
 

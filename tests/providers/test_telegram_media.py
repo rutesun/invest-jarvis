@@ -1,9 +1,8 @@
 # tests/providers/test_telegram_media.py
-import json
-import pytest
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, PropertyMock
+from unittest.mock import AsyncMock, MagicMock
 
+import pytest
 
 from src.providers.telegram.media import TelegramMediaDownloader
 

@@ -1,9 +1,10 @@
 import logging
-from src.core.interfaces import BaseTool, BaseProvider
+
+from src.core.interfaces import BaseProvider, BaseTool
 from src.core.models import ToolResult
 from src.tools.technical.indicators import IndicatorCalculator
 from src.tools.technical.scorer import TechnicalScorer
-from src.tools.technical.models import TechnicalResult
+
 
 logger = logging.getLogger(__name__)
 

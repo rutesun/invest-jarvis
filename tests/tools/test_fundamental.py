@@ -1,8 +1,10 @@
 # tests/tools/test_fundamental.py
+from unittest.mock import MagicMock, patch
+
 import pandas as pd
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
-from src.tools.fundamental import FundamentalTool, FundamentalSnapshot
+
+from src.tools.fundamental import FundamentalSnapshot, FundamentalTool
 
 
 @pytest.mark.asyncio
@@ -199,7 +201,6 @@ def test_fundamental_snapshot_with_quarterly_data():
 @pytest.mark.asyncio
 async def test_quarterly_yoy_calculation():
     """YoY growth rate calculation verification"""
-    import asyncio
 
     mock_info = {"marketCap": 3e12}
 
@@ -249,7 +250,6 @@ async def test_quarterly_yoy_calculation():
 @pytest.mark.asyncio
 async def test_quarterly_qoq_calculation():
     """QoQ growth rate calculation verification"""
-    import asyncio
 
     mock_info = {"marketCap": 3e12}
 

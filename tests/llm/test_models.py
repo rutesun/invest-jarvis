@@ -1,4 +1,3 @@
-import pytest
 from src.llm.models import (
     FundamentalSummaryInput,
     FundamentalSummaryOutput,
@@ -37,9 +36,7 @@ def test_news_analysis_input():
     input_data = NewsAnalysisInput(
         ticker="AAPL",
         company_name="Apple Inc.",
-        news=[
-            {"title": "Apple releases new product", "published": "2024-01-01", "summary": "..."}
-        ],
+        news=[{"title": "Apple releases new product", "published": "2024-01-01", "summary": "..."}],
     )
     assert input_data.ticker == "AAPL"
     assert len(input_data.news) == 1

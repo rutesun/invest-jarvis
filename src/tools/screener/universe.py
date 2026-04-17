@@ -1,7 +1,7 @@
-from src.tools.screener.models import UniverseStock
-from src.providers.naver import NaverProvider
 from src.providers.kis import KISProvider
+from src.providers.naver import NaverProvider
 from src.providers.yfinance_provider import YFinanceProvider
+from src.tools.screener.models import UniverseStock
 
 
 class UniverseBuilder:
@@ -37,14 +37,18 @@ class UniverseBuilder:
             for theme in themes:
                 for s in theme.get("stocks", []):
                     code = s["code"]
-                    self._merge(stocks, code, UniverseStock(
-                        ticker=code,
-                        name=s["name"],
-                        market=s["market"],
-                        sources=["theme"],
-                        theme=theme["name"],
-                        theme_change_rate=theme["change_rate"],
-                    ))
+                    self._merge(
+                        stocks,
+                        code,
+                        UniverseStock(
+                            ticker=code,
+                            name=s["name"],
+                            market=s["market"],
+                            sources=["theme"],
+                            theme=theme["name"],
+                            theme_change_rate=theme["change_rate"],
+                        ),
+                    )
         except Exception:
             pass
 
@@ -52,14 +56,18 @@ class UniverseBuilder:
         try:
             volume_stocks = await self.naver.get_volume_ranking(top_n=30)
             for s in volume_stocks:
-                self._merge(stocks, s["code"], UniverseStock(
-                    ticker=s["code"],
-                    name=s["name"],
-                    market=s["market"],
-                    sources=["volume_rank"],
-                    price=s.get("price"),
-                    change_pct=s.get("change_pct"),
-                ))
+                self._merge(
+                    stocks,
+                    s["code"],
+                    UniverseStock(
+                        ticker=s["code"],
+                        name=s["name"],
+                        market=s["market"],
+                        sources=["volume_rank"],
+                        price=s.get("price"),
+                        change_pct=s.get("change_pct"),
+                    ),
+                )
         except Exception:
             pass
 
@@ -67,14 +75,18 @@ class UniverseBuilder:
         try:
             rise_stocks = await self.naver.get_rise_ranking(top_n=30)
             for s in rise_stocks:
-                self._merge(stocks, s["code"], UniverseStock(
-                    ticker=s["code"],
-                    name=s["name"],
-                    market=s["market"],
-                    sources=["rise_rank"],
-                    price=s.get("price"),
-                    change_pct=s.get("change_pct"),
-                ))
+                self._merge(
+                    stocks,
+                    s["code"],
+                    UniverseStock(
+                        ticker=s["code"],
+                        name=s["name"],
+                        market=s["market"],
+                        sources=["rise_rank"],
+                        price=s.get("price"),
+                        change_pct=s.get("change_pct"),
+                    ),
+                )
         except Exception:
             pass
 
@@ -84,12 +96,16 @@ class UniverseBuilder:
                 for inv_type in ["foreign", "institution"]:
                     ranking = await self.kis.get_investor_ranking(investor_type=inv_type, top_n=30)
                     for s in ranking:
-                        self._merge(stocks, s["ticker"], UniverseStock(
-                            ticker=s["ticker"],
-                            name=s["name"],
-                            market="KOSPI",
-                            sources=["kis_rank"],
-                        ))
+                        self._merge(
+                            stocks,
+                            s["ticker"],
+                            UniverseStock(
+                                ticker=s["ticker"],
+                                name=s["name"],
+                                market="KOSPI",
+                                sources=["kis_rank"],
+                            ),
+                        )
             except Exception:
                 pass
 
@@ -99,19 +115,26 @@ class UniverseBuilder:
             return
 
         import logging
+
         for exchange in ["NAS", "NYS"]:
             # Rise ranking
             try:
-                rise = await self.kis.get_us_ranking_updown(exchange=exchange, direction="up", top_n=30)
+                rise = await self.kis.get_us_ranking_updown(
+                    exchange=exchange, direction="up", top_n=30
+                )
                 for s in rise:
-                    self._merge(stocks, s["ticker"], UniverseStock(
-                        ticker=s["ticker"],
-                        name=s["name"],
-                        market=exchange,
-                        sources=["rise_rank"],
-                        price=s.get("price"),
-                        change_pct=s.get("change_pct"),
-                    ))
+                    self._merge(
+                        stocks,
+                        s["ticker"],
+                        UniverseStock(
+                            ticker=s["ticker"],
+                            name=s["name"],
+                            market=exchange,
+                            sources=["rise_rank"],
+                            price=s.get("price"),
+                            change_pct=s.get("change_pct"),
+                        ),
+                    )
                 logging.info(f"US {exchange} rise: {len(rise)} stocks")
             except Exception as e:
                 logging.warning(f"Failed to get US {exchange} rise ranking: {e}")
@@ -120,13 +143,17 @@ class UniverseBuilder:
             try:
                 volume = await self.kis.get_us_ranking_volume(exchange=exchange, top_n=30)
                 for s in volume:
-                    self._merge(stocks, s["ticker"], UniverseStock(
-                        ticker=s["ticker"],
-                        name=s["name"],
-                        market=exchange,
-                        sources=["volume_rank"],
-                        price=s.get("price"),
-                    ))
+                    self._merge(
+                        stocks,
+                        s["ticker"],
+                        UniverseStock(
+                            ticker=s["ticker"],
+                            name=s["name"],
+                            market=exchange,
+                            sources=["volume_rank"],
+                            price=s.get("price"),
+                        ),
+                    )
                 logging.info(f"US {exchange} volume: {len(volume)} stocks")
             except Exception as e:
                 logging.warning(f"Failed to get US {exchange} volume ranking: {e}")

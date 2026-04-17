@@ -3,8 +3,9 @@ from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
-from src.providers.ticker_resolver import TickerResolver
+
 from src.providers.ticker_models import TickerNotFoundError
+from src.providers.ticker_resolver import TickerResolver
 
 
 @pytest.mark.asyncio
@@ -80,9 +81,7 @@ async def test_resolve_llm_result_saved_to_cache():
     with tempfile.TemporaryDirectory() as tmpdir:
         cache_path = Path(tmpdir) / "user_mappings.yaml"
         resolver = TickerResolver(user_cache_path=cache_path, openai_api_key="test-key")
-        resolver.llm_agent.resolve = AsyncMock(
-            return_value=("035720.KQ", "Kakao Corp.")
-        )
+        resolver.llm_agent.resolve = AsyncMock(return_value=("035720.KQ", "Kakao Corp."))
 
         await resolver.resolve("카카오")
         # 두 번째 호출은 cache hit이어야 함

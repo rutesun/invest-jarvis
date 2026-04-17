@@ -1,12 +1,14 @@
 from datetime import datetime
-from pydantic import BaseModel
+
 import yfinance as yf
+from pydantic import BaseModel
+
 from src.core.interfaces import BaseTool
 from src.core.models import ToolResult
 
 
-class MacroSnapshot(BaseModel):
-    """Macro indicators snapshot."""
+class TickerMacroSnapshot(BaseModel):
+    """Macro indicators snapshot for ticker analysis."""
 
     timestamp: datetime
 
@@ -50,7 +52,7 @@ class MacroTool(BaseTool):
         """Calculate approximate Fear & Greed index."""
         vix_normalized = max(0, min(100, (50 - vix) * 2))
         momentum_normalized = max(0, min(100, (market_momentum + 5) * 10))
-        fear_greed = int((vix_normalized * 0.6 + momentum_normalized * 0.4))
+        fear_greed = int(vix_normalized * 0.6 + momentum_normalized * 0.4)
         return max(0, min(100, fear_greed))
 
     async def execute(self, **kwargs) -> ToolResult:
@@ -85,14 +87,12 @@ class MacroTool(BaseTool):
             spy_momentum = (
                 (data["spy"]["current"] - hist["Close"].iloc[0]) / hist["Close"].iloc[0] * 100
             )
-            fear_greed = self._calculate_fear_greed(
-                data["vix"]["current"], spy_momentum
-            )
+            fear_greed = self._calculate_fear_greed(data["vix"]["current"], spy_momentum)
             fear_greed_label = self._get_fear_greed_label(fear_greed)
 
             yield_spread = data["us_10y"]["current"] - data["us_2y"]["current"]
 
-            snapshot = MacroSnapshot(
+            snapshot = TickerMacroSnapshot(
                 timestamp=datetime.now(),
                 vix=data["vix"]["current"],
                 vix_change=data["vix"]["change"],
@@ -111,3 +111,6 @@ class MacroTool(BaseTool):
 
         except Exception as e:
             return ToolResult(success=False, data=None, error=str(e))
+
+
+__all__ = ["MacroTool", "TickerMacroSnapshot"]

@@ -1,4 +1,5 @@
 import pandas as pd
+
 from src.tools.technical.models import ComponentResult
 
 
@@ -6,13 +7,19 @@ def analyze_supertrend(df: pd.DataFrame) -> ComponentResult:
     """Analyze Supertrend signals."""
     if df.empty or len(df) < 2:
         return ComponentResult(
-            signals=[], evidence=[], metrics={}, score=0,
+            signals=[],
+            evidence=[],
+            metrics={},
+            score=0,
         )
 
     # Check for Supertrend columns
     if "SUPERTd_10_3.0" not in df.columns:
         return ComponentResult(
-            signals=[], evidence=["Supertrend 데이터 없음"], metrics={}, score=0,
+            signals=[],
+            evidence=["Supertrend 데이터 없음"],
+            metrics={},
+            score=0,
         )
 
     latest = df.iloc[-1]
@@ -25,11 +32,16 @@ def analyze_supertrend(df: pd.DataFrame) -> ComponentResult:
 
     if pd.isna(supertrend_dir):
         return ComponentResult(
-            signals=[], evidence=["Supertrend 값 없음"], metrics={}, score=0,
+            signals=[],
+            evidence=["Supertrend 값 없음"],
+            metrics={},
+            score=0,
         )
 
     supertrend_dir = int(supertrend_dir)
-    prev_supertrend_dir = int(prev_supertrend_dir) if not pd.isna(prev_supertrend_dir) else supertrend_dir
+    prev_supertrend_dir = (
+        int(prev_supertrend_dir) if not pd.isna(prev_supertrend_dir) else supertrend_dir
+    )
 
     signals = []
     evidence = []
@@ -81,5 +93,8 @@ def analyze_supertrend(df: pd.DataFrame) -> ComponentResult:
             score -= 15
 
     return ComponentResult(
-        signals=signals, evidence=evidence, metrics=metrics, score=score,
+        signals=signals,
+        evidence=evidence,
+        metrics=metrics,
+        score=score,
     )

@@ -1,5 +1,4 @@
-import pytest
-from src.tools.screener.models import UniverseStock, ScreenerEvidence
+from src.tools.screener.models import ScreenerEvidence, UniverseStock
 
 
 def test_universe_stock():
@@ -31,7 +30,10 @@ def test_universe_stock_minimal():
 
 def test_screener_evidence():
     stock = UniverseStock(
-        ticker="005930", name="삼성전자", market="KOSPI", sources=["theme"],
+        ticker="005930",
+        name="삼성전자",
+        market="KOSPI",
+        sources=["theme"],
     )
     evidence = ScreenerEvidence(
         stock=stock,

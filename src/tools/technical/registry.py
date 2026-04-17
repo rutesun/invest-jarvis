@@ -1,10 +1,9 @@
-from typing import Optional
 from src.tools.technical.base import BaseStrategy
-from src.tools.technical.strategies.trend import TrendStrategy
-from src.tools.technical.strategies.oscillator import OscillatorStrategy
-from src.tools.technical.strategies.divergence import DivergenceStrategy
 from src.tools.technical.strategies.disparity import DisparityStrategy
+from src.tools.technical.strategies.divergence import DivergenceStrategy
+from src.tools.technical.strategies.oscillator import OscillatorStrategy
 from src.tools.technical.strategies.risk import RiskStrategy
+from src.tools.technical.strategies.trend import TrendStrategy
 
 
 # Strategy mapping
@@ -32,7 +31,7 @@ class StrategyRegistry:
         if name in self._strategies:
             del self._strategies[name]
 
-    def get(self, name: str) -> Optional[BaseStrategy]:
+    def get(self, name: str) -> BaseStrategy | None:
         """Get a strategy by name."""
         return self._strategies.get(name)
 

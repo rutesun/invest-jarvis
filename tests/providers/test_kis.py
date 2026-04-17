@@ -1,5 +1,7 @@
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
+
 from src.providers.kis import KISProvider
 
 
@@ -69,5 +71,6 @@ async def test_kis_get_quote(mock_token_response, mock_quote_response):
 async def test_kis_implements_base_provider():
     """Verify KISProvider implements BaseProvider interface."""
     from src.core.interfaces import BaseProvider
+
     provider = KISProvider(app_key="test", app_secret="test")
     assert isinstance(provider, BaseProvider)

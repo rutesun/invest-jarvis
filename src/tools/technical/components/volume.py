@@ -1,4 +1,5 @@
 import pandas as pd
+
 from src.tools.technical.models import ComponentResult
 
 
@@ -6,7 +7,10 @@ def analyze_volume(df: pd.DataFrame) -> ComponentResult:
     """Analyze volume patterns."""
     if "Vol_SMA_20" not in df.columns or len(df) < 2:
         return ComponentResult(
-            signals=[], evidence=["거래량 데이터 없음"], metrics={}, score=0,
+            signals=[],
+            evidence=["거래량 데이터 없음"],
+            metrics={},
+            score=0,
         )
 
     latest = df.iloc[-1]
@@ -19,7 +23,10 @@ def analyze_volume(df: pd.DataFrame) -> ComponentResult:
 
     if pd.isna(volume) or pd.isna(vol_sma_20) or vol_sma_20 == 0:
         return ComponentResult(
-            signals=[], evidence=["거래량 SMA 없음"], metrics={}, score=0,
+            signals=[],
+            evidence=["거래량 SMA 없음"],
+            metrics={},
+            score=0,
         )
 
     volume = float(volume)
@@ -57,5 +64,8 @@ def analyze_volume(df: pd.DataFrame) -> ComponentResult:
         evidence.append(f"거래량 {volume:,.0f} / 20일평균 {vol_sma_20:,.0f} = {vol_ratio:.1f}x")
 
     return ComponentResult(
-        signals=signals, evidence=evidence, metrics=metrics, score=score,
+        signals=signals,
+        evidence=evidence,
+        metrics=metrics,
+        score=score,
     )

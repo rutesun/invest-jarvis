@@ -3,11 +3,12 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
 from .config import ChannelConfig
+
 
 logger = logging.getLogger(__name__)
 
@@ -49,8 +50,8 @@ class TelegramCollector:
         offset_date = target_date + timedelta(days=1)
 
         # UTC로 변환하여 비교 (msg.date는 UTC)
-        target_date_utc = target_date.astimezone(timezone.utc)
-        offset_date_utc = offset_date.astimezone(timezone.utc)
+        target_date_utc = target_date.astimezone(UTC)
+        offset_date_utc = offset_date.astimezone(UTC)
 
         messages: list[dict] = []
         async for msg in self._client.iter_messages(entity, limit=5000):
@@ -69,13 +70,14 @@ class TelegramCollector:
 
             # 메시지의 날짜를 채널 timezone으로 변환하여 저장
             msg_local_date = msg.date.astimezone(tz).strftime("%Y-%m-%d")
-            messages.append(
-                await self._to_dict(msg, channel_name, msg_local_date, channel_config)
-            )
+            messages.append(await self._to_dict(msg, channel_name, msg_local_date, channel_config))
 
         logger.info(
             "%s에서 %s일자 메시지 %d건 수집 (timezone: %s)",
-            channel_name, date_str, len(messages), channel_config.timezone,
+            channel_name,
+            date_str,
+            len(messages),
+            channel_config.timezone,
         )
         return messages
 
@@ -111,12 +113,19 @@ class TelegramCollector:
 
         logger.info(
             "%s에서 min_id=%d 이후 메시지 %d일치 수집 (timezone: %s)",
-            channel_name, min_id, len(by_date), channel_config.timezone,
+            channel_name,
+            min_id,
+            len(by_date),
+            channel_config.timezone,
         )
         return by_date
 
     async def _to_dict(
-        self, msg: Any, channel_name: str, date_str: str, channel_config: ChannelConfig | str,
+        self,
+        msg: Any,
+        channel_name: str,
+        date_str: str,
+        channel_config: ChannelConfig | str,
     ) -> dict:
         """Telethon Message를 CSV 저장용 dict로 변환한다.
 
@@ -131,7 +140,9 @@ class TelegramCollector:
             forward_from = str(getattr(msg.forward, "chat_id", ""))
 
         # Author: 채널 ID 사용 (config.yaml과 매칭 가능)
-        channel_id = channel_config.id if isinstance(channel_config, ChannelConfig) else channel_config
+        channel_id = (
+            channel_config.id if isinstance(channel_config, ChannelConfig) else channel_config
+        )
         author = channel_id
 
         media_info = json.dumps(None)

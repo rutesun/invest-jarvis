@@ -1,7 +1,10 @@
 """Ingest stage 테스트."""
+
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import patch, MagicMock
-from src.pipelines.daily_report.stages.ingest_stage import ingest, _fetch_macro
+
+from src.pipelines.daily_report.stages.ingest_stage import _fetch_macro, ingest
 
 
 def test_ingest_no_csv_raises_error():

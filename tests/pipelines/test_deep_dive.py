@@ -1,15 +1,17 @@
-import pytest
+from datetime import datetime
 from unittest.mock import AsyncMock, patch
+
+import pytest
+
+from src.core.models import ToolResult
+from src.llm.models import NewsAnalysisOutput, TechnicalSummaryOutput
 from src.pipelines.deep_dive import DeepDivePipeline
+from src.tools.news import NewsArticle
 from src.tools.technical.models import (
-    TechnicalResult,
     IndicatorSnapshot,
     StrategyResult,
+    TechnicalResult,
 )
-from src.tools.news import NewsArticle
-from src.llm.models import NewsAnalysisOutput, TechnicalSummaryOutput
-from src.core.models import ToolResult
-from datetime import datetime
 
 
 @pytest.fixture
@@ -67,7 +69,9 @@ def mock_llm():
 @pytest.mark.asyncio
 async def test_deep_dive_pipeline_success(mock_technical_tool, mock_news_tool, mock_llm):
     """Test successful deep dive analysis."""
-    with patch("src.llm.analyzer.generate_technical_summary", new_callable=AsyncMock) as mock_tech_summary:
+    with patch(
+        "src.llm.analyzer.generate_technical_summary", new_callable=AsyncMock
+    ) as mock_tech_summary:
         with patch("src.llm.analyzer.analyze_news", new_callable=AsyncMock) as mock_news_analysis:
             # Mock LLM outputs
             mock_tech_summary.return_value = TechnicalSummaryOutput(
@@ -142,7 +146,9 @@ async def test_deep_dive_pipeline_empty_news(mock_technical_tool, mock_llm):
     mock_news_tool = AsyncMock()
     mock_news_tool.execute.return_value = ToolResult(success=True, data=[])
 
-    with patch("src.llm.analyzer.generate_technical_summary", new_callable=AsyncMock) as mock_tech_summary:
+    with patch(
+        "src.llm.analyzer.generate_technical_summary", new_callable=AsyncMock
+    ) as mock_tech_summary:
         mock_tech_summary.return_value = TechnicalSummaryOutput(
             summary="강세",
             key_insights=["골든크로스"],

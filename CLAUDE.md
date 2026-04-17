@@ -69,6 +69,12 @@ Providers → Tools → Pipelines → CLI (src/cli/main.py)
 - `src/tools/disclosure.py` — SEC EDGAR + DART 통합 공시 페처
 - `src/tools/flow.py` — KIS API 수급 데이터 (외인/기관 순매수)
 
+**Pipelines**:
+- `src/pipelines/quick_check.py` — 기술적 분석만 (LLM 없이 빠른 체크)
+- `src/pipelines/deep_dive.py` — 기술 + 펀더멘털 + 뉴스 + 공시 + 수급 + LLM 종합 분석
+- `src/pipelines/ticker_report.py` — 매크로 지표 + 다중 종목 기술 분석 (티커 기반 일일 리포트)
+- `src/pipelines/daily_report/` — 텔레그램 메시지 수집 → MapReduce 5단계 파이프라인 → 테마별 인사이트 (일일 시장 리포트)
+
 ## Common Commands
 
 전체 CLI 사용법: [CLI_USAGE.md](docs/CLI_USAGE.md)

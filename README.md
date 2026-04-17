@@ -46,7 +46,18 @@ jarvis report daily 2026-04-17 --notion         # Notion 업로드
 - `reports/YYYY-MM/daily_YYYY-MM-DD.md` 자동 저장
 - Notion 연동 지원
 
-### 4. 포트폴리오 모니터링
+### 4. 종목 스크리닝 (Screener)
+```bash
+jarvis screen --market kr          # 한국 시장 스크리닝
+jarvis screen --market us          # 미국 시장 스크리닝
+jarvis screen --top 20             # 상위 20개만
+```
+- 테마/급등주/거래량/기관매수 데이터 수집
+- 외국인/기관 순매수 분석
+- 모멘텀 시그널 스코어링
+- 다중 소스 증거 기반 랭킹
+
+### 5. 포트폴리오 모니터링
 ```bash
 jarvis portfolio
 ```
@@ -55,7 +66,7 @@ jarvis portfolio
 - 최근 뉴스 요약
 - 수익률 추적
 
-### 5. 티커 캐시 관리
+### 6. 티커 캐시 관리
 ```bash
 jarvis cache list          # 캐시된 매핑 목록 보기
 jarvis cache clear         # 캐시 전체 삭제
@@ -78,7 +89,7 @@ jarvis telegram catch-up            # 누락분 보충 수집
 - catch-up 모드로 누락분 자동 보충
 - **사진/PDF 자동 다운로드** (첨부파일 + URL)
 
-### 7. Claude Code Skills
+### 8. Claude Code Skills
 ```
 /invest-check AAPL
 /invest-analyze AAPL
@@ -204,6 +215,10 @@ uv run jarvis analyze TSLA --provider anthropic
 uv run jarvis report
 uv run jarvis report --tickers=AAPL,GOOGL,META
 
+# 종목 스크리닝
+uv run jarvis screen --market kr    # 한국 시장
+uv run jarvis screen --market us    # 미국 시장
+
 # 포트폴리오 (KIS API 필요)
 uv run jarvis portfolio
 
@@ -255,9 +270,13 @@ Claude: /invest-report
 
 **Tools** - 분석 도구
 - `TechnicalAnalysisTool`: 5개 전략 기반 기술 분석
+- `FundamentalTool`: 재무제표 및 주요 지표 (EPS, P/E, ROE 등)
 - `MacroTool`: 매크로 지표 (VIX, Fear & Greed, 금리 등)
 - `NewsTool`: 뉴스 수집
 - `PortfolioTool`: 포트폴리오 조회
+- `ScreenerTool`: 종목 발굴 (테마, 급등주, 거래량, 수급)
+- `DisclosureTool`: SEC EDGAR (미국) + OpenDART (한국) 공시 조회
+- `FlowTool`: 외국인/기관 수급 동향 (KIS API, 한국주식)
 
 **Strategies** - 기술적 분석 전략
 - `TrendStrategy`: 이동평균선, ADX, Supertrend
@@ -269,7 +288,7 @@ Claude: /invest-report
 **Pipelines** - 워크플로우
 - `QuickCheckPipeline`: 빠른 기술 분석 (LLM 불필요)
 - `DeepDivePipeline`: 기술 + 뉴스 + LLM 해석
-- `DailyReportPipeline`: 매크로 + 다중 종목 분석
+- `TickerReportPipeline`: 매크로 + 다중 종목 분석
 - `PortfolioPipeline`: 포트폴리오 모니터링
 
 **LLM Client** - AI 분석
@@ -297,6 +316,32 @@ uv run pytest tests/integration/ -v -m integration
 # 커버리지 포함
 uv run pytest tests/ --cov=src --cov-report=html
 ```
+
+### 코드 위생(Import/Unused) 점검
+
+```bash
+# 개발 도구 설치
+uv sync --dev
+
+# 임포트/정적 점검
+uv run --group dev ruff check src tests
+
+# 미사용 코드 후보 탐지
+uv run --group dev vulture src --min-confidence 80
+
+# 한 번에 실행
+./scripts/check_hygiene.sh
+```
+
+PR 전에는 최소 1회 `check_hygiene.sh` 실행을 권장한다.
+
+### 문서 유지 정책
+
+코드 변경과 문서 변경은 같은 PR에서 함께 반영:
+- CLI 동작 변경: `docs/CLI_USAGE.md`
+- 기능/사용 예시 변경: `README.md`
+- 아키텍처 변경: `AGENTS.md`
+- 개발 프로세스 변경: `docs/DEVELOPMENT.md`
 
 ### 새 전략 추가
 
@@ -405,4 +450,3 @@ invest-jarvis/
 MIT
 
 ---
-

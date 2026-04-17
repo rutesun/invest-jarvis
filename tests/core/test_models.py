@@ -1,5 +1,4 @@
 # tests/core/test_models.py
-import pytest
 from src.core.models import ToolResult
 
 

@@ -1,9 +1,11 @@
 from datetime import datetime
+
 from pydantic import BaseModel
 
 
 class ComponentResult(BaseModel):
     """Result from a technical analysis component."""
+
     signals: list[str]
     evidence: list[str]
     metrics: dict[str, float]

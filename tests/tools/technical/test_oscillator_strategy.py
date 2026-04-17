@@ -1,8 +1,9 @@
-import pytest
-import pandas as pd
 import numpy as np
-from src.tools.technical.strategies.oscillator import OscillatorStrategy
+import pandas as pd
+import pytest
+
 from src.tools.technical.indicators import IndicatorCalculator
+from src.tools.technical.strategies.oscillator import OscillatorStrategy
 
 
 @pytest.fixture
@@ -10,13 +11,16 @@ def overbought_df():
     """Create DataFrame with overbought conditions."""
     dates = pd.date_range("2024-01-01", periods=100, freq="D")
     close = 100 + np.arange(100) * 0.8  # strong uptrend
-    df = pd.DataFrame({
-        "Open": close - 0.5,
-        "High": close + 1,
-        "Low": close - 1,
-        "Close": close,
-        "Volume": [1000000] * 100,
-    }, index=dates)
+    df = pd.DataFrame(
+        {
+            "Open": close - 0.5,
+            "High": close + 1,
+            "Low": close - 1,
+            "Close": close,
+            "Volume": [1000000] * 100,
+        },
+        index=dates,
+    )
     calculator = IndicatorCalculator()
     return calculator.calculate(df)
 

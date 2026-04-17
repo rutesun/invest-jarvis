@@ -1,7 +1,8 @@
 import pandas as pd
 import pytest
-from src.tools.technical.scorer import TechnicalScorer
+
 from src.tools.technical.indicators import IndicatorCalculator
+from src.tools.technical.scorer import TechnicalScorer
 
 
 @pytest.fixture
@@ -9,13 +10,15 @@ def sample_df():
     """Create sample OHLCV data for testing."""
     data = []
     for i in range(250):
-        data.append({
-            "Open": 100 + i * 0.1,
-            "High": 101 + i * 0.1,
-            "Low": 99 + i * 0.1,
-            "Close": 100.5 + i * 0.1,
-            "Volume": 1000000 + i * 1000,
-        })
+        data.append(
+            {
+                "Open": 100 + i * 0.1,
+                "High": 101 + i * 0.1,
+                "Low": 99 + i * 0.1,
+                "Close": 100.5 + i * 0.1,
+                "Volume": 1000000 + i * 1000,
+            }
+        )
     df = pd.DataFrame(data)
 
     calculator = IndicatorCalculator()
@@ -68,13 +71,15 @@ def test_technical_scorer_total_score_calculation(sample_df):
 
 def test_technical_scorer_insufficient_data():
     """Test with insufficient data."""
-    df = pd.DataFrame({
-        "Open": [100],
-        "High": [101],
-        "Low": [99],
-        "Close": [100],
-        "Volume": [1000000],
-    })
+    df = pd.DataFrame(
+        {
+            "Open": [100],
+            "High": [101],
+            "Low": [99],
+            "Close": [100],
+            "Volume": [1000000],
+        }
+    )
 
     calculator = IndicatorCalculator()
     df = calculator.calculate(df)
