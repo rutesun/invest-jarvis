@@ -92,8 +92,8 @@ class KISProvider(BaseProvider):
             "Content-Type": "application/json; charset=utf-8",
         }
 
-        end_date = datetime.now().strftime("%Y%m%d")
-        start_date = (datetime.now() - timedelta(days=days)).strftime("%Y%m%d")
+        datetime.now().strftime("%Y%m%d")
+        (datetime.now() - timedelta(days=days)).strftime("%Y%m%d")
 
         params = {
             "FID_COND_MRKT_DIV_CODE": "J",

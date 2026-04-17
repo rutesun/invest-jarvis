@@ -39,7 +39,7 @@ def channel_config_with_filter():
 
 @pytest.mark.asyncio
 async def test_fetch_messages_for_date(mock_client, channel_config):
-    target_date = datetime(2026, 4, 13, tzinfo=UTC)
+    datetime(2026, 4, 13, tzinfo=UTC)
     messages = [
         _make_tg_message(1, "첫 번째 메시지", datetime(2026, 4, 13, 9, 0, tzinfo=UTC)),
         _make_tg_message(2, "두 번째 메시지", datetime(2026, 4, 13, 10, 0, tzinfo=UTC)),

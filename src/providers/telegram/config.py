@@ -18,13 +18,9 @@ class ChannelConfig(BaseModel):
 
     def should_include(self, text: str) -> bool:
         """메시지가 include/exclude 필터를 통과하는지 확인한다."""
-        if self.include:
-            if not any(re.search(p, text) for p in self.include):
-                return False
-        if self.exclude:
-            if any(re.search(p, text) for p in self.exclude):
-                return False
-        return True
+        if self.include and not any(re.search(p, text) for p in self.include):
+            return False
+        return not (self.exclude and any(re.search(p, text) for p in self.exclude))
 
 
 class TelegramConfig(BaseModel):

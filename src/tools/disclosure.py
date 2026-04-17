@@ -90,7 +90,9 @@ class SECDisclosureFetcher:
         cutoff = (datetime.now() - timedelta(days=90)).date()
         results: list[DisclosureItem] = []
 
-        for form, date_str, doc, accession in zip(forms, filing_dates, documents, accessions):
+        for form, date_str, doc, accession in zip(
+            forms, filing_dates, documents, accessions, strict=False
+        ):
             if form not in ("10-Q", "8-K"):
                 continue
             if date.fromisoformat(date_str) < cutoff:

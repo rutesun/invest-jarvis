@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 
 import pandas as pd
 
@@ -108,10 +109,8 @@ class EvidenceCollector:
         investor_trends = []
         program_trades = []
         if is_kr and self.kis:
-            try:
+            with contextlib.suppress(Exception):
                 investor_trends = await self.kis.get_investor_trend(stock.ticker, days=10)
-            except Exception:
-                pass
 
             try:
                 program_trades = await self.kis.get_program_trade(stock.ticker, days=10)

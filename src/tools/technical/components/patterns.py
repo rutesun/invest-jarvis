@@ -157,12 +157,11 @@ def _detect_candlestick_patterns(df: pd.DataFrame) -> dict:
     total_range = h - l
 
     # Hammer detection (can be bullish or bearish)
-    if total_range > 0 and body > 0:
-        if lower_shadow > 2 * body and upper_shadow < body * 0.5:
-            signals.append("Hammer (망치형)")
-            evidence.append(f"아래 꼬리 {lower_shadow:.2f} > 몸통 {body:.2f}의 2배")
-            score += 10
-            metrics["hammer_ratio"] = round(lower_shadow / body, 2)
+    if total_range > 0 and body > 0 and lower_shadow > 2 * body and upper_shadow < body * 0.5:
+        signals.append("Hammer (망치형)")
+        evidence.append(f"아래 꼬리 {lower_shadow:.2f} > 몸통 {body:.2f}의 2배")
+        score += 10
+        metrics["hammer_ratio"] = round(lower_shadow / body, 2)
 
     # Bullish Engulfing detection
     prev_body = abs(prev_c - prev_o)

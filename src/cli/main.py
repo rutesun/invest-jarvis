@@ -180,13 +180,13 @@ def check(
         console.print(f"[bold]Analyzing {ticker}...[/bold]\n")
     except ValueError as e:
         console.print(f"[red]{e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     result = asyncio.run(run_quick_check(query))
 
     if not result.get("success", False):
         console.print(f"[red]Error: {result.get('error', 'Unknown error')}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     pipeline = QuickCheckPipeline(technical_tool=None)  # Just for formatting
     output = pipeline.format_output(result)
@@ -541,10 +541,10 @@ def analyze(
         console.print(Markdown(output))
     except ValueError as e:
         console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 async def run_daily_report(tickers: list[str], provider: str) -> dict:
@@ -656,10 +656,10 @@ def report_ticker(
         console.print(Markdown(output))
     except ValueError as e:
         console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 async def run_portfolio_monitoring() -> dict:
@@ -693,7 +693,7 @@ def portfolio(
     kis_app_secret = os.getenv("KIS_APP_SECRET")
     if not kis_app_key or not kis_app_secret:
         console.print("[red]Error: KIS_APP_KEY and KIS_APP_SECRET required[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     console.print("[bold]Loading portfolio...[/bold]\n")
 
@@ -701,7 +701,7 @@ def portfolio(
 
     if not result.get("success", False):
         console.print(f"[red]Error: {result.get('error', 'Unknown error')}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     pipeline = PortfolioPipeline(None, None, None)
     output = pipeline.format_output(result)
@@ -764,7 +764,7 @@ def screen(
 
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 cache_app = typer.Typer(help="Manage user ticker cache")
@@ -868,10 +868,10 @@ def report_daily(
     except FileNotFoundError as e:
         console.print(f"[red]오류: {e}[/red]")
         console.print(f"[yellow]힌트: 먼저 'uv run jarvis telegram fetch {date}' 실행[/yellow]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
     except Exception as e:
         console.print(f"[red]오류: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 # --- Telegram 서브커맨드 ---
@@ -933,10 +933,10 @@ def telegram_fetch(
             console.print(f"[green]완료: {result['total']}건 수집됨 ({result['date']})[/green]")
         else:
             console.print(f"[red]오류: {result['error']}[/red]")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
     except Exception as e:
         console.print(f"[red]오류: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @telegram_app.command("catch-up")
@@ -952,10 +952,10 @@ def telegram_catchup(
             console.print(f"[green]완료: {result['total']}건 보충 수집됨[/green]")
         else:
             console.print(f"[red]오류: {result['error']}[/red]")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
     except Exception as e:
         console.print(f"[red]오류: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 if __name__ == "__main__":

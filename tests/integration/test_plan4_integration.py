@@ -73,7 +73,7 @@ async def test_plan4_complete_flow():
     assert "patterns" in result.components
 
     # Verify each component has expected structure
-    for name, comp in result.components.items():
+    for _name, comp in result.components.items():
         assert "score" in comp
         assert "signals" in comp
         assert "evidence" in comp

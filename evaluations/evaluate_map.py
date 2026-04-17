@@ -13,7 +13,6 @@ from pathlib import Path
 from typing import Any
 
 from evaluations.metrics import RULE_BASED_METRICS, evaluate_all
-
 from src.pipelines.daily_report.models import TelegramMessage
 from src.pipelines.daily_report.stages.map_stage import map_stage
 
@@ -61,7 +60,7 @@ def run_evaluation(
         )
         print("🤖 LLM-as-Judge 활성화")
 
-    all_scores = {name: [] for name in RULE_BASED_METRICS.keys()}
+    all_scores = {name: [] for name in RULE_BASED_METRICS}
 
     for case in test_cases:
         case_id = case["id"]

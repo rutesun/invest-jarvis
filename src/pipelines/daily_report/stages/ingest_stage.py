@@ -48,7 +48,7 @@ def ingest(date: str, data_dir: str = "data") -> IngestResult:
 def _fetch_macro(date: str) -> MacroSnapshot:
     """주어진 날짜의 매크로 지표 수집."""
     date_obj = datetime.strptime(date, "%Y-%m-%d")
-    prev_date = date_obj - timedelta(days=1)
+    date_obj - timedelta(days=1)
 
     # 미국 시장 (전날 종가)
     us_tickers = {"S&P500": "^GSPC", "NASDAQ": "^IXIC", "DOW": "^DJI"}

@@ -8,7 +8,6 @@ from evaluations.metrics import (
     number_preservation,
     split_accuracy,
 )
-
 from src.pipelines.daily_report.models import MappedIssue
 
 

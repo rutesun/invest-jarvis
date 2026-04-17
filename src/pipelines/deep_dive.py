@@ -106,7 +106,7 @@ class DeepDivePipeline:
         optional_data: dict = {}
         if optional_coros:
             opt_results = await asyncio.gather(*optional_coros, return_exceptions=True)
-            for key, res in zip(optional_keys, opt_results):
+            for key, res in zip(optional_keys, opt_results, strict=True):
                 if not isinstance(res, Exception) and res.success:
                     optional_data[key] = res.data
                 else:

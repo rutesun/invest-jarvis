@@ -170,7 +170,7 @@ if __name__ == "__main__":
 
     # 요약 출력
     total_themes = sum(len(issue.themes) for issue in issues)
-    unique_themes = len(set(theme for issue in issues for theme in issue.themes))
+    unique_themes = len({theme for issue in issues for theme in issue.themes})
     avg_sources = sum(len(issue.source_ids) for issue in issues) / len(issues) if issues else 0
 
     print(f"✓ 테마: {total_themes}개 총, {unique_themes}개 고유")

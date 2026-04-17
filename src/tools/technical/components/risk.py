@@ -79,8 +79,8 @@ def analyze_risk(df: pd.DataFrame) -> ComponentResult:
 
     # 4. Gap levels (unfilled gaps)
     if "Is_Gap_Up" in df.columns and "Gap_Up_Lower" in df.columns:
-        gap_up_rows = df[df["Is_Gap_Up"] == True].tail(3)
-        for idx, row in gap_up_rows.iterrows():
+        gap_up_rows = df[df["Is_Gap_Up"]].tail(3)
+        for _idx, row in gap_up_rows.iterrows():
             gap_lower = row.get("Gap_Up_Lower")
             if not pd.isna(gap_lower):
                 gap_lower = float(gap_lower)
@@ -88,8 +88,8 @@ def analyze_risk(df: pd.DataFrame) -> ComponentResult:
                     support_levels.append({"level": gap_lower, "type": "Gap Up (unfilled)"})
 
     if "Is_Gap_Down" in df.columns and "Gap_Down_Upper" in df.columns:
-        gap_down_rows = df[df["Is_Gap_Down"] == True].tail(3)
-        for idx, row in gap_down_rows.iterrows():
+        gap_down_rows = df[df["Is_Gap_Down"]].tail(3)
+        for _idx, row in gap_down_rows.iterrows():
             gap_upper = row.get("Gap_Down_Upper")
             if not pd.isna(gap_upper):
                 gap_upper = float(gap_upper)

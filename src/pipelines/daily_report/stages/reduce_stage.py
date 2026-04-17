@@ -2,25 +2,23 @@
 
 import asyncio
 import json
-from datetime import datetime
 from pathlib import Path
 
 from ddgs import DDGS
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage, SystemMessage
-
-from src.llm.provider import LLMProvider
-
-
-load_dotenv()
 from langsmith import traceable
 
+from src.llm.provider import LLMProvider
 from src.pipelines.daily_report.models import (
     MacroSnapshot,
     MappedIssue,
     NewsItem,
 )
 from src.pipelines.daily_report.prompts import REDUCE_SYSTEM_PROMPT, REDUCE_USER_PROMPT
+
+
+load_dotenv()
 
 
 @traceable(name="Reduce Stage")
@@ -192,7 +190,6 @@ def _search_news(theme: str, date: str, max_results: int) -> list[dict]:
     """DuckDuckGo로 뉴스 검색."""
     try:
         query = f"{theme} 주식 시장"
-        date_obj = datetime.strptime(date, "%Y-%m-%d")
 
         ddgs = DDGS()
         results = ddgs.news(

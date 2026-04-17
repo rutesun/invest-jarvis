@@ -6,15 +6,14 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage, SystemMessage
+from langsmith import traceable
 
 from src.llm.provider import LLMProvider
+from src.pipelines.daily_report.models import MappedIssue, ShuffleResult, ThemeMapping
+from src.pipelines.daily_report.prompts import SHUFFLE_SYSTEM_PROMPT, SHUFFLE_USER_PROMPT
 
 
 load_dotenv()
-from langsmith import traceable
-
-from src.pipelines.daily_report.models import MappedIssue, ShuffleResult, ThemeMapping
-from src.pipelines.daily_report.prompts import SHUFFLE_SYSTEM_PROMPT, SHUFFLE_USER_PROMPT
 
 
 @traceable(name="Shuffle Stage")
@@ -58,7 +57,7 @@ async def _normalize_themes_by_category(
     ]
     results = await asyncio.gather(*tasks)
 
-    return {category: theme_map for category, theme_map in zip(category_buckets.keys(), results)}
+    return dict(zip(category_buckets.keys(), results, strict=True))
 
 
 async def _normalize_themes_for_category(

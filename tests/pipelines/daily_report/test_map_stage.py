@@ -60,7 +60,7 @@ def test_map_stage_with_real_data():
     assert avg_sources >= 1.5  # 평균 1.5개 이상의 소스
 
     # 테마 다양성 체크
-    unique_themes = len(set(theme for issue in issues for theme in issue.themes))
+    unique_themes = len({theme for issue in issues for theme in issue.themes})
     total_themes = sum(len(issue.themes) for issue in issues)
     print(f"테마: {total_themes}개 총, {unique_themes}개 고유")
     assert unique_themes >= 20  # 최소 20개 이상의 고유 테마

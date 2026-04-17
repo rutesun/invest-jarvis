@@ -12,6 +12,9 @@ import argparse
 import json
 from datetime import datetime
 
+from langsmith import Client, evaluate
+from langsmith.schemas import Example, Run
+
 from evaluations.metrics import (
     ThemeMatchResult,
     _issues_to_text,
@@ -34,9 +37,6 @@ from evaluations.metrics import (
 from evaluations.metrics import (
     split_accuracy as _split_accuracy,
 )
-from langsmith import Client, evaluate
-from langsmith.schemas import Example, Run
-
 from src.llm.provider import LLMProvider
 from src.pipelines.daily_report.models import MappedIssue, TelegramMessage
 from src.pipelines.daily_report.stages.map_stage import map_stage
