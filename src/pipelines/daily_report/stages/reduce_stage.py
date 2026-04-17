@@ -1,32 +1,35 @@
 """Reduce stage: 테마별 뉴스 검색 및 분석 리포트 생성."""
+
 import asyncio
 import json
-from typing import List, Dict
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
+
+from ddgs import DDGS
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage, SystemMessage
-from ddgs import DDGS
+
 from src.llm.provider import LLMProvider
+
 
 load_dotenv()
 from langsmith import traceable
+
 from src.pipelines.daily_report.models import (
+    MacroSnapshot,
     MappedIssue,
     NewsItem,
-    MacroSnapshot,
-    IssueCategory,
 )
 from src.pipelines.daily_report.prompts import REDUCE_SYSTEM_PROMPT, REDUCE_USER_PROMPT
 
 
 @traceable(name="Reduce Stage")
 def reduce_stage(
-    category_groups: Dict[str, Dict[str, List[MappedIssue]]],
+    category_groups: dict[str, dict[str, list[MappedIssue]]],
     macro: MacroSnapshot,
     date: str = None,
     max_news_per_theme: int = 5,
-) -> List[NewsItem]:
+) -> list[NewsItem]:
     """
     테마별로 뉴스 검색 + LLM 분석 리포트 생성.
 
@@ -57,25 +60,23 @@ def reduce_stage(
 
 
 async def _analyze_themes_parallel(
-    category_groups: Dict[str, Dict[str, List[MappedIssue]]],
+    category_groups: dict[str, dict[str, list[MappedIssue]]],
     macro: MacroSnapshot,
     date: str,
     max_news_per_theme: int,
-) -> List[NewsItem]:
+) -> list[NewsItem]:
     """카테고리/테마별 병렬 분석."""
     tasks = []
     for category, theme_map in category_groups.items():
         for theme, issues in theme_map.items():
-            tasks.append(
-                _analyze_theme(category, theme, issues, macro, date, max_news_per_theme)
-            )
+            tasks.append(_analyze_theme(category, theme, issues, macro, date, max_news_per_theme))
     return await asyncio.gather(*tasks)
 
 
 async def _analyze_theme(
     category: str,
     theme: str,
-    issues: List[MappedIssue],
+    issues: list[MappedIssue],
     macro: MacroSnapshot,
     date: str,
     max_news: int,
@@ -92,17 +93,25 @@ async def _analyze_theme(
     )
 
     # 프롬프트 구성
-    issues_text = "\n\n".join([
-        f"**{issue.title}**\n{issue.summary}\n"
-        f"키워드: {', '.join(issue.keywords)}\n"
-        f"감성: {issue.sentiment}"
-        for issue in issues
-    ])
+    issues_text = "\n\n".join(
+        [
+            f"**{issue.title}**\n{issue.summary}\n"
+            f"키워드: {', '.join(issue.keywords)}\n"
+            f"감성: {issue.sentiment}"
+            for issue in issues
+        ]
+    )
 
-    news_text = "\n\n".join([
-        f"**{article['title']}**\n{article['body']}\n출처: {article['url']}"
-        for article in news_articles
-    ]) if news_articles else "관련 뉴스 없음"
+    news_text = (
+        "\n\n".join(
+            [
+                f"**{article['title']}**\n{article['body']}\n출처: {article['url']}"
+                for article in news_articles
+            ]
+        )
+        if news_articles
+        else "관련 뉴스 없음"
+    )
 
     system_prompt = REDUCE_SYSTEM_PROMPT
     user_prompt = REDUCE_USER_PROMPT.format(
@@ -139,22 +148,24 @@ async def _analyze_theme(
 
     try:
         # NewsItem without category (LLM output)
+
         from pydantic import BaseModel, Field
-        from typing import Literal
 
         class NewsItemOutput(BaseModel):
             """Reduce stage LLM 출력용 (category 제외)."""
+
             theme: str = Field(description="한글 정규화 테마명")
             emoji: str = Field(description="단일 이모지: 🚀📈⚠️ℹ️📉⚡")
             summary: str = Field(description="한글 bullet points")
             impact: str = Field(description="한글 impact 문구")
-            stocks: List[Dict] = Field(default_factory=list)
+            stocks: list[dict] = Field(default_factory=list)
 
         llm_with_output = llm.with_structured_output(NewsItemOutput)
         response = await llm_with_output.ainvoke(messages, config=config)
 
         # category 추가하여 NewsItem 생성
         from src.pipelines.daily_report.models import StockDetail
+
         stocks = [StockDetail(**s) for s in response.stocks] if response.stocks else []
 
         return NewsItem(
@@ -177,7 +188,7 @@ async def _analyze_theme(
         )
 
 
-def _search_news(theme: str, date: str, max_results: int) -> List[Dict]:
+def _search_news(theme: str, date: str, max_results: int) -> list[dict]:
     """DuckDuckGo로 뉴스 검색."""
     try:
         query = f"{theme} 주식 시장"
@@ -203,26 +214,21 @@ if __name__ == "__main__":
     date = sys.argv[1] if len(sys.argv) > 1 else "2026-04-14"
 
     # Shuffle stage 출력 로드
-    shuffle_file = (
-        f"tests/pipelines/daily_report/fixtures/stage_outputs/shuffle_{date}.json"
-    )
-    with open(shuffle_file, "r", encoding="utf-8") as f:
+    shuffle_file = f"tests/pipelines/daily_report/fixtures/stage_outputs/shuffle_{date}.json"
+    with open(shuffle_file, encoding="utf-8") as f:
         shuffle_data = json.load(f)
 
     # category_groups 복원
     category_groups = {
         category: {
-            theme: [MappedIssue(**issue) for issue in issues]
-            for theme, issues in theme_map.items()
+            theme: [MappedIssue(**issue) for issue in issues] for theme, issues in theme_map.items()
         }
         for category, theme_map in shuffle_data["category_groups"].items()
     }
 
     # Ingest stage에서 매크로 로드
-    ingest_file = (
-        f"tests/pipelines/daily_report/fixtures/stage_outputs/ingest_{date}.json"
-    )
-    with open(ingest_file, "r", encoding="utf-8") as f:
+    ingest_file = f"tests/pipelines/daily_report/fixtures/stage_outputs/ingest_{date}.json"
+    with open(ingest_file, encoding="utf-8") as f:
         ingest_data = json.load(f)
     macro = MacroSnapshot(**ingest_data["macro"])
 
@@ -239,9 +245,7 @@ if __name__ == "__main__":
         print(f"  [{item.category}] {item.emoji} {item.theme}")
 
     # 출력 저장
-    output_file = (
-        f"tests/pipelines/daily_report/fixtures/stage_outputs/reduce_{date}.json"
-    )
+    output_file = f"tests/pipelines/daily_report/fixtures/stage_outputs/reduce_{date}.json"
     Path(output_file).parent.mkdir(parents=True, exist_ok=True)
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(

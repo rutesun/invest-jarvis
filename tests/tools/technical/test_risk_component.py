@@ -1,6 +1,7 @@
-import pytest
-import pandas as pd
 import numpy as np
+import pandas as pd
+import pytest
+
 from src.tools.technical.components.risk import analyze_risk
 from src.tools.technical.indicators import IndicatorCalculator
 
@@ -11,13 +12,16 @@ def strong_support_df():
     dates = pd.date_range("2024-01-01", periods=100, freq="D")
     close = 100 + np.random.randn(100) * 2
 
-    df = pd.DataFrame({
-        "Open": close - 0.5,
-        "High": close + 1,
-        "Low": close - 1,
-        "Close": close,
-        "Volume": [1000000] * 100,
-    }, index=dates)
+    df = pd.DataFrame(
+        {
+            "Open": close - 0.5,
+            "High": close + 1,
+            "Low": close - 1,
+            "Close": close,
+            "Volume": [1000000] * 100,
+        },
+        index=dates,
+    )
 
     calculator = IndicatorCalculator()
     return calculator.calculate(df)
@@ -30,13 +34,16 @@ def near_resistance_df():
     # Uptrend approaching previous high
     close = 100 + np.arange(100) * 0.2
 
-    df = pd.DataFrame({
-        "Open": close - 0.5,
-        "High": close + 1,
-        "Low": close - 1,
-        "Close": close,
-        "Volume": [1000000] * 100,
-    }, index=dates)
+    df = pd.DataFrame(
+        {
+            "Open": close - 0.5,
+            "High": close + 1,
+            "Low": close - 1,
+            "Close": close,
+            "Volume": [1000000] * 100,
+        },
+        index=dates,
+    )
 
     calculator = IndicatorCalculator()
     return calculator.calculate(df)
@@ -54,9 +61,11 @@ def test_risk_analysis(strong_support_df):
 
 def test_risk_no_data():
     """Test with insufficient data."""
-    df = pd.DataFrame({
-        "Close": [100, 101, 102],
-    })
+    df = pd.DataFrame(
+        {
+            "Close": [100, 101, 102],
+        }
+    )
 
     result = analyze_risk(df)
     assert result.score == 0

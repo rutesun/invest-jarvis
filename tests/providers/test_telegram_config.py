@@ -1,16 +1,13 @@
 # tests/providers/test_telegram_config.py
-import pytest
 from pathlib import Path
-from src.providers.telegram.config import TelegramConfig, ChannelConfig
+
+from src.providers.telegram.config import ChannelConfig, TelegramConfig
 
 
 def test_load_simple_channel(tmp_path):
     config_file = tmp_path / "config.yaml"
     config_file.write_text(
-        "telegram:\n"
-        "  channels:\n"
-        '    - "12345"\n'
-        "  output_dir: data\n",
+        'telegram:\n  channels:\n    - "12345"\n  output_dir: data\n',
         encoding="utf-8",
     )
     config = TelegramConfig.from_yaml(config_file)

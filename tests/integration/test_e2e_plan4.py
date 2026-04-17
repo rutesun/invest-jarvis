@@ -1,7 +1,10 @@
-import pytest
 import re
+
+import pytest
 from typer.testing import CliRunner
+
 from src.cli.main import app
+
 
 runner = CliRunner()
 
@@ -53,13 +56,12 @@ def test_analyze_shows_sector_priority_metrics():
     assert "매출 성장률" in result.stdout, "Revenue growth metric should be present"
 
     # 우선순위 지표들이 ⭐와 함께 같은 섹션에 표시되어야 함
-    lines_with_star = [line for line in result.stdout.split('\n') if '⭐' in line]
+    lines_with_star = [line for line in result.stdout.split("\n") if "⭐" in line]
     assert len(lines_with_star) > 0, "Should have lines with priority metrics marked with ⭐"
 
     # P/E Ratio는 우선순위가 아니므로 ⭐가 붙지 않아야 함
     # Check that no line contains both ⭐ and P/E Ratio
-    pe_lines = [line for line in result.stdout.split('\n')
-                if '⭐' in line and 'P/E Ratio' in line]
+    pe_lines = [line for line in result.stdout.split("\n") if "⭐" in line and "P/E Ratio" in line]
     assert len(pe_lines) == 0, "P/E Ratio should not have ⭐"
 
     # Sector/Industry 정보는 표시되어야 함

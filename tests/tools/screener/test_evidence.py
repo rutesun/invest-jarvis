@@ -1,9 +1,11 @@
-import pytest
-import pandas as pd
-import numpy as np
 from unittest.mock import AsyncMock
+
+import numpy as np
+import pandas as pd
+import pytest
+
 from src.tools.screener.evidence import EvidenceCollector
-from src.tools.screener.models import UniverseStock, ScreenerEvidence
+from src.tools.screener.models import UniverseStock
 
 
 @pytest.fixture

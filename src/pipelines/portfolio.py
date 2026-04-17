@@ -1,7 +1,8 @@
 from typing import Any
+
+from src.tools.news import NewsTool
 from src.tools.portfolio import PortfolioTool
 from src.tools.technical.tool import TechnicalAnalysisTool
-from src.tools.news import NewsTool
 
 
 class PortfolioPipeline:
@@ -38,16 +39,18 @@ class PortfolioPipeline:
             news_result = await self.news_tool.execute(ticker, limit=3)
             news = news_result.data if news_result.success else []
 
-            holdings.append({
-                "ticker": ticker,
-                "name": position["name"],
-                "quantity": position["quantity"],
-                "current_price": position["current_price"],
-                "profit_loss": position.get("profit_loss", 0),
-                "profit_loss_pct": position.get("profit_loss_pct", 0),
-                "technical": technical,
-                "news": news,
-            })
+            holdings.append(
+                {
+                    "ticker": ticker,
+                    "name": position["name"],
+                    "quantity": position["quantity"],
+                    "current_price": position["current_price"],
+                    "profit_loss": position.get("profit_loss", 0),
+                    "profit_loss_pct": position.get("profit_loss_pct", 0),
+                    "technical": technical,
+                    "news": news,
+                }
+            )
 
         return {
             "success": True,
@@ -63,7 +66,7 @@ class PortfolioPipeline:
             return f"Error: {result.get('error', 'Unknown error')}"
 
         lines = [
-            f"## Portfolio Summary",
+            "## Portfolio Summary",
             "",
             f"**Total Assets**: ₩{result['total_assets']:,.0f}",
             f"**Cash**: ₩{result.get('cash', 0):,.0f}",
@@ -77,11 +80,15 @@ class PortfolioPipeline:
             lines.append(f"#### {holding['name']} ({holding['ticker']})")
             lines.append(f"- Quantity: {holding['quantity']}")
             lines.append(f"- Current: ₩{holding['current_price']:,.0f}")
-            lines.append(f"- P&L: ₩{holding.get('profit_loss', 0):,.0f} ({holding.get('profit_loss_pct', 0):+.2f}%)")
+            lines.append(
+                f"- P&L: ₩{holding.get('profit_loss', 0):,.0f} ({holding.get('profit_loss_pct', 0):+.2f}%)"
+            )
 
             if holding.get("technical"):
                 tech = holding["technical"]
-                lines.append(f"- Assessment: {tech.overall_assessment} (신뢰도: {tech.confidence_score:.0f}%)")
+                lines.append(
+                    f"- Assessment: {tech.overall_assessment} (신뢰도: {tech.confidence_score:.0f}%)"
+                )
                 if tech.key_insights:
                     lines.append(f"- Insights: {', '.join(tech.key_insights[:2])}")
 

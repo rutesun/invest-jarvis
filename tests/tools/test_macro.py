@@ -1,6 +1,8 @@
-import pytest
 from datetime import datetime
-from src.tools.macro import MacroTool, MacroSnapshot
+
+import pytest
+
+from src.tools.macro import MacroSnapshot, MacroTool
 
 
 def test_macro_snapshot_model():

@@ -1,6 +1,8 @@
-import pytest
 from datetime import datetime
-from src.tools.news import NewsTool, NewsArticle
+
+import pytest
+
+from src.tools.news import NewsArticle, NewsTool
 
 
 def test_news_article_model():

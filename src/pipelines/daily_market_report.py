@@ -1,8 +1,9 @@
 from datetime import datetime
+
 from langchain_core.language_models import BaseChatModel
-from src.tools.macro import MacroTool, MacroSnapshot
+
+from src.tools.macro import MacroSnapshot, MacroTool
 from src.tools.technical.tool import TechnicalAnalysisTool
-from src.tools.technical.models import TechnicalResult
 
 
 class DailyReportPipeline:

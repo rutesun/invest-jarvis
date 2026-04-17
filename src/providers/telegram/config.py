@@ -48,12 +48,14 @@ class TelegramConfig(BaseModel):
             if isinstance(ch, str):
                 channels.append(ChannelConfig(id=ch))
             elif isinstance(ch, dict):
-                channels.append(ChannelConfig(
-                    id=str(ch["id"]),
-                    include=ch.get("include", []),
-                    exclude=ch.get("exclude", []),
-                    timezone=ch.get("timezone", "UTC"),
-                ))
+                channels.append(
+                    ChannelConfig(
+                        id=str(ch["id"]),
+                        include=ch.get("include", []),
+                        exclude=ch.get("exclude", []),
+                        timezone=ch.get("timezone", "UTC"),
+                    )
+                )
 
         output_dir = Path(tg.get("output_dir", "data"))
         link_proc = tg.get("link_processing", {})

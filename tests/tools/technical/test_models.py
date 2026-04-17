@@ -1,10 +1,10 @@
-import pytest
 from datetime import datetime
+
 from src.tools.technical.models import (
+    ComponentResult,
     IndicatorSnapshot,
     StrategyResult,
     TechnicalResult,
-    ComponentResult,
 )
 
 

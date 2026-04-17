@@ -3,6 +3,7 @@ from pydantic import BaseModel
 
 class KISToken(BaseModel):
     """KIS API access token."""
+
     access_token: str
     token_type: str
     expires_in: int
@@ -10,6 +11,7 @@ class KISToken(BaseModel):
 
 class KISQuote(BaseModel):
     """Korean stock quote."""
+
     ticker: str
     name: str
     price: float
@@ -20,6 +22,7 @@ class KISQuote(BaseModel):
 
 class KISPosition(BaseModel):
     """Portfolio position."""
+
     ticker: str
     name: str
     quantity: int
@@ -31,6 +34,7 @@ class KISPosition(BaseModel):
 
 class KISBalance(BaseModel):
     """Portfolio balance."""
+
     total_assets: float
     cash: float
     stock_value: float

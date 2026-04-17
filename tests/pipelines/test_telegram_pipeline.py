@@ -1,7 +1,9 @@
 # tests/pipelines/test_telegram_pipeline.py
-import pytest
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
 from src.pipelines.telegram_pipeline import TelegramPipeline
 
 
@@ -45,9 +47,7 @@ async def test_fetch_collects_and_saves(
     mock_config, mock_wrapper, mock_collector, mock_storage, mock_state
 ):
     """fetch는 collector를 호출하고 storage에 저장한다."""
-    mock_collector.fetch_channel.return_value = [
-        {"message_id": 1, "content": "test"}
-    ]
+    mock_collector.fetch_channel.return_value = [{"message_id": 1, "content": "test"}]
 
     pipeline = TelegramPipeline(
         config=mock_config,
@@ -61,7 +61,9 @@ async def test_fetch_collects_and_saves(
 
     assert total == 1
     mock_collector.fetch_channel.assert_called_once()
-    mock_storage.save.assert_called_once_with("chan1", "2026-04-13", [{"message_id": 1, "content": "test"}])
+    mock_storage.save.assert_called_once_with(
+        "chan1", "2026-04-13", [{"message_id": 1, "content": "test"}]
+    )
     mock_state.update.assert_called_once_with("chan1", 1)
 
 
@@ -103,7 +105,9 @@ async def test_create_raises_on_empty_channels(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_close_stops_wrapper(mock_config, mock_wrapper, mock_collector, mock_storage, mock_state):
+async def test_close_stops_wrapper(
+    mock_config, mock_wrapper, mock_collector, mock_storage, mock_state
+):
     """close는 wrapper.stop을 호출한다."""
     pipeline = TelegramPipeline(
         config=mock_config,

@@ -1,4 +1,5 @@
 import pandas as pd
+
 from src.tools.technical.models import ComponentResult
 
 
@@ -6,7 +7,10 @@ def analyze_crsi(df: pd.DataFrame) -> ComponentResult:
     """Analyze Cycle RSI signals."""
     if "cRSI" not in df.columns or len(df) < 2:
         return ComponentResult(
-            signals=[], evidence=["cRSI 데이터 없음"], metrics={}, score=0,
+            signals=[],
+            evidence=["cRSI 데이터 없음"],
+            metrics={},
+            score=0,
         )
 
     latest = df.iloc[-1]
@@ -19,7 +23,10 @@ def analyze_crsi(df: pd.DataFrame) -> ComponentResult:
 
     if pd.isna(crsi) or pd.isna(crsi_high) or pd.isna(crsi_low) or pd.isna(prev_crsi):
         return ComponentResult(
-            signals=[], evidence=["cRSI 값 부족"], metrics={}, score=0,
+            signals=[],
+            evidence=["cRSI 값 부족"],
+            metrics={},
+            score=0,
         )
 
     crsi = float(crsi)
@@ -30,7 +37,11 @@ def analyze_crsi(df: pd.DataFrame) -> ComponentResult:
     signals = []
     evidence = []
     score = 0
-    metrics = {"crsi": round(crsi, 2), "crsi_high_band": round(crsi_high, 2), "crsi_low_band": round(crsi_low, 2)}
+    metrics = {
+        "crsi": round(crsi, 2),
+        "crsi_high_band": round(crsi_high, 2),
+        "crsi_low_band": round(crsi_low, 2),
+    }
 
     band_width = crsi_high - crsi_low
 
@@ -61,5 +72,8 @@ def analyze_crsi(df: pd.DataFrame) -> ComponentResult:
         score += 10
 
     return ComponentResult(
-        signals=signals, evidence=evidence, metrics=metrics, score=score,
+        signals=signals,
+        evidence=evidence,
+        metrics=metrics,
+        score=score,
     )

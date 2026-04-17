@@ -1,6 +1,7 @@
-import pandas as pd
 import numpy as np
+import pandas as pd
 from scipy.signal import argrelextrema
+
 from src.tools.technical.models import ComponentResult
 
 
@@ -8,13 +9,19 @@ def analyze_divergence(df: pd.DataFrame) -> ComponentResult:
     """Analyze price/indicator divergence patterns."""
     if df.empty or len(df) < 50:
         return ComponentResult(
-            signals=[], evidence=["데이터 부족 (50일 이상 필요)"], metrics={}, score=0,
+            signals=[],
+            evidence=["데이터 부족 (50일 이상 필요)"],
+            metrics={},
+            score=0,
         )
 
     # Check required columns
     if "Close" not in df.columns or "RSI" not in df.columns:
         return ComponentResult(
-            signals=[], evidence=["필수 지표 없음"], metrics={}, score=0,
+            signals=[],
+            evidence=["필수 지표 없음"],
+            metrics={},
+            score=0,
         )
 
     signals = []
@@ -71,13 +78,17 @@ def analyze_divergence(df: pd.DataFrame) -> ComponentResult:
             evidence.append(crsi_div["evidence"])
             score += crsi_div["score"]
             # Stronger signal if both RSI and cRSI agree
-            if (bearish_div and "bearish" in crsi_div["signal"].lower()) or \
-               (bullish_div and "bullish" in crsi_div["signal"].lower()):
+            if (bearish_div and "bearish" in crsi_div["signal"].lower()) or (
+                bullish_div and "bullish" in crsi_div["signal"].lower()
+            ):
                 signals.append("RSI + cRSI 다이버전스 일치 (강력)")
                 score = int(score * 1.5)
 
     return ComponentResult(
-        signals=signals, evidence=evidence, metrics=metrics, score=score,
+        signals=signals,
+        evidence=evidence,
+        metrics=metrics,
+        score=score,
     )
 
 
@@ -173,7 +184,10 @@ def _detect_macd_divergence(df, price_highs_idx, price_lows_idx, price_values):
                     macd_peaks.append(nearby_macd[0])
 
             if len(macd_peaks) >= 2:
-                price1, price2 = price_values[recent_price_peaks[0]], price_values[recent_price_peaks[1]]
+                price1, price2 = (
+                    price_values[recent_price_peaks[0]],
+                    price_values[recent_price_peaks[1]],
+                )
                 macd1, macd2 = macd_values[macd_peaks[0]], macd_values[macd_peaks[1]]
 
                 if price2 > price1 and macd2 < macd1:
@@ -194,7 +208,10 @@ def _detect_macd_divergence(df, price_highs_idx, price_lows_idx, price_values):
                     macd_lows.append(nearby_macd[0])
 
             if len(macd_lows) >= 2:
-                price1, price2 = price_values[recent_price_lows[0]], price_values[recent_price_lows[1]]
+                price1, price2 = (
+                    price_values[recent_price_lows[0]],
+                    price_values[recent_price_lows[1]],
+                )
                 macd1, macd2 = macd_values[macd_lows[0]], macd_values[macd_lows[1]]
 
                 if price2 < price1 and macd2 > macd1:
@@ -227,7 +244,10 @@ def _detect_crsi_divergence(df, price_highs_idx, price_lows_idx, price_values):
                     crsi_peaks.append(nearby_crsi[0])
 
             if len(crsi_peaks) >= 2:
-                price1, price2 = price_values[recent_price_peaks[0]], price_values[recent_price_peaks[1]]
+                price1, price2 = (
+                    price_values[recent_price_peaks[0]],
+                    price_values[recent_price_peaks[1]],
+                )
                 crsi1, crsi2 = crsi_values[crsi_peaks[0]], crsi_values[crsi_peaks[1]]
 
                 if price2 > price1 and crsi2 < crsi1:
@@ -248,7 +268,10 @@ def _detect_crsi_divergence(df, price_highs_idx, price_lows_idx, price_values):
                     crsi_lows.append(nearby_crsi[0])
 
             if len(crsi_lows) >= 2:
-                price1, price2 = price_values[recent_price_lows[0]], price_values[recent_price_lows[1]]
+                price1, price2 = (
+                    price_values[recent_price_lows[0]],
+                    price_values[recent_price_lows[1]],
+                )
                 crsi1, crsi2 = crsi_values[crsi_lows[0]], crsi_values[crsi_lows[1]]
 
                 if price2 < price1 and crsi2 > crsi1:

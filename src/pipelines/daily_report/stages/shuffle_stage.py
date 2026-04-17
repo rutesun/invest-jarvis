@@ -1,21 +1,25 @@
 """Shuffle stage: 카테고리 그룹핑 + 테마 정규화."""
+
 import asyncio
 import json
-from typing import List, Dict
 from pathlib import Path
+
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage, SystemMessage
+
 from src.llm.provider import LLMProvider
+
 
 load_dotenv()
 from langsmith import traceable
+
 from src.pipelines.daily_report.models import MappedIssue, ShuffleResult, ThemeMapping
 from src.pipelines.daily_report.prompts import SHUFFLE_SYSTEM_PROMPT, SHUFFLE_USER_PROMPT
 
 
 @traceable(name="Shuffle Stage")
 def shuffle_stage(
-    issues: List[MappedIssue],
+    issues: list[MappedIssue],
     date: str = None,
 ) -> ShuffleResult:
     """
@@ -32,23 +36,21 @@ def shuffle_stage(
         return ShuffleResult(category_groups={})
 
     # 1단계: 결정론적 카테고리 그룹핑 (LLM 불필요)
-    category_buckets: Dict[str, List[MappedIssue]] = {}
+    category_buckets: dict[str, list[MappedIssue]] = {}
     for issue in issues:
         category_buckets.setdefault(issue.category, []).append(issue)
 
     # 2단계: 카테고리 내 테마 정규화 (LLM, 병렬)
     loop = asyncio.get_event_loop()
-    category_groups = loop.run_until_complete(
-        _normalize_themes_by_category(category_buckets, date)
-    )
+    category_groups = loop.run_until_complete(_normalize_themes_by_category(category_buckets, date))
 
     return ShuffleResult(category_groups=category_groups)
 
 
 async def _normalize_themes_by_category(
-    category_buckets: Dict[str, List[MappedIssue]],
+    category_buckets: dict[str, list[MappedIssue]],
     date: str,
-) -> Dict[str, Dict[str, List[MappedIssue]]]:
+) -> dict[str, dict[str, list[MappedIssue]]]:
     """카테고리별 병렬 테마 정규화."""
     tasks = [
         _normalize_themes_for_category(category, issues, date)
@@ -56,17 +58,14 @@ async def _normalize_themes_by_category(
     ]
     results = await asyncio.gather(*tasks)
 
-    return {
-        category: theme_map
-        for category, theme_map in zip(category_buckets.keys(), results)
-    }
+    return {category: theme_map for category, theme_map in zip(category_buckets.keys(), results)}
 
 
 async def _normalize_themes_for_category(
     category: str,
-    issues: List[MappedIssue],
+    issues: list[MappedIssue],
     date: str,
-) -> Dict[str, List[MappedIssue]]:
+) -> dict[str, list[MappedIssue]]:
     """단일 카테고리 내 테마 정규화."""
     # 카테고리 내 모든 테마 수집
     all_themes = []
@@ -81,7 +80,7 @@ async def _normalize_themes_for_category(
         theme_mapping = await _normalize_themes(unique_themes, category, date)
 
     # 이슈를 정규화된 테마로 그룹핑
-    theme_groups: Dict[str, List[MappedIssue]] = {}
+    theme_groups: dict[str, list[MappedIssue]] = {}
 
     for issue in issues:
         # 이슈의 첫 번째 테마로 대표 테마 결정
@@ -103,10 +102,10 @@ async def _normalize_themes_for_category(
 
 
 async def _normalize_themes(
-    themes: List[str],
+    themes: list[str],
     category: str,
     date: str,
-) -> Dict[str, List[str]]:
+) -> dict[str, list[str]]:
     """LLM으로 테마 정규화."""
     llm = LLMProvider.create(
         provider="anthropic",
@@ -154,7 +153,7 @@ if __name__ == "__main__":
 
     # Map stage 출력 로드
     map_file = f"tests/pipelines/daily_report/fixtures/stage_outputs/map_{date}.json"
-    with open(map_file, "r", encoding="utf-8") as f:
+    with open(map_file, encoding="utf-8") as f:
         issues_data = json.load(f)
     issues = [MappedIssue(**issue) for issue in issues_data]
 
@@ -167,9 +166,7 @@ if __name__ == "__main__":
     total_categories = len(result.category_groups)
     total_themes = sum(len(themes) for themes in result.category_groups.values())
     total_issues = sum(
-        len(issues)
-        for themes in result.category_groups.values()
-        for issues in themes.values()
+        len(issues) for themes in result.category_groups.values() for issues in themes.values()
     )
 
     print(f"✓ {total_categories}개 카테고리")
@@ -182,9 +179,7 @@ if __name__ == "__main__":
             print(f"  - {theme}: {len(issues)}개 이슈")
 
     # 출력 저장
-    output_file = (
-        f"tests/pipelines/daily_report/fixtures/stage_outputs/shuffle_{date}.json"
-    )
+    output_file = f"tests/pipelines/daily_report/fixtures/stage_outputs/shuffle_{date}.json"
     Path(output_file).parent.mkdir(parents=True, exist_ok=True)
 
     output_data = {

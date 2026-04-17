@@ -1,8 +1,9 @@
 # tests/providers/test_telegram_storage.py
 import csv
 import json
+
 import pytest
-from pathlib import Path
+
 from src.providers.telegram.storage import TelegramStorage
 
 
@@ -56,7 +57,15 @@ def test_csv_columns(storage, tmp_path):
     with open(csv_path, encoding="utf-8") as f:
         reader = csv.DictReader(f)
         row = next(reader)
-    expected_cols = {"message_id", "timestamp", "channel_name", "author", "content", "media_info", "forward_from"}
+    expected_cols = {
+        "message_id",
+        "timestamp",
+        "channel_name",
+        "author",
+        "content",
+        "media_info",
+        "forward_from",
+    }
     assert set(row.keys()) == expected_cols
 
 

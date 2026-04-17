@@ -1,5 +1,7 @@
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
 from src.llm.analyzer import (
     analyze_news,
     generate_fundamental_summary,

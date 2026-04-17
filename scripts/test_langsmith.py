@@ -1,14 +1,17 @@
 #!/usr/bin/env python
 """LangSmith 추적 테스트."""
+
 import os
 import sys
 from pathlib import Path
+
 
 # 프로젝트 루트를 sys.path에 추가
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from dotenv import load_dotenv
+
 
 # .env 로드
 load_dotenv()
@@ -21,8 +24,10 @@ print(f"  LANGSMITH_ENDPOINT: {os.getenv('LANGSMITH_ENDPOINT', 'default')}")
 
 # 간단한 LLM 호출 테스트
 print("\nLLM 호출 테스트...")
-from src.llm.provider import LLMProvider
 from langchain_core.messages import HumanMessage
+
+from src.llm.provider import LLMProvider
+
 
 llm = LLMProvider.create(provider="openai", model="gpt-4o", temperature=0.3)
 response = llm.invoke([HumanMessage(content="Hello, test")])

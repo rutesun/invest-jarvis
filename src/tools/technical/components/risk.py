@@ -1,4 +1,5 @@
 import pandas as pd
+
 from src.tools.technical.models import ComponentResult
 
 
@@ -6,7 +7,10 @@ def analyze_risk(df: pd.DataFrame) -> ComponentResult:
     """Analyze risk levels using support/resistance confluence."""
     if df.empty or len(df) < 20:
         return ComponentResult(
-            signals=[], evidence=["데이터 부족"], metrics={}, score=0,
+            signals=[],
+            evidence=["데이터 부족"],
+            metrics={},
+            score=0,
         )
 
     latest = df.iloc[-1]
@@ -14,7 +18,10 @@ def analyze_risk(df: pd.DataFrame) -> ComponentResult:
 
     if close == 0:
         return ComponentResult(
-            signals=[], evidence=["가격 데이터 없음"], metrics={}, score=0,
+            signals=[],
+            evidence=["가격 데이터 없음"],
+            metrics={},
+            score=0,
         )
 
     signals = []
@@ -126,14 +133,18 @@ def analyze_risk(df: pd.DataFrame) -> ComponentResult:
         support_distance = ((close - nearest_support["level"]) / close) * 100
         metrics["nearest_support"] = round(nearest_support["level"], 2)
         metrics["support_distance_pct"] = round(support_distance, 2)
-        evidence.append(f"최근 지지선: ${nearest_support['level']:.2f} ({nearest_support['type']}) -{support_distance:.1f}%")
+        evidence.append(
+            f"최근 지지선: ${nearest_support['level']:.2f} ({nearest_support['type']}) -{support_distance:.1f}%"
+        )
 
     if resistance_levels:
         nearest_resistance = min(resistance_levels, key=lambda x: x["level"])
         resistance_distance = ((nearest_resistance["level"] - close) / close) * 100
         metrics["nearest_resistance"] = round(nearest_resistance["level"], 2)
         metrics["resistance_distance_pct"] = round(resistance_distance, 2)
-        evidence.append(f"최근 저항선: ${nearest_resistance['level']:.2f} ({nearest_resistance['type']}) +{resistance_distance:.1f}%")
+        evidence.append(
+            f"최근 저항선: ${nearest_resistance['level']:.2f} ({nearest_resistance['type']}) +{resistance_distance:.1f}%"
+        )
 
     # Risk penalties
     if "SMA_50" in df.columns and not pd.isna(latest.get("SMA_50")):
@@ -154,7 +165,9 @@ def analyze_risk(df: pd.DataFrame) -> ComponentResult:
         stop_loss = close - (2 * atr)
         metrics["stop_loss"] = round(stop_loss, 2)
         metrics["stop_loss_distance_pct"] = round(((close - stop_loss) / close) * 100, 2)
-        evidence.append(f"손절가: ${stop_loss:.2f} (2×ATR, -{metrics['stop_loss_distance_pct']:.1f}%)")
+        evidence.append(
+            f"손절가: ${stop_loss:.2f} (2×ATR, -{metrics['stop_loss_distance_pct']:.1f}%)"
+        )
 
     # Overall risk assessment
     if score >= 15:
@@ -169,5 +182,8 @@ def analyze_risk(df: pd.DataFrame) -> ComponentResult:
         signals.insert(0, "중위험")
 
     return ComponentResult(
-        signals=signals, evidence=evidence, metrics=metrics, score=score,
+        signals=signals,
+        evidence=evidence,
+        metrics=metrics,
+        score=score,
     )

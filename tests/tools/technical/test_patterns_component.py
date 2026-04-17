@@ -1,5 +1,5 @@
 import pandas as pd
-import pytest
+
 from src.tools.technical.components.patterns import analyze_patterns
 
 
@@ -25,12 +25,14 @@ def test_analyze_patterns_breakout_rolling_high():
     """Test breakout detection using rolling high."""
     # Create breakout scenario
     close_values = [100] * 40 + [101, 102, 103, 104, 105, 110, 115, 120, 125, 130]
-    df = pd.DataFrame({
-        "Close": close_values,
-        "High": [c + 2 for c in close_values],
-        "Low": [c - 2 for c in close_values],
-        "Volume": [1000000] * 50,
-    })
+    df = pd.DataFrame(
+        {
+            "Close": close_values,
+            "High": [c + 2 for c in close_values],
+            "Low": [c - 2 for c in close_values],
+            "Volume": [1000000] * 50,
+        }
+    )
 
     result = analyze_patterns(df)
 
@@ -40,13 +42,15 @@ def test_analyze_patterns_breakout_rolling_high():
 
 def test_analyze_patterns_breakout_swing_high():
     """Test breakout detection using swing high."""
-    df = pd.DataFrame({
-        "Close": [100] * 20 + [105] * 5,
-        "High": [102] * 20 + [107] * 5,
-        "Low": [98] * 20 + [103] * 5,
-        "Volume": [1000000] * 25,
-        "Swing_High": [None] * 15 + [102.0] + [None] * 9,  # Swing high at index 15
-    })
+    df = pd.DataFrame(
+        {
+            "Close": [100] * 20 + [105] * 5,
+            "High": [102] * 20 + [107] * 5,
+            "Low": [98] * 20 + [103] * 5,
+            "Volume": [1000000] * 25,
+            "Swing_High": [None] * 15 + [102.0] + [None] * 9,  # Swing high at index 15
+        }
+    )
 
     result = analyze_patterns(df)
 
@@ -56,13 +60,15 @@ def test_analyze_patterns_breakout_swing_high():
 
 def test_analyze_patterns_hammer():
     """Test Hammer candlestick pattern detection."""
-    df = pd.DataFrame({
-        "Open": [100] * 5 + [100],
-        "High": [102] * 5 + [100.2],  # Small upper shadow
-        "Low": [99] * 5 + [90],  # Long lower shadow
-        "Close": [101] * 5 + [99.5],
-        "Volume": [1000000] * 6,
-    })
+    df = pd.DataFrame(
+        {
+            "Open": [100] * 5 + [100],
+            "High": [102] * 5 + [100.2],  # Small upper shadow
+            "Low": [99] * 5 + [90],  # Long lower shadow
+            "Close": [101] * 5 + [99.5],
+            "Volume": [1000000] * 6,
+        }
+    )
 
     result = analyze_patterns(df)
 
@@ -72,13 +78,15 @@ def test_analyze_patterns_hammer():
 
 def test_analyze_patterns_bullish_engulfing():
     """Test Bullish Engulfing pattern detection."""
-    df = pd.DataFrame({
-        "Open": [102, 100, 97],  # Last open below prev close
-        "High": [103, 101, 105],
-        "Low": [99, 97, 96],
-        "Close": [100, 98, 104],  # Last candle engulfs previous
-        "Volume": [1000000] * 3,
-    })
+    df = pd.DataFrame(
+        {
+            "Open": [102, 100, 97],  # Last open below prev close
+            "High": [103, 101, 105],
+            "Low": [99, 97, 96],
+            "Close": [100, 98, 104],  # Last candle engulfs previous
+            "Volume": [1000000] * 3,
+        }
+    )
 
     result = analyze_patterns(df)
 
@@ -99,14 +107,16 @@ def test_analyze_patterns_no_data():
 def test_analyze_patterns_no_patterns():
     """Test when no patterns are detected."""
     # Stable, no patterns
-    df = pd.DataFrame({
-        "Open": [100] * 50,
-        "High": [101] * 50,
-        "Low": [99] * 50,
-        "Close": [100] * 50,
-        "Volume": [1000000] * 50,
-        "ATR": [1.0] * 50,  # Stable ATR (no VCP)
-    })
+    df = pd.DataFrame(
+        {
+            "Open": [100] * 50,
+            "High": [101] * 50,
+            "Low": [99] * 50,
+            "Close": [100] * 50,
+            "Volume": [1000000] * 50,
+            "ATR": [1.0] * 50,  # Stable ATR (no VCP)
+        }
+    )
 
     result = analyze_patterns(df)
 

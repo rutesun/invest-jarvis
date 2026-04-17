@@ -1,11 +1,14 @@
 import json
 import logging
 import re
+
 from ddgs import DDGS
-from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import tool
+from langchain_openai import ChatOpenAI
+
 from src.providers.ticker_models import TickerNotFoundError
+
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +33,7 @@ After finding the ticker, respond with ONLY this JSON (no other text):
 
 
 def _has_korean(text: str) -> bool:
-    return bool(re.search(r'[\uAC00-\uD7A3]', text))
+    return bool(re.search(r"[\uAC00-\uD7A3]", text))
 
 
 @tool
@@ -96,9 +99,13 @@ class LLMTickerAgent:
             for tool_call in response.tool_calls:
                 logger.debug("Tool call: %s(%s)", tool_call["name"], tool_call["args"])
                 tool_result = duckduckgo_search.invoke({"query": tool_call["args"]["query"]})
-                messages.append(ToolMessage(
-                    content=tool_result,
-                    tool_call_id=tool_call["id"],
-                ))
+                messages.append(
+                    ToolMessage(
+                        content=tool_result,
+                        tool_call_id=tool_call["id"],
+                    )
+                )
 
-        raise TickerNotFoundError(f"Could not resolve after {self.MAX_ITERATIONS} iterations: {query}")
+        raise TickerNotFoundError(
+            f"Could not resolve after {self.MAX_ITERATIONS} iterations: {query}"
+        )

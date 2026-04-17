@@ -1,15 +1,17 @@
+from datetime import UTC, datetime
+
 import pandas as pd
-from datetime import datetime, timezone
-from src.tools.technical.models import TechnicalResult
-from src.tools.technical.indicators import IndicatorCalculator
-from src.tools.technical.components.minervini import analyze_minervini
-from src.tools.technical.components.velocity import analyze_velocity
+
 from src.tools.technical.components.crsi import analyze_crsi
-from src.tools.technical.components.volume import analyze_volume
-from src.tools.technical.components.patterns import analyze_patterns
-from src.tools.technical.components.supertrend import analyze_supertrend
 from src.tools.technical.components.divergence import analyze_divergence
+from src.tools.technical.components.minervini import analyze_minervini
+from src.tools.technical.components.patterns import analyze_patterns
 from src.tools.technical.components.risk import analyze_risk
+from src.tools.technical.components.supertrend import analyze_supertrend
+from src.tools.technical.components.velocity import analyze_velocity
+from src.tools.technical.components.volume import analyze_volume
+from src.tools.technical.indicators import IndicatorCalculator
+from src.tools.technical.models import TechnicalResult
 
 
 class TechnicalScorer:
@@ -90,7 +92,7 @@ class TechnicalScorer:
 
         return TechnicalResult(
             ticker=ticker,
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             snapshot=snapshot,
             components=components,
             total_score=total_score,

@@ -4,6 +4,7 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
+
 CSV_COLUMNS = [
     "message_id",
     "timestamp",

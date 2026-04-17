@@ -1,23 +1,25 @@
 """Map stage 평가 메트릭."""
 
 from collections import Counter
-from typing import List, Dict, Any
+from typing import Any
+
 from pydantic import BaseModel, Field
+
 from src.pipelines.daily_report.models import MappedIssue
 
 
 class ThemeMatchResult(BaseModel):
     """LLM 테마 매칭 결과."""
 
-    matches: List[Dict[str, Any]] = Field(
+    matches: list[dict[str, Any]] = Field(
         description="각 예상 테마별 매칭 결과 [{expected, matched, reason}]"
     )
     score: float = Field(description="전체 매칭 점수 (0.0 ~ 1.0)", ge=0.0, le=1.0)
 
 
 def split_accuracy(
-    issues: List[MappedIssue],
-    expected: Dict[str, Any],
+    issues: list[MappedIssue],
+    expected: dict[str, Any],
 ) -> float:
     """이슈 분리 정확도: 예상 범위 내 개수인지."""
     actual_count = len(issues)
@@ -27,8 +29,8 @@ def split_accuracy(
 
 
 def number_preservation(
-    issues: List[MappedIssue],
-    expected: Dict[str, Any],
+    issues: list[MappedIssue],
+    expected: dict[str, Any],
 ) -> float:
     """숫자 보존율: 원문 숫자가 출력에 포함되었는지.
 
@@ -53,8 +55,8 @@ def number_preservation(
 
 
 def company_preservation(
-    issues: List[MappedIssue],
-    expected: Dict[str, Any],
+    issues: list[MappedIssue],
+    expected: dict[str, Any],
 ) -> float:
     """기업명 보존율: 원문 기업명이 출력에 포함되었는지."""
     expected_companies = expected.get("must_preserve_companies", [])
@@ -67,8 +69,8 @@ def company_preservation(
 
 
 def theme_relevance(
-    issues: List[MappedIssue],
-    expected: Dict[str, Any],
+    issues: list[MappedIssue],
+    expected: dict[str, Any],
 ) -> float:
     """테마 적절성: 예상 테마와 실제 테마의 의미적 유사도.
 
@@ -92,16 +94,17 @@ def theme_relevance(
 
 
 def theme_relevance_llm(
-    issues: List[MappedIssue],
-    expected: Dict[str, Any],
+    issues: list[MappedIssue],
+    expected: dict[str, Any],
     llm=None,
-) -> tuple[float, List[Dict]]:
+) -> tuple[float, list[dict]]:
     """LLM-as-Judge로 테마 의미적 유사도 평가.
 
     Returns:
         (score, match_details) - 점수와 상세 매칭 결과
     """
     from langchain_core.messages import HumanMessage, SystemMessage
+
     from src.pipelines.daily_report.prompts import THEME_JUDGE_SYSTEM_PROMPT
 
     expected_themes = expected.get("expected_themes", [])
@@ -110,11 +113,14 @@ def theme_relevance_llm(
 
     actual_themes = [theme for issue in issues for theme in issue.themes]
     if not actual_themes:
-        return 0.0, [{"expected": t, "matched": False, "reason": "출력 테마 없음"} for t in expected_themes]
+        return 0.0, [
+            {"expected": t, "matched": False, "reason": "출력 테마 없음"} for t in expected_themes
+        ]
 
     # LLM 생성 (없으면 기본값)
     if llm is None:
         from src.llm.provider import LLMProvider
+
         llm = LLMProvider.create(
             provider="anthropic",
             model="us.anthropic.claude-haiku-4-5-20251001-v1:0",
@@ -141,8 +147,8 @@ def theme_relevance_llm(
 
 
 def keyword_coverage(
-    issues: List[MappedIssue],
-    expected: Dict[str, Any],
+    issues: list[MappedIssue],
+    expected: dict[str, Any],
 ) -> float:
     """키워드 커버리지: 예상 키워드 중 출력에 포함된 비율."""
     expected_keywords = expected.get("expected_keywords", [])
@@ -157,8 +163,8 @@ def keyword_coverage(
 
 
 def must_split_check(
-    issues: List[MappedIssue],
-    expected: Dict[str, Any],
+    issues: list[MappedIssue],
+    expected: dict[str, Any],
 ) -> float:
     """분리 필요 여부 충족 검사.
 
@@ -173,8 +179,8 @@ def must_split_check(
 
 
 def category_accuracy(
-    issues: List[MappedIssue],
-    expected: Dict[str, Any],
+    issues: list[MappedIssue],
+    expected: dict[str, Any],
 ) -> float:
     """카테고리 정확도: 예상 카테고리와 실제 카테고리 일치 여부.
 
@@ -202,13 +208,11 @@ def category_accuracy(
 
         # intersection: 각 카테고리별 min
         intersection = sum(
-            min(expected_counter.get(cat, 0), actual_counter.get(cat, 0))
-            for cat in all_categories
+            min(expected_counter.get(cat, 0), actual_counter.get(cat, 0)) for cat in all_categories
         )
         # union: 각 카테고리별 max
         union = sum(
-            max(expected_counter.get(cat, 0), actual_counter.get(cat, 0))
-            for cat in all_categories
+            max(expected_counter.get(cat, 0), actual_counter.get(cat, 0)) for cat in all_categories
         )
         return intersection / union if union > 0 else 1.0
 
@@ -217,7 +221,7 @@ def category_accuracy(
     return matched / len(actual_categories)
 
 
-def _issues_to_text(issues: List[MappedIssue]) -> str:
+def _issues_to_text(issues: list[MappedIssue]) -> str:
     """이슈 리스트를 단일 텍스트로 변환."""
     parts = []
     for issue in issues:
@@ -242,11 +246,11 @@ RULE_BASED_METRICS = {
 
 
 def evaluate_all(
-    issues: List[MappedIssue],
-    expected: Dict[str, Any],
+    issues: list[MappedIssue],
+    expected: dict[str, Any],
     use_llm_judge: bool = False,
     llm=None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """모든 메트릭 계산.
 
     Args:

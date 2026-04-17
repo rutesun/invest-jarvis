@@ -1,7 +1,8 @@
+import numpy as np
 import pandas as pd
 import pandas_ta as ta
-import numpy as np
 from scipy.signal import argrelextrema
+
 from src.tools.technical.models import IndicatorSnapshot
 
 
@@ -96,7 +97,9 @@ class IndicatorCalculator:
             high_values = df["High"].values
             swing_high_idx = argrelextrema(high_values, np.greater, order=5)[0]
             if len(swing_high_idx) > 0:
-                df.loc[df.index[swing_high_idx], "Swing_High"] = df.iloc[swing_high_idx]["High"].values
+                df.loc[df.index[swing_high_idx], "Swing_High"] = df.iloc[swing_high_idx][
+                    "High"
+                ].values
 
             # Find local minima (swing lows)
             low_values = df["Low"].values
@@ -153,7 +156,9 @@ class IndicatorCalculator:
             bb_upper=safe_get("BBU_20_2.0"),
             bb_lower=safe_get("BBL_20_2.0"),
             adx=safe_get("ADX_14"),
-            supertrend_direction=int(safe_get("SUPERTd_10_3.0") or 0) if safe_get("SUPERTd_10_3.0") else None,
+            supertrend_direction=int(safe_get("SUPERTd_10_3.0") or 0)
+            if safe_get("SUPERTd_10_3.0")
+            else None,
             disparity_20=safe_get("Disparity_20"),
             disparity_50=safe_get("Disparity_50"),
             disparity_120=safe_get("Disparity_120"),
@@ -171,8 +176,12 @@ class IndicatorCalculator:
             vol_sma_120=safe_get("Vol_SMA_120"),
             swing_high=safe_get("Swing_High"),
             swing_low=safe_get("Swing_Low"),
-            is_gap_up=bool(latest.get("Is_Gap_Up")) if not pd.isna(latest.get("Is_Gap_Up")) else None,
-            is_gap_down=bool(latest.get("Is_Gap_Down")) if not pd.isna(latest.get("Is_Gap_Down")) else None,
+            is_gap_up=bool(latest.get("Is_Gap_Up"))
+            if not pd.isna(latest.get("Is_Gap_Up"))
+            else None,
+            is_gap_down=bool(latest.get("Is_Gap_Down"))
+            if not pd.isna(latest.get("Is_Gap_Down"))
+            else None,
             macd_fast=safe_get("MACD_5_35_5"),
             macd_fast_signal=safe_get("MACDs_5_35_5"),
             macd_fast_histogram=safe_get("MACDh_5_35_5"),

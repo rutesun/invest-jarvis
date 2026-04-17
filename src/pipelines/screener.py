@@ -2,10 +2,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from src.tools.screener.universe import UniverseBuilder
+from src.tools.news import NewsTool
 from src.tools.screener.evidence import EvidenceCollector
 from src.tools.screener.models import ScreenerEvidence
-from src.tools.news import NewsTool
+from src.tools.screener.universe import UniverseBuilder
 
 
 class ScreenerPipeline:
@@ -46,6 +46,7 @@ class ScreenerPipeline:
         kr_count = sum(1 for s in universe if s.market in ("KOSPI", "KOSDAQ"))
         us_count = sum(1 for s in universe if s.market not in ("KOSPI", "KOSDAQ"))
         import logging
+
         logging.info(f"Universe: total={len(universe)}, KR={kr_count}, US={us_count}")
 
         # 3. Evidence + Score
@@ -97,10 +98,10 @@ class ScreenerPipeline:
 
     def _aggregate_themes(self, scored: list[ScreenerEvidence]) -> list[dict]:
         """Aggregate themes from scored stocks.
-        
+
         Args:
             scored: List of ScreenerEvidence objects sorted by momentum
-            
+
         Returns:
             List of theme dictionaries sorted by average momentum
         """
@@ -130,10 +131,10 @@ class ScreenerPipeline:
 
     async def _fetch_news_for_top(self, top_stocks: list[ScreenerEvidence]) -> dict[str, list]:
         """Fetch news for top stocks.
-        
+
         Args:
             top_stocks: List of top ScreenerEvidence objects
-            
+
         Returns:
             Dictionary mapping stock names to news articles
         """
@@ -146,8 +147,7 @@ class ScreenerPipeline:
                 result = await self.news_tool.execute(yf_ticker, limit=3)
                 if result.success and result.data:
                     news[item.stock.name] = [
-                        {"title": a.title, "published": a.published}
-                        for a in result.data
+                        {"title": a.title, "published": a.published} for a in result.data
                     ]
             except Exception:
                 pass
@@ -155,10 +155,10 @@ class ScreenerPipeline:
 
     def format_output(self, result: dict[str, Any]) -> str:
         """Format screener result as markdown.
-        
+
         Args:
             result: Dictionary from run() containing leaders, themes, news
-            
+
         Returns:
             Markdown formatted string
         """
@@ -187,7 +187,9 @@ class ScreenerPipeline:
             for i, t in enumerate(themes, 1):
                 stocks_str = ", ".join(t["top_stocks"])
                 rate = t.get("change_rate") or 0
-                lines.append(f"| {i} | {t['name']} | {rate:+.1f}% | {t['stock_count']} | {stocks_str} |")
+                lines.append(
+                    f"| {i} | {t['name']} | {rate:+.1f}% | {t['stock_count']} | {stocks_str} |"
+                )
             lines.append("")
 
         # Leaders - separate KR and US
@@ -197,8 +199,12 @@ class ScreenerPipeline:
         # Korean stocks
         if kr_leaders:
             lines.append("## 주도주 TOP 50 (한국)")
-            lines.append("| # | 종목 | 시장 | 모멘텀 | 당일외인 | 당일기관 | 당일프로 | 10일외인 | 10일기관 | 10일프로 | 거래량 | 소스 |")
-            lines.append("|---|------|------|--------|----------|----------|----------|----------|----------|----------|--------|------|")
+            lines.append(
+                "| # | 종목 | 시장 | 모멘텀 | 당일외인 | 당일기관 | 당일프로 | 10일외인 | 10일기관 | 10일프로 | 거래량 | 소스 |"
+            )
+            lines.append(
+                "|---|------|------|--------|----------|----------|----------|----------|----------|----------|--------|------|"
+            )
             for i, item in enumerate(kr_leaders, 1):
                 s = item.stock
                 sources_str = ",".join(s.sources)
@@ -208,7 +214,9 @@ class ScreenerPipeline:
                 daily_p = self._format_net(item.daily_program)
                 # 10-day aggregated: "7/10 (+15.3M)"
                 ten_f = f"{item.foreign_days_count}/10 ({self._format_net(item.foreign_net)})"
-                ten_i = f"{item.institution_days_count}/10 ({self._format_net(item.institution_net)})"
+                ten_i = (
+                    f"{item.institution_days_count}/10 ({self._format_net(item.institution_net)})"
+                )
                 ten_p = f"{item.program_days_count}/10 ({self._format_net(item.program_net)})"
                 lines.append(
                     f"| {i} | {s.name} | {s.market} | "
@@ -245,10 +253,10 @@ class ScreenerPipeline:
 
     def save_report(self, result: dict[str, Any]) -> Path:
         """Save report to markdown file.
-        
+
         Args:
             result: Dictionary from run() containing screener results
-            
+
         Returns:
             Path to saved report file
         """

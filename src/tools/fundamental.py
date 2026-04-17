@@ -1,14 +1,17 @@
 # src/tools/fundamental.py
 import asyncio
 from functools import partial
-from pydantic import BaseModel
+
 import yfinance as yf
+from pydantic import BaseModel
+
 from src.core.interfaces import BaseTool
 from src.core.models import ToolResult
 
 
 class QuarterlyData(BaseModel):
     """Quarterly financial data with growth rates."""
+
     period: str
     revenue: float | None = None
     earnings: float | None = None
@@ -20,6 +23,7 @@ class QuarterlyData(BaseModel):
 
 class FundamentalSnapshot(BaseModel):
     """Comprehensive fundamental data snapshot."""
+
     # Basic info
     market_cap: float | None = None
     sector: str | None = None
@@ -77,9 +81,7 @@ class FundamentalTool(BaseTool):
     async def execute(self, ticker: str, **kwargs) -> ToolResult:
         try:
             loop = asyncio.get_running_loop()
-            snapshot = await loop.run_in_executor(
-                None, partial(self._fetch_fundamentals, ticker)
-            )
+            snapshot = await loop.run_in_executor(None, partial(self._fetch_fundamentals, ticker))
             return ToolResult(success=True, data=snapshot)
         except Exception as e:
             return ToolResult(success=False, data=None, error=str(e))
@@ -128,11 +130,13 @@ class FundamentalTool(BaseTool):
                         except (ValueError, TypeError):
                             pass
 
-                    quarters_raw.append({
-                        "period": period,
-                        "revenue": rev_value,
-                        "earnings": earn_value,
-                    })
+                    quarters_raw.append(
+                        {
+                            "period": period,
+                            "revenue": rev_value,
+                            "earnings": earn_value,
+                        }
+                    )
 
                 # Calculate growth rates for most recent 4 quarters
                 quarterly_data_list = []
@@ -144,9 +148,17 @@ class FundamentalTool(BaseTool):
                     earnings_yoy = None
                     if len(quarters_raw) >= i + 5:  # Need i+5 quarters for YoY
                         q_yoy = quarters_raw[i + 4]
-                        if q["revenue"] is not None and q_yoy["revenue"] is not None and q_yoy["revenue"] > 0:
+                        if (
+                            q["revenue"] is not None
+                            and q_yoy["revenue"] is not None
+                            and q_yoy["revenue"] > 0
+                        ):
                             revenue_yoy = (q["revenue"] - q_yoy["revenue"]) / q_yoy["revenue"]
-                        if q["earnings"] is not None and q_yoy["earnings"] is not None and q_yoy["earnings"] > 0:
+                        if (
+                            q["earnings"] is not None
+                            and q_yoy["earnings"] is not None
+                            and q_yoy["earnings"] > 0
+                        ):
                             earnings_yoy = (q["earnings"] - q_yoy["earnings"]) / q_yoy["earnings"]
 
                     # QoQ calculation (compare with 1 quarter ago)
@@ -154,22 +166,33 @@ class FundamentalTool(BaseTool):
                     earnings_qoq = None
                     if len(quarters_raw) >= i + 2:  # Need i+2 quarters for QoQ
                         q_qoq = quarters_raw[i + 1]
-                        if q["revenue"] is not None and q_qoq["revenue"] is not None and q_qoq["revenue"] > 0:
+                        if (
+                            q["revenue"] is not None
+                            and q_qoq["revenue"] is not None
+                            and q_qoq["revenue"] > 0
+                        ):
                             revenue_qoq = (q["revenue"] - q_qoq["revenue"]) / q_qoq["revenue"]
-                        if q["earnings"] is not None and q_qoq["earnings"] is not None and q_qoq["earnings"] > 0:
+                        if (
+                            q["earnings"] is not None
+                            and q_qoq["earnings"] is not None
+                            and q_qoq["earnings"] > 0
+                        ):
                             earnings_qoq = (q["earnings"] - q_qoq["earnings"]) / q_qoq["earnings"]
 
-                    quarterly_data_list.append(QuarterlyData(
-                        period=q["period"],
-                        revenue=q["revenue"],
-                        earnings=q["earnings"],
-                        revenue_yoy=revenue_yoy,
-                        revenue_qoq=revenue_qoq,
-                        earnings_yoy=earnings_yoy,
-                        earnings_qoq=earnings_qoq,
-                    ))
+                    quarterly_data_list.append(
+                        QuarterlyData(
+                            period=q["period"],
+                            revenue=q["revenue"],
+                            earnings=q["earnings"],
+                            revenue_yoy=revenue_yoy,
+                            revenue_qoq=revenue_qoq,
+                            earnings_yoy=earnings_yoy,
+                            earnings_qoq=earnings_qoq,
+                        )
+                    )
         except Exception as e:
             import logging
+
             logging.getLogger(__name__).warning("Failed to parse quarterly financials: %s", e)
 
         return FundamentalSnapshot(

@@ -8,27 +8,39 @@ Usage:
     uv run python evaluations/langsmith_eval.py --experiment v1_baseline
 """
 
-import json
 import argparse
+import json
 from datetime import datetime
-from typing import Dict, Any, List
 
+from evaluations.metrics import (
+    ThemeMatchResult,
+    _issues_to_text,
+)
+from evaluations.metrics import (
+    category_accuracy as _category_accuracy,
+)
+from evaluations.metrics import (
+    company_preservation as _company_preservation,
+)
+from evaluations.metrics import (
+    keyword_coverage as _keyword_coverage,
+)
+from evaluations.metrics import (
+    must_split_check as _must_split_check,
+)
+from evaluations.metrics import (
+    number_preservation as _number_preservation,
+)
+from evaluations.metrics import (
+    split_accuracy as _split_accuracy,
+)
 from langsmith import Client, evaluate
 from langsmith.schemas import Example, Run
 
-from src.pipelines.daily_report.models import TelegramMessage, MappedIssue
-from src.pipelines.daily_report.stages.map_stage import map_stage
 from src.llm.provider import LLMProvider
-from evaluations.metrics import (
-    split_accuracy as _split_accuracy,
-    number_preservation as _number_preservation,
-    company_preservation as _company_preservation,
-    keyword_coverage as _keyword_coverage,
-    must_split_check as _must_split_check,
-    category_accuracy as _category_accuracy,
-    _issues_to_text,
-    ThemeMatchResult,
-)
+from src.pipelines.daily_report.models import MappedIssue, TelegramMessage
+from src.pipelines.daily_report.stages.map_stage import map_stage
+
 
 # LangSmith 클라이언트
 client = Client()
@@ -55,7 +67,7 @@ def create_dataset_from_test_cases(
     test_cases_path: str = "evaluations/datasets/test_cases.json",
 ):
     """test_cases.json에서 LangSmith 데이터셋 생성."""
-    with open(test_cases_path, "r", encoding="utf-8") as f:
+    with open(test_cases_path, encoding="utf-8") as f:
         data = json.load(f)
 
     # 기존 데이터셋 확인
@@ -85,7 +97,7 @@ def create_dataset_from_test_cases(
     return dataset
 
 
-def run_map_stage_for_eval(inputs: Dict) -> Dict:
+def run_map_stage_for_eval(inputs: dict) -> dict:
     """LangSmith evaluate()용 타겟 함수."""
     message = TelegramMessage(
         channel_id="test",
@@ -110,42 +122,43 @@ def run_map_stage_for_eval(inputs: Dict) -> Dict:
 # Rule-based Evaluators — metrics.py 함수를 래핑
 # ============================================================
 
-def split_accuracy(run: Run, example: Example) -> Dict:
+
+def split_accuracy(run: Run, example: Example) -> dict:
     """이슈 분리 정확도."""
     issues = [MappedIssue(**i) for i in (run.outputs or {}).get("issues", [])]
     score = _split_accuracy(issues, example.outputs or {})
     return {"key": "split_accuracy", "score": score}
 
 
-def must_split_check(run: Run, example: Example) -> Dict:
+def must_split_check(run: Run, example: Example) -> dict:
     """분리 필요 여부 충족 검사."""
     issues = [MappedIssue(**i) for i in (run.outputs or {}).get("issues", [])]
     score = _must_split_check(issues, example.outputs or {})
     return {"key": "must_split_check", "score": score}
 
 
-def number_preservation(run: Run, example: Example) -> Dict:
+def number_preservation(run: Run, example: Example) -> dict:
     """숫자 보존율."""
     issues = [MappedIssue(**i) for i in (run.outputs or {}).get("issues", [])]
     score = _number_preservation(issues, example.outputs or {})
     return {"key": "number_preservation", "score": score}
 
 
-def company_preservation(run: Run, example: Example) -> Dict:
+def company_preservation(run: Run, example: Example) -> dict:
     """기업명 보존율."""
     issues = [MappedIssue(**i) for i in (run.outputs or {}).get("issues", [])]
     score = _company_preservation(issues, example.outputs or {})
     return {"key": "company_preservation", "score": score}
 
 
-def keyword_coverage(run: Run, example: Example) -> Dict:
+def keyword_coverage(run: Run, example: Example) -> dict:
     """키워드 커버리지."""
     issues = [MappedIssue(**i) for i in (run.outputs or {}).get("issues", [])]
     score = _keyword_coverage(issues, example.outputs or {})
     return {"key": "keyword_coverage", "score": score}
 
 
-def category_accuracy(run: Run, example: Example) -> Dict:
+def category_accuracy(run: Run, example: Example) -> dict:
     """카테고리 정확도."""
     issues = [MappedIssue(**i) for i in (run.outputs or {}).get("issues", [])]
     score = _category_accuracy(issues, example.outputs or {})
@@ -156,9 +169,11 @@ def category_accuracy(run: Run, example: Example) -> Dict:
 # LLM-as-Judge Evaluator
 # ============================================================
 
-def theme_relevance_llm(run: Run, example: Example) -> Dict:
+
+def theme_relevance_llm(run: Run, example: Example) -> dict:
     """LLM-as-Judge로 테마 의미적 유사도 평가."""
     from langchain_core.messages import HumanMessage, SystemMessage
+
     from src.pipelines.daily_report.prompts import THEME_JUDGE_SYSTEM_PROMPT
 
     outputs = run.outputs or {}
@@ -202,7 +217,7 @@ def run_evaluation(experiment_prefix: str):
     """LangSmith evaluate() 실행."""
     print(f"\n🚀 Running evaluation: {experiment_prefix}")
     print(f"   Dataset: {DATASET_NAME}")
-    print(f"   View results at: https://smith.langchain.com\n")
+    print("   View results at: https://smith.langchain.com\n")
 
     results = evaluate(
         run_map_stage_for_eval,
@@ -223,7 +238,7 @@ def run_evaluation(experiment_prefix: str):
     print("📈 EVALUATION COMPLETE")
     print("=" * 60)
     print(f"Experiment: {experiment_prefix}")
-    print(f"View detailed results at: https://smith.langchain.com")
+    print("View detailed results at: https://smith.langchain.com")
 
     return results
 

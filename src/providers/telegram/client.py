@@ -1,10 +1,11 @@
 # src/providers/telegram/client.py
 from __future__ import annotations
 
-import os
 import logging
+import os
 
 from telethon import TelegramClient
+
 
 logger = logging.getLogger(__name__)
 

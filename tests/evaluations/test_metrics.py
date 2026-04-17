@@ -1,17 +1,15 @@
 """evaluations/metrics.py 단위 테스트."""
 
-import pytest
-from src.pipelines.daily_report.models import MappedIssue
 from evaluations.metrics import (
-    split_accuracy,
-    number_preservation,
+    RULE_BASED_METRICS,
     company_preservation,
     keyword_coverage,
     must_split_check,
-    theme_relevance,
-    _issues_to_text,
-    RULE_BASED_METRICS,
+    number_preservation,
+    split_accuracy,
 )
+
+from src.pipelines.daily_report.models import MappedIssue
 
 
 def make_issue(
@@ -40,6 +38,7 @@ def make_issue(
 # split_accuracy
 # ============================================================
 
+
 def test_split_accuracy_exact_match():
     issues = [make_issue(), make_issue()]
     score = split_accuracy(issues, {"num_issues_min": 2, "num_issues_max": 2})
@@ -66,6 +65,7 @@ def test_split_accuracy_too_many():
 # ============================================================
 # must_split_check
 # ============================================================
+
 
 def test_must_split_check_pass_when_split_required():
     """must_split=True이고 이슈가 2개 이상이면 1.0."""
@@ -96,6 +96,7 @@ def test_must_split_check_missing_field():
 # number_preservation
 # ============================================================
 
+
 def test_number_preservation_all_preserved():
     issue = make_issue(summary="테슬라 5.6% 급락, 인력 10% 감축")
     score = number_preservation([issue], {"must_preserve_numbers": ["5.6%", "10%"]})
@@ -117,6 +118,7 @@ def test_number_preservation_empty_expected():
 # company_preservation
 # ============================================================
 
+
 def test_company_preservation_all_preserved():
     issue = make_issue(title="테슬라 오라클 뉴스", summary="블룸에너지 계약")
     score = company_preservation(
@@ -127,15 +129,14 @@ def test_company_preservation_all_preserved():
 
 def test_company_preservation_partial():
     issue = make_issue(title="테슬라 뉴스")
-    score = company_preservation(
-        [issue], {"must_preserve_companies": ["테슬라", "오라클"]}
-    )
+    score = company_preservation([issue], {"must_preserve_companies": ["테슬라", "오라클"]})
     assert abs(score - 0.5) < 0.01
 
 
 # ============================================================
 # keyword_coverage — 이중 검색 없는지 확인
 # ============================================================
+
 
 def test_keyword_coverage_no_double_count():
     """키워드가 issues.keywords에만 존재하는 경우 이중 검색 없이 정확히 계산."""
@@ -159,6 +160,7 @@ def test_keyword_coverage_empty_expected():
 # ============================================================
 # RULE_BASED_METRICS 포함 여부
 # ============================================================
+
 
 def test_rule_based_metrics_contains_must_split():
     assert "must_split_check" in RULE_BASED_METRICS

@@ -11,40 +11,34 @@ class SectorMetrics:
         "debt_to_equity",
     ]
 
-    FINANCIALS = [
-        "roe", "roa", "pb_ratio", "debt_to_equity", "earnings_growth"
-    ]
+    FINANCIALS = ["roe", "roa", "pb_ratio", "debt_to_equity", "earnings_growth"]
 
     CONSUMER_CYCLICAL = [
-        "peg_ratio", "revenue_growth", "gross_margin", "debt_to_equity", "free_cash_flow"
+        "peg_ratio",
+        "revenue_growth",
+        "gross_margin",
+        "debt_to_equity",
+        "free_cash_flow",
     ]
 
-    CONSUMER_DEFENSIVE = [
-        "dividend_yield", "pe_ratio", "gross_margin", "roe", "payout_ratio"
-    ]
+    CONSUMER_DEFENSIVE = ["dividend_yield", "pe_ratio", "gross_margin", "roe", "payout_ratio"]
 
-    HEALTHCARE = [
-        "peg_ratio", "revenue_growth", "operating_margin", "roe", "fcf_yield"
-    ]
+    HEALTHCARE = ["peg_ratio", "revenue_growth", "operating_margin", "roe", "fcf_yield"]
 
-    INDUSTRIALS = [
-        "pe_ratio", "roe", "debt_to_equity", "free_cash_flow", "operating_margin"
-    ]
+    INDUSTRIALS = ["pe_ratio", "roe", "debt_to_equity", "free_cash_flow", "operating_margin"]
 
-    ENERGY = [
-        "pb_ratio", "debt_to_equity", "fcf_yield", "operating_margin", "dividend_yield"
-    ]
+    ENERGY = ["pb_ratio", "debt_to_equity", "fcf_yield", "operating_margin", "dividend_yield"]
 
-    REAL_ESTATE = [
-        "pb_ratio", "dividend_yield", "debt_to_equity", "free_cash_flow"
-    ]
+    REAL_ESTATE = ["pb_ratio", "dividend_yield", "debt_to_equity", "free_cash_flow"]
 
-    UTILITIES = [
-        "dividend_yield", "pe_ratio", "debt_to_equity", "payout_ratio"
-    ]
+    UTILITIES = ["dividend_yield", "pe_ratio", "debt_to_equity", "payout_ratio"]
 
     COMMUNICATION_SERVICES = [
-        "pe_ratio", "ev_ebitda", "revenue_growth", "fcf_yield", "operating_margin"
+        "pe_ratio",
+        "ev_ebitda",
+        "revenue_growth",
+        "fcf_yield",
+        "operating_margin",
     ]
 
     DEFAULT = [

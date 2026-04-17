@@ -1,4 +1,5 @@
 import pandas as pd
+
 from src.tools.technical.models import ComponentResult
 
 
@@ -6,7 +7,10 @@ def analyze_minervini(df: pd.DataFrame) -> ComponentResult:
     """Analyze Minervini Stage 2 conditions."""
     if df.empty or len(df) < 200:
         return ComponentResult(
-            signals=[], evidence=["데이터 부족 (200일 이상 필요)"], metrics={}, score=0,
+            signals=[],
+            evidence=["데이터 부족 (200일 이상 필요)"],
+            metrics={},
+            score=0,
         )
 
     latest = df.iloc[-1]
@@ -26,7 +30,10 @@ def analyze_minervini(df: pd.DataFrame) -> ComponentResult:
 
     if not all([close, sma_50, sma_150, sma_200]):
         return ComponentResult(
-            signals=[], evidence=["이동평균 계산 불가"], metrics={}, score=0,
+            signals=[],
+            evidence=["이동평균 계산 불가"],
+            metrics={},
+            score=0,
         )
 
     # Check SMA_200 rising (vs 21 days ago)

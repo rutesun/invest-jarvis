@@ -1,6 +1,7 @@
-import pytest
-import pandas as pd
 import numpy as np
+import pandas as pd
+import pytest
+
 from src.tools.technical.components.supertrend import analyze_supertrend
 from src.tools.technical.indicators import IndicatorCalculator
 
@@ -10,13 +11,16 @@ def uptrend_df():
     """DataFrame with supertrend uptrend."""
     dates = pd.date_range("2024-01-01", periods=100, freq="D")
     close = 100 + np.arange(100) * 0.5
-    df = pd.DataFrame({
-        "Open": close - 0.5,
-        "High": close + 1,
-        "Low": close - 1,
-        "Close": close,
-        "Volume": [1000000] * 100,
-    }, index=dates)
+    df = pd.DataFrame(
+        {
+            "Open": close - 0.5,
+            "High": close + 1,
+            "Low": close - 1,
+            "Close": close,
+            "Volume": [1000000] * 100,
+        },
+        index=dates,
+    )
     calculator = IndicatorCalculator()
     return calculator.calculate(df)
 
@@ -26,13 +30,16 @@ def downtrend_df():
     """DataFrame with supertrend downtrend."""
     dates = pd.date_range("2024-01-01", periods=100, freq="D")
     close = 150 - np.arange(100) * 0.5
-    df = pd.DataFrame({
-        "Open": close + 0.5,
-        "High": close + 1,
-        "Low": close - 1,
-        "Close": close,
-        "Volume": [1000000] * 100,
-    }, index=dates)
+    df = pd.DataFrame(
+        {
+            "Open": close + 0.5,
+            "High": close + 1,
+            "Low": close - 1,
+            "Close": close,
+            "Volume": [1000000] * 100,
+        },
+        index=dates,
+    )
     calculator = IndicatorCalculator()
     return calculator.calculate(df)
 
@@ -60,13 +67,16 @@ def test_supertrend_direction_change():
     # Create data with direction change
     dates = pd.date_range("2024-01-01", periods=50, freq="D")
     close = [100 - i * 0.5 for i in range(25)] + [87.5 + i * 0.5 for i in range(25)]
-    df = pd.DataFrame({
-        "Open": [c - 0.5 for c in close],
-        "High": [c + 1 for c in close],
-        "Low": [c - 1 for c in close],
-        "Close": close,
-        "Volume": [1000000] * 50,
-    }, index=dates)
+    df = pd.DataFrame(
+        {
+            "Open": [c - 0.5 for c in close],
+            "High": [c + 1 for c in close],
+            "Low": [c - 1 for c in close],
+            "Close": close,
+            "Volume": [1000000] * 50,
+        },
+        index=dates,
+    )
 
     calculator = IndicatorCalculator()
     df = calculator.calculate(df)
@@ -80,11 +90,13 @@ def test_supertrend_direction_change():
 
 def test_supertrend_no_data():
     """Test with insufficient data."""
-    df = pd.DataFrame({
-        "Close": [100],
-        "High": [101],
-        "Low": [99],
-    })
+    df = pd.DataFrame(
+        {
+            "Close": [100],
+            "High": [101],
+            "Low": [99],
+        }
+    )
 
     result = analyze_supertrend(df)
 
@@ -98,13 +110,16 @@ def test_supertrend_with_real_calculation():
     np.random.seed(42)
     close = 100 + np.cumsum(np.random.randn(100) * 2)
 
-    df = pd.DataFrame({
-        "Open": close - np.random.rand(100),
-        "High": close + np.random.rand(100) * 2,
-        "Low": close - np.random.rand(100) * 2,
-        "Close": close,
-        "Volume": np.random.randint(1000000, 5000000, 100),
-    }, index=dates)
+    df = pd.DataFrame(
+        {
+            "Open": close - np.random.rand(100),
+            "High": close + np.random.rand(100) * 2,
+            "Low": close - np.random.rand(100) * 2,
+            "Close": close,
+            "Volume": np.random.randint(1000000, 5000000, 100),
+        },
+        index=dates,
+    )
 
     calculator = IndicatorCalculator()
     df = calculator.calculate(df)

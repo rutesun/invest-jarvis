@@ -1,7 +1,8 @@
 import asyncio
+import json
 import os
 import sys
-import json
+
 
 # 프로젝트 루트 경로를 sys.path에 추가 (임포트 에러 방지)
 # scripts/test_complex_map_prompt.py -> scripts -> root (2 levels)
@@ -13,10 +14,11 @@ if sys.stdout.encoding.lower() != "utf-8":
     sys.stdout.reconfigure(encoding="utf-8")
 
 from dotenv import load_dotenv
-from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 
 from src.llm.provider import LLMProvider
 from src.pipelines.daily_report.models import MappedIssueList
+
 
 load_dotenv()
 
@@ -194,22 +196,18 @@ TEST_SYSTEM_PROMPT = """
 """
 
 
-async def run_test(model_name: str, temperature: float, provider: str = "openai", use_bedrock: bool = True):
+async def run_test(
+    model_name: str, temperature: float, provider: str = "openai", use_bedrock: bool = True
+):
     # Bedrock 사용 여부 명시적 설정
     if not use_bedrock:
         os.environ["CLAUDE_CODE_USE_BEDROCK"] = "0"
 
     # 모델 정의
-    llm = LLMProvider.create(
-        provider=provider, model=model_name, temperature=temperature
-    )
+    llm = LLMProvider.create(provider=provider, model=model_name, temperature=temperature)
 
     message = (
-        COMPLEX_MESSAGE
-        + COMPLEX_MESSAGE1
-        + COMPLEX_MESSAGE2
-        + COMPLEX_MESSAGE3
-        + COMPLEX_MESSAGE4
+        COMPLEX_MESSAGE + COMPLEX_MESSAGE1 + COMPLEX_MESSAGE2 + COMPLEX_MESSAGE3 + COMPLEX_MESSAGE4
     )
 
     # 채널명-메시지ID 형태로 가상 포맷팅

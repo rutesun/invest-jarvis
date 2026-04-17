@@ -1,5 +1,6 @@
-import pandas as pd
 import numpy as np
+import pandas as pd
+
 from src.tools.technical.base import BaseStrategy
 from src.tools.technical.models import StrategyResult
 
@@ -64,10 +65,8 @@ class DivergenceStrategy(BaseStrategy):
         if len(price_peaks) >= 2 and len(rsi_peaks) >= 2:
             # Bullish divergence: price lower lows, RSI higher lows
             if (
-                recent["Close"].iloc[price_peaks[-1]]
-                < recent["Close"].iloc[price_peaks[-2]]
-                and recent["RSI"].iloc[rsi_peaks[-1]]
-                > recent["RSI"].iloc[rsi_peaks[-2]]
+                recent["Close"].iloc[price_peaks[-1]] < recent["Close"].iloc[price_peaks[-2]]
+                and recent["RSI"].iloc[rsi_peaks[-1]] > recent["RSI"].iloc[rsi_peaks[-2]]
             ):
                 return {
                     "signal": "RSI 강세 다이버전스",
@@ -76,10 +75,8 @@ class DivergenceStrategy(BaseStrategy):
                 }
             # Bearish divergence: price higher highs, RSI lower highs
             elif (
-                recent["Close"].iloc[price_peaks[-1]]
-                > recent["Close"].iloc[price_peaks[-2]]
-                and recent["RSI"].iloc[rsi_peaks[-1]]
-                < recent["RSI"].iloc[rsi_peaks[-2]]
+                recent["Close"].iloc[price_peaks[-1]] > recent["Close"].iloc[price_peaks[-2]]
+                and recent["RSI"].iloc[rsi_peaks[-1]] < recent["RSI"].iloc[rsi_peaks[-2]]
             ):
                 return {
                     "signal": "RSI 약세 다이버전스",
@@ -101,8 +98,7 @@ class DivergenceStrategy(BaseStrategy):
         if len(price_peaks) >= 2 and len(macd_peaks) >= 2:
             # Bullish divergence
             if (
-                recent["Close"].iloc[price_peaks[-1]]
-                < recent["Close"].iloc[price_peaks[-2]]
+                recent["Close"].iloc[price_peaks[-1]] < recent["Close"].iloc[price_peaks[-2]]
                 and recent["MACD_12_26_9"].iloc[macd_peaks[-1]]
                 > recent["MACD_12_26_9"].iloc[macd_peaks[-2]]
             ):
@@ -113,8 +109,7 @@ class DivergenceStrategy(BaseStrategy):
                 }
             # Bearish divergence
             elif (
-                recent["Close"].iloc[price_peaks[-1]]
-                > recent["Close"].iloc[price_peaks[-2]]
+                recent["Close"].iloc[price_peaks[-1]] > recent["Close"].iloc[price_peaks[-2]]
                 and recent["MACD_12_26_9"].iloc[macd_peaks[-1]]
                 < recent["MACD_12_26_9"].iloc[macd_peaks[-2]]
             ):

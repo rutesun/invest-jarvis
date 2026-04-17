@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
+
 import pandas as pd
+
 from src.tools.technical.models import StrategyResult
 
 

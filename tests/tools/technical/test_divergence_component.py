@@ -1,6 +1,7 @@
-import pytest
-import pandas as pd
 import numpy as np
+import pandas as pd
+import pytest
+
 from src.tools.technical.components.divergence import analyze_divergence
 from src.tools.technical.indicators import IndicatorCalculator
 
@@ -15,15 +16,18 @@ def bullish_divergence_df():
 
     # Add some noise to create peaks
     for i in [20, 50, 80]:
-        close[i-5:i+5] += np.linspace(0, 3, 10)
+        close[i - 5 : i + 5] += np.linspace(0, 3, 10)
 
-    df = pd.DataFrame({
-        "Open": close - 0.5,
-        "High": close + 1,
-        "Low": close - 1,
-        "Close": close,
-        "Volume": [1000000] * 100,
-    }, index=dates)
+    df = pd.DataFrame(
+        {
+            "Open": close - 0.5,
+            "High": close + 1,
+            "Low": close - 1,
+            "Close": close,
+            "Volume": [1000000] * 100,
+        },
+        index=dates,
+    )
 
     calculator = IndicatorCalculator()
     return calculator.calculate(df)
@@ -37,13 +41,16 @@ def bearish_divergence_df():
     # Price: uptrend with higher highs
     close = 100 + np.arange(100) * 0.3
 
-    df = pd.DataFrame({
-        "Open": close - 0.5,
-        "High": close + 1,
-        "Low": close - 1,
-        "Close": close,
-        "Volume": [1000000] * 100,
-    }, index=dates)
+    df = pd.DataFrame(
+        {
+            "Open": close - 0.5,
+            "High": close + 1,
+            "Low": close - 1,
+            "Close": close,
+            "Volume": [1000000] * 100,
+        },
+        index=dates,
+    )
 
     calculator = IndicatorCalculator()
     return calculator.calculate(df)
@@ -61,10 +68,12 @@ def test_divergence_analysis(bullish_divergence_df):
 
 def test_divergence_no_data():
     """Test with insufficient data."""
-    df = pd.DataFrame({
-        "Close": [100, 101, 102],
-        "RSI": [50, 51, 52],
-    })
+    df = pd.DataFrame(
+        {
+            "Close": [100, 101, 102],
+            "RSI": [50, 51, 52],
+        }
+    )
 
     result = analyze_divergence(df)
     assert result.score == 0
