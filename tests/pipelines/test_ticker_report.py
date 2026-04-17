@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import AsyncMock
 from datetime import datetime
 from src.pipelines.ticker_report import TickerReportPipeline
-from src.tools.macro import MacroTool, MacroSnapshot
+from src.tools.macro import MacroTool, TickerMacroSnapshot
 from src.tools.technical.tool import TechnicalAnalysisTool
 from src.tools.technical.models import TechnicalResult, IndicatorSnapshot, StrategyResult
 from src.core.models import ToolResult
@@ -11,7 +11,7 @@ from src.core.models import ToolResult
 @pytest.fixture
 def mock_macro_tool():
     tool = AsyncMock(spec=MacroTool)
-    macro_snapshot = MacroSnapshot(
+    macro_snapshot = TickerMacroSnapshot(
         timestamp=datetime.now(),
         vix=15.5,
         vix_change=-0.5,

@@ -1,10 +1,10 @@
 import pytest
 from datetime import datetime
-from src.tools.macro import MacroTool, MacroSnapshot
+from src.tools.macro import MacroTool, TickerMacroSnapshot
 
 
 def test_macro_snapshot_model():
-    snapshot = MacroSnapshot(
+    snapshot = TickerMacroSnapshot(
         timestamp=datetime.now(),
         vix=18.5,
         vix_change=1.2,
@@ -30,7 +30,7 @@ async def test_macro_tool_execute():
 
     assert result.success is True
     assert result.data is not None
-    assert isinstance(result.data, MacroSnapshot)
+    assert isinstance(result.data, TickerMacroSnapshot)
 
     snapshot = result.data
     assert snapshot.vix > 0

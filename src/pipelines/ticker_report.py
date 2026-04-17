@@ -1,6 +1,6 @@
 from datetime import datetime
 from langchain_core.language_models import BaseChatModel
-from src.tools.macro import MacroTool, MacroSnapshot
+from src.tools.macro import MacroTool, TickerMacroSnapshot
 from src.tools.technical.tool import TechnicalAnalysisTool
 from src.tools.technical.models import TechnicalResult
 
@@ -24,7 +24,7 @@ class TickerReportPipeline:
         Returns:
             dict with keys:
                 - date: datetime
-                - macro: MacroSnapshot
+                - macro: TickerMacroSnapshot
                 - tickers: list[dict] with keys:
                     - ticker: str
                     - technical: TechnicalResult | None
@@ -34,7 +34,7 @@ class TickerReportPipeline:
         if not macro_result.success:
             raise RuntimeError(f"Macro snapshot failed: {macro_result.error}")
 
-        macro_data: MacroSnapshot = macro_result.data
+        macro_data: TickerMacroSnapshot = macro_result.data
 
         ticker_analyses = []
         for ticker in tickers:

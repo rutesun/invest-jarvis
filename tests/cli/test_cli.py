@@ -3,7 +3,7 @@ from typer.testing import CliRunner
 from unittest.mock import patch, AsyncMock
 from datetime import datetime
 from src.cli.main import app
-from src.tools.macro import MacroSnapshot
+from src.tools.macro import TickerMacroSnapshot
 from src.tools.technical.models import TechnicalResult, IndicatorSnapshot
 from src.llm.models import TechnicalSummaryOutput, NewsAnalysisOutput
 
@@ -92,7 +92,7 @@ def test_cli_analyze_command():
 
 
 def test_cli_report_command():
-    mock_macro = MacroSnapshot(
+    mock_macro = TickerMacroSnapshot(
         timestamp=datetime.now(),
         vix=15.5,
         vix_change=-0.5,

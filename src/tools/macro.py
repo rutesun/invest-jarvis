@@ -5,8 +5,8 @@ from src.core.interfaces import BaseTool
 from src.core.models import ToolResult
 
 
-class MacroSnapshot(BaseModel):
-    """Macro indicators snapshot."""
+class TickerMacroSnapshot(BaseModel):
+    """Macro indicators snapshot for ticker analysis."""
 
     timestamp: datetime
 
@@ -92,7 +92,7 @@ class MacroTool(BaseTool):
 
             yield_spread = data["us_10y"]["current"] - data["us_2y"]["current"]
 
-            snapshot = MacroSnapshot(
+            snapshot = TickerMacroSnapshot(
                 timestamp=datetime.now(),
                 vix=data["vix"]["current"],
                 vix_change=data["vix"]["change"],
@@ -111,3 +111,6 @@ class MacroTool(BaseTool):
 
         except Exception as e:
             return ToolResult(success=False, data=None, error=str(e))
+
+
+__all__ = ["MacroTool", "TickerMacroSnapshot"]
