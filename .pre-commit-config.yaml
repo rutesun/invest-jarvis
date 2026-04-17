@@ -1,0 +1,36 @@
+# Pre-commit hooks for code quality
+# Install: uv run pre-commit install
+# Run manually: uv run pre-commit run --all-files
+
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: uv run --group dev ruff check --fix
+        language: system
+        types: [python]
+        require_serial: true
+
+      - id: ruff-format
+        name: ruff format
+        entry: uv run --group dev ruff format
+        language: system
+        types: [python]
+        require_serial: true
+
+      - id: vulture
+        name: detect unused code
+        entry: uv run --group dev vulture src --min-confidence 80
+        language: system
+        pass_filenames: false
+        # Allow failure for now (informational)
+        verbose: true
+        stages: [manual]
+
+      - id: pytest-fast
+        name: fast unit tests
+        entry: uv run pytest tests/ --ignore=tests/integration -x --tb=short
+        language: system
+        pass_filenames: false
+        stages: [manual]
