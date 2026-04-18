@@ -78,3 +78,23 @@ def test_news_item_emoji_field():
         impact="Impact: 긍정적",
     )
     assert item.emoji == "🚀"
+
+
+def test_theme_analysis_with_investment_theme():
+    """ThemeAnalysis should have investment_theme and keywords fields."""
+    from src.pipelines.daily_report.models import ThemeAnalysis
+
+    data = {
+        "investment_theme": "GPU 공급망 다변화 가속, 엔비디아 독점 완화 수혜",
+        "keywords": ["GPU", "엔비디아", "AMD", "세레브라스", "AI 칩"],
+        "emoji": "🚀",
+        "summary": "테스트 요약",
+        "impact": "테스트 영향",
+        "stocks": [],
+    }
+
+    analysis = ThemeAnalysis(**data)
+
+    assert analysis.investment_theme == "GPU 공급망 다변화 가속, 엔비디아 독점 완화 수혜"
+    assert len(analysis.keywords) == 5
+    assert "GPU" in analysis.keywords

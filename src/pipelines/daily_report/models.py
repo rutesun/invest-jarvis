@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class Sentiment(StrEnum):
@@ -110,11 +110,36 @@ class StockDetail(BaseModel):
 class ThemeAnalysis(BaseModel):
     """Reduce stage LLM 출력용 (category 제외)."""
 
-    theme: str = Field(description="한글 정규화 테마명")
+    investment_theme: str = Field(
+        description="투자 인사이트 테마명 (20-40자). "
+        "패턴: [트렌드] + [방향성] + [수혜/리스크]. "
+        "예: 'GPU 공급망 다변화 가속, 엔비디아 독점 완화 수혜'"
+    )
+    keywords: list[str] = Field(description="검색용 키워드 5-10개 (종목명, 기술용어, 트렌드)")
     emoji: str = Field(description="단일 이모지: 🚀📈⚠️ℹ️📉⚡")
     summary: str = Field(description="한글 bullet points")
     impact: str = Field(description="한글 impact 문구")
     stocks: list[StockDetail] = Field(default_factory=list)
+
+    @field_validator("investment_theme")
+    @classmethod
+    def validate_theme_length(cls, v):
+        """투자 테마 길이 검증 (20-40자)."""
+        length = len(v)
+        if not (20 <= length <= 40):
+            raise ValueError(
+                f"investment_theme 길이는 20-40자여야 합니다 (현재: {length}자, 값: '{v}')"
+            )
+        return v
+
+    @field_validator("keywords")
+    @classmethod
+    def validate_keywords_count(cls, v):
+        """키워드 개수 검증 (5-10개)."""
+        count = len(v)
+        if not (5 <= count <= 10):
+            raise ValueError(f"keywords는 5-10개여야 합니다 (현재: {count}개)")
+        return v
 
 
 class NewsItem(BaseModel):
