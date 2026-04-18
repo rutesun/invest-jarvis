@@ -19,7 +19,10 @@ from src.pipelines.daily_report.models import (
     NewsItem,
     ThemeAnalysis,
 )
-from src.pipelines.daily_report.prompts import REDUCE_SYSTEM_PROMPT, REDUCE_USER_PROMPT
+from src.pipelines.daily_report.prompts import (
+    REDUCE_SYSTEM_PROMPT_V2,
+    REDUCE_USER_PROMPT_V2,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -72,7 +75,7 @@ async def _analyze_theme(
     macro: MacroSnapshot,
     date: str,
 ) -> NewsItem:
-    """단일 테마 분석."""
+    """단일 테마 분석 (투자 인사이트 생성)."""
 
     issues_text = "\n\n".join(
         [
@@ -83,9 +86,9 @@ async def _analyze_theme(
         ]
     )
 
-    system_prompt = REDUCE_SYSTEM_PROMPT
-    user_prompt = REDUCE_USER_PROMPT.format(
-        theme=theme,
+    system_prompt = REDUCE_SYSTEM_PROMPT_V2
+    user_prompt = REDUCE_USER_PROMPT_V2.format(
+        technical_theme=theme,
         issues=issues_text,
     )
 
@@ -116,25 +119,23 @@ async def _analyze_theme(
         return NewsItem(
             category=category,
             technical_theme=theme,
-            investment_theme=theme,
-            keywords=[],
+            investment_theme=response.investment_theme,
+            keywords=response.keywords,
             emoji=response.emoji,
             summary=response.summary,
             impact=response.impact,
             stocks=response.stocks,
         )
     except Exception as e:
-        logger.error("Theme '%s' analysis failed: %s", theme, e, exc_info=True)
-        return NewsItem(
-            category=category,
-            technical_theme=theme,
-            investment_theme=theme,
-            keywords=[],
-            emoji="ℹ️",
-            summary=f"{theme} 관련 {len(issues)}개 이슈",
-            impact="분석 실패",
-            stocks=[],
+        logger.error(
+            "테마 분석 실패 - [%s] %s: %s (%s)",
+            category,
+            theme,
+            type(e).__name__,
+            str(e),
+            exc_info=True,
         )
+        raise
 
 
 # 테스트용 CLI 진입점
