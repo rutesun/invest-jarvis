@@ -58,13 +58,67 @@ async def _analyze_themes_parallel(
     macro: MacroSnapshot,
     date: str,
 ) -> list[NewsItem]:
-    """카테고리/테마별 병렬 분석."""
+    """카테고리/테마별 병렬 분석 (실패율 체크 포함)."""
     llm = REDUCE_LLM.create_llm()
-    tasks = []
+
+    # 테마명과 함께 태스크 저장
+    theme_tasks = []
     for category, theme_map in category_groups.items():
         for theme, issues in theme_map.items():
-            tasks.append(_analyze_theme(llm, category, theme, issues, macro, date))
-    return await asyncio.gather(*tasks)
+            task = _analyze_theme(llm, category, theme, issues, macro, date)
+            theme_tasks.append((category, theme, task))
+
+    # 병렬 실행 (예외 수집)
+    results = await asyncio.gather(*[task for _, _, task in theme_tasks], return_exceptions=True)
+
+    # 성공/실패 분류
+    success = []
+    failed_info = []
+
+    for (category, theme, _), result in zip(theme_tasks, results, strict=True):
+        if isinstance(result, Exception):
+            failed_info.append(
+                {
+                    "category": category,
+                    "theme": theme,
+                    "error_type": type(result).__name__,
+                    "error_message": str(result),
+                }
+            )
+        else:
+            success.append(result)
+
+    # 실패 정보 로깅
+    for fail in failed_info:
+        logger.error(
+            "❌ 테마 분석 실패 - [%s] %s: %s (%s)",
+            fail["category"],
+            fail["theme"],
+            fail["error_type"],
+            fail["error_message"],
+        )
+
+    # 실패율 체크
+    failure_rate = len(failed_info) / len(results) if results else 0
+
+    if failure_rate > 0.2:
+        logger.error(
+            "🛑 테마 분석 실패율 %.1f%% 초과 (%d/%d), 파이프라인 중단",
+            failure_rate * 100,
+            len(failed_info),
+            len(results),
+        )
+        raise RuntimeError(
+            f"Theme analysis failure rate too high: {len(failed_info)}/{len(results)} "
+            f"({failure_rate:.1%})"
+        )
+
+    if failed_info:
+        logger.warning(
+            "⚠️ %d개 테마 분석 실패 (성공률: %.1f%%)", len(failed_info), (1 - failure_rate) * 100
+        )
+
+    return success
 
 
 async def _analyze_theme(
