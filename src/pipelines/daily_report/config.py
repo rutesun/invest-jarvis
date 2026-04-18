@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 
 from src.llm.provider import LLMProvider
 
@@ -23,7 +23,7 @@ class StageLLMConfig:
             temperature=self.temperature,
         )
 
-    def build_messages(self, system_prompt: str, user_prompt: str) -> list:
+    def build_messages(self, system_prompt: str, user_prompt: str) -> list[BaseMessage]:
         """LLM 메시지 리스트 생성. Anthropic이면 system prompt 캐싱 적용."""
         kwargs = {}
         if self.provider == "anthropic":
@@ -65,3 +65,6 @@ MAP_MAX_TOKENS_PER_CHUNK = 80_000
 # LLM 호출 재시도/타임아웃
 LLM_TIMEOUT_SECONDS = 60.0
 LLM_MAX_RETRIES = 3
+
+# 매크로 데이터 수집 재시도
+MACRO_MAX_RETRIES = 3

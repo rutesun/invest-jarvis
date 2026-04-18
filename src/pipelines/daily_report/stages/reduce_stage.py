@@ -6,6 +6,9 @@ import logging
 from pathlib import Path
 
 from dotenv import load_dotenv
+
+
+load_dotenv()
 from langsmith import traceable
 
 from src.pipelines.daily_report.config import REDUCE_LLM
@@ -18,8 +21,6 @@ from src.pipelines.daily_report.models import (
 )
 from src.pipelines.daily_report.prompts import REDUCE_SYSTEM_PROMPT, REDUCE_USER_PROMPT
 
-
-load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -55,14 +56,16 @@ async def _analyze_themes_parallel(
     date: str,
 ) -> list[NewsItem]:
     """카테고리/테마별 병렬 분석."""
+    llm = REDUCE_LLM.create_llm()
     tasks = []
     for category, theme_map in category_groups.items():
         for theme, issues in theme_map.items():
-            tasks.append(_analyze_theme(category, theme, issues, macro, date))
+            tasks.append(_analyze_theme(llm, category, theme, issues, macro, date))
     return await asyncio.gather(*tasks)
 
 
 async def _analyze_theme(
+    llm,
     category: str,
     theme: str,
     issues: list[MappedIssue],
@@ -70,7 +73,6 @@ async def _analyze_theme(
     date: str,
 ) -> NewsItem:
     """단일 테마 분석."""
-    llm = REDUCE_LLM.create_llm()
 
     issues_text = "\n\n".join(
         [

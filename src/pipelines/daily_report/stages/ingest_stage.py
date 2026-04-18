@@ -13,6 +13,8 @@ import yfinance as yf
 from dotenv import load_dotenv
 from langsmith import traceable
 
+from src.pipelines.daily_report.config import MACRO_MAX_RETRIES
+
 
 # 환경변수 로드
 load_dotenv()
@@ -24,9 +26,6 @@ from src.pipelines.daily_report.models import (
 
 
 logger = logging.getLogger(__name__)
-
-MACRO_MAX_RETRIES = 3
-MACRO_RETRY_DELAY = 1.0
 
 
 @traceable(name="Ingest Stage")
@@ -61,7 +60,7 @@ def _fetch_with_retry(
     label: str,
     max_retries: int = MACRO_MAX_RETRIES,
 ) -> Any | None:
-    """매크로 데이터 수집 공통 리트라이. 모두 실패 시 None 반환."""
+    """매크로 데이터 수집 공통 리트라이 (exponential backoff). 모두 실패 시 None 반환."""
     for attempt in range(max_retries):
         try:
             return fn()
@@ -70,7 +69,7 @@ def _fetch_with_retry(
                 "%s fetch failed (attempt %d/%d): %s", label, attempt + 1, max_retries, e
             )
             if attempt < max_retries - 1:
-                time.sleep(MACRO_RETRY_DELAY)
+                time.sleep(2**attempt)
     return None
 
 
@@ -85,10 +84,10 @@ def _fetch_fear_greed() -> int | None:
 def _fetch_macro(date: str) -> MacroSnapshot:
     """주어진 날짜의 매크로 지표 수집."""
 
-    def _get_pct_change(ticker: str) -> float | None:
+    def _get_pct_change(ticker: str) -> float:
         data = yf.Ticker(ticker).history(period="2d")
         if len(data) < 2:
-            return None
+            raise ValueError(f"{ticker}: insufficient data ({len(data)} rows)")
         return round(
             (data["Close"].iloc[-1] - data["Close"].iloc[-2]) / data["Close"].iloc[-2] * 100, 2
         )
@@ -110,6 +109,8 @@ def _fetch_macro(date: str) -> MacroSnapshot:
     # VIX
     def _get_vix() -> float:
         data = yf.Ticker("^VIX").history(period="1d")
+        if len(data) == 0:
+            raise ValueError("VIX: no data returned")
         return round(data["Close"].iloc[-1], 1)
 
     vix = _fetch_with_retry(_get_vix, "VIX")
@@ -124,6 +125,8 @@ def _fetch_macro(date: str) -> MacroSnapshot:
     # KRW/USD
     def _get_krw_usd() -> float:
         data = yf.Ticker("KRW=X").history(period="1d")
+        if len(data) == 0:
+            raise ValueError("KRW/USD: no data returned")
         return round(data["Close"].iloc[-1], 1)
 
     krw_usd = _fetch_with_retry(_get_krw_usd, "KRW/USD")
