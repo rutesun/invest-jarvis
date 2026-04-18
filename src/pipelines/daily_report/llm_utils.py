@@ -3,7 +3,7 @@
 import asyncio
 import logging
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from src.pipelines.daily_report.config import LLM_MAX_RETRIES, LLM_TIMEOUT_SECONDS
 
@@ -56,12 +56,30 @@ async def invoke_llm_with_retry(
             )
         except Exception as e:
             last_exception = e
-            logger.warning(
-                "LLM call failed (attempt %d/%d): %s",
-                attempt + 1,
-                max_retries,
-                e,
-            )
+
+            # ValidationError면 피드백 메시지를 다음 시도에 추가
+            if isinstance(e, ValidationError):
+                error_details = str(e)
+                feedback_message = {
+                    "role": "user",
+                    "content": f"⚠️ 검증 실패:\n{error_details}\n\n제약 조건을 정확히 지켜주세요.",
+                }
+                # messages 리스트에 피드백 추가 (다음 시도 시 사용됨)
+                messages = messages + [feedback_message]
+
+                logger.warning(
+                    "ValidationError (attempt %d/%d): %s",
+                    attempt + 1,
+                    max_retries,
+                    error_details,
+                )
+            else:
+                logger.warning(
+                    "LLM call failed (attempt %d/%d): %s",
+                    attempt + 1,
+                    max_retries,
+                    e,
+                )
 
         if attempt < max_retries - 1:
             wait_time = 2**attempt
