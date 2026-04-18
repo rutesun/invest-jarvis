@@ -115,7 +115,9 @@ async def _analyze_theme(
 
         return NewsItem(
             category=category,
-            theme=response.theme,
+            technical_theme=theme,
+            investment_theme=theme,
+            keywords=[],
             emoji=response.emoji,
             summary=response.summary,
             impact=response.impact,
@@ -125,7 +127,9 @@ async def _analyze_theme(
         logger.error("Theme '%s' analysis failed: %s", theme, e, exc_info=True)
         return NewsItem(
             category=category,
-            theme=theme,
+            technical_theme=theme,
+            investment_theme=theme,
+            keywords=[],
             emoji="ℹ️",
             summary=f"{theme} 관련 {len(issues)}개 이슈",
             impact="분석 실패",
@@ -168,7 +172,7 @@ if __name__ == "__main__":
 
     # 카테고리별 출력
     for item in news_items:
-        print(f"  [{item.category}] {item.emoji} {item.theme}")
+        print(f"  [{item.category}] {item.emoji} {item.investment_theme}")
 
     # 출력 저장
     output_file = f"tests/pipelines/daily_report/fixtures/stage_outputs/reduce_{date}.json"

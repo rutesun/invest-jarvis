@@ -67,7 +67,7 @@ async def _generate_insights(
     # 프롬프트 구성
     news_text = "\n\n".join(
         [
-            f"{item.emoji} **{item.theme}**\n{item.summary}\n**(Impact: {item.impact})**"
+            f"{item.emoji} **{item.investment_theme}**\n{item.summary}\n**(Impact: {item.impact})**"
             for item in news_items
         ]
     )
