@@ -147,7 +147,14 @@ class NewsItem(BaseModel):
     """Reduce stage의 테마별 분석."""
 
     category: IssueCategory = Field(description="카테고리 (정렬/필터링용)")
-    theme: str = Field(description="한글 정규화 테마명")
+
+    # 테마 (2개 필드로 분리)
+    technical_theme: str = Field(description="Shuffle에서 정규화한 기술적 테마명 (검색 키)")
+    investment_theme: str = Field(description="투자 인사이트 테마명 (리포트 표시용)")
+
+    # 검색
+    keywords: list[str] = Field(description="검색용 키워드")
+
     emoji: str = Field(description="단일 이모지: 🚀📈⚠️ℹ️📉⚡")
     summary: str = Field(description="한글 bullet points")
     impact: str = Field(description="한글 impact 문구")

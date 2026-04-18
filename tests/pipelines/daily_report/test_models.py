@@ -79,7 +79,9 @@ def test_news_item_emoji_field():
     """NewsItem emoji 필드 테스트."""
     item = NewsItem(
         category="에너지",
-        theme="AI 전력",
+        technical_theme="AI 전력",
+        investment_theme="AI 전력 수요 급증으로 친환경 에너지 인프라 강화",
+        keywords=["AI", "전력", "데이터센터"],
         emoji="🚀",
         summary="- 내용",
         impact="Impact: 긍정적",
@@ -165,3 +167,23 @@ def test_theme_analysis_with_investment_theme():
             summary="테스트 요약",
             impact="테스트 영향",
         )
+
+
+def test_news_item_with_split_themes():
+    """NewsItem should have both technical_theme and investment_theme."""
+    data = {
+        "category": "반도체",
+        "technical_theme": "AI 인프라 및 칩 수요",
+        "investment_theme": "GPU 공급망 다변화 가속, 엔비디아 독점 완화 수혜",
+        "keywords": ["GPU", "엔비디아", "AMD"],
+        "emoji": "🚀",
+        "summary": "테스트 요약",
+        "impact": "테스트 영향",
+        "stocks": [],
+    }
+
+    news = NewsItem(**data)
+
+    assert news.technical_theme == "AI 인프라 및 칩 수요"
+    assert news.investment_theme == "GPU 공급망 다변화 가속, 엔비디아 독점 완화 수혜"
+    assert len(news.keywords) == 3
