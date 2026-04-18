@@ -88,7 +88,7 @@ Ingest → Map → Shuffle → Reduce → Wrapup
 | **Ingest** | 텔레그램 메시지 로드, 필터링 | ❌ |
 | **Map** | 메시지 → 투자 이슈 추출, 카테고리 분류 | ✅ (Haiku 4.5) |
 | **Shuffle** | 카테고리 그룹핑 + 테마 정규화 | ✅ (Haiku 4.5) |
-| **Reduce** | 테마별 분석 리포트 + 관련 뉴스 | ✅ (Haiku 4.5) |
+| **Reduce** | 테마별 분석 리포트 | ✅ (Haiku 4.5) |
 | **Wrapup** | 종합 시장 인사이트 도출 | ✅ (Haiku 4.5) |
 
 ### 주요 모델
@@ -97,7 +97,8 @@ Ingest → Map → Shuffle → Reduce → Wrapup
 TelegramMessage       # 원본 메시지
 MappedIssue          # Map 출력 (category, themes, keywords)
 ShuffleResult        # Shuffle 출력 (category_groups)
-NewsItem             # Reduce 출력 (테마별 분석)
+ThemeAnalysis        # Reduce LLM 출력 (category 제외)
+NewsItem             # Reduce 출력 (테마별 분석, category 포함)
 DailyReport          # Wrapup 출력 (최종 리포트)
 ```
 
@@ -145,6 +146,8 @@ CLI → DailyReportPipeline
 | Ticker Mapping | `~/.cache/invest-jarvis/user_mappings.yaml` | 6개월 | 회사명→티커 변환 |
 | LLM Ticker Resolve | SQLite | 6개월 | LLM 티커 해석 결과 |
 | 가격 데이터 | 메모리 | 세션 | yfinance API 중복 호출 방지 |
+| LLM Prompt | Anthropic API | 5분 | System prompt 캐싱 (`cache_control`, Anthropic만) |
+| Fear & Greed | `requests-cache` | 1분 | CNN Fear & Greed Index (`fear-and-greed` 패키지 내장) |
 
 ---
 
@@ -154,6 +157,7 @@ CLI → DailyReportPipeline
 
 **주요 의존성**:
 - `yfinance`: 미국 주식 데이터
+- `fear-and-greed`: CNN Fear & Greed Index
 - `pandas`, `numpy`: 데이터 처리
 - `typer`, `rich`: CLI 인터페이스
 - `pydantic`: 데이터 검증

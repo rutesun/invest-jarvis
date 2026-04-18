@@ -2,18 +2,22 @@
 
 import asyncio
 import json
+import logging
 from pathlib import Path
 
 from dotenv import load_dotenv
-from langchain_core.messages import HumanMessage, SystemMessage
+
+
+load_dotenv()
 from langsmith import traceable
 
-from src.llm.provider import LLMProvider
+from src.pipelines.daily_report.config import SHUFFLE_LLM
+from src.pipelines.daily_report.llm_utils import invoke_llm_with_retry
 from src.pipelines.daily_report.models import MappedIssue, ShuffleResult, ThemeMapping
 from src.pipelines.daily_report.prompts import SHUFFLE_SYSTEM_PROMPT, SHUFFLE_USER_PROMPT
 
 
-load_dotenv()
+logger = logging.getLogger(__name__)
 
 
 @traceable(name="Shuffle Stage")
@@ -40,8 +44,7 @@ def shuffle_stage(
         category_buckets.setdefault(issue.category, []).append(issue)
 
     # 2단계: 카테고리 내 테마 정규화 (LLM, 병렬)
-    loop = asyncio.get_event_loop()
-    category_groups = loop.run_until_complete(_normalize_themes_by_category(category_buckets, date))
+    category_groups = asyncio.run(_normalize_themes_by_category(category_buckets, date))
 
     return ShuffleResult(category_groups=category_groups)
 
@@ -51,8 +54,9 @@ async def _normalize_themes_by_category(
     date: str,
 ) -> dict[str, dict[str, list[MappedIssue]]]:
     """카테고리별 병렬 테마 정규화."""
+    llm = SHUFFLE_LLM.create_llm()
     tasks = [
-        _normalize_themes_for_category(category, issues, date)
+        _normalize_themes_for_category(llm, category, issues, date)
         for category, issues in category_buckets.items()
     ]
     results = await asyncio.gather(*tasks)
@@ -61,6 +65,7 @@ async def _normalize_themes_by_category(
 
 
 async def _normalize_themes_for_category(
+    llm,
     category: str,
     issues: list[MappedIssue],
     date: str,
@@ -76,7 +81,7 @@ async def _normalize_themes_for_category(
     if len(unique_themes) <= 2:
         theme_mapping = {theme: [theme] for theme in unique_themes}
     else:
-        theme_mapping = await _normalize_themes(unique_themes, category, date)
+        theme_mapping = await _normalize_themes(llm, unique_themes, category, date)
 
     # 이슈를 정규화된 테마로 그룹핑
     theme_groups: dict[str, list[MappedIssue]] = {}
@@ -101,16 +106,12 @@ async def _normalize_themes_for_category(
 
 
 async def _normalize_themes(
+    llm,
     themes: list[str],
     category: str,
     date: str,
 ) -> dict[str, list[str]]:
     """LLM으로 테마 정규화."""
-    llm = LLMProvider.create(
-        provider="anthropic",
-        model="us.anthropic.claude-haiku-4-5-20251001-v1:0",
-        temperature=0.1,
-    )
 
     themes_text = "\n".join([f"- {theme}" for theme in themes])
 
@@ -130,17 +131,13 @@ async def _normalize_themes(
         },
     }
 
-    messages = [
-        SystemMessage(content=system_prompt),
-        HumanMessage(content=user_prompt),
-    ]
+    messages = SHUFFLE_LLM.build_messages(system_prompt, user_prompt)
 
     try:
-        llm_with_output = llm.with_structured_output(ThemeMapping)
-        response = await llm_with_output.ainvoke(messages, config=config)
+        response = await invoke_llm_with_retry(llm, ThemeMapping, messages, config)
         return response.mapping
     except Exception as e:
-        print(f"⚠️  [{category}] 테마 정규화 실패: {e}")
+        logger.error("[%s] theme normalization failed: %s", category, e, exc_info=True)
         return {theme: [theme] for theme in themes}
 
 

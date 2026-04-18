@@ -2,19 +2,22 @@
 
 import asyncio
 import json
+import logging
 from pathlib import Path
 
 from dotenv import load_dotenv
-from langchain_core.messages import HumanMessage, SystemMessage
-
-from src.llm.provider import LLMProvider
 
 
 load_dotenv()
 from langsmith import traceable
 
+from src.pipelines.daily_report.config import WRAPUP_LLM
+from src.pipelines.daily_report.llm_utils import invoke_llm_with_retry
 from src.pipelines.daily_report.models import DailyReport, KeyInsightsList, MacroSnapshot, NewsItem
 from src.pipelines.daily_report.prompts import WRAPUP_SYSTEM_PROMPT, WRAPUP_USER_PROMPT
+
+
+logger = logging.getLogger(__name__)
 
 
 @traceable(name="Wrapup Stage")
@@ -43,8 +46,7 @@ def wrapup_stage(
         )
 
     # LLM으로 메타 인사이트 도출
-    loop = asyncio.get_event_loop()
-    key_insights = loop.run_until_complete(_generate_insights(news_items, macro, date))
+    key_insights = asyncio.run(_generate_insights(news_items, macro, date))
 
     return DailyReport(
         date=date or macro.date,
@@ -60,9 +62,7 @@ async def _generate_insights(
     date: str,
 ) -> list[str]:
     """LLM으로 메타 인사이트 생성."""
-    llm = LLMProvider.create(
-        provider="anthropic", model="us.anthropic.claude-haiku-4-5-20251001-v1:0", temperature=0.4
-    )
+    llm = WRAPUP_LLM.create_llm()
 
     # 프롬프트 구성
     news_text = "\n\n".join(
@@ -90,17 +90,13 @@ async def _generate_insights(
         },
     }
 
-    messages = [
-        SystemMessage(content=system_prompt),
-        HumanMessage(content=user_prompt),
-    ]
+    messages = WRAPUP_LLM.build_messages(system_prompt, user_prompt)
 
     try:
-        llm_with_output = llm.with_structured_output(KeyInsightsList)
-        response = await llm_with_output.ainvoke(messages, config=config)
+        response = await invoke_llm_with_retry(llm, KeyInsightsList, messages, config)
         return response.insights
     except Exception as e:
-        print(f"⚠️  인사이트 생성 실패: {e}")
+        logger.error("Insight generation failed: %s", e, exc_info=True)
         return [
             f"총 {len(news_items)}개 테마 분석 완료",
             f"VIX: {macro.vix}, Fear & Greed: {macro.fear_greed}",
