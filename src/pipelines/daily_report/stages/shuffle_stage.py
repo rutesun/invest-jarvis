@@ -2,18 +2,21 @@
 
 import asyncio
 import json
+import logging
 from pathlib import Path
 
 from dotenv import load_dotenv
-from langchain_core.messages import HumanMessage, SystemMessage
 from langsmith import traceable
 
-from src.llm.provider import LLMProvider
+from src.pipelines.daily_report.config import SHUFFLE_LLM
+from src.pipelines.daily_report.llm_utils import invoke_llm_with_retry
 from src.pipelines.daily_report.models import MappedIssue, ShuffleResult, ThemeMapping
 from src.pipelines.daily_report.prompts import SHUFFLE_SYSTEM_PROMPT, SHUFFLE_USER_PROMPT
 
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 
 @traceable(name="Shuffle Stage")
@@ -40,8 +43,7 @@ def shuffle_stage(
         category_buckets.setdefault(issue.category, []).append(issue)
 
     # 2단계: 카테고리 내 테마 정규화 (LLM, 병렬)
-    loop = asyncio.get_event_loop()
-    category_groups = loop.run_until_complete(_normalize_themes_by_category(category_buckets, date))
+    category_groups = asyncio.run(_normalize_themes_by_category(category_buckets, date))
 
     return ShuffleResult(category_groups=category_groups)
 
@@ -106,11 +108,7 @@ async def _normalize_themes(
     date: str,
 ) -> dict[str, list[str]]:
     """LLM으로 테마 정규화."""
-    llm = LLMProvider.create(
-        provider="anthropic",
-        model="us.anthropic.claude-haiku-4-5-20251001-v1:0",
-        temperature=0.1,
-    )
+    llm = SHUFFLE_LLM.create_llm()
 
     themes_text = "\n".join([f"- {theme}" for theme in themes])
 
@@ -130,17 +128,13 @@ async def _normalize_themes(
         },
     }
 
-    messages = [
-        SystemMessage(content=system_prompt),
-        HumanMessage(content=user_prompt),
-    ]
+    messages = SHUFFLE_LLM.build_messages(system_prompt, user_prompt)
 
     try:
-        llm_with_output = llm.with_structured_output(ThemeMapping)
-        response = await llm_with_output.ainvoke(messages, config=config)
+        response = await invoke_llm_with_retry(llm, ThemeMapping, messages, config)
         return response.mapping
     except Exception as e:
-        print(f"⚠️  [{category}] 테마 정규화 실패: {e}")
+        logger.error("[%s] theme normalization failed: %s", category, e, exc_info=True)
         return {theme: [theme] for theme in themes}
 
 

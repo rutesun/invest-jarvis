@@ -1,24 +1,27 @@
-"""Reduce stage: 테마별 뉴스 검색 및 분석 리포트 생성."""
+"""Reduce stage: 테마별 LLM 분석 리포트 생성."""
 
 import asyncio
 import json
+import logging
 from pathlib import Path
 
-from ddgs import DDGS
 from dotenv import load_dotenv
-from langchain_core.messages import HumanMessage, SystemMessage
 from langsmith import traceable
 
-from src.llm.provider import LLMProvider
+from src.pipelines.daily_report.config import REDUCE_LLM
+from src.pipelines.daily_report.llm_utils import invoke_llm_with_retry
 from src.pipelines.daily_report.models import (
     MacroSnapshot,
     MappedIssue,
     NewsItem,
+    ThemeAnalysis,
 )
 from src.pipelines.daily_report.prompts import REDUCE_SYSTEM_PROMPT, REDUCE_USER_PROMPT
 
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 
 @traceable(name="Reduce Stage")
@@ -26,16 +29,14 @@ def reduce_stage(
     category_groups: dict[str, dict[str, list[MappedIssue]]],
     macro: MacroSnapshot,
     date: str = None,
-    max_news_per_theme: int = 5,
 ) -> list[NewsItem]:
     """
-    테마별로 뉴스 검색 + LLM 분석 리포트 생성.
+    테마별 LLM 분석 리포트 생성.
 
     Args:
         category_groups: Shuffle stage 출력 { category: { theme: [issues] } }
         macro: 매크로 데이터
         date: 날짜 문자열
-        max_news_per_theme: 테마당 최대 뉴스 개수
 
     Returns:
         테마별 NewsItem 리스트 (카테고리 포함)
@@ -43,16 +44,7 @@ def reduce_stage(
     if not category_groups:
         return []
 
-    # 병렬 처리
-    loop = asyncio.get_event_loop()
-    news_items = loop.run_until_complete(
-        _analyze_themes_parallel(
-            category_groups,
-            macro,
-            date,
-            max_news_per_theme,
-        )
-    )
+    news_items = asyncio.run(_analyze_themes_parallel(category_groups, macro, date))
 
     return news_items
 
@@ -61,13 +53,12 @@ async def _analyze_themes_parallel(
     category_groups: dict[str, dict[str, list[MappedIssue]]],
     macro: MacroSnapshot,
     date: str,
-    max_news_per_theme: int,
 ) -> list[NewsItem]:
     """카테고리/테마별 병렬 분석."""
     tasks = []
     for category, theme_map in category_groups.items():
         for theme, issues in theme_map.items():
-            tasks.append(_analyze_theme(category, theme, issues, macro, date, max_news_per_theme))
+            tasks.append(_analyze_theme(category, theme, issues, macro, date))
     return await asyncio.gather(*tasks)
 
 
@@ -77,20 +68,10 @@ async def _analyze_theme(
     issues: list[MappedIssue],
     macro: MacroSnapshot,
     date: str,
-    max_news: int,
 ) -> NewsItem:
     """단일 테마 분석."""
-    # 1. 뉴스 검색
-    news_articles = _search_news(theme, date, max_news)
+    llm = REDUCE_LLM.create_llm()
 
-    # 2. LLM 분석
-    llm = LLMProvider.create(
-        provider="anthropic",
-        model="us.anthropic.claude-haiku-4-5-20251001-v1:0",
-        temperature=0.3,
-    )
-
-    # 프롬프트 구성
     issues_text = "\n\n".join(
         [
             f"**{issue.title}**\n{issue.summary}\n"
@@ -100,25 +81,12 @@ async def _analyze_theme(
         ]
     )
 
-    news_text = (
-        "\n\n".join(
-            [
-                f"**{article['title']}**\n{article['body']}\n출처: {article['url']}"
-                for article in news_articles
-            ]
-        )
-        if news_articles
-        else "관련 뉴스 없음"
-    )
-
     system_prompt = REDUCE_SYSTEM_PROMPT
     user_prompt = REDUCE_USER_PROMPT.format(
         theme=theme,
         issues=issues_text,
-        news_articles=news_text,
     )
 
-    # LangSmith 태깅
     run_name = f"Reduce Stage - {date} - {category}/{theme[:20]}"
     config = {
         "run_name": run_name,
@@ -135,36 +103,13 @@ async def _analyze_theme(
             "category": category,
             "theme": theme,
             "issue_count": len(issues),
-            "news_count": len(news_articles),
         },
     }
 
-    messages = [
-        SystemMessage(content=system_prompt),
-        HumanMessage(content=user_prompt),
-    ]
+    messages = REDUCE_LLM.build_messages(system_prompt, user_prompt)
 
     try:
-        # NewsItem without category (LLM output)
-
-        from pydantic import BaseModel, Field
-
-        class NewsItemOutput(BaseModel):
-            """Reduce stage LLM 출력용 (category 제외)."""
-
-            theme: str = Field(description="한글 정규화 테마명")
-            emoji: str = Field(description="단일 이모지: 🚀📈⚠️ℹ️📉⚡")
-            summary: str = Field(description="한글 bullet points")
-            impact: str = Field(description="한글 impact 문구")
-            stocks: list[dict] = Field(default_factory=list)
-
-        llm_with_output = llm.with_structured_output(NewsItemOutput)
-        response = await llm_with_output.ainvoke(messages, config=config)
-
-        # category 추가하여 NewsItem 생성
-        from src.pipelines.daily_report.models import StockDetail
-
-        stocks = [StockDetail(**s) for s in response.stocks] if response.stocks else []
+        response = await invoke_llm_with_retry(llm, ThemeAnalysis, messages, config)
 
         return NewsItem(
             category=category,
@@ -172,10 +117,10 @@ async def _analyze_theme(
             emoji=response.emoji,
             summary=response.summary,
             impact=response.impact,
-            stocks=stocks,
+            stocks=response.stocks,
         )
     except Exception as e:
-        print(f"⚠️  테마 '{theme}' 분석 실패: {e}")
+        logger.error("Theme '%s' analysis failed: %s", theme, e, exc_info=True)
         return NewsItem(
             category=category,
             theme=theme,
@@ -184,24 +129,6 @@ async def _analyze_theme(
             impact="분석 실패",
             stocks=[],
         )
-
-
-def _search_news(theme: str, date: str, max_results: int) -> list[dict]:
-    """DuckDuckGo로 뉴스 검색."""
-    try:
-        query = f"{theme} 주식 시장"
-
-        ddgs = DDGS()
-        results = ddgs.news(
-            query,
-            region="kr-kr",
-            max_results=max_results,
-        )
-
-        return list(results) if results else []
-    except Exception as e:
-        print(f"⚠️  뉴스 검색 실패 ({theme}): {e}")
-        return []
 
 
 # 테스트용 CLI 진입점

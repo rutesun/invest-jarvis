@@ -2,28 +2,31 @@
 
 import asyncio
 import json
+import logging
 from pathlib import Path
 
 from dotenv import load_dotenv
-from langchain_core.messages import HumanMessage, SystemMessage
-
-from src.llm.provider import LLMProvider
 
 
 # LangSmith 추적을 위한 환경변수 로드
 load_dotenv()
 from langsmith import traceable
 
+from src.pipelines.daily_report.config import MAP_LLM, MAP_MAX_TOKENS_PER_CHUNK
 from src.pipelines.daily_report.examples.map_examples import get_map_examples
+from src.pipelines.daily_report.llm_utils import invoke_llm_with_retry
 from src.pipelines.daily_report.models import MappedIssue, MappedIssueList, TelegramMessage
 from src.pipelines.daily_report.prompts import MAP_SYSTEM_PROMPT, MAP_USER_PROMPT
+
+
+logger = logging.getLogger(__name__)
 
 
 @traceable(name="Map Stage")
 def map_stage(
     messages: list[TelegramMessage],
     date: str = None,
-    max_tokens_per_chunk: int = 80000,
+    max_tokens_per_chunk: int = MAP_MAX_TOKENS_PER_CHUNK,
 ) -> list[MappedIssue]:
     """
     청크 단위로 텔레그램 메시지에서 이슈 추출.
@@ -46,8 +49,7 @@ def map_stage(
     chunks = _chunk_messages(messages, max_tokens_per_chunk)
 
     # 청크를 병렬로 처리
-    loop = asyncio.get_event_loop()
-    results = loop.run_until_complete(_analyze_chunks_parallel(chunks, date))
+    results = asyncio.run(_analyze_chunks_parallel(chunks, date))
 
     # 결과 flatten
     all_issues = []
@@ -94,9 +96,7 @@ async def _analyze_chunks_parallel(
     date: str,
 ) -> list[list[MappedIssue]]:
     """asyncio로 청크를 병렬 분석."""
-    llm = LLMProvider.create(
-        provider="anthropic", model="us.anthropic.claude-haiku-4-5-20251001-v1:0", temperature=0.2
-    )
+    llm = MAP_LLM.create_llm()
 
     tasks = [
         _analyze_chunk(chunk, llm, chunk_index, date) for chunk_index, chunk in enumerate(chunks)
@@ -137,18 +137,13 @@ async def _analyze_chunk(
         },
     }
 
-    # LLM 호출 (예시를 SystemMessage로 분리하여 캐싱 가능)
-    messages = [
-        SystemMessage(content=system_prompt),
-        HumanMessage(content=user_prompt),
-    ]
+    messages = MAP_LLM.build_messages(system_prompt, user_prompt)
 
     try:
-        llm_with_output = llm.with_structured_output(MappedIssueList)
-        response = await llm_with_output.ainvoke(messages, config=config)
+        response = await invoke_llm_with_retry(llm, MappedIssueList, messages, config)
         return response.issues
     except Exception as e:
-        print(f"⚠️  LLM 응답 파싱 실패: {e}")
+        logger.error("Map chunk %d failed: %s", chunk_index, e, exc_info=True)
         return []
 
 

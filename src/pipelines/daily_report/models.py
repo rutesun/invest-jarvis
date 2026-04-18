@@ -1,9 +1,18 @@
 """Daily report 파이프라인 데이터 모델."""
 
 from datetime import datetime
+from enum import StrEnum
 from typing import Literal
 
 from pydantic import BaseModel, Field
+
+
+class Sentiment(StrEnum):
+    """이슈 감성 분류."""
+
+    BULL = "bull"
+    BEAR = "bear"
+    NEUTRAL = "neutral"
 
 
 # 고정 카테고리 (클러스터링 키)
@@ -78,7 +87,7 @@ class MappedIssue(BaseModel):
     )
     impact: str = Field(description="이 이슈가 시장/종목에 주는 핵심 시사점 (단문)")
     keywords: list[str] = Field(description="종목명, 티커, 기술용어")
-    sentiment: Literal["bull", "bear", "neutral"]
+    sentiment: Sentiment
     source_ids: list[str] = Field(description="원본 메시지 ID 리스트")
 
 
@@ -96,6 +105,16 @@ class StockDetail(BaseModel):
     name: str
     ticker: str
     catalyst: str = Field(description="한글 촉매 설명")
+
+
+class ThemeAnalysis(BaseModel):
+    """Reduce stage LLM 출력용 (category 제외)."""
+
+    theme: str = Field(description="한글 정규화 테마명")
+    emoji: str = Field(description="단일 이모지: 🚀📈⚠️ℹ️📉⚡")
+    summary: str = Field(description="한글 bullet points")
+    impact: str = Field(description="한글 impact 문구")
+    stocks: list[StockDetail] = Field(default_factory=list)
 
 
 class NewsItem(BaseModel):

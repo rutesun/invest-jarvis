@@ -346,9 +346,6 @@ REDUCE_USER_PROMPT = """**테마**: {theme}
 **관련 이슈들**:
 {issues}
 
-**관련 뉴스**:
-{news_articles}
-
 위 정보를 바탕으로 분석 리포트를 작성하세요."""
 
 

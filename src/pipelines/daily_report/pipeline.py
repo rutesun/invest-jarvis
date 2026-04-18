@@ -1,5 +1,7 @@
 """Daily Report 전체 파이프라인 통합."""
 
+import logging
+
 from langsmith import get_current_run_tree, traceable
 
 from src.pipelines.daily_report.models import DailyReport
@@ -8,6 +10,9 @@ from src.pipelines.daily_report.stages.map_stage import map_stage
 from src.pipelines.daily_report.stages.reduce_stage import reduce_stage
 from src.pipelines.daily_report.stages.shuffle_stage import shuffle_stage
 from src.pipelines.daily_report.stages.wrapup_stage import wrapup_stage
+
+
+logger = logging.getLogger(__name__)
 
 
 @traceable(name="Daily Report Pipeline")
@@ -32,34 +37,34 @@ def run_pipeline(date: str, data_dir: str = "data") -> DailyReport:
         run_tree.name = f"Daily Report Generation - {date}"
 
     # 1. Ingest: 텔레그램 메시지 + 매크로 로드
-    print("[1/5] Ingest Stage...")
+    logger.info("[1/5] Ingest Stage...")
     ingest_result = ingest(date, data_dir)
-    print(f"  ✓ {len(ingest_result.messages)}개 메시지 로드")
+    logger.info("  %d messages loaded", len(ingest_result.messages))
 
     # 2. Map: 이슈 추출
-    print("[2/5] Map Stage...")
+    logger.info("[2/5] Map Stage...")
     issues = map_stage(ingest_result.messages, date)
-    print(f"  ✓ {len(issues)}개 이슈 추출")
+    logger.info("  %d issues extracted", len(issues))
 
     # 3. Shuffle: 카테고리 그룹핑 + 테마 정규화
-    print("[3/5] Shuffle Stage...")
+    logger.info("[3/5] Shuffle Stage...")
     shuffle_result = shuffle_stage(issues, date)
     total_themes = sum(len(t) for t in shuffle_result.category_groups.values())
-    print(f"  ✓ {len(shuffle_result.category_groups)}개 카테고리, {total_themes}개 테마")
+    logger.info("  %d categories, %d themes", len(shuffle_result.category_groups), total_themes)
 
     # 4. Reduce: 테마별 분석
-    print("[4/5] Reduce Stage...")
+    logger.info("[4/5] Reduce Stage...")
     news_items = reduce_stage(
         shuffle_result.category_groups,
         ingest_result.macro,
         date,
     )
-    print(f"  ✓ {len(news_items)}개 테마 분석")
+    logger.info("  %d themes analyzed", len(news_items))
 
     # 5. Wrapup: 최종 리포트
-    print("[5/5] Wrapup Stage...")
+    logger.info("[5/5] Wrapup Stage...")
     report = wrapup_stage(news_items, ingest_result.macro, date)
-    print(f"  ✓ {len(report.key_insights)}개 핵심 인사이트")
+    logger.info("  %d key insights", len(report.key_insights))
 
     return report
 

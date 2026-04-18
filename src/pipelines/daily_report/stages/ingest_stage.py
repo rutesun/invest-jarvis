@@ -1,9 +1,14 @@
 """Ingest stage: 텔레그램 메시지 및 매크로 데이터 로드."""
 
 import csv
-from datetime import datetime, timedelta
+import logging
+import time
+from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
+from typing import Any
 
+import fear_and_greed
 import yfinance as yf
 from dotenv import load_dotenv
 from langsmith import traceable
@@ -16,6 +21,12 @@ from src.pipelines.daily_report.models import (
     MacroSnapshot,
     TelegramMessage,
 )
+
+
+logger = logging.getLogger(__name__)
+
+MACRO_MAX_RETRIES = 3
+MACRO_RETRY_DELAY = 1.0
 
 
 @traceable(name="Ingest Stage")
@@ -45,75 +56,86 @@ def ingest(date: str, data_dir: str = "data") -> IngestResult:
     return IngestResult(date=date, macro=macro, messages=messages)
 
 
+def _fetch_with_retry(
+    fn: Callable[[], Any],
+    label: str,
+    max_retries: int = MACRO_MAX_RETRIES,
+) -> Any | None:
+    """매크로 데이터 수집 공통 리트라이. 모두 실패 시 None 반환."""
+    for attempt in range(max_retries):
+        try:
+            return fn()
+        except Exception as e:
+            logger.warning(
+                "%s fetch failed (attempt %d/%d): %s", label, attempt + 1, max_retries, e
+            )
+            if attempt < max_retries - 1:
+                time.sleep(MACRO_RETRY_DELAY)
+    return None
+
+
+def _fetch_fear_greed() -> int | None:
+    """CNN Fear & Greed Index 조회. 실패 시 None."""
+    result = _fetch_with_retry(fear_and_greed.get, "Fear & Greed")
+    if result is None:
+        return None
+    return round(result.value)
+
+
 def _fetch_macro(date: str) -> MacroSnapshot:
     """주어진 날짜의 매크로 지표 수집."""
-    date_obj = datetime.strptime(date, "%Y-%m-%d")
-    date_obj - timedelta(days=1)
 
-    # 미국 시장 (전날 종가)
+    def _get_pct_change(ticker: str) -> float | None:
+        data = yf.Ticker(ticker).history(period="2d")
+        if len(data) < 2:
+            return None
+        return round(
+            (data["Close"].iloc[-1] - data["Close"].iloc[-2]) / data["Close"].iloc[-2] * 100, 2
+        )
+
+    # 미국 시장
     us_tickers = {"S&P500": "^GSPC", "NASDAQ": "^IXIC", "DOW": "^DJI"}
     us_markets = {}
-    for name, ticker in us_tickers.items():
-        try:
-            data = yf.Ticker(ticker).history(period="2d")
-            if len(data) >= 2:
-                pct_change = (
-                    (data["Close"].iloc[-1] - data["Close"].iloc[-2]) / data["Close"].iloc[-2] * 100
-                )
-                us_markets[name] = round(pct_change, 2)
-            else:
-                us_markets[name] = 0.0
-        except Exception:
-            us_markets[name] = 0.0
+    for name, symbol in us_tickers.items():
+        result = _fetch_with_retry(lambda s=symbol: _get_pct_change(s), f"US:{name}")
+        us_markets[name] = result if result is not None else 0.0
 
-    # 한국 시장 (당일 종가)
+    # 한국 시장
     kr_tickers = {"KOSPI": "^KS11", "KOSDAQ": "^KQ11"}
     kr_markets = {}
-    for name, ticker in kr_tickers.items():
-        try:
-            data = yf.Ticker(ticker).history(period="2d")
-            if len(data) >= 2:
-                pct_change = (
-                    (data["Close"].iloc[-1] - data["Close"].iloc[-2]) / data["Close"].iloc[-2] * 100
-                )
-                kr_markets[name] = round(pct_change, 2)
-            else:
-                kr_markets[name] = 0.0
-        except Exception:
-            kr_markets[name] = 0.0
+    for name, symbol in kr_tickers.items():
+        result = _fetch_with_retry(lambda s=symbol: _get_pct_change(s), f"KR:{name}")
+        kr_markets[name] = result if result is not None else 0.0
 
     # VIX
-    try:
-        vix_data = yf.Ticker("^VIX").history(period="1d")
-        vix = round(vix_data["Close"].iloc[-1], 1) if len(vix_data) > 0 else 0.0
-    except Exception:
+    def _get_vix() -> float:
+        data = yf.Ticker("^VIX").history(period="1d")
+        return round(data["Close"].iloc[-1], 1)
+
+    vix = _fetch_with_retry(_get_vix, "VIX")
+    if vix is None:
         vix = 0.0
 
-    # Fear & Greed (간단한 계산: VIX 기반 추정)
-    # VIX < 15: Greed, VIX 15-25: Neutral, VIX > 25: Fear
-    try:
-        if vix < 15:
-            fear_greed = 70  # Greed
-        elif vix < 25:
-            fear_greed = 50  # Neutral
-        else:
-            fear_greed = 30  # Fear
-    except Exception:
-        fear_greed = 50
+    # Fear & Greed (CNN)
+    fg = _fetch_fear_greed()
+    if fg is None:
+        fg = 50
 
-    # KRW/USD (yfinance KRW=X 사용)
-    try:
-        krw_data = yf.Ticker("KRW=X").history(period="1d")
-        krw_usd = round(krw_data["Close"].iloc[-1], 1) if len(krw_data) > 0 else 1320.0
-    except Exception:
-        krw_usd = 1320.0
+    # KRW/USD
+    def _get_krw_usd() -> float:
+        data = yf.Ticker("KRW=X").history(period="1d")
+        return round(data["Close"].iloc[-1], 1)
+
+    krw_usd = _fetch_with_retry(_get_krw_usd, "KRW/USD")
+    if krw_usd is None:
+        krw_usd = 0.0
 
     return MacroSnapshot(
         date=date,
         us_markets=us_markets,
         kr_markets=kr_markets,
         vix=vix,
-        fear_greed=fear_greed,
+        fear_greed=fg,
         krw_usd=krw_usd,
     )
 

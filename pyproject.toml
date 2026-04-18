@@ -20,6 +20,7 @@ dependencies = [
     "ddgs>=9.0.0",
     "telethon>=1.36.0",
     "notion-client>=2.0.0",
+    "fear-and-greed>=0.4",
 ]
 
 [project.optional-dependencies]
@@ -63,6 +64,8 @@ select = [
 ignore = [
     "E501",  # Line too long (handled by formatter)
 ]
+[tool.ruff.lint.per-file-ignores]
+"src/pipelines/daily_report/stages/*.py" = ["E402"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["src"]
