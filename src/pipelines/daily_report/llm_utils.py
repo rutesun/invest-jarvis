@@ -3,6 +3,7 @@
 import asyncio
 import logging
 
+from langchain_core.messages import HumanMessage
 from pydantic import BaseModel, ValidationError
 
 from src.pipelines.daily_report.config import LLM_MAX_RETRIES, LLM_TIMEOUT_SECONDS
@@ -38,6 +39,7 @@ async def invoke_llm_with_retry(
     """
     llm_with_output = llm.with_structured_output(output_model)
     last_exception = None
+    original_msg_count = len(messages)
 
     for attempt in range(max_retries):
         try:
@@ -59,13 +61,19 @@ async def invoke_llm_with_retry(
 
             # ValidationError면 피드백 메시지를 다음 시도에 추가
             if isinstance(e, ValidationError):
-                error_details = str(e)
-                feedback_message = {
-                    "role": "user",
-                    "content": f"⚠️ 검증 실패:\n{error_details}\n\n제약 조건을 정확히 지켜주세요.",
-                }
-                # messages 리스트에 피드백 추가 (다음 시도 시 사용됨)
-                messages = messages + [feedback_message]
+                # Extract concise error summary
+                error_lines = []
+                for error in e.errors():
+                    field = ".".join(str(loc) for loc in error["loc"])
+                    msg = error["msg"]
+                    error_lines.append(f"- {field}: {msg}")
+                error_details = "\n".join(error_lines)
+
+                feedback_message = HumanMessage(
+                    content=f"⚠️ 검증 실패:\n{error_details}\n\n제약 조건을 정확히 지켜주세요."
+                )
+                # Only keep original messages + latest feedback (discard previous feedbacks)
+                messages = messages[:original_msg_count] + [feedback_message]
 
                 logger.warning(
                     "ValidationError (attempt %d/%d): %s",
