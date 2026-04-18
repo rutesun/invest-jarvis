@@ -110,6 +110,7 @@ class StockDetail(BaseModel):
 class ThemeAnalysis(BaseModel):
     """Reduce stage LLM 출력용 (category 제외)."""
 
+    theme: str = Field(description="한글 정규화 테마명 (backward compatibility)")
     investment_theme: str = Field(
         description="투자 인사이트 테마명 (20-40자). "
         "패턴: [트렌드] + [방향성] + [수혜/리스크]. "
