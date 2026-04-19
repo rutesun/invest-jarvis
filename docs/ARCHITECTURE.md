@@ -87,9 +87,9 @@ Ingest → Map → Shuffle → Reduce → Wrapup
 |-------|------|-----|
 | **Ingest** | 텔레그램 메시지 로드, 필터링 | ❌ |
 | **Map** | 메시지 → 투자 이슈 추출, 카테고리 분류 | ✅ (Haiku 4.5) |
-| **Shuffle** | 카테고리 그룹핑 + 테마 정규화 | ✅ (Haiku 4.5) |
-| **Reduce** | 테마별 분석 리포트 | ✅ (Haiku 4.5) |
-| **Wrapup** | 종합 시장 인사이트 도출 | ✅ (Haiku 4.5) |
+| **Shuffle** | 카테고리 그룹핑 + 기술적 테마 정규화 | ✅ (Haiku 4.5) |
+| **Reduce** | 기술적 테마 → 투자 인사이트 변환, 테마별 분석 | ✅ (Haiku 4.5) |
+| **Wrapup** | 테마 간 관계 + 매크로 연결, 종합 인사이트 | ✅ (Haiku 4.5) |
 
 ### 주요 모델
 
@@ -97,12 +97,31 @@ Ingest → Map → Shuffle → Reduce → Wrapup
 TelegramMessage       # 원본 메시지
 MappedIssue          # Map 출력 (category, themes, keywords)
 ShuffleResult        # Shuffle 출력 (category_groups)
-ThemeAnalysis        # Reduce LLM 출력 (category 제외)
-NewsItem             # Reduce 출력 (테마별 분석, category 포함)
-DailyReport          # Wrapup 출력 (최종 리포트)
+ThemeAnalysis        # Reduce LLM 출력 (investment_theme, keywords)
+NewsItem             # Reduce 출력 (technical_theme + investment_theme)
+DailyReport          # Wrapup 출력 (key_insights + news)
 ```
 
-**설계 스펙**: `docs/superpowers/specs/2026-04-17-category-field-design.md`
+### 테마 아키텍처
+
+**이중 테마 시스템**:
+- `technical_theme`: Shuffle에서 정규화한 기술적 테마명 (안정적 검색 키)
+- `investment_theme`: Reduce LLM이 생성한 투자 인사이트 (표시명)
+
+**검색 흐름**:
+1. 사용자 쿼리로 `technical_theme` + `keywords` 검색
+2. 매칭된 `NewsItem` 반환
+3. UI에는 `investment_theme` 표시
+
+**투자 테마 패턴**:
+- 패턴 1: `[트렌드] + [방향성] + [수혜/리스크]`
+- 패턴 2: `[원인] + [결과] + [투자 액션]`
+- 패턴 3: `[현상] + [구체적 종목/섹터]`
+- 길이: 20-40자, 방향성 명확 (가속/둔화/전환)
+
+**설계 스펙**: 
+- `docs/superpowers/specs/2026-04-17-category-field-design.md` (카테고리)
+- `docs/superpowers/specs/2026-04-19-investment-theme-design.md` (투자 테마)
 
 ---
 
