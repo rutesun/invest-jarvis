@@ -62,17 +62,46 @@ async def invoke_llm_with_retry(
 
             # ValidationError면 피드백 메시지를 다음 시도에 추가
             if isinstance(e, ValidationError):
-                # Extract concise error summary
-                error_lines = []
+                # 필드별 스펙 정보
+                field_specs = {
+                    "investment_theme": """
+📋 investment_theme 요구사항:
+- 길이: 20-40자 (쉼표 포함)
+- 구조: [전반부 10-15자, 후반부 10-15자]
+- 방향성 명확히 (가속/둔화/전환 등)
+- 가능하면 구체적 종목/섹터 언급
+
+✅ 올바른 예시:
+- "GPU 공급망 다변화 가속, 엔비디아 독점 완화 수혜" (29자)
+- "엔터프라이즈 AI 채택 본격화, SaaS 가격 파워 회복" (31자)
+- "스트리밍 가이던스 실망, 광고 전환 시급" (22자)""",
+                    "keywords": """
+📋 keywords 요구사항:
+- 개수: 5-10개 (정확히)
+- 포함: 종목명 (한글/영문), 기술용어, 트렌드
+
+✅ 올바른 예시:
+- ["GPU", "엔비디아", "AMD", "세레브라스", "AI 칩", "공급망", "데이터센터"] (7개)
+- ["팔란티어", "세일스포스", "AI 에이전트", "SaaS", "엔터프라이즈"] (5개)""",
+                }
+
+                # Extract error details with field-specific specs
+                feedback_parts = ["⚠️ 검증 실패:\n"]
+                error_summary = []
                 for error in e.errors():
                     field = ".".join(str(loc) for loc in error["loc"])
                     msg = error["msg"]
-                    error_lines.append(f"- {field}: {msg}")
-                error_details = "\n".join(error_lines)
+                    feedback_parts.append(f"❌ {field}: {msg}\n")
+                    error_summary.append(f"{field}: {msg}")
 
-                feedback_message = HumanMessage(
-                    content=f"⚠️ 검증 실패:\n{error_details}\n\n제약 조건을 정확히 지켜주세요."
-                )
+                    # 해당 필드의 스펙 추가
+                    if field in field_specs:
+                        feedback_parts.append(field_specs[field])
+                        feedback_parts.append("")  # 빈 줄
+
+                feedback_parts.append("위 요구사항을 정확히 지켜서 다시 생성해주세요.")
+
+                feedback_message = HumanMessage(content="\n".join(feedback_parts))
                 # Only keep original messages + latest feedback (discard previous feedbacks)
                 messages_to_send = messages[:original_msg_count] + [feedback_message]
 
@@ -80,7 +109,7 @@ async def invoke_llm_with_retry(
                     "ValidationError (attempt %d/%d): %s",
                     attempt + 1,
                     max_retries,
-                    error_details,
+                    "; ".join(error_summary),
                 )
             else:
                 logger.warning(
