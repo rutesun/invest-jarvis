@@ -187,3 +187,77 @@ def test_news_item_with_split_themes():
     assert news.technical_theme == "AI 인프라 및 칩 수요"
     assert news.investment_theme == "GPU 공급망 다변화 가속, 엔비디아 독점 완화 수혜"
     assert len(news.keywords) == 3
+
+
+def test_validation_error_context():
+    """ValidationError should include spec and examples in context."""
+    from pydantic import ValidationError
+
+    from src.pipelines.daily_report.models import ThemeAnalysis
+
+    # Test investment_theme validation error context
+    try:
+        ThemeAnalysis(
+            theme="GPU 공급망",
+            investment_theme="짧음",  # Too short (2 chars)
+            keywords=["GPU", "엔비디아", "AMD", "세레브라스", "AI 칩"],
+            emoji="🚀",
+            summary="테스트 요약",
+            impact="테스트 영향",
+        )
+    except ValidationError as e:
+        errors = e.errors()
+        assert len(errors) == 1
+        error = errors[0]
+
+        # Check error structure
+        assert error["type"] == "theme_length_error"
+        assert "ctx" in error
+
+        # Check context contains spec and examples
+        ctx = error["ctx"]
+        assert "spec" in ctx
+        assert "examples" in ctx
+        assert "length" in ctx
+        assert ctx["length"] == 2
+
+        # Check spec content
+        assert "20-40자" in ctx["spec"]
+        assert "방향성 명확히" in ctx["spec"]
+
+        # Check examples
+        assert isinstance(ctx["examples"], list)
+        assert len(ctx["examples"]) == 3
+        assert "엔비디아" in ctx["examples"][0]
+
+    # Test keywords validation error context
+    try:
+        ThemeAnalysis(
+            theme="GPU 공급망",
+            investment_theme="GPU 공급망 다변화 가속, 엔비디아 독점 완화 수혜",
+            keywords=["GPU", "엔비디아", "AMD"],  # Too few (3 items)
+            emoji="🚀",
+            summary="테스트 요약",
+            impact="테스트 영향",
+        )
+    except ValidationError as e:
+        errors = e.errors()
+        assert len(errors) == 1
+        error = errors[0]
+
+        # Check error structure
+        assert error["type"] == "keywords_count_error"
+
+        # Check context
+        ctx = error["ctx"]
+        assert "spec" in ctx
+        assert "examples" in ctx
+        assert "count" in ctx
+        assert ctx["count"] == 3
+
+        # Check spec content
+        assert "5-10개" in ctx["spec"]
+
+        # Check examples
+        assert isinstance(ctx["examples"], list)
+        assert len(ctx["examples"]) == 2
