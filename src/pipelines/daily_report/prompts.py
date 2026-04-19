@@ -433,9 +433,9 @@ REDUCE_USER_PROMPT_V2 = """**기술적 테마**: {technical_theme}
 2. 검색 키워드 추출
 3. 테마 분석 작성"""
 
-# Activate V2 prompts (uncomment when ready to deploy)
-# REDUCE_SYSTEM_PROMPT = REDUCE_SYSTEM_PROMPT_V2
-# REDUCE_USER_PROMPT = REDUCE_USER_PROMPT_V2
+# Activate V2 prompts
+REDUCE_SYSTEM_PROMPT = REDUCE_SYSTEM_PROMPT_V2
+REDUCE_USER_PROMPT = REDUCE_USER_PROMPT_V2
 
 
 # ============================================================================
@@ -539,9 +539,9 @@ WRAPUP_USER_PROMPT_V2 = """**매크로 데이터**:
 
 위 데이터를 종합하여 전체 시장 스토리를 구성하세요."""
 
-# Activate V2 prompts (uncomment when ready to deploy)
-# WRAPUP_SYSTEM_PROMPT = WRAPUP_SYSTEM_PROMPT_V2
-# WRAPUP_USER_PROMPT = WRAPUP_USER_PROMPT_V2
+# Activate V2 prompts
+WRAPUP_SYSTEM_PROMPT = WRAPUP_SYSTEM_PROMPT_V2
+WRAPUP_USER_PROMPT = WRAPUP_USER_PROMPT_V2
 
 
 # ============================================================================
