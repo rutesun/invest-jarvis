@@ -1,5 +1,7 @@
 """Integration tests for investment theme generation."""
 
+import os
+
 import pytest
 
 from src.pipelines.daily_report.models import MacroSnapshot, MappedIssue
@@ -36,6 +38,8 @@ def sample_category_groups():
     return {"반도체": {"AI 인프라 및 칩 수요": [issue1]}}
 
 
+@pytest.mark.integration
+@pytest.mark.skipif(not os.getenv("ANTHROPIC_API_KEY"), reason="Requires API key")
 def test_reduce_generates_investment_theme(sample_category_groups, macro_snapshot):
     """Reduce stage should generate investment_theme and keywords."""
     result = reduce_stage(sample_category_groups, macro_snapshot, date="2026-04-19")

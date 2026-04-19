@@ -40,11 +40,12 @@ async def invoke_llm_with_retry(
     llm_with_output = llm.with_structured_output(output_model)
     last_exception = None
     original_msg_count = len(messages)
+    messages_to_send = list(messages)
 
     for attempt in range(max_retries):
         try:
             response = await asyncio.wait_for(
-                llm_with_output.ainvoke(messages, config=config),
+                llm_with_output.ainvoke(messages_to_send, config=config),
                 timeout=timeout_seconds,
             )
             return response
@@ -73,7 +74,7 @@ async def invoke_llm_with_retry(
                     content=f"⚠️ 검증 실패:\n{error_details}\n\n제약 조건을 정확히 지켜주세요."
                 )
                 # Only keep original messages + latest feedback (discard previous feedbacks)
-                messages = messages[:original_msg_count] + [feedback_message]
+                messages_to_send = messages[:original_msg_count] + [feedback_message]
 
                 logger.warning(
                     "ValidationError (attempt %d/%d): %s",

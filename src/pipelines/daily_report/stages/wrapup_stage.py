@@ -44,6 +44,17 @@ def wrapup_stage(
             date=date or macro.date, macro=macro, key_insights=["분석할 뉴스가 없습니다."], news=[]
         )
 
+    import asyncio
+
+    return asyncio.run(_wrapup_stage_async(news_items, macro, date))
+
+
+async def _wrapup_stage_async(
+    news_items: list[NewsItem],
+    macro: MacroSnapshot,
+    date: str = None,
+) -> DailyReport:
+    """Async implementation of wrapup stage."""
     llm = WRAPUP_LLM.create_llm()
 
     # 매크로 데이터 포맷팅
@@ -83,7 +94,7 @@ KRW/USD: {macro.krw_usd}"""
     messages = WRAPUP_LLM.build_messages(system_prompt, user_prompt)
 
     try:
-        response = invoke_llm_with_retry(llm, KeyInsightsList, messages, config)
+        response = await invoke_llm_with_retry(llm, KeyInsightsList, messages, config)
         key_insights = response.insights
     except Exception as e:
         logger.error("Wrapup stage failed: %s", e, exc_info=True)
