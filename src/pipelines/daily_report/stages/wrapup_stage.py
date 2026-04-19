@@ -1,6 +1,5 @@
 """Wrapup stage: 전체 테마 종합 및 메타 인사이트 도출."""
 
-import asyncio
 import json
 import logging
 from pathlib import Path
@@ -14,7 +13,10 @@ from langsmith import traceable
 from src.pipelines.daily_report.config import WRAPUP_LLM
 from src.pipelines.daily_report.llm_utils import invoke_llm_with_retry
 from src.pipelines.daily_report.models import DailyReport, KeyInsightsList, MacroSnapshot, NewsItem
-from src.pipelines.daily_report.prompts import WRAPUP_SYSTEM_PROMPT, WRAPUP_USER_PROMPT
+from src.pipelines.daily_report.prompts import (
+    WRAPUP_SYSTEM_PROMPT_V2,
+    WRAPUP_USER_PROMPT_V2,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -27,7 +29,7 @@ def wrapup_stage(
     date: str = None,
 ) -> DailyReport:
     """
-    전체 테마를 종합하여 일일 리포트 생성.
+    전체 시장 인사이트 도출 (테마 간 관계 + 매크로 연결).
 
     Args:
         news_items: Reduce stage 출력 (테마별 분석)
@@ -35,48 +37,38 @@ def wrapup_stage(
         date: 날짜 문자열
 
     Returns:
-        최종 DailyReport
+        DailyReport (key_insights 포함)
     """
     if not news_items:
         return DailyReport(
-            date=date or macro.date,
-            macro=macro,
-            news=[],
-            key_insights=[],
+            date=date or macro.date, macro=macro, key_insights=["분석할 뉴스가 없습니다."], news=[]
         )
 
-    # LLM으로 메타 인사이트 도출
-    key_insights = asyncio.run(_generate_insights(news_items, macro, date))
-
-    return DailyReport(
-        date=date or macro.date,
-        macro=macro,
-        news=news_items,
-        key_insights=key_insights,
-    )
-
-
-async def _generate_insights(
-    news_items: list[NewsItem],
-    macro: MacroSnapshot,
-    date: str,
-) -> list[str]:
-    """LLM으로 메타 인사이트 생성."""
     llm = WRAPUP_LLM.create_llm()
 
-    # 프롬프트 구성
+    # 매크로 데이터 포맷팅
+    macro_text = f"""VIX: {macro.vix}
+Fear & Greed: {macro.fear_greed}
+미국 시장: {", ".join(f"{k} {v:+.2f}%" for k, v in macro.us_markets.items())}
+한국 시장: {", ".join(f"{k} {v:+.2f}%" for k, v in macro.kr_markets.items())}
+KRW/USD: {macro.krw_usd}"""
+
+    # 테마별 분석 포맷팅 (investment_theme 사용)
     news_text = "\n\n".join(
         [
-            f"{item.emoji} **{item.investment_theme}**\n{item.summary}\n**(Impact: {item.impact})**"
+            f"[{item.category}] {item.investment_theme}\n"  # investment_theme 사용
+            f"(기술 테마: {item.technical_theme})\n"
+            f"{item.emoji} {item.summary[:100]}..."  # 요약 일부만
             for item in news_items
         ]
     )
 
-    # prompts.py에서 프롬프트 가져오기
-    system_prompt = WRAPUP_SYSTEM_PROMPT
-    user_prompt = WRAPUP_USER_PROMPT.format(news_items=news_text)
+    # V2 프롬프트 사용
+    system_prompt = WRAPUP_SYSTEM_PROMPT_V2
+    user_prompt = WRAPUP_USER_PROMPT_V2.format(
+        macro=macro_text, news_count=len(news_items), news_items=news_text
+    )
 
-    # LangSmith 태깅
     run_name = f"Wrapup Stage - {date}"
     config = {
         "run_name": run_name,
@@ -85,22 +77,24 @@ async def _generate_insights(
             "stage": "wrapup",
             "date": date,
             "theme_count": len(news_items),
-            "vix": macro.vix,
-            "fear_greed": macro.fear_greed,
         },
     }
 
     messages = WRAPUP_LLM.build_messages(system_prompt, user_prompt)
 
     try:
-        response = await invoke_llm_with_retry(llm, KeyInsightsList, messages, config)
-        return response.insights
+        response = invoke_llm_with_retry(llm, KeyInsightsList, messages, config)
+        key_insights = response.insights
     except Exception as e:
-        logger.error("Insight generation failed: %s", e, exc_info=True)
-        return [
-            f"총 {len(news_items)}개 테마 분석 완료",
-            f"VIX: {macro.vix}, Fear & Greed: {macro.fear_greed}",
-        ]
+        logger.error("Wrapup stage failed: %s", e, exc_info=True)
+        key_insights = ["전체 인사이트 도출 실패"]
+
+    return DailyReport(
+        date=date or macro.date,
+        macro=macro,
+        key_insights=key_insights,
+        news=news_items,
+    )
 
 
 # 테스트용 CLI 진입점
