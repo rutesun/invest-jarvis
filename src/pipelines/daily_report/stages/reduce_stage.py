@@ -190,11 +190,15 @@ async def _analyze_theme(
     try:
         response = await invoke_llm_with_retry(llm, ThemeAnalysis, messages, config)
 
+        # Flatten source_ids from all issues
+        all_source_ids = [sid for issue in issues for sid in issue.source_ids]
+
         return NewsItem(
             category=category,
             technical_theme=theme,
             investment_theme=response.investment_theme,
             keywords=response.keywords,
+            source_ids=all_source_ids,
             emoji=response.emoji,
             summary=response.summary,
             impact=response.impact,

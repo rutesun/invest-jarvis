@@ -185,6 +185,7 @@ class NewsItem(BaseModel):
 
     # 검색
     keywords: list[str] = Field(description="검색용 키워드")
+    source_ids: list[str] = Field(description="원본 텔레그램 메시지 ID 리스트 (증거 추적용)")
 
     emoji: str = Field(description="단일 이모지: 🚀📈⚠️ℹ️📉⚡")
     summary: str = Field(description="한글 bullet points")
