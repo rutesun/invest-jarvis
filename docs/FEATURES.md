@@ -192,20 +192,6 @@ TelegramMessage → MappedIssue → ShuffleResult → ThemeAnalysis/NewsItem →
 
 ---
 
-## 9. LLM Provider
-
-OpenAI / Anthropic / AWS Bedrock 추상화 팩토리.
-
-| Provider | 기본 모델 | 비고 |
-|----------|----------|------|
-| OpenAI | `gpt-4o` | seed=42 (재현성) |
-| Anthropic | `claude-3-5-sonnet` | API 직접 또는 Bedrock |
-| Bedrock | 환경변수로 지정 | `CLAUDE_CODE_USE_BEDROCK=1` |
-
-모든 LLM 호출은 LangChain `with_structured_output()`으로 Pydantic 모델 검증 적용.
-
----
-
 ## 환경 변수
 
 | 변수 | 필수 | 용도 |
