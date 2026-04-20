@@ -87,13 +87,19 @@ uv run pytest tests/tools/test_technical.py::test_trend_strategy
 
 | 변경 | 업데이트 문서 |
 |------|---------------|
-| 새 기능/파이프라인 추가 | `README.md` Features 섹션 |
-| 새 CLI 커맨드 추가 | `docs/CLI_USAGE.md` Commands 섹션 |
-| 새 모듈/패키지 추가 | `docs/` 아래 대응 문서 |
+| 기능 동작 변경 | `docs/FEATURES.md` (현재 기능명세) |
+| 아키텍처적 결정 | `docs/adr/NNNN-제목.md` (ADR, 변경 이유 기록) |
+| 새 CLI 커맨드 추가 | `docs/CLI_USAGE.md` |
 | 아키텍처 변경 | `docs/ARCHITECTURE.md` |
-| 의존성 추가 | `README.md` 설치/설정 섹션 |
+| 개발 프로세스 변경 | `docs/DEVELOPMENT.md` |
 
 **문서 업데이트는 코드 변경과 같은 커밋에 포함.**
+
+### ADR (Architecture Decision Record) 운영
+- **작성 시점**: 기능명세(`FEATURES.md`)가 변경되는 PR에서 아키텍처적으로 중요한 결정이 있을 때
+- **위치**: `docs/adr/NNNN-제목.md` (번호 순차, append-only)
+- **템플릿**: `docs/adr/0000-template.md`
+- **원칙**: 수락된 ADR은 수정하지 않음. 결정 변경 시 새 ADR 작성 후 기존 것을 "대체됨"으로 마킹
 
 ---
 
@@ -196,7 +202,7 @@ jarvis check 삼성전자
 - [ ] 커버리지 유지/향상
 
 ### 문서
-- [ ] CLAUDE.md/README.md 업데이트 (필요시)
+- [ ] FEATURES.md/CLAUDE.md 업데이트 (필요시)
 - [ ] 주석/docstring 추가 (복잡한 로직만)
 - [ ] 변경사항 문서화
 

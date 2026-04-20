@@ -22,7 +22,7 @@ Providers → Tools → Pipelines → CLI
 
 | 모듈 | 역할 |
 |------|------|
-| `technical/` | 5-전략 시스템 (Trend, Oscillator, Divergence, Disparity, Risk) |
+| `technical/` | 8-컴포넌트 시스템 (Minervini, Velocity, CRSI, Volume, Patterns, Supertrend, Divergence, Risk) |
 | `fundamental.py` | 기본적 분석 (P/E, EPS 등) |
 | `macro.py` | 매크로 지표 (VIX, Fear & Greed, 금리, DXY) |
 | `news.py` | 뉴스 검색 및 감성 분석 |
@@ -35,7 +35,7 @@ Providers → Tools → Pipelines → CLI
 |------|------|
 | `quick_check.py` | 빠른 기술적 분석 (LLM 불필요) |
 | `deep_dive.py` | 심층 분석 (기술 + 뉴스 + LLM) |
-| `daily_market_report.py` | 매크로 + 다중 종목 리포트 |
+| `ticker_report.py` | 매크로 + 다중 종목 리포트 |
 | `portfolio.py` | 포트폴리오 모니터링 |
 | `screener.py` | 시장 스크리너 |
 | `daily_report/` | 텔레그램 메시지 MapReduce 파이프라인 |
@@ -55,21 +55,18 @@ Typer 기반, Rich 출력
 
 ---
 
-## 기술적 분석 전략 시스템
+## 기술적 분석 컴포넌트 시스템
 
 **위치**: `src/tools/technical/`
 
-### 5가지 전략
-1. **Trend**: SMA 골든/데드 크로스, ADX 추세 강도
-2. **Oscillator**: RSI, Stochastic 과매수/과매도
-3. **Divergence**: 가격-지표 다이버전스 패턴
-4. **Disparity**: 이격도 극단 진입
-5. **Risk**: 변동성, 하락폭, 지지/저항 분석
+**상세 명세**: [`docs/FEATURES.md`](FEATURES.md) 섹션 1 참조
+
+### 8개 컴포넌트
+Minervini (추세 추종), Velocity (모멘텀), CRSI (과매수/과매도), Volume (거래량), Patterns (캔들스틱), Supertrend (ATR 추세), Divergence (RSI/MACD), Risk (낙폭/변동성)
 
 ### 종합 평가
-- 각 전략의 시그널을 가중 합산
-- 신뢰도 점수 계산 (전략 간 일치도)
-- 매수/매도/중립 추천
+- 각 컴포넌트 점수 합산
+- 시그널/경고/증거 구조화 출력
 
 ---
 

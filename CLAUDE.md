@@ -46,7 +46,8 @@ uv run jarvis telegram catch-up # 누락분 보충 수집
 
 | 변경 | 업데이트 문서 |
 |------|---------------|
-| 새 기능/파이프라인 | `README.md` Features 섹션 |
+| 기능 동작 변경 | `docs/FEATURES.md` (현재 기능명세) |
+| 아키텍처적 결정 | `docs/adr/NNNN-제목.md` (ADR, 변경 이유 기록) |
 | 새 CLI 커맨드 | `docs/CLI_USAGE.md` |
 | 아키텍처 변경 | `docs/ARCHITECTURE.md` |
 | 개발 프로세스 변경 | `docs/DEVELOPMENT.md` |
