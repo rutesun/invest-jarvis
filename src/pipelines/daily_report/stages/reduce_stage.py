@@ -19,7 +19,10 @@ from src.pipelines.daily_report.models import (
     NewsItem,
     ThemeAnalysis,
 )
-from src.pipelines.daily_report.prompts import REDUCE_SYSTEM_PROMPT, REDUCE_USER_PROMPT
+from src.pipelines.daily_report.prompts import (
+    REDUCE_SYSTEM_PROMPT_V2,
+    REDUCE_USER_PROMPT_V2,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -55,13 +58,67 @@ async def _analyze_themes_parallel(
     macro: MacroSnapshot,
     date: str,
 ) -> list[NewsItem]:
-    """카테고리/테마별 병렬 분석."""
+    """카테고리/테마별 병렬 분석 (실패율 체크 포함)."""
     llm = REDUCE_LLM.create_llm()
-    tasks = []
+
+    # 테마명과 함께 태스크 저장
+    theme_tasks = []
     for category, theme_map in category_groups.items():
         for theme, issues in theme_map.items():
-            tasks.append(_analyze_theme(llm, category, theme, issues, macro, date))
-    return await asyncio.gather(*tasks)
+            task = _analyze_theme(llm, category, theme, issues, macro, date)
+            theme_tasks.append((category, theme, task))
+
+    # 병렬 실행 (예외 수집)
+    results = await asyncio.gather(*[task for _, _, task in theme_tasks], return_exceptions=True)
+
+    # 성공/실패 분류
+    success = []
+    failed_info = []
+
+    for (category, theme, _), result in zip(theme_tasks, results, strict=True):
+        if isinstance(result, Exception):
+            failed_info.append(
+                {
+                    "category": category,
+                    "theme": theme,
+                    "error_type": type(result).__name__,
+                    "error_message": str(result),
+                }
+            )
+        else:
+            success.append(result)
+
+    # 실패 정보 로깅
+    for fail in failed_info:
+        logger.error(
+            "❌ 테마 분석 실패 - [%s] %s: %s (%s)",
+            fail["category"],
+            fail["theme"],
+            fail["error_type"],
+            fail["error_message"],
+        )
+
+    # 실패율 체크
+    failure_rate = len(failed_info) / len(results) if results else 0
+
+    if failure_rate > 0.2:
+        logger.error(
+            "🛑 테마 분석 실패율 %.1f%% 초과 (%d/%d), 파이프라인 중단",
+            failure_rate * 100,
+            len(failed_info),
+            len(results),
+        )
+        raise RuntimeError(
+            f"Theme analysis failure rate too high: {len(failed_info)}/{len(results)} "
+            f"({failure_rate:.1%})"
+        )
+
+    if failed_info:
+        logger.warning(
+            "⚠️ %d개 테마 분석 실패 (성공률: %.1f%%)", len(failed_info), (1 - failure_rate) * 100
+        )
+
+    return success
 
 
 async def _analyze_theme(
@@ -72,7 +129,7 @@ async def _analyze_theme(
     macro: MacroSnapshot,
     date: str,
 ) -> NewsItem:
-    """단일 테마 분석."""
+    """단일 테마 분석 (투자 인사이트 생성)."""
 
     issues_text = "\n\n".join(
         [
@@ -83,9 +140,9 @@ async def _analyze_theme(
         ]
     )
 
-    system_prompt = REDUCE_SYSTEM_PROMPT
-    user_prompt = REDUCE_USER_PROMPT.format(
-        theme=theme,
+    system_prompt = REDUCE_SYSTEM_PROMPT_V2
+    user_prompt = REDUCE_USER_PROMPT_V2.format(
+        technical_theme=theme,
         issues=issues_text,
     )
 
@@ -115,22 +172,24 @@ async def _analyze_theme(
 
         return NewsItem(
             category=category,
-            theme=response.theme,
+            technical_theme=theme,
+            investment_theme=response.investment_theme,
+            keywords=response.keywords,
             emoji=response.emoji,
             summary=response.summary,
             impact=response.impact,
             stocks=response.stocks,
         )
     except Exception as e:
-        logger.error("Theme '%s' analysis failed: %s", theme, e, exc_info=True)
-        return NewsItem(
-            category=category,
-            theme=theme,
-            emoji="ℹ️",
-            summary=f"{theme} 관련 {len(issues)}개 이슈",
-            impact="분석 실패",
-            stocks=[],
+        logger.error(
+            "테마 분석 실패 - [%s] %s: %s (%s)",
+            category,
+            theme,
+            type(e).__name__,
+            str(e),
+            exc_info=True,
         )
+        raise
 
 
 # 테스트용 CLI 진입점
@@ -168,7 +227,7 @@ if __name__ == "__main__":
 
     # 카테고리별 출력
     for item in news_items:
-        print(f"  [{item.category}] {item.emoji} {item.theme}")
+        print(f"  [{item.category}] {item.emoji} {item.investment_theme}")
 
     # 출력 저장
     output_file = f"tests/pipelines/daily_report/fixtures/stage_outputs/reduce_{date}.json"

@@ -3,7 +3,8 @@
 import asyncio
 import logging
 
-from pydantic import BaseModel
+from langchain_core.messages import HumanMessage
+from pydantic import BaseModel, ValidationError
 
 from src.pipelines.daily_report.config import LLM_MAX_RETRIES, LLM_TIMEOUT_SECONDS
 
@@ -38,11 +39,13 @@ async def invoke_llm_with_retry(
     """
     llm_with_output = llm.with_structured_output(output_model)
     last_exception = None
+    original_msg_count = len(messages)
+    messages_to_send = list(messages)
 
     for attempt in range(max_retries):
         try:
             response = await asyncio.wait_for(
-                llm_with_output.ainvoke(messages, config=config),
+                llm_with_output.ainvoke(messages_to_send, config=config),
                 timeout=timeout_seconds,
             )
             return response
@@ -56,12 +59,52 @@ async def invoke_llm_with_retry(
             )
         except Exception as e:
             last_exception = e
-            logger.warning(
-                "LLM call failed (attempt %d/%d): %s",
-                attempt + 1,
-                max_retries,
-                e,
-            )
+
+            # ValidationError면 피드백 메시지를 다음 시도에 추가
+            if isinstance(e, ValidationError):
+                # Extract error details from validator context
+                feedback_parts = ["⚠️ 검증 실패:\n"]
+                error_summary = []
+
+                for error in e.errors():
+                    field = ".".join(str(loc) for loc in error["loc"])
+                    msg = error["msg"]
+                    ctx = error.get("ctx", {})
+
+                    feedback_parts.append(f"❌ {field}: {msg}\n")
+                    error_summary.append(f"{field}: {msg}")
+
+                    # validator가 제공한 spec 사용
+                    if "spec" in ctx:
+                        feedback_parts.append(ctx["spec"])
+                        feedback_parts.append("")  # 빈 줄
+
+                    # validator가 제공한 examples 사용
+                    if "examples" in ctx:
+                        feedback_parts.append("✅ 올바른 예시:")
+                        for ex in ctx["examples"]:
+                            feedback_parts.append(f"- {ex}")
+                        feedback_parts.append("")  # 빈 줄
+
+                feedback_parts.append("위 요구사항을 정확히 지켜서 다시 생성해주세요.")
+
+                feedback_message = HumanMessage(content="\n".join(feedback_parts))
+                # Only keep original messages + latest feedback (discard previous feedbacks)
+                messages_to_send = messages[:original_msg_count] + [feedback_message]
+
+                logger.warning(
+                    "ValidationError (attempt %d/%d): %s",
+                    attempt + 1,
+                    max_retries,
+                    "; ".join(error_summary),
+                )
+            else:
+                logger.warning(
+                    "LLM call failed (attempt %d/%d): %s",
+                    attempt + 1,
+                    max_retries,
+                    e,
+                )
 
         if attempt < max_retries - 1:
             wait_time = 2**attempt

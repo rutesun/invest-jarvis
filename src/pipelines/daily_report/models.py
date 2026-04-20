@@ -4,7 +4,8 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+from pydantic_core import PydanticCustomError
 
 
 class Sentiment(StrEnum):
@@ -110,18 +111,81 @@ class StockDetail(BaseModel):
 class ThemeAnalysis(BaseModel):
     """Reduce stage LLM 출력용 (category 제외)."""
 
-    theme: str = Field(description="한글 정규화 테마명")
+    theme: str | None = Field(
+        default=None, description="한글 정규화 테마명 (backward compatibility, deprecated)"
+    )
+    investment_theme: str = Field(
+        description="투자 인사이트 테마명 (20-40자). "
+        "패턴: [트렌드] + [방향성] + [수혜/리스크]. "
+        "예: 'GPU 공급망 다변화 가속, 엔비디아 독점 완화 수혜'"
+    )
+    keywords: list[str] = Field(description="검색용 키워드 5-10개 (종목명, 기술용어, 트렌드)")
     emoji: str = Field(description="단일 이모지: 🚀📈⚠️ℹ️📉⚡")
     summary: str = Field(description="한글 bullet points")
     impact: str = Field(description="한글 impact 문구")
     stocks: list[StockDetail] = Field(default_factory=list)
+
+    @field_validator("investment_theme")
+    @classmethod
+    def validate_theme_length(cls, v):
+        """투자 테마 길이 검증 (20-40자)."""
+        length = len(v)
+        if not (20 <= length <= 40):
+            raise PydanticCustomError(
+                "theme_length_error",
+                "investment_theme 길이는 20-40자여야 합니다 (현재: {length}자)",
+                {
+                    "length": length,
+                    "value": v,
+                    "spec": """📋 investment_theme 요구사항:
+- 길이: 20-40자 (쉼표 포함)
+- 구조: [전반부 10-15자, 후반부 10-15자]
+- 방향성 명확히 (가속/둔화/전환 등)
+- 가능하면 구체적 종목/섹터 언급""",
+                    "examples": [
+                        '"GPU 공급망 다변화 가속, 엔비디아 독점 완화 수혜" (29자)',
+                        '"엔터프라이즈 AI 채택 본격화, SaaS 가격 파워 회복" (31자)',
+                        '"스트리밍 가이던스 실망, 광고 전환 시급" (22자)',
+                    ],
+                },
+            )
+        return v
+
+    @field_validator("keywords")
+    @classmethod
+    def validate_keywords_count(cls, v):
+        """키워드 개수 검증 (5-10개)."""
+        count = len(v)
+        if not (5 <= count <= 10):
+            raise PydanticCustomError(
+                "keywords_count_error",
+                "keywords는 5-10개여야 합니다 (현재: {count}개)",
+                {
+                    "count": count,
+                    "spec": """📋 keywords 요구사항:
+- 개수: 5-10개 (정확히)
+- 포함: 종목명 (한글/영문), 기술용어, 트렌드""",
+                    "examples": [
+                        '["GPU", "엔비디아", "AMD", "세레브라스", "AI 칩", "공급망", "데이터센터"] (7개)',
+                        '["팔란티어", "세일스포스", "AI 에이전트", "SaaS", "엔터프라이즈"] (5개)',
+                    ],
+                },
+            )
+        return v
 
 
 class NewsItem(BaseModel):
     """Reduce stage의 테마별 분석."""
 
     category: IssueCategory = Field(description="카테고리 (정렬/필터링용)")
-    theme: str = Field(description="한글 정규화 테마명")
+
+    # 테마 (2개 필드로 분리)
+    technical_theme: str = Field(description="Shuffle에서 정규화한 기술적 테마명 (검색 키)")
+    investment_theme: str = Field(description="투자 인사이트 테마명 (리포트 표시용)")
+
+    # 검색
+    keywords: list[str] = Field(description="검색용 키워드")
+
     emoji: str = Field(description="단일 이모지: 🚀📈⚠️ℹ️📉⚡")
     summary: str = Field(description="한글 bullet points")
     impact: str = Field(description="한글 impact 문구")
