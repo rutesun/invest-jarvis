@@ -45,10 +45,30 @@ def reduce_stage(
     Returns:
         테마별 NewsItem 리스트 (카테고리 포함)
     """
+    import time
+
     if not category_groups:
         return []
 
+    start_time = time.time()
+    total_themes = sum(len(themes) for themes in category_groups.values())
+
+    logger.info(
+        "Reduce stage started: %d categories, %d themes",
+        len(category_groups),
+        total_themes,
+    )
+
     news_items = asyncio.run(_analyze_themes_parallel(category_groups, macro, date))
+
+    elapsed = time.time() - start_time
+
+    logger.info(
+        "Reduce stage completed: %d themes → %d news items in %.1fs",
+        total_themes,
+        len(news_items),
+        elapsed,
+    )
 
     return news_items
 

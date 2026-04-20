@@ -39,14 +39,26 @@ def map_stage(
     Returns:
         테마를 가진 MappedIssue 리스트
     """
+    import time
+
     if not messages:
         return []
+
+    start_time = time.time()
 
     # 날짜 추출 (없으면 첫 메시지에서)
     if not date and messages:
         date = messages[0].timestamp.strftime("%Y-%m-%d")
 
     chunks = _chunk_messages(messages, max_tokens_per_chunk)
+    chunk_sizes = [len(c) for c in chunks]
+
+    logger.info(
+        "Map stage started: %d messages split into %d chunks (sizes: %s)",
+        len(messages),
+        len(chunks),
+        chunk_sizes,
+    )
 
     # 청크를 병렬로 처리
     results = asyncio.run(_analyze_chunks_parallel(chunks, date))
@@ -55,6 +67,16 @@ def map_stage(
     all_issues = []
     for chunk_issues in results:
         all_issues.extend(chunk_issues)
+
+    elapsed = time.time() - start_time
+
+    logger.info(
+        "Map stage completed: %d messages → %d issues in %.1fs (%.1f msg/s)",
+        len(messages),
+        len(all_issues),
+        elapsed,
+        len(messages) / elapsed if elapsed > 0 else 0,
+    )
 
     return all_issues
 
@@ -111,6 +133,12 @@ async def _analyze_chunk(
     date: str,
 ) -> list[MappedIssue]:
     """LLM으로 단일 청크 분석."""
+    import time
+
+    start_time = time.time()
+
+    logger.info("[Chunk %d] Processing %d messages...", chunk_index, len(chunk))
+
     # 프롬프트용 메시지 포맷팅
     messages_text = "\n".join([f"[{msg.channel_id}-{msg.message_id}] {msg.text}" for msg in chunk])
 
@@ -140,10 +168,24 @@ async def _analyze_chunk(
     messages = MAP_LLM.build_messages(system_prompt, user_prompt)
 
     try:
+        llm_start = time.time()
         response = await invoke_llm_with_retry(llm, MappedIssueList, messages, config)
-        return response.issues
+        llm_duration = time.time() - llm_start
+
+        issues = response.issues
+        elapsed = time.time() - start_time
+
+        logger.info(
+            "[Chunk %d] Completed: %d issues extracted (LLM: %.1fs, Total: %.1fs)",
+            chunk_index,
+            len(issues),
+            llm_duration,
+            elapsed,
+        )
+        return issues
     except Exception as e:
-        logger.error("Map chunk %d failed: %s", chunk_index, e, exc_info=True)
+        elapsed = time.time() - start_time
+        logger.error("[Chunk %d] Failed after %.1fs: %s", chunk_index, elapsed, e, exc_info=True)
         return []
 
 

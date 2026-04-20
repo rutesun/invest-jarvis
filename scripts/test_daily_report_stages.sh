@@ -59,9 +59,9 @@ if [ -f "$OUTPUT_DIR/map_$DATE.json" ]; then
 fi
 
 if [ -f "$OUTPUT_DIR/shuffle_$DATE.json" ]; then
-    NORMALIZED_THEMES=$(jq '.canonical_themes | keys | length' "$OUTPUT_DIR/shuffle_$DATE.json")
-    THEME_GROUPS=$(jq '.theme_groups | keys | length' "$OUTPUT_DIR/shuffle_$DATE.json")
-    echo "✓ Shuffle: $NORMALIZED_THEMES개 정규화 테마, $THEME_GROUPS개 그룹"
+    CATEGORIES=$(jq '.category_groups | keys | length' "$OUTPUT_DIR/shuffle_$DATE.json")
+    THEMES=$(jq '.category_groups | to_entries | map(.value | keys | length) | add' "$OUTPUT_DIR/shuffle_$DATE.json")
+    echo "✓ Shuffle: $CATEGORIES개 카테고리, $THEMES개 테마"
 fi
 
 if [ -f "$OUTPUT_DIR/reduce_$DATE.json" ]; then

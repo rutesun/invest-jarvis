@@ -39,14 +39,29 @@ def wrapup_stage(
     Returns:
         DailyReport (key_insights 포함)
     """
+    import asyncio
+    import time
+
     if not news_items:
         return DailyReport(
             date=date or macro.date, macro=macro, key_insights=["분석할 뉴스가 없습니다."], news=[]
         )
 
-    import asyncio
+    start_time = time.time()
 
-    return asyncio.run(_wrapup_stage_async(news_items, macro, date))
+    logger.info("Wrapup stage started: %d news items to synthesize", len(news_items))
+
+    report = asyncio.run(_wrapup_stage_async(news_items, macro, date))
+
+    elapsed = time.time() - start_time
+
+    logger.info(
+        "Wrapup stage completed: %d key insights generated in %.1fs",
+        len(report.key_insights),
+        elapsed,
+    )
+
+    return report
 
 
 async def _wrapup_stage_async(
