@@ -19,6 +19,22 @@ repos:
         types: [python]
         require_serial: true
 
+      - id: check-features-doc
+        name: check FEATURES.md updated
+        entry: bash -c 'git diff --cached --name-only | grep -q "^src/" && ! git diff --cached --name-only | grep -q "^docs/FEATURES.md" && echo "⚠️  src/ 변경이 있지만 docs/FEATURES.md가 업데이트되지 않았습니다. 기능 변경이면 FEATURES.md도 업데이트하세요." || true'
+        verbose: true
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: check-features-doc-llm
+        name: LLM feature change detection
+        entry: bash scripts/check-features-doc.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
       - id: vulture
         name: detect unused code
         entry: uv run --group dev vulture src --min-confidence 80
