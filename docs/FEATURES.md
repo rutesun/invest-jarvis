@@ -138,6 +138,17 @@ TelegramMessage → MappedIssue → ShuffleResult → ThemeAnalysis/NewsItem →
 - Anthropic provider일 때 system prompt에 `cache_control: ephemeral` 자동 적용
 - OpenAI로 전환 시 자동 비활성화 (`StageLLMConfig.build_messages()`)
 
+**리포트 출력:**
+- Markdown 파일: `reports/YYYY-MM/daily_YYYY-MM-DD.md`
+- 각 테마마다 **출처** 섹션에 원본 메시지 발췌 포함
+- source_ids로 CSV에서 원본 메시지 로드 → keywords로 관련 부분 추출 (~200자)
+- 예시:
+  ```
+  **출처**:
+  1. 신한 해외주식 데일리(4/20) "이란 외무장관의 호르무즈 해협..."
+  2. ★ Daily Market Digest - "지난 금요일은 이란의..."
+  ```
+
 **의존성:** 텔레그램 CSV, Anthropic Haiku 4.5, yfinance, fear-and-greed
 
 ---
