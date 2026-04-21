@@ -141,7 +141,7 @@ TelegramMessage → MappedIssue → ShuffleResult → ThemeAnalysis/NewsItem →
 **리포트 출력:**
 - Markdown 파일: `reports/YYYY-MM/daily_YYYY-MM-DD.md`
 - 각 테마마다 **출처** 섹션에 원본 메시지 발췌 포함
-- source_ids로 CSV에서 원본 메시지 로드 → keywords로 관련 부분 추출 (~200자)
+- source_ids로 CSV에서 원본 메시지 로드 → keywords 매칭 시 주변 ~200자 발췌, 매칭 없으면 전체 메시지
 - 예시:
   ```
   **출처**:

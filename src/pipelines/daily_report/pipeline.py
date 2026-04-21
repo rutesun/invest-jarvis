@@ -71,7 +71,7 @@ def _extract_relevant_text(content: str, keywords: list[str], max_length: int = 
         max_length: 최대 발췌 길이
 
     Returns:
-        발췌된 텍스트 (없으면 앞부분 반환)
+        발췌된 텍스트 (없으면 전체 반환)
     """
     if not content:
         return ""
@@ -105,10 +105,8 @@ def _extract_relevant_text(content: str, keywords: list[str], max_length: int = 
 
         return excerpt.strip()
 
-    # 키워드 없으면 앞부분 반환
-    if len(content) <= max_length:
-        return content
-    return content[:max_length].rstrip() + "..."
+    # 키워드 없으면 전체 반환
+    return content
 
 
 @traceable(name="Daily Report Pipeline")
