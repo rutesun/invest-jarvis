@@ -12,10 +12,10 @@ import httpx
 logger = logging.getLogger(__name__)
 
 # 메시지 본문에서 URL 추출용 정규식
-# 마크다운 링크 [text](url) 및 일반 URL 모두 지원
-# .pdf, .pdf.do, .pdf?param 등 다양한 형식 지원
+# 모든 HTTP(S) URL을 찾고, _fetch_url_pdf()에서 실제 PDF 여부 확인
+# 단축 URL(vo.la, bit.ly 등)도 지원
 URL_PATTERN = re.compile(
-    r"https?://[^\s\)\]]+\.pdf(?:\.[a-z]+)?(?:\?[^\s\)\]]*)?",
+    r"https?://[^\s\)\]]+",
     re.IGNORECASE,
 )
 
@@ -142,7 +142,14 @@ class TelegramMediaDownloader:
             async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
                 # HEAD로 Content-Type 확인
                 head = await client.head(url)
-                if "application/pdf" not in head.headers.get("content-type", ""):
+                content_type = head.headers.get("content-type", "").lower()
+                final_url = str(head.url).lower()
+
+                # Content-Type 또는 URL 확장자로 PDF 확인
+                is_pdf = "application/pdf" in content_type or final_url.endswith(".pdf")
+
+                if not is_pdf:
+                    logger.debug("Not a PDF: %s (type=%s, url=%s)", url, content_type, final_url)
                     return False
 
                 # 스트림 다운로드
