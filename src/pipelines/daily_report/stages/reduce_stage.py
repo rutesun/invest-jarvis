@@ -152,12 +152,7 @@ async def _analyze_theme(
     """단일 테마 분석 (투자 인사이트 생성)."""
 
     issues_text = "\n\n".join(
-        [
-            f"**{issue.title}**\n{issue.summary}\n"
-            f"키워드: {', '.join(issue.keywords)}\n"
-            f"감성: {issue.sentiment}"
-            for issue in issues
-        ]
+        [f"**{issue.title}**\n{issue.summary}\n감성: {issue.sentiment}" for issue in issues]
     )
 
     system_prompt = REDUCE_SYSTEM_PROMPT_V2

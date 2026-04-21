@@ -87,7 +87,6 @@ class MappedIssue(BaseModel):
         max_length=3,
     )
     impact: str = Field(description="이 이슈가 시장/종목에 주는 핵심 시사점 (단문)")
-    keywords: list[str] = Field(description="종목명, 티커, 기술용어")
     sentiment: Sentiment
     source_ids: list[str] = Field(description="원본 메시지 ID 리스트")
 
