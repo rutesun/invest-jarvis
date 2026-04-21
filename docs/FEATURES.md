@@ -190,6 +190,7 @@ TelegramMessage → MappedIssue → ShuffleResult → ThemeAnalysis/NewsItem →
 **URL PDF 다운로드:**
 - 메시지 본문에서 모든 HTTP(S) URL 추출
 - HEAD 요청으로 Content-Type 확인 (follow_redirects=True)
+- HEAD 실패 시(TooManyRedirects) GET으로 fallback (DART 등 HEAD 미지원 사이트 대응)
 - 단축 URL(vo.la, bit.ly 등) 지원: 최종 리다이렉트 URL의 확장자도 체크
 
 **의존성:** Telethon, httpx (미디어 다운로드)
