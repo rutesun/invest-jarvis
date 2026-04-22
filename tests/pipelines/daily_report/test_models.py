@@ -82,10 +82,11 @@ def test_news_item_emoji_field():
         technical_theme="AI 전력",
         investment_theme="AI 전력 수요 급증으로 친환경 에너지 인프라 강화",
         keywords=["AI", "전력", "데이터센터"],
-        source_ids=["test-123"],
         emoji="🚀",
         summary="- 내용",
         impact="Impact: 긍정적",
+        stocks=[],
+        source_ids=["test-123"],
     )
     assert item.emoji == "🚀"
 
@@ -177,11 +178,11 @@ def test_news_item_with_split_themes():
         "technical_theme": "AI 인프라 및 칩 수요",
         "investment_theme": "GPU 공급망 다변화 가속, 엔비디아 독점 완화 수혜",
         "keywords": ["GPU", "엔비디아", "AMD"],
-        "source_ids": ["test-456"],
         "emoji": "🚀",
         "summary": "테스트 요약",
         "impact": "테스트 영향",
         "stocks": [],
+        "source_ids": ["test-456"],
     }
 
     news = NewsItem(**data)
