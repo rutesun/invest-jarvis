@@ -9,6 +9,26 @@ from dotenv import load_dotenv
 from rich.console import Console
 from rich.markdown import Markdown
 
+from src.llm.provider import LLMProvider
+from src.pipelines.deep_dive import DeepDivePipeline
+from src.pipelines.portfolio import PortfolioPipeline
+from src.pipelines.quick_check import QuickCheckPipeline
+from src.pipelines.screener import ScreenerPipeline
+from src.pipelines.ticker_report import TickerReportPipeline
+from src.providers.kis import KISProvider
+from src.providers.naver import NaverProvider
+from src.providers.ticker_resolver import TickerResolver
+from src.providers.yfinance_provider import YFinanceProvider
+from src.tools.fundamental import FundamentalTool
+from src.tools.macro import MacroTool
+from src.tools.news import NewsTool
+from src.tools.portfolio import PortfolioTool
+from src.tools.screener.evidence import EvidenceCollector
+from src.tools.screener.universe import UniverseBuilder
+from src.tools.technical.scorer import TechnicalScorer
+from src.tools.technical.tool import TechnicalAnalysisTool
+from src.utils.sector_metrics import SectorMetrics
+
 
 # Load environment variables from .env file
 load_dotenv()
@@ -93,27 +113,6 @@ def _format_metric_value(metric_name: str, value: float) -> str:
         return formatted.rstrip("0").rstrip(".") if "." in formatted else formatted
 
 
-from src.llm.provider import LLMProvider
-from src.pipelines.deep_dive import DeepDivePipeline
-from src.pipelines.portfolio import PortfolioPipeline
-from src.pipelines.quick_check import QuickCheckPipeline
-from src.pipelines.screener import ScreenerPipeline
-from src.pipelines.ticker_report import TickerReportPipeline
-from src.providers.kis import KISProvider
-from src.providers.naver import NaverProvider
-from src.providers.ticker_resolver import TickerResolver
-from src.providers.yfinance_provider import YFinanceProvider
-from src.tools.fundamental import FundamentalTool
-from src.tools.macro import MacroTool
-from src.tools.news import NewsTool
-from src.tools.portfolio import PortfolioTool
-from src.tools.screener.evidence import EvidenceCollector
-from src.tools.screener.universe import UniverseBuilder
-from src.tools.technical.scorer import TechnicalScorer
-from src.tools.technical.tool import TechnicalAnalysisTool
-from src.utils.sector_metrics import SectorMetrics
-
-
 logger = logging.getLogger(__name__)
 
 app = typer.Typer(help="Invest Jarvis - Financial Analysis CLI")
@@ -152,7 +151,7 @@ async def resolve_ticker(query: str) -> str:
         resolution = await resolver.resolve(query)
         return resolution.resolved_ticker
     except Exception as e:
-        raise ValueError(f"Could not resolve ticker for '{query}': {e}")
+        raise ValueError(f"Could not resolve ticker for '{query}': {e}") from e
 
 
 async def run_quick_check(ticker_or_name: str) -> dict:

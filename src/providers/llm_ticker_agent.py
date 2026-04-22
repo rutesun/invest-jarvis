@@ -93,8 +93,8 @@ class LLMTickerAgent:
                         raise TickerNotFoundError(f"LLM returned null ticker for: {query}")
                     logger.debug("Resolved %s → %s (%s)", query, ticker, display_name)
                     return ticker, display_name
-                except (json.JSONDecodeError, KeyError):
-                    raise TickerNotFoundError(f"Could not resolve: {query}")
+                except (json.JSONDecodeError, KeyError) as e:
+                    raise TickerNotFoundError(f"Could not resolve: {query}") from e
 
             for tool_call in response.tool_calls:
                 logger.debug("Tool call: %s(%s)", tool_call["name"], tool_call["args"])

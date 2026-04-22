@@ -77,17 +77,25 @@ def score_momentum(df: pd.DataFrame, lookback: int = 50) -> dict:
     if "SUPERTd_10_3.0" in df.columns and len(df) > 1:
         curr_dir = df.iloc[-1].get("SUPERTd_10_3.0")
         prev_dir = df.iloc[-2].get("SUPERTd_10_3.0")
-        if not pd.isna(curr_dir) and not pd.isna(prev_dir):
-            if float(prev_dir) < 0 and float(curr_dir) > 0:
-                result["trend_reversal"] = 25.0
+        if (
+            not pd.isna(curr_dir)
+            and not pd.isna(prev_dir)
+            and float(prev_dir) < 0
+            and float(curr_dir) > 0
+        ):
+            result["trend_reversal"] = 25.0
 
     # Compression: recent 10-day ATR < previous 10-day ATR
     if "ATR" in df.columns and len(df) >= 20:
         recent_atr = df["ATR"].iloc[-10:].mean()
         prev_atr = df["ATR"].iloc[-20:-10].mean()
-        if not pd.isna(recent_atr) and not pd.isna(prev_atr) and prev_atr > 0:
-            if recent_atr < prev_atr:
-                result["compression"] = 15.0
+        if (
+            not pd.isna(recent_atr)
+            and not pd.isna(prev_atr)
+            and prev_atr > 0
+            and recent_atr < prev_atr
+        ):
+            result["compression"] = 15.0
 
     # Combo bonus
     if result["breakout"] > 0 and result["trend_reversal"] > 0:

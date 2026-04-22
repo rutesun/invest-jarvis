@@ -12,6 +12,8 @@ from pathlib import Path
 import httpx
 from pydantic import BaseModel
 
+from src.core.models import ToolResult
+
 
 class DisclosureItem(BaseModel):
     """공시 1건 (SEC 8-K/10-Q 또는 DART 보고서)."""
@@ -266,9 +268,6 @@ class DARTDisclosureFetcher:
     def _save_cache(self, mapping: dict[str, str]) -> None:
         self.CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
         self.CACHE_PATH.write_text(json.dumps(mapping, ensure_ascii=False), encoding="utf-8")
-
-
-from src.core.models import ToolResult
 
 
 class DisclosureTool:
