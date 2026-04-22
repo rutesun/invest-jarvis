@@ -118,7 +118,7 @@ def update_daily_report(report: DailyReport, date: str) -> str:
         return page_url
 
     except Exception as e:
-        raise Exception(f"Notion 페이지 생성 실패: {str(e)}")
+        raise Exception(f"Notion 페이지 생성 실패: {str(e)}") from e
 
 
 # ==================== Notion Block Builders ====================

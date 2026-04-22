@@ -135,15 +135,15 @@ def _detect_candlestick_patterns(df: pd.DataFrame) -> dict:
 
     o = latest.get("Open")
     h = latest.get("High")
-    l = latest.get("Low")
+    low = latest.get("Low")
     c = latest.get("Close")
     prev_o = prev.get("Open")
     prev_c = prev.get("Close")
 
-    if any(pd.isna(x) for x in [o, h, l, c, prev_o, prev_c]):
+    if any(pd.isna(x) for x in [o, h, low, c, prev_o, prev_c]):
         return {"signals": [], "evidence": [], "metrics": {}, "score": 0}
 
-    o, h, l, c = float(o), float(h), float(l), float(c)
+    o, h, low, c = float(o), float(h), float(low), float(c)
     prev_o, prev_c = float(prev_o), float(prev_c)
 
     signals = []
@@ -153,8 +153,8 @@ def _detect_candlestick_patterns(df: pd.DataFrame) -> dict:
 
     body = abs(c - o)
     upper_shadow = h - max(o, c)
-    lower_shadow = min(o, c) - l
-    total_range = h - l
+    lower_shadow = min(o, c) - low
+    total_range = h - low
 
     # Hammer detection (can be bullish or bearish)
     if total_range > 0 and body > 0 and lower_shadow > 2 * body and upper_shadow < body * 0.5:
@@ -165,11 +165,12 @@ def _detect_candlestick_patterns(df: pd.DataFrame) -> dict:
 
     # Bullish Engulfing detection
     prev_body = abs(prev_c - prev_o)
-    if prev_c < prev_o and c > o:  # Prev bearish, current bullish
-        if c > prev_o and o < prev_c and body > prev_body:
-            signals.append("Bullish Engulfing (상승장악형)")
-            evidence.append(f"현재 양봉이 이전 음봉 완전 포함 (몸통 {body:.2f} > {prev_body:.2f})")
-            score += 15
-            metrics["engulfing_body"] = round(body, 2)
+    if (
+        prev_c < prev_o and c > o and c > prev_o and o < prev_c and body > prev_body
+    ):  # Prev bearish, current bullish engulfs it
+        signals.append("Bullish Engulfing (상승장악형)")
+        evidence.append(f"현재 양봉이 이전 음봉 완전 포함 (몸통 {body:.2f} > {prev_body:.2f})")
+        score += 15
+        metrics["engulfing_body"] = round(body, 2)
 
     return {"signals": signals, "evidence": evidence, "metrics": metrics, "score": score}

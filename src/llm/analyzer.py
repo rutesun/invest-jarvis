@@ -6,6 +6,8 @@ from langchain_core.prompts import ChatPromptTemplate
 from src.llm.models import (
     FundamentalSummaryInput,
     FundamentalSummaryOutput,
+    IntegratedAnalysisInput,
+    IntegratedAnalysisOutput,
     NewsAnalysisInput,
     NewsAnalysisOutput,
     TechnicalSummaryInput,
@@ -221,9 +223,6 @@ Provide summary with:
     )
 
     return result
-
-
-from src.llm.models import IntegratedAnalysisInput, IntegratedAnalysisOutput
 
 
 async def generate_integrated_analysis(
