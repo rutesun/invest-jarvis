@@ -4,7 +4,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.tools.disclosure import DisclosureItem, extract_kr_code, is_korean_ticker
+from src.tools.disclosure import (
+    DARTDisclosureFetcher,
+    DisclosureItem,
+    DisclosureTool,
+    SECDisclosureFetcher,
+    extract_kr_code,
+    is_korean_ticker,
+)
 
 
 def test_disclosure_item_defaults():
@@ -65,8 +72,6 @@ def test_extract_kr_code_pads_short_code():
 
 
 # ── SEC EDGAR Fetcher Tests ───────────────────────────────────────────────────
-
-from src.tools.disclosure import SECDisclosureFetcher
 
 
 @pytest.fixture
@@ -176,8 +181,6 @@ async def test_sec_fetcher_uses_cache(sec_fetcher, sec_submissions_response, tmp
 
 
 # ── DART Fetcher Tests ────────────────────────────────────────────────────────
-
-from src.tools.disclosure import DARTDisclosureFetcher
 
 
 @pytest.fixture
@@ -307,8 +310,6 @@ async def test_dart_fetcher_uses_cache(dart_fetcher, dart_list_response, tmp_pat
 
 
 # ── DisclosureTool Integration Tests ──────────────────────────────────────────
-
-from src.tools.disclosure import DisclosureTool
 
 
 @pytest.mark.asyncio

@@ -69,39 +69,41 @@ def mock_llm():
 @pytest.mark.asyncio
 async def test_deep_dive_pipeline_success(mock_technical_tool, mock_news_tool, mock_llm):
     """Test successful deep dive analysis."""
-    with patch(
-        "src.llm.analyzer.generate_technical_summary", new_callable=AsyncMock
-    ) as mock_tech_summary:
-        with patch("src.llm.analyzer.analyze_news", new_callable=AsyncMock) as mock_news_analysis:
-            # Mock LLM outputs
-            mock_tech_summary.return_value = TechnicalSummaryOutput(
-                summary="강세",
-                key_insights=["골든크로스"],
-                recommendation="매수",
-                confidence=0.75,
-                rationale="좋음",
-            )
-            mock_news_analysis.return_value = NewsAnalysisOutput(
-                sentiment="긍정",
-                confidence=0.85,
-                key_themes=["신제품"],
-                summary="긍정적",
-                impact_assessment="좋음",
-            )
+    with (
+        patch(
+            "src.llm.analyzer.generate_technical_summary", new_callable=AsyncMock
+        ) as mock_tech_summary,
+        patch("src.llm.analyzer.analyze_news", new_callable=AsyncMock) as mock_news_analysis,
+    ):
+        # Mock LLM outputs
+        mock_tech_summary.return_value = TechnicalSummaryOutput(
+            summary="강세",
+            key_insights=["골든크로스"],
+            recommendation="매수",
+            confidence=0.75,
+            rationale="좋음",
+        )
+        mock_news_analysis.return_value = NewsAnalysisOutput(
+            sentiment="긍정",
+            confidence=0.85,
+            key_themes=["신제품"],
+            summary="긍정적",
+            impact_assessment="좋음",
+        )
 
-            pipeline = DeepDivePipeline(
-                technical_tool=mock_technical_tool,
-                news_tool=mock_news_tool,
-                llm=mock_llm,
-            )
+        pipeline = DeepDivePipeline(
+            technical_tool=mock_technical_tool,
+            news_tool=mock_news_tool,
+            llm=mock_llm,
+        )
 
-            result = await pipeline.run("AAPL")
+        result = await pipeline.run("AAPL")
 
-            assert result["ticker"] == "AAPL"
-            assert result["technical"] is not None
-            assert result["technical_summary"].summary == "강세"
-            assert result["news"] is not None
-            assert result["news_analysis"].sentiment == "긍정"
+        assert result["ticker"] == "AAPL"
+        assert result["technical"] is not None
+        assert result["technical_summary"].summary == "강세"
+        assert result["news"] is not None
+        assert result["news_analysis"].sentiment == "긍정"
 
 
 @pytest.mark.asyncio

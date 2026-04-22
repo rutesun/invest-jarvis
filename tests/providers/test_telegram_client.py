@@ -8,16 +8,20 @@ from src.providers.telegram.client import TelegramClientWrapper
 
 def test_missing_api_id_raises_error():
     """TELEGRAM_API_ID 없을 때 명확한 에러 메시지"""
-    with patch.dict("os.environ", {}, clear=True):
-        with pytest.raises(ValueError, match="TELEGRAM_API_ID"):
-            TelegramClientWrapper()
+    with (
+        patch.dict("os.environ", {}, clear=True),
+        pytest.raises(ValueError, match="TELEGRAM_API_ID"),
+    ):
+        TelegramClientWrapper()
 
 
 def test_missing_api_hash_raises_error():
     """TELEGRAM_API_HASH 없을 때 명확한 에러 메시지"""
-    with patch.dict("os.environ", {"TELEGRAM_API_ID": "12345"}, clear=True):
-        with pytest.raises(ValueError, match="TELEGRAM_API_HASH"):
-            TelegramClientWrapper()
+    with (
+        patch.dict("os.environ", {"TELEGRAM_API_ID": "12345"}, clear=True),
+        pytest.raises(ValueError, match="TELEGRAM_API_HASH"),
+    ):
+        TelegramClientWrapper()
 
 
 def test_valid_env_creates_client():
