@@ -142,12 +142,7 @@ TelegramMessage → MappedIssue → ShuffleResult → ThemeAnalysis/NewsItem →
 - Markdown 파일: `reports/YYYY-MM/daily_YYYY-MM-DD.md`
 - 각 테마마다 **출처** 섹션에 원본 메시지 발췌 포함
 - source_ids로 CSV에서 원본 메시지 로드 → keywords 매칭 시 주변 ~200자 발췌, 매칭 없으면 전체 메시지
-- 예시:
-  ```
-  **출처**:
-  1. 신한 해외주식 데일리(4/20) "이란 외무장관의 호르무즈 해협..."
-  2. ★ Daily Market Digest - "지난 금요일은 이란의..."
-  ```
+- **포맷**: 개행문자 변환, 출처에 채널명+인용블록, 테마 구분선(`---`)
 
 **의존성:** 텔레그램 CSV, Anthropic Haiku 4.5, yfinance, fear-and-greed
 
