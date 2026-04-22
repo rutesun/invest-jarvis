@@ -148,7 +148,7 @@ def test_cli_report_command():
 
     with patch("src.cli.main.run_daily_report", new_callable=AsyncMock) as mock_run:
         mock_run.return_value = mock_result
-        result = runner.invoke(app, ["report", "--tickers", "AAPL"])
+        result = runner.invoke(app, ["report", "ticker", "--tickers", "AAPL"])
 
     assert result.exit_code == 0
     assert "Daily Market Report" in result.stdout
