@@ -35,16 +35,35 @@ def shuffle_stage(
     Returns:
         category_groups: { category: { theme: [issues] } }
     """
+    import time
+
     if not issues:
         return ShuffleResult(category_groups={})
+
+    start_time = time.time()
+
+    logger.info("Shuffle stage started: %d issues", len(issues))
 
     # 1단계: 결정론적 카테고리 그룹핑 (LLM 불필요)
     category_buckets: dict[str, list[MappedIssue]] = {}
     for issue in issues:
         category_buckets.setdefault(issue.category, []).append(issue)
 
+    logger.info("Step 1/2: Categorized into %d categories", len(category_buckets))
+
     # 2단계: 카테고리 내 테마 정규화 (LLM, 병렬)
     category_groups = asyncio.run(_normalize_themes_by_category(category_buckets, date))
+
+    total_themes = sum(len(themes) for themes in category_groups.values())
+    elapsed = time.time() - start_time
+
+    logger.info(
+        "Shuffle stage completed: %d issues → %d categories, %d themes in %.1fs",
+        len(issues),
+        len(category_groups),
+        total_themes,
+        elapsed,
+    )
 
     return ShuffleResult(category_groups=category_groups)
 

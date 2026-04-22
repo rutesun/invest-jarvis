@@ -1,6 +1,8 @@
 """Daily Report 전체 파이프라인 통합."""
 
+import csv
 import logging
+from pathlib import Path
 
 from langsmith import get_current_run_tree, traceable
 
@@ -13,6 +15,98 @@ from src.pipelines.daily_report.stages.wrapup_stage import wrapup_stage
 
 
 logger = logging.getLogger(__name__)
+
+
+def _load_source_messages(source_ids: list[str], date: str, data_dir: str) -> dict[str, str]:
+    """
+    source_ids로 원본 메시지를 CSV에서 로드.
+
+    Args:
+        source_ids: "{channel_id}-{message_id}" 형식 리스트
+        date: YYYY-MM-DD
+        data_dir: 데이터 디렉토리
+
+    Returns:
+        {source_id: content} dict
+    """
+    messages = {}
+    year_month = "-".join(date.split("-")[:2])  # YYYY-MM
+    data_path = Path(data_dir) / year_month
+
+    # 채널별로 그룹핑
+    by_channel: dict[str, list[str]] = {}
+    for source_id in source_ids:
+        if "-" not in source_id:
+            continue
+        channel_id, msg_id = source_id.rsplit("-", 1)
+        by_channel.setdefault(channel_id, []).append(msg_id)
+
+    # 채널별 CSV 로드
+    for channel_id, msg_ids in by_channel.items():
+        csv_file = data_path / f"{date}-{channel_id}.csv"
+        if not csv_file.exists():
+            logger.warning("CSV not found: %s", csv_file)
+            continue
+
+        try:
+            with open(csv_file, encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    if row["message_id"] in msg_ids:
+                        source_id = f"{channel_id}-{row['message_id']}"
+                        messages[source_id] = row.get("content", "")
+        except Exception as e:
+            logger.error("Failed to load CSV %s: %s", csv_file, e)
+
+    return messages
+
+
+def _extract_relevant_text(content: str, keywords: list[str], max_length: int = 300) -> str:
+    """
+    키워드와 관련된 부분을 발췌.
+
+    Args:
+        content: 원본 텍스트
+        keywords: 검색 키워드 리스트
+        max_length: 최대 발췌 길이
+
+    Returns:
+        발췌된 텍스트 (없으면 전체 반환)
+    """
+    if not content:
+        return ""
+
+    content_lower = content.lower()
+
+    # 키워드가 등장하는 첫 위치 찾기
+    first_match = None
+    for keyword in keywords:
+        keyword_lower = keyword.lower()
+        pos = content_lower.find(keyword_lower)
+        if pos != -1 and (first_match is None or pos < first_match):
+            first_match = pos
+
+    # 키워드 발견 시 그 주변 추출
+    if first_match is not None:
+        # 키워드 앞뒤로 max_length//2씩
+        start = max(0, first_match - max_length // 2)
+        end = min(len(content), first_match + max_length // 2)
+
+        # 문장 경계로 자르기 (개행 또는 마침표)
+        excerpt = content[start:end]
+
+        # 앞에 ... 추가
+        if start > 0:
+            excerpt = "..." + excerpt.lstrip()
+
+        # 뒤에 ... 추가
+        if end < len(content):
+            excerpt = excerpt.rstrip() + "..."
+
+        return excerpt.strip()
+
+    # 키워드 없으면 전체 반환
+    return content
 
 
 @traceable(name="Daily Report Pipeline")
@@ -69,12 +163,13 @@ def run_pipeline(date: str, data_dir: str = "data") -> DailyReport:
     return report
 
 
-def format_report(report: DailyReport) -> str:
+def format_report(report: DailyReport, data_dir: str = "data") -> str:
     """
     DailyReport를 Markdown으로 포맷팅.
 
     Args:
         report: 최종 리포트
+        data_dir: 데이터 디렉토리 (원본 메시지 로드용)
 
     Returns:
         Markdown 문자열
@@ -106,7 +201,7 @@ def format_report(report: DailyReport) -> str:
     # 테마별 분석
     output += "## 📰 Theme Analysis\n\n"
     for news_item in report.news:
-        output += f"### {news_item.emoji} {news_item.theme}\n\n"
+        output += f"### {news_item.emoji} {news_item.investment_theme}\n\n"
         output += f"{news_item.summary}\n\n"
         output += f"**Impact**: {news_item.impact}\n\n"
 
@@ -115,6 +210,17 @@ def format_report(report: DailyReport) -> str:
             for stock in news_item.stocks:
                 output += f"- **{stock.name}** ({stock.ticker}): {stock.catalyst}\n"
             output += "\n"
+
+        # 출처 (원본 메시지 발췌)
+        if news_item.source_ids:
+            source_messages = _load_source_messages(news_item.source_ids, report.date, data_dir)
+            if source_messages:
+                output += "**출처**:\n"
+                for idx, (_source_id, content) in enumerate(source_messages.items(), 1):
+                    excerpt = _extract_relevant_text(content, news_item.keywords, max_length=200)
+                    if excerpt:
+                        output += f"{idx}. {excerpt}\n"
+                output += "\n"
 
     return output
 

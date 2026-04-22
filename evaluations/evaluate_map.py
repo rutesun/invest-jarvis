@@ -89,7 +89,6 @@ def run_evaluation(
         for i, issue in enumerate(issues):
             print(f"  [{i + 1}] {issue.title}")
             print(f"      themes: {issue.themes}")
-            print(f"      keywords: {issue.keywords[:5]}...")
 
         # 메트릭 계산
         metrics = evaluate_all(issues, expected, use_llm_judge=use_llm_judge, llm=llm)

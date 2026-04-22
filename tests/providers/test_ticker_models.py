@@ -1,6 +1,7 @@
 from datetime import datetime
 
 import pytest
+from pydantic import ValidationError
 
 from src.providers.ticker_models import CachedMapping, TickerResolution
 
@@ -19,7 +20,7 @@ def test_ticker_resolution_creation():
 
 
 def test_ticker_resolution_requires_fields():
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         TickerResolution(original_query="test")
 
 

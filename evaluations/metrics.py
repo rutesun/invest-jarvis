@@ -229,7 +229,6 @@ def _issues_to_text(issues: list[MappedIssue]) -> str:
         parts.append(issue.summary)
         parts.append(issue.impact)
         parts.extend(issue.themes)
-        parts.extend(issue.keywords)
     return " ".join(parts)
 
 

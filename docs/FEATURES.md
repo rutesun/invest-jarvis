@@ -107,8 +107,8 @@ TelegramMessage → MappedIssue → ShuffleResult → ThemeAnalysis/NewsItem →
 |------|------|
 | `MacroSnapshot` | VIX, CNN Fear & Greed, KRW/USD, 미국/한국 시장 변동률 |
 | `MappedIssue` | 카테고리(18종), 제목, 요약, 테마(1-3), 감성(Sentiment enum), 소스 ID |
-| `ThemeAnalysis` | Reduce LLM 출력 (category 제외): 테마명, 이모지, 요약, 임팩트, 관련종목 |
-| `NewsItem` | ThemeAnalysis + category |
+| `ThemeAnalysis` | Reduce LLM 출력 (category 제외): 투자 테마명, 검색 키워드, 이모지, 요약, 임팩트, 관련종목 |
+| `NewsItem` | ThemeAnalysis + category + technical_theme + source_ids (원본 메시지 추적용) |
 | `DailyReport` | 날짜, 매크로, 핵심 인사이트, 테마별 뉴스 |
 
 **18개 고정 카테고리:**
@@ -123,7 +123,7 @@ TelegramMessage → MappedIssue → ShuffleResult → ThemeAnalysis/NewsItem →
 | `REDUCE_LLM` | Anthropic Haiku 4.5, temp 0.3 | Reduce 스테이지 |
 | `WRAPUP_LLM` | Anthropic Haiku 4.5, temp 0.4 | Wrapup 스테이지 |
 | `MAP_MAX_TOKENS_PER_CHUNK` | 80,000 | Map 청크 크기 |
-| `LLM_TIMEOUT_SECONDS` | 60 | LLM 호출 타임아웃 |
+| `LLM_TIMEOUT_SECONDS` | 180 | LLM 호출 타임아웃 (Map 100+ 메시지 대응) |
 | `LLM_MAX_RETRIES` | 3 | LLM 재시도 (exponential backoff) |
 | `MACRO_MAX_RETRIES` | 3 | 매크로 데이터 재시도 |
 
@@ -137,6 +137,17 @@ TelegramMessage → MappedIssue → ShuffleResult → ThemeAnalysis/NewsItem →
 **프롬프트 캐싱:**
 - Anthropic provider일 때 system prompt에 `cache_control: ephemeral` 자동 적용
 - OpenAI로 전환 시 자동 비활성화 (`StageLLMConfig.build_messages()`)
+
+**리포트 출력:**
+- Markdown 파일: `reports/YYYY-MM/daily_YYYY-MM-DD.md`
+- 각 테마마다 **출처** 섹션에 원본 메시지 발췌 포함
+- source_ids로 CSV에서 원본 메시지 로드 → keywords 매칭 시 주변 ~200자 발췌, 매칭 없으면 전체 메시지
+- 예시:
+  ```
+  **출처**:
+  1. 신한 해외주식 데일리(4/20) "이란 외무장관의 호르무즈 해협..."
+  2. ★ Daily Market Digest - "지난 금요일은 이란의..."
+  ```
 
 **의존성:** 텔레그램 CSV, Anthropic Haiku 4.5, yfinance, fear-and-greed
 
@@ -173,7 +184,14 @@ TelegramMessage → MappedIssue → ShuffleResult → ThemeAnalysis/NewsItem →
 **출력:**
 - CSV: `data/YYYY-MM/YYYY-MM-DD-{channel_id}.csv`
 - 사진: `data/images/YYYY-MM-DD/{channel_id}_{msg_id}.jpg`
-- PDF: `data/files/YYYY-MM-DD/{channel_id}_{msg_id}_{filename}.pdf`
+- 첨부 PDF: `data/files/YYYY-MM-DD/{channel_id}_{msg_id}_{filename}.pdf`
+- URL PDF: `data/files/YYYY-MM-DD/{channel_id}_url_{msg_id}_{filename}.pdf`
+
+**URL PDF 다운로드:**
+- 메시지 본문에서 모든 HTTP(S) URL 추출
+- HEAD 요청으로 Content-Type 확인 (follow_redirects=True)
+- HEAD 실패 시(TooManyRedirects) GET으로 fallback (DART 등 HEAD 미지원 사이트 대응)
+- 단축 URL(vo.la, bit.ly 등) 지원: 최종 리다이렉트 URL의 확장자도 체크
 
 **의존성:** Telethon, httpx (미디어 다운로드)
 

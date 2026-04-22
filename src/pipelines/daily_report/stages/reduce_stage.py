@@ -45,10 +45,30 @@ def reduce_stage(
     Returns:
         테마별 NewsItem 리스트 (카테고리 포함)
     """
+    import time
+
     if not category_groups:
         return []
 
+    start_time = time.time()
+    total_themes = sum(len(themes) for themes in category_groups.values())
+
+    logger.info(
+        "Reduce stage started: %d categories, %d themes",
+        len(category_groups),
+        total_themes,
+    )
+
     news_items = asyncio.run(_analyze_themes_parallel(category_groups, macro, date))
+
+    elapsed = time.time() - start_time
+
+    logger.info(
+        "Reduce stage completed: %d themes → %d news items in %.1fs",
+        total_themes,
+        len(news_items),
+        elapsed,
+    )
 
     return news_items
 
@@ -132,12 +152,7 @@ async def _analyze_theme(
     """단일 테마 분석 (투자 인사이트 생성)."""
 
     issues_text = "\n\n".join(
-        [
-            f"**{issue.title}**\n{issue.summary}\n"
-            f"키워드: {', '.join(issue.keywords)}\n"
-            f"감성: {issue.sentiment}"
-            for issue in issues
-        ]
+        [f"**{issue.title}**\n{issue.summary}\n감성: {issue.sentiment}" for issue in issues]
     )
 
     system_prompt = REDUCE_SYSTEM_PROMPT_V2
@@ -170,11 +185,15 @@ async def _analyze_theme(
     try:
         response = await invoke_llm_with_retry(llm, ThemeAnalysis, messages, config)
 
+        # Flatten source_ids from all issues
+        all_source_ids = [sid for issue in issues for sid in issue.source_ids]
+
         return NewsItem(
             category=category,
             technical_theme=theme,
             investment_theme=response.investment_theme,
             keywords=response.keywords,
+            source_ids=all_source_ids,
             emoji=response.emoji,
             summary=response.summary,
             impact=response.impact,

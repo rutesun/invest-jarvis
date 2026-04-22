@@ -16,7 +16,6 @@ def make_issue(
     summary="요약",
     category="기타",
     themes=None,
-    keywords=None,
     impact="영향",
     sentiment="neutral",
     source_ids=None,
@@ -26,7 +25,6 @@ def make_issue(
         summary=summary,
         category=category,
         themes=themes or ["테마1"],
-        keywords=keywords or ["키워드1"],
         impact=impact,
         sentiment=sentiment,
         source_ids=source_ids or ["test_001"],
@@ -138,15 +136,15 @@ def test_company_preservation_partial():
 
 
 def test_keyword_coverage_no_double_count():
-    """키워드가 issues.keywords에만 존재하는 경우 이중 검색 없이 정확히 계산."""
-    issue = make_issue(keywords=["HBM", "삼성"])
+    """키워드가 title/summary에 존재하는 경우 정확히 계산."""
+    issue = make_issue(title="HBM 뉴스", summary="삼성 관련")
     expected = {"expected_keywords": ["HBM", "삼성", "없는키워드"]}
     score = keyword_coverage([issue], expected)
     assert abs(score - 2 / 3) < 0.01
 
 
 def test_keyword_coverage_full_match():
-    issue = make_issue(title="HBM 뉴스", summary="삼성 HBM", keywords=["HBM"])
+    issue = make_issue(title="HBM 뉴스", summary="삼성 HBM")
     score = keyword_coverage([issue], {"expected_keywords": ["HBM", "삼성"]})
     assert score == 1.0
 

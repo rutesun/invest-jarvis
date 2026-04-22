@@ -113,7 +113,6 @@ def run_map_stage_for_eval(inputs: dict) -> dict:
         "num_issues": len(issues),
         "all_text": _issues_to_text(issues),
         "all_themes": [theme for issue in issues for theme in issue.themes],
-        "all_keywords": [kw for issue in issues for kw in issue.keywords],
         "all_categories": [issue.category for issue in issues],
     }
 
