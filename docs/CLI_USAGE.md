@@ -221,6 +221,56 @@ uv run python -m src.pipelines.daily_report.stages.wrapup_stage 2026-04-17
 
 ---
 
+#### 3-3. report upload - 기존 리포트 일괄 업로드
+
+**특징:**
+- `reports/` 디렉토리의 기존 MD 파일을 Notion에 업로드
+- 날짜 범위 지정 가능
+- 리포트 타입 필터링 (daily, screener, all)
+- 진행 상황 표시 및 에러 핸들링
+
+**요구사항:**
+- `NOTION_TOKEN`, `NOTION_DATABASE_ID` 필요 ([설정 가이드](../README_NOTION.md))
+
+**사용법:**
+```bash
+uv run jarvis report upload [시작날짜] [종료날짜] [OPTIONS]
+```
+
+**옵션:**
+- `--type, -t`: 리포트 타입 (`all`, `daily`, `screener`, 기본값: all)
+
+**예시:**
+```bash
+# 전체 리포트 업로드
+uv run jarvis report upload
+
+# 특정 날짜만
+uv run jarvis report upload 2026-04-22
+
+# 날짜 범위 지정
+uv run jarvis report upload 2026-04-17 2026-04-22
+
+# Daily 리포트만
+uv run jarvis report upload --type daily
+
+# Screener 리포트만 (특정 날짜)
+uv run jarvis report upload 2026-04-18 --type screener
+```
+
+**출력 내용:**
+```bash
+3개 리포트를 Notion에 업로드합니다...
+
+✓ daily_2026-04-22.md → https://notion.so/...
+✓ screen-2026-04-18.md → https://notion.so/...
+✗ daily_2026-04-21.md 실패: Duplicate entry
+
+완료: 성공 2, 실패 1
+```
+
+---
+
 ### 4. portfolio - 포트폴리오 모니터링
 
 **특징:**
@@ -264,12 +314,19 @@ uv run jarvis screen [OPTIONS]
 
 **옵션:**
 - `--market, -m`: `kr`, `us`, `all` (기본값: all)
+- `--notion`: Notion에 업로드
 
 **예시:**
 ```bash
+# MD 파일만 저장 (기본)
 uv run jarvis screen
+
+# 시장별 스크리닝
 uv run jarvis screen --market kr
 uv run jarvis screen --market us
+
+# Notion에도 업로드
+uv run jarvis screen --notion
 ```
 
 ---

@@ -741,6 +741,7 @@ async def run_screen(market: str) -> dict:
 @app.command()
 def screen(
     market: str = typer.Option("all", "--market", "-m", help="kr, us, or all"),
+    notion: bool = typer.Option(False, "--notion", help="Upload to Notion"),
 ):
     """Scan market for leading stocks and themes."""
     console.print(f"[bold]Scanning {market} market...[/bold]\n")
@@ -760,6 +761,17 @@ def screen(
         # Save report
         report_path = pipeline.save_report(result)
         console.print(f"\n[green]Report saved to {report_path}[/green]")
+
+        # Notion upload (optional)
+        if notion:
+            try:
+                from src.integrations.notion import update_screener_report
+
+                date = result["timestamp"].strftime("%Y-%m-%d")
+                page_url = update_screener_report(result, date)
+                console.print(f"[green]✓ Notion uploaded: {page_url}[/green]")
+            except Exception as e:
+                console.print(f"[red]✗ Notion upload failed: {e}[/red]")
 
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
@@ -812,6 +824,78 @@ def cache_clear(
 app.add_typer(report_app, name="report")
 
 
+@report_app.command("upload")
+def report_upload(
+    start_date: str = typer.Argument(None, help="시작 날짜 (YYYY-MM-DD). 미지정 시 전체"),
+    end_date: str = typer.Argument(None, help="종료 날짜 (YYYY-MM-DD). 미지정 시 시작 날짜만"),
+    report_type: str = typer.Option("all", "--type", "-t", help="all, daily, screener"),
+):
+    """Upload existing reports to Notion."""
+    from pathlib import Path
+
+    from src.integrations.notion import upload_report_from_file
+
+    # reports/ 디렉토리 스캔
+    reports_dir = Path("reports")
+    if not reports_dir.exists():
+        console.print("[red]reports/ 디렉토리가 없습니다.[/red]")
+        raise typer.Exit(1)
+
+    # MD 파일 찾기
+    pattern_map = {
+        "daily": "daily_*.md",
+        "screener": "screen-*.md",
+        "all": "*.md",
+    }
+    pattern = pattern_map.get(report_type, "*.md")
+    md_files = list(reports_dir.rglob(pattern))
+
+    if not md_files:
+        console.print(f"[yellow]업로드할 리포트가 없습니다. (패턴: {pattern})[/yellow]")
+        return
+
+    # 날짜 필터링
+    filtered_files = []
+    for file_path in md_files:
+        # 파일명에서 날짜 추출
+        filename = file_path.stem
+        if filename.startswith("daily_"):
+            date_str = filename.replace("daily_", "")
+        elif filename.startswith("screen-"):
+            date_str = filename.replace("screen-", "")
+        else:
+            continue
+
+        # 날짜 범위 체크
+        if start_date and date_str < start_date:
+            continue
+        if end_date and date_str > end_date:
+            continue
+
+        filtered_files.append((file_path, date_str))
+
+    if not filtered_files:
+        console.print("[yellow]날짜 범위에 해당하는 리포트가 없습니다.[/yellow]")
+        return
+
+    # 업로드
+    console.print(f"[bold]{len(filtered_files)}개 리포트를 Notion에 업로드합니다...[/bold]\n")
+    success_count = 0
+    fail_count = 0
+
+    for file_path, date_str in filtered_files:
+        try:
+            page_url = upload_report_from_file(file_path, date_str)
+            console.print(f"[green]✓ {file_path.name} → {page_url}[/green]")
+            success_count += 1
+        except Exception as e:
+            console.print(f"[red]✗ {file_path.name} 실패: {e}[/red]")
+            fail_count += 1
+
+    # 결과 요약
+    console.print(f"\n[bold]완료: 성공 {success_count}, 실패 {fail_count}[/bold]")
+
+
 @report_app.command("daily")
 def report_daily(
     date: str = typer.Argument(
@@ -855,8 +939,8 @@ def report_daily(
             try:
                 from src.integrations.notion import update_daily_report
 
-                update_daily_report(report, date)
-                console.print("[green]✓ Notion 업데이트 완료[/green]")
+                page_url = update_daily_report(report, date, data_dir)
+                console.print(f"[green]✓ Notion 업데이트 완료: {page_url}[/green]")
             except ImportError:
                 console.print(
                     "[yellow]⚠ Notion 연동 모듈이 없습니다. 구현 필요: src/integrations/notion.py[/yellow]"

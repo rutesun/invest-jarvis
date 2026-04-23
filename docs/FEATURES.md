@@ -79,7 +79,11 @@ KIS 계좌의 보유 종목별 기술적 분석 + 최근 뉴스.
 
 **출력:** 테마 Top 10 + 종목 Top 50 (KR/US 각각) + 뉴스
 
-**의존성:** Naver API, yfinance, KIS API (선택)
+**Notion 업로드 (선택):**
+- `--notion` 옵션으로 Screener 리포트를 Notion Database에 업로드
+- 통합 Database 구조 (Type: Screener)
+
+**의존성:** Naver API, yfinance, KIS API (선택), Notion API (선택)
 
 ---
 
@@ -192,7 +196,46 @@ TelegramMessage → MappedIssue → ShuffleResult → ThemeAnalysis/NewsItem →
 
 ---
 
-## 8. Ticker Resolution
+## 8. Notion Integration
+
+Daily Report 및 Screener 리포트를 Notion Database에 자동 업로드.
+
+**명령어:**
+- `jarvis report daily <날짜> --notion`: Daily Report 업로드
+- `jarvis screen --notion`: Screener Report 업로드
+- `jarvis report upload [날짜범위] [--type daily|screener|all]`: 기존 MD 파일 일괄 업로드
+
+**Database 구조 (통합):**
+
+| Property | Type | 용도 |
+|----------|------|------|
+| Name | Title | 리포트 제목 |
+| Type | Select | Daily / Screener |
+| Date | Date | 리포트 날짜 |
+| Top Themes | Multi-select | 상위 5개 테마 |
+| VIX | Number | VIX 지수 (Daily 전용) |
+| Fear & Greed | Number | Fear & Greed Index (Daily 전용) |
+| KRW/USD | Number | 원달러 환율 (Daily 전용) |
+| Insights Count | Number | 핵심 인사이트 개수 (Daily 전용) |
+| KR Leaders | Number | 한국 주도주 개수 (Screener 전용) |
+| US Leaders | Number | 미국 주도주 개수 (Screener 전용) |
+
+**마크다운 → Notion 블록 변환:**
+- `**bold**` → Notion bold annotation
+- Heading2, Divider, Callout, Table, Toggle 지원
+- 테마별 분석: 이모지 + 투자 인사이트 테마명
+
+**일괄 업로드:**
+- `reports/` 디렉토리의 MD 파일 자동 파싱
+- 날짜 범위 필터링
+- 리포트 타입 필터 (daily/screener/all)
+- 중복 방지 (Date + Type 기준)
+
+**의존성:** notion-client
+
+---
+
+## 9. Ticker Resolution
 
 종목명/티커 자동 변환 시스템. 모든 파이프라인에서 공통 사용.
 
