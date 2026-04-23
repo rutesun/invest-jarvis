@@ -4,6 +4,7 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.prompts import ChatPromptTemplate
 
 from src.llm.models import (
+    ActionableSignalOutput,
     FundamentalSummaryInput,
     FundamentalSummaryOutput,
     IntegratedAnalysisInput,
@@ -13,6 +14,7 @@ from src.llm.models import (
     TechnicalSummaryInput,
     TechnicalSummaryOutput,
 )
+from src.llm.retry import invoke_llm_with_retry
 
 
 async def analyze_news(
@@ -282,3 +284,72 @@ async def generate_integrated_analysis(
             "flow_text": flow_text,
         }
     )
+
+
+async def generate_actionable_signal(
+    ticker: str,
+    warnings: list[str],
+    recommendation: str,
+    rationale: str,
+    llm: BaseChatModel,
+) -> ActionableSignalOutput:
+    """
+    Generate actionable investment signal with timing and concrete reasons.
+
+    Args:
+        ticker: Stock ticker symbol
+        warnings: List of warning/signal strings from technical analysis
+        recommendation: Overall recommendation ("매수", "매도", "중립")
+        rationale: Reasoning behind the recommendation
+        llm: LangChain chat model to use for generation
+
+    Returns:
+        Structured actionable signal with action, timing, strength, and reasons
+    """
+    warnings_text = "\n".join(f"- {w}" for w in warnings)
+
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                "당신은 실행 가능한 투자 시그널을 생성하는 전문가입니다. "
+                "명확한 액션, 타이밍, 이유를 제공하세요.",
+            ),
+            (
+                "user",
+                """종목: {ticker}
+추천: {recommendation}
+근거: {rationale}
+
+기술적 경고/시그널:
+{warnings_text}
+
+다음을 포함한 실행 가능한 시그널을 생성하세요:
+- action: "매수", "매도", 또는 "관망"
+- timing: "지금", "조정_대기", 또는 "보류"
+- signal_strength: 1-10 (10=매우 강함)
+- headline: 한 줄 요약 (예: "매수. 지금. 이유: RSI 과매도")
+- primary_reason: 핵심 이유 하나
+- supporting_reasons: 부차적 이유 2-3개 리스트
+- risks: 리스크 요인 1-2개 리스트
+- invalidation_point: 청산/손절 가격 (선택, 없으면 null)
+- confidence: 신뢰도 0.0-1.0""",
+            ),
+        ]
+    )
+
+    chain = prompt | llm.with_structured_output(ActionableSignalOutput)
+
+    result = await invoke_llm_with_retry(
+        chain=chain,
+        input_data={
+            "ticker": ticker,
+            "recommendation": recommendation,
+            "rationale": rationale,
+            "warnings_text": warnings_text,
+        },
+        max_retries=3,
+        backoff_factor=1.0,
+    )
+
+    return result

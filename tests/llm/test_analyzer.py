@@ -4,11 +4,13 @@ import pytest
 
 from src.llm.analyzer import (
     analyze_news,
+    generate_actionable_signal,
     generate_fundamental_summary,
     generate_integrated_analysis,
     generate_technical_summary,
 )
 from src.llm.models import (
+    ActionableSignalOutput,
     FundamentalSummaryInput,
     FundamentalSummaryOutput,
     IntegratedAnalysisInput,
@@ -275,3 +277,54 @@ async def test_generate_integrated_analysis_calls_llm():
     assert result.recommendation == "매수"
     assert len(result.rationale) == 2
     assert result.action_summary == "단기 매수 기회 포착"
+
+
+@pytest.mark.asyncio
+async def test_generate_actionable_signal():
+    """Test generate_actionable_signal generates structured investment signal."""
+    expected_output = ActionableSignalOutput(
+        action="매수",
+        timing="지금",
+        signal_strength=8,
+        headline="매수. 지금. 이유: RSI 과매도 + 골든크로스",
+        primary_reason="RSI 28 (과매도)",
+        supporting_reasons=["골든크로스 발생", "거래량 증가", "실적 개선"],
+        risks=["금리 인상 위험", "섹터 회전 가능성"],
+        invalidation_point="$145.20",
+        confidence=0.82,
+    )
+
+    with patch("src.llm.analyzer.ChatPromptTemplate") as mock_prompt_class:
+        mock_prompt = MagicMock()
+        mock_prompt_class.from_messages.return_value = mock_prompt
+
+        with patch("src.llm.analyzer.invoke_llm_with_retry") as mock_retry:
+            mock_retry.return_value = expected_output
+
+            # Mock the chain
+            mock_chain = MagicMock()
+            mock_prompt.__or__ = MagicMock(return_value=mock_chain)
+
+            mock_llm = MagicMock()
+
+            warnings = [
+                "RSI 28 (과매도)",
+                "골든크로스 발생",
+                "거래량 20% 증가",
+            ]
+
+            result = await generate_actionable_signal(
+                ticker="AAPL",
+                warnings=warnings,
+                recommendation="매수",
+                rationale="기술적 지표 전반 긍정적",
+                llm=mock_llm,
+            )
+
+        assert result.action == "매수"
+        assert result.timing == "지금"
+        assert result.signal_strength == 8
+        assert "매수" in result.headline
+        assert len(result.supporting_reasons) == 3
+        assert len(result.risks) == 2
+        assert mock_retry.called
