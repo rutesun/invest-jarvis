@@ -6,6 +6,7 @@ from langchain_core.language_models import BaseChatModel
 from src.llm import analyzer
 from src.llm.analyzer import generate_fundamental_summary
 from src.llm.models import (
+    ActionableSignalOutput,
     FundamentalSummaryInput,
     FundamentalSummaryOutput,
     IntegratedAnalysisInput,
@@ -60,6 +61,7 @@ class DeepDivePipeline:
                 - disclosure: list[DisclosureItem] | None (SEC 10-Q/8-K or OpenDART)
                 - flow: InvestorFlow | None (외국인/기관 순매수 동향, 한국주식만)
                 - integrated_analysis: IntegratedAnalysisOutput | None (종합 인사이트)
+                - actionable_signal: ActionableSignalOutput | None (실행 가능한 투자 시그널)
         """
         tech_result = await self.technical_tool.execute(ticker)
         if not tech_result.success:
@@ -127,6 +129,13 @@ class DeepDivePipeline:
                 flow_data=flow_data,
             )
 
+        # Generate actionable investment signal
+        actionable_signal = await self._generate_actionable_signal(
+            ticker=ticker,
+            technical_data=technical_data,
+            technical_summary=technical_summary,
+        )
+
         return {
             "ticker": ticker,
             "technical": technical_data,
@@ -138,6 +147,7 @@ class DeepDivePipeline:
             "disclosure": disclosure_items,
             "flow": flow_data,
             "integrated_analysis": integrated_analysis,
+            "actionable_signal": actionable_signal,
         }
 
     async def _generate_technical_summary(
@@ -296,3 +306,27 @@ class DeepDivePipeline:
             flow_summary=self._format_flow_for_llm(flow_data) if flow_data else None,
         )
         return await analyzer.generate_integrated_analysis(input_data, self.llm)
+
+    async def _generate_actionable_signal(
+        self,
+        ticker: str,
+        technical_data: TechnicalResult,
+        technical_summary: TechnicalSummaryOutput,
+    ) -> ActionableSignalOutput:
+        """Generate actionable investment signal from technical analysis."""
+        # Collect warnings from technical data
+        warnings = technical_data.warnings or []
+
+        # If no warnings, collect signals from components
+        if not warnings:
+            for _comp_name, comp_data in technical_data.components.items():
+                signals = comp_data.get("signals", [])
+                warnings.extend(signals)
+
+        return await analyzer.generate_actionable_signal(
+            ticker=ticker,
+            warnings=warnings,
+            recommendation=technical_summary.recommendation,
+            rationale=technical_summary.rationale,
+            llm=self.llm,
+        )
