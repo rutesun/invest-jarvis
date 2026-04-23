@@ -86,7 +86,14 @@ class ActionableSignalOutput(BaseModel):
 **필드 설계 결정:**
 - `action`: "매수/매도/관망" 3가지만 (명확성)
 - `timing`: "지금/조정_대기/보류" 3가지 (애매한 "3일_기다림" 제외)
-- `signal_strength`: 1-10 정수 (LLM 판단, 공식 기반 아님)
+- `signal_strength`: **1-10 정수 (5개 팩터 종합 + LLM 판단)**
+  - 기술적 지표 (8개 컴포넌트 평균)
+  - 뉴스 감성 (긍정/부정 강도)
+  - 펀더멘탈 (밸류에이션, 성장성)
+  - 공시 (중요 이벤트 영향)
+  - 수급 (외인/기관 흐름, 한국만)
+  - **규칙 기반 아님 - LLM이 맥락 고려해 최종 판단**
+  - **모순 허용** (action="매수" + signal_strength=2 가능, CLI에서 경고만)
 - `headline`: "{action}. {timing}. 이유: {핵심}" 형식 강제
 - `primary_reason`: 반드시 구체적 숫자 포함 (RSI 28, P/E 12 등)
 - `invalidation_point`: 손절 가격 명시 (리스크 관리)
@@ -106,8 +113,29 @@ async def generate_actionable_signal(
             """당신은 실전 투자자입니다. **지금 뭘 해야 하는지** 명확히 말하세요.
 
 규칙:
-- timing: "지금" (즉시 진입), "조정_대기" (조정 대기), "보류" (액션 안 함)
-- signal_strength: 1-10 (1=약함, 10=매우 강함)
+- **signal_strength (1-10)**: 5개 팩터 종합 평가
+  - 기술적 지표 (8개 컴포넌트 평균)
+  - 뉴스 감성 (긍정/부정 강도)
+  - 펀더멘탈 (밸류에이션)
+  - 공시 (중요 이벤트 영향)
+  - 수급 (외인/기관 흐름, 한국만)
+  - 1-3: 약한 신호 (불확실성 높음)
+  - 4-6: 중간 신호 (추가 관찰 필요)
+  - 7-10: 강한 신호 (명확한 방향성)
+
+- **timing 결정**: 
+  1. 기술 지표 1차 평가 (8개 컴포넌트 종합)
+     - 긍정적 → "지금" 힌트
+     - 과매수/과매도 → "조정_대기" 힌트
+     - 혼재 → "보류" 힌트
+  2. LLM 최종 판단 (모든 팩터 고려)
+     - 공시: 수주잔고, 대규모 계약 → 기술 지표 약해도 "지금" 가능
+     - 펀더멘탈: 실적 개선, 밸류에이션 매력
+     - 매크로: 섹터 모멘텀, 정책 수혜
+     - 뉴스: 호재/악재 강도
+     - 수급: 외인/기관 집중 매수
+  3. Override 원칙: "기술적으로 중립이어도, 강력한 펀더멘탈 모멘텀(예: 수주잔고 급증)이 있으면 '지금' 추천"
+
 - headline: "{action}. {timing}. 이유: {핵심}" 형식
 - primary_reason: 반드시 구체적 숫자 포함 (RSI 28, P/E 12, 거래량 2.3배 등)
 - supporting_reasons: 2-3개만, 각각 한 문장
@@ -163,8 +191,13 @@ def format_actionable_signal(signal: ActionableSignalOutput) -> Panel:
     
     fire_emoji = "🔥" * signal.signal_strength
     
+    # 모순 체크 (경고만, 에러 아님)
+    warning_line = ""
+    if signal.action in ["매수", "매도"] and signal.signal_strength < 5:
+        warning_line = "\n[yellow]⚠️  약한 신호로 명확한 액션 추천 - 재확인 필요[/yellow]\n"
+    
     content = f"""[bold cyan]{signal.action} | {signal.timing} | 신호 강도: {fire_emoji} ({signal.signal_strength}/10)[/bold cyan]
-
+{warning_line}
 [bold white]{signal.headline}[/bold white]
 
 [bold]주 근거:[/bold] {signal.primary_reason}
@@ -681,19 +714,23 @@ uv run pytest --cov=src/llm --cov=src/pipelines --cov-report=html
 | 1.2 | `invoke_llm_with_retry` 이동 | `src/llm/utils.py` (새 파일) | 15분 |
 | 1.3 | `generate_actionable_signal()` 함수 작성 | `src/llm/analyzer.py` | 30분 |
 | 1.4 | 파이프라인 통합 (`actionable_signal` + `warnings` 반환) | `src/pipelines/deep_dive.py` | 20분 |
-| 1.5 | CLI 출력 개선 (Rich Panel + warnings) | `src/cli/main.py` | 20분 |
-| 1.6 | 10개 종목 테스트 및 프롬프트 튜닝 | - | 30분 |
+| 1.5 | CLI 출력 개선 (Rich Panel + warnings + 모순 경고) | `src/cli/main.py` | 20분 |
+| 1.6 | 평가 데이터셋 레이블링 (50-100개) | `evaluations/test_cases/actionable_signal.yaml` | **2시간** |
+| 1.7 | 평가 메트릭 구현 | `evaluations/metrics_signal.py` | 30분 |
+| 1.8 | 10개 종목 테스트 및 프롬프트 튜닝 | - | 30분 |
 
-**총 예상 시간:** 2시간
+**총 예상 시간:** 4.5시간 (데이터셋 레이블링 2시간 포함)
 
 **완료 기준:**
 - `jarvis analyze AAPL` 실행 시 박스 형태로 명확한 신호 출력
 - headline: "{action}. {timing}. 이유: {핵심}" 형식
 - timing: "지금" | "조정_대기" | "보류" 중 하나
-- signal_strength: 1-10 시각화 (🔥 이모지)
+- signal_strength: 1-10 시각화 (🔥 이모지), 5개 팩터 종합 판단
 - primary_reason: 구체적 숫자 포함 (RSI 28, P/E 12 등)
 - invalidation_point: stop-loss 가격 명시
 - warnings: 실패한 데이터 소스 리스트 하단 표시
+- 모순 경고: `action="매수" + signal_strength<5` 시 "⚠️ 약한 신호로 명확한 액션" 표시
+- **평가 통과**: timing_accuracy > 70%, clarity_score > 4.0/5.0, signal_strength_correlation > 0.6 (50개 테스트)
 
 **의존성:** 없음 (기존 코드 활용)
 
@@ -701,13 +738,16 @@ uv run pytest --cov=src/llm --cov=src/pipelines --cov-report=html
 
 ## Open Questions (모두 해결됨)
 
-| 질문 | 결정 |
-|------|------|
-| LLM temperature | 0.1 시작, 테스트 후 조정 |
-| signal_strength 계산 방식 | LLM 판단 (1-10) |
-| timing 옵션 | **"지금" \| "조정_대기" \| "보류"** (3가지) |
-| 백테스팅 프레임워크 | Phase 2에서 결정 |
-| 과거 데이터 범위 | Phase 2에서 결정 |
+| 질문 | 결정 | 근거 |
+|------|------|------|
+| **1. signal_strength 계산** | **5개 팩터 종합 + LLM 판단** | 기술적 분석만으로는 공시/뉴스 영향 반영 불가. LLM이 technical + news + fundamental + disclosure + flow를 종합해서 1-10 판단 |
+| **2. timing 결정 로직** | **하이브리드: 기술 지표 1차 → LLM 최종** | 기술 지표로 힌트 제공하되, LLM이 펀더멘탈/공시(수주잔고 등)/매크로 고려해서 Override 가능. "기술적으로 약해도 강력한 펀더멘탈 있으면 '지금' 추천" |
+| **3. 출시 기준** | **엄격: timing_accuracy > 70%, clarity_score > 4.0/5.0, signal_strength_correlation > 0.6 (50개 테스트)** | 정확도 우선. 미달 시 프롬프트 개선 반복 |
+| **4. 평가 데이터셋** | **히스토리 데이터 + 수동 레이블링 (~2시간)** | 과거 `jarvis analyze` 결과 50-100개 선별 → action/timing/signal_strength 수동 레이블. 현실적 데이터 확보 |
+| **5. action-signal_strength 모순** | **허용 + CLI 경고 표시** | Pydantic validator 없음. "매수 + signal_strength=2" 같은 엣지 케이스 허용하되 `⚠️ 약한 신호로 명확한 액션 - 재확인 필요` 경고 |
+| LLM temperature | 0.1 시작, 테스트 후 조정 | 일관성 우선 |
+| 백테스팅 프레임워크 | Phase 2에서 결정 | - |
+| 과거 데이터 범위 | Phase 2에서 결정 | - |
 
 ---
 
@@ -789,10 +829,26 @@ uv run pytest --cov=src/llm --cov=src/pipelines --cov-report=html
 }
 ```
 
-**데이터 수집 방법:**
-1. 실제 `jarvis analyze` 실행 결과 중 좋은 예시 선별
-2. Mock 데이터로 재현 가능하도록 저장
-3. 예상 출력 명세 작성
+**데이터 수집 방법 (히스토리 데이터 + 수동 레이블링, ~2시간):**
+
+1. **과거 `jarvis analyze` 결과 50-100개 선별**
+   - 다양한 종목: 미국 5개 (AAPL, MSFT, NVDA, TSLA, GOOGL), 한국 5개 (삼성전자, SK하이닉스, NAVER, 카카오, 현대차)
+   - 다양한 시나리오: 상승장/하락장/횡보, 호재/악재, 실적 발표 시점
+   - 극단 케이스: 급등/급락, 공시 이벤트, 데이터 부족 상황
+
+2. **수동 레이블링 (ground truth 작성)**
+   - `action`: 매수/매도/관망 (당신이 직접 판단)
+   - `timing`: 지금/조정_대기/보류 (실제 상황에서 어떻게 했을지)
+   - `signal_strength`: 1-10 (종합 판단)
+   - `headline` 적절성: 0-5점 (이상적 headline 작성)
+
+3. **Mock 데이터 저장**
+   - 당시 technical/news/fundamental/disclosure/flow 데이터를 JSON으로 저장
+   - 재현 가능하도록 normalize (API 호출 없이 테스트 가능)
+
+4. **작업 시간: ~2시간** (구현 계획에 포함)
+
+5. **저장 위치:** `evaluations/test_cases/actionable_signal.yaml`
 
 ### 2. 평가 메트릭
 
@@ -980,7 +1036,9 @@ uv run python evaluations/compare_signal.py v1_baseline v2_improved
 - 미국 주식: AAPL, MSFT, NVDA, TSLA, GOOGL
 - 한국 주식: 삼성전자, SK하이닉스, NAVER, 카카오, 현대차
 
-### 7. 성공 기준 (Evaluation Metrics)
+### 7. 성공 기준 (Evaluation Metrics + Launch Gate)
+
+**메트릭 목표:**
 
 | 메트릭 | 목표 | 측정 방법 |
 |--------|------|----------|
@@ -994,6 +1052,18 @@ uv run python evaluations/compare_signal.py v1_baseline v2_improved
 **평균 점수:**
 - Baseline (v1): 0.80 목표
 - Production: 0.85 이상 유지
+
+**출시 기준 (Launch Gate - 엄격):**
+
+프롬프트 v1은 다음 **모든 조건을 동시 충족**할 때만 출시:
+
+| 메트릭 | 임계값 | 측정 데이터 |
+|--------|--------|-----------|
+| **timing_accuracy** | > 70% | 50개 테스트 케이스 |
+| **clarity_score** | > 4.0/5.0 | LLM-as-Judge (headline + 전체 신호 명확성) |
+| **signal_strength_correlation** | > 0.6 | ground truth vs 예측 (Pearson correlation) |
+
+**미달 시:** 프롬프트 개선 반복 (temperature 조정, 규칙 강화, 예시 추가)
 
 ---
 
