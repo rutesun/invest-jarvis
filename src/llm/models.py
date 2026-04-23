@@ -1,6 +1,6 @@
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 
 class LLMRequest(BaseModel):
@@ -117,3 +117,31 @@ class IntegratedAnalysisOutput(BaseModel):
     rationale: list[str]  # 3-4개 근거, 각 항목은 "기술적:" / "기본적:" / "공시:" / "수급:" 접두사
     risks: list[str]  # 2-3개 리스크 요인
     action_summary: str  # 한 줄 한국어 요약
+
+
+class ActionableSignalOutput(BaseModel):
+    """LLM output for actionable investment signal."""
+
+    action: str = Field(..., description="매수|매도|관망")
+    timing: str = Field(..., description="지금|조정_대기|보류")
+    signal_strength: int = Field(..., ge=1, le=10, description="1-10")
+    headline: str = Field(..., description="한줄 요약")
+    primary_reason: str = Field(..., description="핵심 이유")
+    supporting_reasons: list[str] = Field(..., description="부차 이유")
+    risks: list[str] = Field(..., description="리스크")
+    invalidation_point: str | None = Field(None, description="청산/손절 가격")
+    confidence: float = Field(..., ge=0.0, le=1.0, description="0.0-1.0")
+
+    @field_validator("action")
+    @classmethod
+    def validate_action(cls, v: str) -> str:
+        if v not in {"매수", "매도", "관망"}:
+            raise ValueError(f"Invalid action: {v}")
+        return v
+
+    @field_validator("timing")
+    @classmethod
+    def validate_timing(cls, v: str) -> str:
+        if v not in {"지금", "조정_대기", "보류"}:
+            raise ValueError(f"Invalid timing: {v}")
+        return v

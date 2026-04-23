@@ -1,4 +1,8 @@
+import pytest
+from pydantic import ValidationError
+
 from src.llm.models import (
+    ActionableSignalOutput,
     FundamentalSummaryInput,
     FundamentalSummaryOutput,
     LLMRequest,
@@ -152,3 +156,59 @@ def test_fundamental_summary_output():
     assert len(output.weaknesses) == 2
     assert output.valuation_assessment == "적정"
     assert output.confidence == 0.82
+
+
+def test_actionable_signal_output_valid():
+    """Test valid ActionableSignalOutput creation."""
+    signal = ActionableSignalOutput(
+        action="매수",
+        timing="지금",
+        signal_strength=8,
+        headline="매수. 지금. 이유: RSI 과매도",
+        primary_reason="RSI 28 (과매도)",
+        supporting_reasons=["실적 양호", "거래량 증가"],
+        risks=["금리 인상 위험"],
+        invalidation_point="$145.20",
+        confidence=0.82,
+    )
+
+    assert signal.action == "매수"
+    assert signal.timing == "지금"
+    assert signal.signal_strength == 8
+    assert "매수" in signal.headline
+    assert len(signal.supporting_reasons) == 2
+    assert len(signal.risks) == 1
+
+
+def test_actionable_signal_output_invalid_action():
+    """Test ActionableSignalOutput rejects invalid action."""
+    with pytest.raises(ValidationError) as exc_info:
+        ActionableSignalOutput(
+            action="HOLD",  # Invalid - must be 매수/매도/관망
+            timing="지금",
+            signal_strength=8,
+            headline="test",
+            primary_reason="test",
+            supporting_reasons=[],
+            risks=[],
+            confidence=0.8,
+        )
+
+    assert "Invalid action" in str(exc_info.value)
+
+
+def test_actionable_signal_output_invalid_timing():
+    """Test ActionableSignalOutput rejects invalid timing."""
+    with pytest.raises(ValidationError) as exc_info:
+        ActionableSignalOutput(
+            action="매수",
+            timing="WAIT",  # Invalid - must be 지금/조정_대기/보류
+            signal_strength=8,
+            headline="test",
+            primary_reason="test",
+            supporting_reasons=[],
+            risks=[],
+            confidence=0.8,
+        )
+
+    assert "Invalid timing" in str(exc_info.value)
