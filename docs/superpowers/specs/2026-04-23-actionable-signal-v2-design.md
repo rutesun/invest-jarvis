@@ -248,31 +248,52 @@ def detect_cup_and_handle(df: pd.DataFrame) -> ChartPatternResult:
 **Confidence 계산:**
 
 ```python
+# src/tools/technical/components/chart_patterns.py
+
+# 패턴별 Confidence 가중치 (config로 외부화)
+PATTERN_CONFIDENCE_WEIGHTS = {
+    "cup_and_handle": {
+        "depth_weight": 0.3,
+        "handle_weight": 0.3,
+        "period_weight": 0.2,
+        "volume_weight": 0.2,
+    },
+    "double_bottom": {
+        "height_similarity_weight": 0.4,
+        "rebound_weight": 0.3,
+        "period_weight": 0.3,
+    },
+    # 다른 패턴도 동일하게
+}
+
 def calculate_cup_handle_confidence(
     cup_depth: float, 
     handle_ret: float, 
-    cup_length: int
+    cup_length: int,
+    weights: dict | None = None
 ) -> float:
-    """룰 기반 신뢰도 스코어링"""
+    """룰 기반 신뢰도 스코어링 (가중치 외부화)"""
+    
+    if weights is None:
+        weights = PATTERN_CONFIDENCE_WEIGHTS["cup_and_handle"]
     
     confidence = 0.0
     
-    # 1. 컵 깊이 적합도 (0-0.3)
+    # 1. 컵 깊이 적합도
     ideal_depth = 0.27  # 15-40% 중간값
     depth_score = 1.0 - abs(cup_depth - ideal_depth) / 0.125
-    confidence += depth_score * 0.3
+    confidence += depth_score * weights["depth_weight"]
     
-    # 2. 핸들 되돌림 적합도 (0-0.3)
+    # 2. 핸들 되돌림 적합도
     handle_score = 1.0 - (handle_ret / 0.15)
-    confidence += handle_score * 0.3
+    confidence += handle_score * weights["handle_weight"]
     
-    # 3. 기간 적합도 (0-0.2)
+    # 3. 기간 적합도
     if 60 <= cup_length <= 120:
-        confidence += 0.2
+        confidence += weights["period_weight"]
     
-    # 4. 볼륨 패턴 (0-0.2, 선택적)
-    # 구현 시 추가 가능
-    confidence += 0.1  # 기본 점수
+    # 4. 볼륨 패턴 (선택적)
+    confidence += 0.5 * weights["volume_weight"]  # 기본 점수
     
     return min(confidence, 1.0)
 ```
@@ -468,6 +489,39 @@ def test_support_resistance(
 
 ---
 
+## Helper Functions
+
+### find_last_occurrence (유틸리티)
+
+```python
+def find_last_occurrence(
+    df: pd.DataFrame,
+    column: str,
+    target_value: float,
+    tolerance: float = 0.001
+) -> int | None:
+    """DataFrame에서 특정 값이 마지막으로 나타난 인덱스 찾기
+    
+    Args:
+        df: 데이터프레임
+        column: 검색할 컬럼명
+        target_value: 찾을 값
+        tolerance: 허용 오차 (±0.1% = 0.001)
+    
+    Returns:
+        마지막 발생 인덱스 (없으면 None)
+    
+    Note:
+        같은 가격대의 여러 봉을 같은 swing으로 간주하기 위해 tolerance 사용
+    """
+    mask = (df[column] - target_value).abs() / target_value <= tolerance
+    matches = df.index[mask]
+    
+    return len(df) - len(matches) + matches[-1] if len(matches) > 0 else None
+```
+
+---
+
 ## Component 2: Price Level Analysis
 
 ### 계산 항목
@@ -496,8 +550,10 @@ def get_fibonacci_base_points(
     # 1순위: Swing Points
     if snapshot.swing_high and snapshot.swing_low:
         # Swing 발생 시점이 6개월 이내인지 확인
-        # (구현: df에서 swing_high 값이 나타난 인덱스 찾기)
-        swing_high_idx = find_last_occurrence(df, 'High', snapshot.swing_high)
+        # tolerance: 같은 가격대(±0.1%)의 여러 봉을 같은 swing으로 간주
+        swing_high_idx = find_last_occurrence(
+            df, 'High', snapshot.swing_high, tolerance=0.001
+        )
         
         if swing_high_idx is not None:
             days_since_swing = len(df) - swing_high_idx - 1
@@ -640,8 +696,8 @@ def identify_key_levels(
                 description=f"{result.pattern_name} 돌파",
             ))
     
-    # 중복 제거 (±1% 이내는 같은 레벨로 간주)
-    unique_levels = deduplicate_levels(all_levels, threshold=0.01)
+    # 중복 제거 (현재가 대비 dynamic threshold)
+    unique_levels = deduplicate_levels(all_levels, snapshot.price, base_threshold=0.01)
     
     # 현재가 기준 분류
     supports = [lv for lv in unique_levels if lv.price < snapshot.price]
@@ -671,10 +727,19 @@ def identify_key_levels(
     )
 
 def deduplicate_levels(
-    levels: list[PriceLevel], 
-    threshold: float = 0.01
+    levels: list[PriceLevel],
+    current_price: float,
+    base_threshold: float = 0.01
 ) -> list[PriceLevel]:
-    """중복 레벨 제거 (±threshold 이내는 하나로)"""
+    """중복 레벨 제거 (현재가 대비 dynamic threshold)
+    
+    Args:
+        levels: 모든 가격 레벨
+        current_price: 현재가 (threshold 기준)
+        base_threshold: 기본 threshold (1% = 0.01)
+    
+    현재가 근처(±5% 이내)는 더 민감하게 (threshold 50% 감소)
+    """
     
     if not levels:
         return []
@@ -684,6 +749,11 @@ def deduplicate_levels(
     
     for level in levels_sorted[1:]:
         last_price = unique[-1].price
+        
+        # Dynamic threshold: 현재가 근처는 더 민감하게
+        distance_from_current = abs(level.price - current_price) / current_price
+        threshold = base_threshold * (0.5 if distance_from_current < 0.05 else 1.0)
+        
         if abs(level.price - last_price) / last_price > threshold:
             unique.append(level)
         else:
@@ -939,7 +1009,9 @@ class TechnicalResult(BaseModel):
     components: dict[str, dict]
     total_score: int = 0
     
-    # 신규: 패턴 감지용 원본 데이터
+    # 신규: 패턴 감지용 원본 데이터 (메모리 최적화)
+    # 옵션 1: 필요한 컬럼만 (Open, High, Low, Close)
+    # 옵션 2: 참조로 유지 (deep copy 피함)
     raw_dataframe: pd.DataFrame | None = None
     
     # Legacy fields (호환성)
@@ -952,6 +1024,12 @@ class TechnicalResult(BaseModel):
     
     class Config:
         arbitrary_types_allowed = True  # pandas.DataFrame 허용
+    
+    @classmethod
+    def from_analysis(cls, df: pd.DataFrame, **kwargs):
+        """메모리 최적화: 필요한 컬럼만 저장"""
+        slim_df = df[['Open', 'High', 'Low', 'Close']].copy()
+        return cls(raw_dataframe=slim_df, **kwargs)
 ```
 
 ---
@@ -1117,9 +1195,12 @@ async def test_actionable_signal_no_patterns(mock_llm):
     ("TSLA", "head_and_shoulders", "2021", "11"),
 ])
 def test_historical_pattern_detection(ticker, expected_pattern, year, month):
-    """유명한 역사적 패턴 감지 검증"""
+    """유명한 역사적 패턴 감지 검증 (snapshot 데이터 사용)"""
     
-    df = yf.download(ticker, start=f"{year}-01-01", end=f"{year}-12-31")
+    # Snapshot 파일에서 데이터 로드 (재현 가능한 테스트)
+    snapshot_path = f"tests/fixtures/patterns/{ticker}_{year}.csv"
+    df = pd.read_csv(snapshot_path, index_col=0, parse_dates=True)
+    
     patterns = detect_chart_patterns(df)
     
     result = patterns[expected_pattern]
@@ -1130,23 +1211,27 @@ def test_historical_pattern_detection(ticker, expected_pattern, year, month):
 
 @pytest.mark.integration
 def test_false_positive_rate():
-    """False Positive 체크 (패턴 없는 종목)"""
+    """False Positive 체크 (Mock 데이터 사용)"""
     
-    # 횡보 종목 (패턴 없을 것으로 예상)
-    sideways_tickers = ["XOM", "KO", "PG"]
+    # Mock 데이터 생성 (확정적 테스트)
+    test_cases = [
+        create_flat_price_series(days=120, price=100),  # 횡보
+        create_noisy_series(days=120, base=100, noise=0.02),  # 노이즈
+        create_random_walk(days=120, start=100),  # 랜덤워크
+    ]
     
     false_positives = 0
     
-    for ticker in sideways_tickers:
-        df = yf.download(ticker, period="1y")
+    for df in test_cases:
         patterns = detect_chart_patterns(df)
         
+        # 패턴이 감지되면 False Positive
         detected_count = sum(1 for p in patterns.values() if p.detected)
         if detected_count > 0:
             false_positives += 1
     
-    # False Positive < 20%
-    assert false_positives / len(sideways_tickers) < 0.2
+    # False Positive < 20% (3개 중 0개 예상)
+    assert false_positives / len(test_cases) < 0.2
 ```
 
 ### 4. CLI E2E 테스트
@@ -1216,6 +1301,7 @@ def test_analyze_displays_new_fields():
 | # | 작업 | 파일 | 예상 시간 |
 |---|------|------|-----------|
 | 2.1 | ChartPatternResult, PriceLevel 모델 추가 | `src/tools/technical/models.py` | 15분 |
+| 2.1b | Helper 함수 구현 (find_last_occurrence, mock generators) | `src/tools/technical/utils.py` (신규) | 20분 |
 | 2.2 | Cup & Handle 패턴 감지 구현 | `src/tools/technical/components/chart_patterns.py` | 45분 |
 | 2.3 | Double Bottom 패턴 감지 구현 | 위 파일 | 30분 |
 | 2.4 | Head & Shoulders 패턴 감지 구현 | 위 파일 | 30분 |
@@ -1229,10 +1315,11 @@ def test_analyze_displays_new_fields():
 | 2.12 | CLI 출력 수정 (4개 필드 표시) | `src/cli/main.py` | 15분 |
 | 2.13 | 단위 테스트 작성 (패턴 + 레벨) | `tests/tools/technical/` | 60분 |
 | 2.14 | 통합 테스트 작성 | `tests/pipelines/test_deep_dive_v2.py` | 30분 |
-| 2.15 | 실제 데이터 검증 (10개 패턴) | `tests/integration/test_known_patterns.py` | 45분 |
+| 2.15a | 테스트 데이터 snapshot 준비 | `tests/fixtures/patterns/` | 20분 |
+| 2.15b | 실제 데이터 검증 (10개 패턴, snapshot) | `tests/integration/test_known_patterns.py` | 30분 |
 | 2.16 | 프롬프트 튜닝 (10개 종목 테스트) | - | 30분 |
 
-**총 예상 시간:** 6시간
+**총 예상 시간:** 7-8시간 (리뷰 피드백 반영, 파라미터 튜닝 버퍼 포함)
 
 **완료 기준:**
 - `jarvis analyze AAPL` 실행 시 4개 신규 필드 출력
@@ -1255,6 +1342,27 @@ def test_analyze_displays_new_fields():
 4. **패턴 히스토리** (최근 3개월 패턴 보관)
 5. **패턴 강도** (여러 패턴 동시 발생 시 강도 증가)
 6. **백테스팅** (패턴 감지 후 실제 수익률 추적)
+
+---
+
+## CHANGELOG
+
+### 2026-04-24: Autoplan 리뷰 피드백 반영
+
+**HIGH 우선도:**
+1. ✅ 일정 6시간 → 7-8시간으로 조정 (파라미터 튜닝 버퍼)
+2. ✅ `find_last_occurrence`에 tolerance 파라미터 추가 (±0.1%)
+3. ✅ 테스트 데이터 snapshot화 (재현 가능한 테스트)
+
+**MEDIUM 우선도:**
+4. ✅ 레벨 중복 제거 threshold를 dynamic하게 (현재가 근처 민감)
+5. ✅ Confidence 가중치를 config로 외부화 (백테스팅 대비)
+6. ✅ `raw_dataframe` 메모리 최적화 (필요한 컬럼만)
+
+**작업 추가:**
+- Task 2.1b: Helper 함수 구현
+- Task 2.15a: 테스트 snapshot 준비
+- 총 작업: 16개 → 18개
 
 ---
 
