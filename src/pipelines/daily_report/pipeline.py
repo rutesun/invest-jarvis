@@ -202,7 +202,19 @@ def format_report(report: DailyReport, data_dir: str = "data") -> str:
     output += "## 📰 Theme Analysis\n\n"
     for news_item in report.news:
         output += f"### {news_item.emoji} {news_item.investment_theme}\n\n"
-        output += f"{news_item.summary}\n\n"
+
+        # Summary를 bullet list로 포맷팅
+        summary_lines = news_item.summary.split("\n")
+        for line in summary_lines:
+            line = line.strip()
+            if line:
+                # 이미 bullet이 있으면 그대로, 없으면 추가
+                if line.startswith("•") or line.startswith("-"):
+                    output += f"{line}\n"
+                else:
+                    output += f"- {line}\n"
+        output += "\n"
+
         output += f"**Impact**: {news_item.impact}\n\n"
 
         if news_item.stocks:
@@ -219,7 +231,8 @@ def format_report(report: DailyReport, data_dir: str = "data") -> str:
                 for idx, (_source_id, content) in enumerate(source_messages.items(), 1):
                     excerpt = _extract_relevant_text(content, news_item.keywords, max_length=200)
                     if excerpt:
-                        output += f"{idx}. {excerpt}\n"
+                        # 4칸 들여쓰기로 번호 리스트 포맷
+                        output += f"    {idx}. {excerpt}\n"
                 output += "\n"
 
     return output
