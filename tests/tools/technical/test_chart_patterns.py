@@ -426,6 +426,51 @@ def test_bearish_flag_implementation():
     # NOTE: Real data validation in Task 9
 
 
+def test_detect_chart_patterns_integration():
+    """Test all patterns are integrated in detect_chart_patterns"""
+    from src.tools.technical.components.chart_patterns import detect_chart_patterns
+    from src.tools.technical.models import IndicatorSnapshot
+
+    dates = pd.date_range(end=pd.Timestamp.now(), periods=100, freq="D")
+    prices = [100 + i * 0.5 for i in range(100)]
+
+    df = pd.DataFrame(
+        {
+            "Open": prices,
+            "High": [p * 1.01 for p in prices],
+            "Low": [p * 0.99 for p in prices],
+            "Close": prices,
+        },
+        index=dates,
+    )
+
+    snapshot = IndicatorSnapshot(
+        price=prices[-1],
+        change_pct=1.0,
+        support_s1=140.0,
+        resistance_r1=150.0,
+        sma_50=135.0,
+        sma_200=130.0,
+    )
+
+    patterns = detect_chart_patterns(df, snapshot)
+
+    # Verify all 8 patterns are included
+    expected_patterns = {
+        "cup_and_handle",
+        "double_bottom",
+        "head_and_shoulders",
+        "ascending_triangle",
+        "descending_triangle",
+        "bullish_flag",
+        "bearish_flag",
+        "support_resistance_test",
+    }
+
+    assert set(patterns.keys()) == expected_patterns
+    assert all(isinstance(p, type(patterns["cup_and_handle"])) for p in patterns.values())
+
+
 def test_support_resistance_test_near_level():
     """Test detection when price near support/resistance"""
     from src.tools.technical.components.chart_patterns import test_support_resistance

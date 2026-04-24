@@ -870,6 +870,10 @@ def detect_chart_patterns(
         "cup_and_handle": detect_cup_and_handle(df),
         "double_bottom": detect_double_bottom(df),
         "head_and_shoulders": detect_head_and_shoulders(df),
+        "ascending_triangle": detect_ascending_triangle(df),
+        "descending_triangle": detect_descending_triangle(df),
+        "bullish_flag": detect_bullish_flag(df),
+        "bearish_flag": detect_bearish_flag(df),
     }
 
     if snapshot:
