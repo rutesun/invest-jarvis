@@ -3,6 +3,52 @@ import pandas as pd
 from src.tools.technical.models import ComponentResult
 
 
+class PatternThresholds:
+    """패턴 감지 임계값 (백테스팅 최적화용)"""
+
+    # VCP Thresholds
+    VCP_ATR_CONTRACTION = 0.20  # ATR 수축률 최소 20%
+    VCP_TIGHTNESS_MULTIPLIER = 0.5  # Tight day 정의: 일봉 범위 < ATR × 0.5
+    VCP_MIN_TIGHT_DAYS = 5  # 20일 중 최소 tight day 개수
+    VCP_RECENT_TIGHT_WINDOW = 3  # 최근 N일 연속 tight 체크
+
+    # Pocket Pivot Thresholds
+    PP_SMA_DISTANCE_PCT = 0.02  # 50일선 근접 기준 ±2%
+    PP_LOOKBACK_DAYS = 10  # 다운데이 검색 기간
+
+    # Tennis Ball / Egg Thresholds
+    TENNIS_BALL_THRESHOLD = 0.5  # 하락 거래량 < 50% 평균
+    EGG_THRESHOLD = 1.5  # 하락 거래량 > 150% 평균
+    MEAN_REVERSION_LOOKBACK = 5  # 평균회귀 신호 검색 기간
+
+    # Power Gap Up Thresholds
+    GAP_SIZE_MIN_PCT = 0.04  # 갭업 최소 크기 4%
+    GAP_VOLUME_MULTIPLIER = 3.0  # Power Gap Up 거래량 3배
+    VOLUME_SURGE_MULTIPLIER = 2.0  # 일반 거래량 급증 2배
+
+
+def _validate_dataframe(df: pd.DataFrame, min_len: int, required_cols: list[str]) -> bool:
+    """DataFrame validation helper.
+
+    Args:
+        df: DataFrame to validate
+        min_len: Minimum required length
+        required_cols: List of required column names
+
+    Returns:
+        True if valid, False otherwise
+    """
+    if len(df) < min_len:
+        return False
+
+    return all(col in df.columns for col in required_cols)
+
+
+def _empty_result() -> dict:
+    """일관된 empty result 반환."""
+    return {"signals": [], "evidence": [], "metrics": {}, "score": 0}
+
+
 def analyze_patterns(df: pd.DataFrame) -> ComponentResult:
     """Analyze chart patterns (VCP, Breakout, Candlestick)."""
     if df.empty or len(df) < 3:
