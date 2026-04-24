@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ComponentResult(BaseModel):
@@ -87,6 +87,45 @@ class StrategyResult(BaseModel):
     signals: list[str]
     evidence: list[str]
     metrics: dict[str, float]
+
+
+class ChartPatternResult(BaseModel):
+    """차트 패턴 감지 결과"""
+
+    pattern_name: str
+    detected: bool
+    confidence: float = Field(ge=0.0, le=1.0)
+
+    # 타이밍 정보
+    completed_date: str | None = None
+    days_ago: int | None = None
+
+    # 가격 정보
+    current_price: float
+    breakout_level: float | None = None
+    support_level: float | None = None
+
+    # 상세 정보
+    description: str
+    key_levels: dict = Field(default_factory=dict)
+
+
+class PriceLevel(BaseModel):
+    """개별 가격 레벨"""
+
+    price: float
+    type: str
+    distance_pct: float
+    description: str
+
+
+class PriceLevels(BaseModel):
+    """통합 가격 레벨 정보"""
+
+    current_price: float
+    support_levels: list[PriceLevel] = Field(default_factory=list)
+    resistance_levels: list[PriceLevel] = Field(default_factory=list)
+    targets: dict[str, float] = Field(default_factory=dict)
 
 
 class TechnicalResult(BaseModel):
