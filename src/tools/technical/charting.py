@@ -401,14 +401,18 @@ def render_technical_chart(
         # 커스텀 스타일: 검은 배경 + 기존 캔들 색상
         custom_style = mpf.make_mpf_style(
             base_mpf_style="yahoo",
+            facecolor="#1A1A1A",  # 차트 영역 배경색
+            gridcolor="#2A2A2A",  # 그리드 색상
+            gridstyle="--",  # 점선
             rc={
-                "figure.facecolor": "#1C1C1C",  # 검은 배경
-                "axes.facecolor": "#1C1C1C",
-                "axes.edgecolor": "#555555",
+                "figure.facecolor": "#000000",  # 바깥 배경
+                "axes.facecolor": "#1A1A1A",  # 차트 영역 배경
+                "axes.edgecolor": "#444444",
                 "axes.labelcolor": "white",
                 "xtick.color": "white",
                 "ytick.color": "white",
-                "grid.color": "#333333",
+                "grid.color": "#2A2A2A",
+                "grid.alpha": 0.3,
             },
         )
 
