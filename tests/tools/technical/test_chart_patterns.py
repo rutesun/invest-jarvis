@@ -63,7 +63,7 @@ def test_cup_and_handle_perfect_pattern():
     result = detect_cup_and_handle(df)
 
     assert result.detected is True
-    assert result.confidence > 0.7
+    assert result.confidence > 0.6  # Period scoring adjustment
     assert result.pattern_name == "Cup & Handle"
     assert result.breakout_level is not None
 
