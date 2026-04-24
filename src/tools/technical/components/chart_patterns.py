@@ -114,7 +114,7 @@ def calculate_cup_handle_confidence(
 
     # 1. Cup depth fit
     ideal_depth = 0.27
-    depth_score = 1.0 - abs(cup_depth - ideal_depth) / 0.125
+    depth_score = max(0.0, 1.0 - abs(cup_depth - ideal_depth) / 0.125)
     confidence += depth_score * weights["depth_weight"]
 
     # 2. Handle retracement fit
@@ -222,7 +222,7 @@ def calculate_double_bottom_confidence(height_diff: float, rebound: float, dista
     confidence = 0.0
 
     # 1. Valley similarity (0-0.4)
-    similarity_score = 1.0 - (height_diff / 0.05)
+    similarity_score = max(0.0, 1.0 - (height_diff / 0.05))
     confidence += similarity_score * 0.4
 
     # 2. Rebound strength (0-0.3)
@@ -550,18 +550,18 @@ def calculate_triangle_confidence(
     confidence = 0.0
 
     # 1. 수평선 품질 (0-0.4)
-    horizontal_score = max(0, 1.0 - peak_std / 0.03)
+    horizontal_score = max(0.0, 1.0 - peak_std / 0.03)
     confidence += horizontal_score * 0.4
 
     # 2. 추세선 기울기 (0-0.3)
     # Ideal: 0.15% per day
     ideal_slope = 0.15
-    slope_score = max(0, 1.0 - abs(abs(slope_percent) - ideal_slope) / 0.15)
+    slope_score = max(0.0, 1.0 - abs(abs(slope_percent) - ideal_slope) / 0.15)
     confidence += slope_score * 0.3
 
     # 3. 수렴도 (0-0.3)
     # 작을수록 좋음 (0이면 완전 수렴)
-    convergence_score = 1.0 - convergence_ratio
+    convergence_score = max(0.0, 1.0 - convergence_ratio)
     confidence += convergence_score * 0.3
 
     return min(confidence, 1.0)

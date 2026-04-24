@@ -351,6 +351,104 @@ def test_ascending_triangle_perfect():
     # NOTE: Synthetic data detection needs tuning with real historical data in Task 9
 
 
+def test_ascending_triangle_no_convergence():
+    """Ascending Triangle without convergence should not detect"""
+    from src.tools.technical.components.chart_patterns import detect_ascending_triangle
+
+    # Create pattern where peaks are horizontal but valleys don't rise (parallel lines)
+    dates = pd.date_range(end=pd.Timestamp.now(), periods=60, freq="D")
+
+    # Oscillate between 130-150 with no convergence
+    prices = [140 + 10 * ((i % 10) / 5 - 1) for i in range(60)]
+
+    df = pd.DataFrame(
+        {
+            "Open": prices,
+            "High": [p * 1.01 for p in prices],
+            "Low": [p * 0.99 for p in prices],
+            "Close": prices,
+        },
+        index=dates,
+    )
+
+    result = detect_ascending_triangle(df)
+
+    # Should fail convergence check
+    assert result.detected is False
+
+
+def test_descending_triangle_insufficient_decline():
+    """Descending Triangle with insufficient resistance decline should not detect"""
+    from src.tools.technical.components.chart_patterns import detect_descending_triangle
+
+    # Peaks don't decline enough (flat resistance)
+    dates = pd.date_range(end=pd.Timestamp.now(), periods=60, freq="D")
+    prices = [140 - 10 * ((i % 10) / 5 - 1) for i in range(60)]
+
+    df = pd.DataFrame(
+        {
+            "Open": prices,
+            "High": [p * 1.01 for p in prices],
+            "Low": [p * 0.99 for p in prices],
+            "Close": prices,
+        },
+        index=dates,
+    )
+
+    result = detect_descending_triangle(df)
+
+    # Should fail slope or convergence check
+    assert result.detected is False
+
+
+def test_bullish_flag_weak_pole():
+    """Bullish Flag with weak pole (<10%) should not detect"""
+    from src.tools.technical.components.chart_patterns import detect_bullish_flag
+
+    # Only 5% rise (too weak for flagpole)
+    dates = pd.date_range(end=pd.Timestamp.now(), periods=40, freq="D")
+    prices = [100 + i * 0.125 for i in range(40)]  # 100 → 105 (5% total)
+
+    df = pd.DataFrame(
+        {
+            "Open": prices,
+            "High": [p * 1.01 for p in prices],
+            "Low": [p * 0.99 for p in prices],
+            "Close": prices,
+        },
+        index=dates,
+    )
+
+    result = detect_bullish_flag(df)
+
+    assert result.detected is False
+    assert "Flagpole 상승 불충분" in result.description
+
+
+def test_bearish_flag_weak_pole():
+    """Bearish Flag with weak pole (<10%) should not detect"""
+    from src.tools.technical.components.chart_patterns import detect_bearish_flag
+
+    # Only 5% drop (too weak for flagpole)
+    dates = pd.date_range(end=pd.Timestamp.now(), periods=40, freq="D")
+    prices = [140 - i * 0.125 for i in range(40)]  # 140 → 135 (5% drop)
+
+    df = pd.DataFrame(
+        {
+            "Open": prices,
+            "High": [p * 1.01 for p in prices],
+            "Low": [p * 0.99 for p in prices],
+            "Close": prices,
+        },
+        index=dates,
+    )
+
+    result = detect_bearish_flag(df)
+
+    assert result.detected is False
+    assert "Flagpole 하락 불충분" in result.description
+
+
 def test_descending_triangle_implementation():
     """Descending Triangle implementation exists"""
     from src.tools.technical.components.chart_patterns import detect_descending_triangle
