@@ -64,8 +64,8 @@ def _badge(ax: Any, text: str, *, xy: tuple[float, float] = (0.01, 0.96)) -> Non
         ha="left",
         va="top",
         fontsize=8.5,
-        color="#111111",
-        bbox={"boxstyle": "round,pad=0.25", "fc": "white", "ec": "#DDDDDD", "alpha": 0.85},
+        color="white",  # 검은 배경에 흰색 텍스트
+        bbox={"boxstyle": "round,pad=0.25", "fc": "#2C2C2C", "ec": "#555555", "alpha": 0.85},
         zorder=5,
     )
 
@@ -98,10 +98,10 @@ def _right_value_labels(ax: Any, df: pd.DataFrame) -> None:
         return
     x = df.index[-1]
     labels = [
-        ("MA50", "SMA_50", "#00B8A9", 0),  # 진한 청록
-        ("MA200", "SMA_200", "#FF2D55", -10),
-        ("MA120", "SMA_120", "#FF8C00", -20),
-        ("MA20", "SMA_20", "#9D4EDD", 10),  # 보라색
+        ("MA50", "SMA_50", "#2196F3", 0),  # 파란색
+        ("MA200", "SMA_200", "#F44336", -10),  # 빨간색
+        ("MA120", "SMA_120", "#FF9800", -20),  # 주황색
+        ("MA20", "SMA_20", "#FFD700", 10),  # 노란색
         ("MA10", "SMA_10", "#B0B0B0", 20),
         ("MA150", "SMA_150", "#8A8A8A", 30),  # 최하단
     ]
@@ -121,9 +121,9 @@ def _right_value_labels(ax: Any, df: pd.DataFrame) -> None:
             textcoords="offset points",
             ha="right",
             va="center",
-            fontsize=8.0,
+            fontsize=9.0,  # 8.0 → 9.0 (더 크게)
             color=color,
-            bbox={"boxstyle": "round,pad=0.2", "fc": "white", "ec": color, "alpha": 0.8},
+            bbox={"boxstyle": "round,pad=0.3", "fc": "#2C2C2C", "ec": color, "alpha": 0.9},
             zorder=6,
         )
 
@@ -135,12 +135,12 @@ def _draw_support_resistance(
     for level in support_levels[:3]:
         price = level.get("price")
         if price and not pd.isna(price):
-            ax.axhline(y=price, color="green", linestyle="--", linewidth=0.7, alpha=0.5, zorder=3)
+            ax.axhline(y=price, color="green", linestyle="--", linewidth=0.7, alpha=0.6, zorder=3)
 
     for level in resistance_levels[:3]:
         price = level.get("price")
         if price and not pd.isna(price):
-            ax.axhline(y=price, color="red", linestyle="--", linewidth=0.7, alpha=0.5, zorder=3)
+            ax.axhline(y=price, color="red", linestyle="--", linewidth=0.7, alpha=0.6, zorder=3)
 
 
 def _mark_patterns(ax: Any, df: pd.DataFrame, patterns: dict[str, Any]) -> None:
@@ -230,23 +230,27 @@ def render_technical_chart(
         def _has_values(col: str) -> bool:
             return col in df_plot.columns and bool(df_plot[col].notna().any())
 
-        # Moving averages (6개, 우선순위별 스타일)
+        # Moving averages (6개, 사용자 색상 스키마)
         if _has_values("SMA_10"):
             addplots.append(mpf.make_addplot(df_plot["SMA_10"], color="#B0B0B0", width=0.7))
         if _has_values("SMA_20"):
             addplots.append(
-                mpf.make_addplot(df_plot["SMA_20"], color="#9D4EDD", width=1.2)
-            )  # 보라색
+                mpf.make_addplot(df_plot["SMA_20"], color="#FFD700", width=1.2)
+            )  # 노란색
         if _has_values("SMA_50"):
             addplots.append(
-                mpf.make_addplot(df_plot["SMA_50"], color="#00B8A9", width=2.0)
-            )  # 진한 청록
+                mpf.make_addplot(df_plot["SMA_50"], color="#2196F3", width=2.0)
+            )  # 파란색
         if _has_values("SMA_120"):
-            addplots.append(mpf.make_addplot(df_plot["SMA_120"], color="#FF8C00", width=1.3))
+            addplots.append(
+                mpf.make_addplot(df_plot["SMA_120"], color="#FF9800", width=1.3)
+            )  # 주황색
         if _has_values("SMA_150"):
             addplots.append(mpf.make_addplot(df_plot["SMA_150"], color="#8A8A8A", width=0.7))
         if _has_values("SMA_200"):
-            addplots.append(mpf.make_addplot(df_plot["SMA_200"], color="#FF2D55", width=1.8))
+            addplots.append(
+                mpf.make_addplot(df_plot["SMA_200"], color="#F44336", width=1.8)
+            )  # 빨간색
 
         # Supertrend with signal markers
         if {"SuperTrend_Up", "SuperTrend_Dn", "SuperTrend_Dir"}.issubset(df_plot.columns):
@@ -303,16 +307,33 @@ def render_technical_chart(
         )
         if has_macd:
             panel_ratios = (*panel_ratios, 2)
-            addplots.append(
-                mpf.make_addplot(
-                    df_plot["MACD_Hist"],
-                    panel=2,
-                    type="bar",
-                    color="#888888",
-                    alpha=0.55,
-                    width=0.7,
+            # MACD 히스토그램: 양수 초록, 음수 빨강 (분리해서 그리기)
+            macd_hist_pos = df_plot["MACD_Hist"].where(df_plot["MACD_Hist"] >= 0)
+            macd_hist_neg = df_plot["MACD_Hist"].where(df_plot["MACD_Hist"] < 0)
+
+            if macd_hist_pos.notna().any():
+                addplots.append(
+                    mpf.make_addplot(
+                        macd_hist_pos,
+                        panel=2,
+                        type="bar",
+                        color="green",
+                        alpha=0.55,
+                        width=0.7,
+                    )
                 )
-            )
+            if macd_hist_neg.notna().any():
+                addplots.append(
+                    mpf.make_addplot(
+                        macd_hist_neg,
+                        panel=2,
+                        type="bar",
+                        color="red",
+                        alpha=0.55,
+                        width=0.7,
+                    )
+                )
+
             addplots.append(mpf.make_addplot(df_plot["MACD"], panel=2, color="#4DA3FF", width=1.0))
             addplots.append(
                 mpf.make_addplot(df_plot["MACD_Signal"], panel=2, color="#FF8C00", width=0.9)
@@ -377,10 +398,24 @@ def render_technical_chart(
                 )
             )
 
+        # 커스텀 스타일: 검은 배경 + 기존 캔들 색상
+        custom_style = mpf.make_mpf_style(
+            base_mpf_style="yahoo",
+            rc={
+                "figure.facecolor": "#1C1C1C",  # 검은 배경
+                "axes.facecolor": "#1C1C1C",
+                "axes.edgecolor": "#555555",
+                "axes.labelcolor": "white",
+                "xtick.color": "white",
+                "ytick.color": "white",
+                "grid.color": "#333333",
+            },
+        )
+
         plot_kwargs = {
             "type": "candle",
             "volume": True,
-            "style": "yahoo",
+            "style": custom_style,
             "title": "",
             "tight_layout": True,
             "panel_ratios": panel_ratios,
@@ -412,9 +447,9 @@ def render_technical_chart(
         if panels:
             ax_price = panels[0]
             if chosen_font:
-                ax_price.set_title(ticker, fontname=chosen_font)
+                ax_price.set_title(ticker, fontname=chosen_font, color="white")
             else:
-                ax_price.set_title(ticker)
+                ax_price.set_title(ticker, color="white")
             _right_value_labels(ax_price, df_plot)
 
             # Stage2 shading
