@@ -117,13 +117,20 @@ class QuickCheckPipeline:
             for comp in components:
                 if "score" in comp:  # New format
                     lines.append(f"- **{comp['name']}**: {comp['score']}점")
+                    # Show all signals first
                     if comp.get("signals"):
                         for sig in comp["signals"][:3]:  # Top 3 signals per component
                             lines.append(f"  - {sig}")
+                    # Then show evidence with clear separation
                     if comp.get("evidence"):
-                        lines.append("  근거:")
+                        if comp.get("signals"):
+                            lines.append("")  # Blank line between signals and evidence
+                        lines.append("  **근거:**")  # 2-space indent (same level as signals)
                         for ev in comp["evidence"][:5]:  # Top 5 evidence per component
-                            lines.append(f"  - {ev}")
+                            lines.append(f"    - {ev}")  # 4-space indent for evidence items
+                    # Add blank line after component if it has content
+                    if comp.get("signals") or comp.get("evidence"):
+                        lines.append("")
                 else:  # Legacy format
                     lines.append(
                         f"- **{comp['name']}**: {comp.get('status', 'N/A')} ({comp.get('confidence', 0):.0f}%)"
