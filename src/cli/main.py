@@ -567,6 +567,19 @@ def display_actionable_signal(signal: ActionableSignalOutput) -> Panel:
     # Confidence
     content.append(f"📊 **신뢰도**: {signal.confidence * 100:.0f}%")
 
+    # Phase 2 fields: Pattern insights and price levels
+    if signal.pattern_insight:
+        content.append(f"\n📈 **패턴 분석**: {signal.pattern_insight}")
+
+    if signal.target_price:
+        content.append(f"🎯 **목표가**: {signal.target_price}")
+
+    if signal.entry_zone:
+        content.append(f"✅ **진입 구간**: {signal.entry_zone}")
+
+    if signal.key_levels:
+        content.append(f"📍 **주요 레벨**: {signal.key_levels}")
+
     panel = Panel(
         "\n".join(content),
         title="[bold]🚀 실행 가능한 투자 시그널[/bold]",
