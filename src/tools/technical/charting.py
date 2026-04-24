@@ -93,20 +93,22 @@ def _shade_stage2(ax: Any, df: pd.DataFrame) -> None:
 
 
 def _right_value_labels(ax: Any, df: pd.DataFrame) -> None:
-    """Display moving average labels on the right side of price panel."""
+    """Display moving average labels grouped in one box."""
     if df.empty:
         return
-    # mplfinance uses numeric x-axis (0, 1, 2, ...) not datetime
-    x = len(df) - 1
+
     labels = [
-        ("MA50", "SMA_50", "#2196F3", 0),  # 파란색
-        ("MA200", "SMA_200", "#F44336", -12),  # 빨간색
-        ("MA120", "SMA_120", "#FF9800", -24),  # 주황색
-        ("MA20", "SMA_20", "#FFD700", 12),  # 노란색
-        ("MA10", "SMA_10", "#B0B0B0", 24),
-        ("MA150", "SMA_150", "#8A8A8A", 36),  # 최하단
+        ("MA10", "SMA_10", "#B0B0B0"),
+        ("MA20", "SMA_20", "#FFD700"),
+        ("MA50", "SMA_50", "#2196F3"),
+        ("MA120", "SMA_120", "#FF9800"),
+        ("MA150", "SMA_150", "#8A8A8A"),
+        ("MA200", "SMA_200", "#F44336"),
     ]
-    for name, col, color, dy in labels:
+
+    # Collect all MA values
+    ma_texts = []
+    for name, col, color in labels:
         if col not in df.columns:
             continue
         try:
@@ -115,29 +117,38 @@ def _right_value_labels(ax: Any, df: pd.DataFrame) -> None:
             continue
         if pd.isna(y):
             continue
+        ma_texts.append((name, y, color))
 
-        # 가격 값도 함께 표시
-        label_text = f"{name}: ${y:.1f}"
+    if not ma_texts:
+        return
 
-        ax.annotate(
-            label_text,
-            xy=(x, y),
-            xytext=(8, dy),  # 오른쪽으로 더 멀리
-            textcoords="offset points",
-            ha="left",
-            va="center",
-            fontsize=10.0,  # 더 크게
-            color=color,
-            weight="bold",  # 굵게
-            bbox={
-                "boxstyle": "round,pad=0.4",
-                "fc": "#1A1A1A",
-                "ec": color,
-                "lw": 2,
-                "alpha": 0.95,
-            },
-            zorder=10,  # 맨 앞으로
-        )
+    # Build multi-line text with color coding
+    text_lines = []
+    for name, value, _color in ma_texts:
+        text_lines.append(f"{name}: ${value:.1f}")
+
+    combined_text = "\n".join(text_lines)
+
+    # Place grouped label at top-right corner
+    ax.text(
+        0.98,
+        0.98,
+        combined_text,
+        transform=ax.transAxes,
+        ha="right",
+        va="top",
+        fontsize=9.0,
+        color="white",
+        family="monospace",
+        bbox={
+            "boxstyle": "round,pad=0.5",
+            "fc": "#1A1A1A",
+            "ec": "#555555",
+            "lw": 1.5,
+            "alpha": 0.9,
+        },
+        zorder=10,
+    )
 
 
 def _draw_support_resistance(
