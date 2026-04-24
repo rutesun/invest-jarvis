@@ -77,6 +77,17 @@ def test_cup_and_handle_too_shallow():
     assert result.detected is False
 
 
+def test_cup_and_handle_short_cup():
+    """40-60일 짧은 Cup 감지 테스트"""
+    df = create_mock_cup_and_handle(cup_depth=0.25, handle_ret=0.10, cup_days=50)
+
+    result = detect_cup_and_handle(df)
+
+    assert result.detected is True, f"Failed to detect: {result.description}"
+    assert result.confidence > 0.6  # 짧은 cup은 period 감점으로 0.65 정도
+    assert result.pattern_name == "Cup & Handle"
+
+
 def create_mock_double_bottom(
     valley1: float = 100.0, valley2: float = 101.0, neckline: float = 120.0, days: int = 60
 ) -> pd.DataFrame:

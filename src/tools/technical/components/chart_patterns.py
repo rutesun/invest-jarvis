@@ -20,13 +20,14 @@ PATTERN_CONFIDENCE_WEIGHTS = {
 def detect_cup_and_handle(df: pd.DataFrame) -> ChartPatternResult:
     """Cup & Handle 패턴 감지 (일봉 기준)"""
 
-    if len(df) < 70:
+    # 최소 데이터 요구사항 완화: 70일 → 50일
+    if len(df) < 50:
         return ChartPatternResult(
             pattern_name="Cup & Handle",
             detected=False,
             confidence=0.0,
             current_price=df["Close"].iloc[-1],
-            description="데이터 부족 (최소 70일 필요)",
+            description="데이터 부족 (최소 50일 필요)",
         )
 
     prices = df["Close"].values
@@ -38,9 +39,9 @@ def detect_cup_and_handle(df: pd.DataFrame) -> ChartPatternResult:
         left_peak_idx = peaks[i - 1]
         right_peak_idx = peaks[i]
 
-        # Cup range
+        # Cup range (Cup 길이 제약 완화: 60-120일 → 40-120일)
         cup_range = prices[left_peak_idx : right_peak_idx + 1]
-        if len(cup_range) < 60 or len(cup_range) > 120:
+        if len(cup_range) < 40 or len(cup_range) > 120:
             continue
 
         cup_max = max(prices[left_peak_idx], prices[right_peak_idx])
@@ -51,8 +52,8 @@ def detect_cup_and_handle(df: pd.DataFrame) -> ChartPatternResult:
         if not (0.15 <= cup_depth <= 0.40):
             continue
 
-        # Check handle
-        handle_range = prices[right_peak_idx : min(right_peak_idx + 10, len(prices))]
+        # Check handle (Handle 길이 확장: max 10일 → max 20일)
+        handle_range = prices[right_peak_idx : min(right_peak_idx + 20, len(prices))]
         if len(handle_range) < 2:
             continue
 
@@ -120,9 +121,14 @@ def calculate_cup_handle_confidence(
     handle_score = 1.0 - (handle_ret / 0.15)
     confidence += handle_score * weights["handle_weight"]
 
-    # 3. Period fit
+    # 3. Period fit (거리에 따라 차등 점수)
     if 60 <= cup_length <= 120:
-        confidence += weights["period_weight"]
+        period_score = 1.0
+    elif 40 <= cup_length < 60:
+        period_score = 0.9  # 짧은 cup 약간 감점
+    else:
+        period_score = 0.7
+    confidence += period_score * weights["period_weight"]
 
     # 4. Volume (placeholder)
     confidence += 0.5 * weights["volume_weight"]
