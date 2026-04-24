@@ -22,8 +22,8 @@ class RiskStrategy(BaseStrategy):
 
         close = self._safe_get(latest, "Close")
         atr = self._safe_get(latest, "ATR")
-        bb_upper = self._safe_get(latest, "BBU_20_2.0")
-        bb_lower = self._safe_get(latest, "BBL_20_2.0")
+        bb_upper = self._safe_get(latest, "BB_Upper")
+        bb_lower = self._safe_get(latest, "BB_Lower")
         high_52w = self._safe_get(latest, "High_52w")
         low_52w = self._safe_get(latest, "Low_52w")
 

@@ -153,8 +153,8 @@ def analyze_risk(df: pd.DataFrame) -> ComponentResult:
             evidence.append("가격이 SMA 50 아래 (리스크 증가)")
             score -= 5
 
-    if "SUPERTd_10_3.0" in df.columns and not pd.isna(latest.get("SUPERTd_10_3.0")):
-        supertrend_dir = int(latest["SUPERTd_10_3.0"])
+    if "SuperTrend_Dir" in df.columns and not pd.isna(latest.get("SuperTrend_Dir")):
+        supertrend_dir = int(latest["SuperTrend_Dir"])
         if supertrend_dir == -1:
             evidence.append("Supertrend 하락 (리스크 증가)")
             score -= 5
