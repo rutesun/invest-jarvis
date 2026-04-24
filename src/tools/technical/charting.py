@@ -191,6 +191,10 @@ def render_technical_chart(
         if df_plot.empty:
             raise ValueError("Empty dataframe after windowing")
 
+        # Flatten MultiIndex columns (yfinance single ticker returns MultiIndex)
+        if isinstance(df_plot.columns, pd.MultiIndex):
+            df_plot.columns = df_plot.columns.get_level_values(0)
+
         # Ensure datetime index
         if not isinstance(df_plot.index, pd.DatetimeIndex):
             df_plot.index = pd.to_datetime(df_plot.index)

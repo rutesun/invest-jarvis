@@ -230,6 +230,14 @@ class DeepDivePipeline:
             indicators["rsi"] = snapshot.rsi
         if snapshot.macd is not None:
             indicators["macd"] = snapshot.macd
+        if snapshot.perf_1m is not None:
+            indicators["perf_1m"] = snapshot.perf_1m
+        if snapshot.perf_3m is not None:
+            indicators["perf_3m"] = snapshot.perf_3m
+        if snapshot.perf_6m is not None:
+            indicators["perf_6m"] = snapshot.perf_6m
+        if snapshot.perf_1y is not None:
+            indicators["perf_1y"] = snapshot.perf_1y
 
         input_data = TechnicalSummaryInput(
             ticker=technical_data.ticker or "UNKNOWN",

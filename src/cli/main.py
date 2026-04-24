@@ -278,6 +278,19 @@ def format_deep_dive_output(result: dict) -> str:
     snapshot = technical.indicators or technical.snapshot
     output += f"## 가격: ${snapshot.price:.2f} ({snapshot.change_pct:+.2f}%)\n\n"
 
+    # Performance
+    perf_parts = []
+    if snapshot.perf_1m is not None:
+        perf_parts.append(f"1M: {snapshot.perf_1m:+.2f}%")
+    if snapshot.perf_3m is not None:
+        perf_parts.append(f"3M: {snapshot.perf_3m:+.2f}%")
+    if snapshot.perf_6m is not None:
+        perf_parts.append(f"6M: {snapshot.perf_6m:+.2f}%")
+    if snapshot.perf_1y is not None:
+        perf_parts.append(f"1Y: {snapshot.perf_1y:+.2f}%")
+    if perf_parts:
+        output += f"**퍼포먼스**: {' | '.join(perf_parts)}\n\n"
+
     # Raw technical indicators
     output += "### 기술적 지표\n\n"
 
@@ -620,6 +633,15 @@ def analyze(
         chart_result = result.get("chart")
         if chart_result and chart_result.success:
             console.print(f"\n[green]📊 차트 저장: {chart_result.path}[/green]")
+            # Auto-open chart on macOS/Linux
+            import platform
+            import subprocess
+
+            system = platform.system()
+            if system == "Darwin":  # macOS
+                subprocess.run(["open", chart_result.path], check=False)
+            elif system == "Linux":
+                subprocess.run(["xdg-open", chart_result.path], check=False)
         elif chart_result and not chart_result.success:
             console.print(f"\n[yellow]⚠️  차트 생성 실패: {chart_result.error}[/yellow]")
     except ValueError as e:

@@ -20,6 +20,12 @@ class IndicatorSnapshot(BaseModel):
     price: float
     change_pct: float
 
+    # Performance
+    perf_1m: float | None = None
+    perf_3m: float | None = None
+    perf_6m: float | None = None
+    perf_1y: float | None = None
+
     # Moving averages
     sma_10: float | None = None
     sma_20: float | None = None
