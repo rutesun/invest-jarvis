@@ -35,16 +35,38 @@ class IndicatorCalculator:
         macd = ta.macd(df["Close"])
         if macd is not None:
             df = pd.concat([df, macd], axis=1)
+            # Rename to clear names
+            if "MACD_12_26_9" in df.columns:
+                df["MACD"] = df["MACD_12_26_9"]
+                df["MACD_Signal"] = df["MACDs_12_26_9"]
+                df["MACD_Hist"] = df["MACDh_12_26_9"]
+                df = df.drop(columns=["MACD_12_26_9", "MACDs_12_26_9", "MACDh_12_26_9"])
 
         # Bollinger Bands
         bb = ta.bbands(df["Close"], length=20)
         if bb is not None:
             df = pd.concat([df, bb], axis=1)
+            # Rename to clear names
+            # Note: pandas_ta uses BBU_20_2.0_2.0 format (length_stdev_offset)
+            bb_cols = [c for c in df.columns if c.startswith("BBU_20") or c.startswith("BBL_20")]
+            if bb_cols:
+                if any(c.startswith("BBU_20") for c in bb_cols):
+                    bbu_col = next(c for c in bb_cols if c.startswith("BBU_20"))
+                    df["BB_Upper"] = df[bbu_col]
+                if any(c.startswith("BBL_20") for c in bb_cols):
+                    bbl_col = next(c for c in bb_cols if c.startswith("BBL_20"))
+                    df["BB_Lower"] = df[bbl_col]
+                # Drop old columns
+                df = df.drop(columns=list(bb_cols))
 
         # ADX
         adx = ta.adx(df["High"], df["Low"], df["Close"], length=14)
         if adx is not None:
             df = pd.concat([df, adx], axis=1)
+            # Rename to clear name
+            if "ADX_14" in df.columns:
+                df["ADX"] = df["ADX_14"]
+                df = df.drop(columns=["ADX_14"])
 
         # ATR
         df["ATR"] = ta.atr(df["High"], df["Low"], df["Close"], length=14)
@@ -61,6 +83,14 @@ class IndicatorCalculator:
         st = ta.supertrend(df["High"], df["Low"], df["Close"], length=10, multiplier=3.0)
         if st is not None:
             df = pd.concat([df, st], axis=1)
+            # Rename to clear names
+            if "SUPERTl_10_3.0" in df.columns:
+                df["SuperTrend_Up"] = df["SUPERTl_10_3.0"]
+                df["SuperTrend_Dn"] = df["SUPERTs_10_3.0"]
+                df["SuperTrend_Dir"] = df["SUPERTd_10_3.0"]
+                df = df.drop(
+                    columns=["SUPERTl_10_3.0", "SUPERTs_10_3.0", "SUPERTd_10_3.0", "SUPERT_10_3.0"]
+                )
 
         # Disparity
         for length in [20, 50, 120]:
@@ -85,6 +115,12 @@ class IndicatorCalculator:
         macd_fast = ta.macd(df["Close"], fast=5, slow=35, signal=5)
         if macd_fast is not None:
             df = pd.concat([df, macd_fast], axis=1)
+            # Rename to clear names
+            if "MACD_5_35_5" in df.columns:
+                df["MACD_Fast"] = df["MACD_5_35_5"]
+                df["MACD_Fast_Signal"] = df["MACDs_5_35_5"]
+                df["MACD_Fast_Hist"] = df["MACDh_5_35_5"]
+                df = df.drop(columns=["MACD_5_35_5", "MACDs_5_35_5", "MACDh_5_35_5"])
 
         # Volume SMAs
         df["Vol_SMA_20"] = ta.sma(df["Volume"], length=20)
@@ -164,15 +200,15 @@ class IndicatorCalculator:
             sma_120=safe_get("SMA_120"),
             sma_200=safe_get("SMA_200"),
             rsi=safe_get("RSI"),
-            macd=safe_get("MACD_12_26_9"),
-            macd_signal=safe_get("MACDs_12_26_9"),
-            macd_histogram=safe_get("MACDh_12_26_9"),
+            macd=safe_get("MACD"),
+            macd_signal=safe_get("MACD_Signal"),
+            macd_histogram=safe_get("MACD_Hist"),
             atr=safe_get("ATR"),
-            bb_upper=safe_get("BBU_20_2.0"),
-            bb_lower=safe_get("BBL_20_2.0"),
-            adx=safe_get("ADX_14"),
-            supertrend_direction=int(safe_get("SUPERTd_10_3.0") or 0)
-            if safe_get("SUPERTd_10_3.0")
+            bb_upper=safe_get("BB_Upper"),
+            bb_lower=safe_get("BB_Lower"),
+            adx=safe_get("ADX"),
+            supertrend_direction=int(safe_get("SuperTrend_Dir") or 0)
+            if safe_get("SuperTrend_Dir")
             else None,
             disparity_20=safe_get("Disparity_20"),
             disparity_50=safe_get("Disparity_50"),
@@ -197,9 +233,9 @@ class IndicatorCalculator:
             is_gap_down=bool(latest.get("Is_Gap_Down"))
             if not pd.isna(latest.get("Is_Gap_Down"))
             else None,
-            macd_fast=safe_get("MACD_5_35_5"),
-            macd_fast_signal=safe_get("MACDs_5_35_5"),
-            macd_fast_histogram=safe_get("MACDh_5_35_5"),
+            macd_fast=safe_get("MACD_Fast"),
+            macd_fast_signal=safe_get("MACD_Fast_Signal"),
+            macd_fast_histogram=safe_get("MACD_Fast_Hist"),
         )
 
     def _calculate_performance(
