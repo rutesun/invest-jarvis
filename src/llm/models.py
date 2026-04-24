@@ -122,6 +122,7 @@ class IntegratedAnalysisOutput(BaseModel):
 class ActionableSignalOutput(BaseModel):
     """LLM output for actionable investment signal."""
 
+    # Phase 1 fields
     action: str = Field(..., description="매수|매도|관망")
     timing: str = Field(..., description="지금|조정_대기|보류")
     signal_strength: int = Field(..., ge=1, le=10, description="1-10")
@@ -131,6 +132,20 @@ class ActionableSignalOutput(BaseModel):
     risks: list[str] = Field(..., description="리스크")
     invalidation_point: str | None = Field(None, description="청산/손절 가격")
     confidence: float = Field(..., ge=0.0, le=1.0, description="0.0-1.0")
+
+    # Phase 2 fields
+    pattern_insight: str | None = Field(
+        None, description="차트 패턴 해석. 예: 'Cup & Handle 8일 전 완성, 돌파 준비'"
+    )
+    target_price: str | None = Field(
+        None, description="가격 목표 (자유 서술). 예: '돌파 시 $250, 조정 시 $175 지지'"
+    )
+    entry_zone: str | None = Field(
+        None, description="진입 구간 (자유 서술). 예: '현재 $200 횡보, 조정 시 $175-180 매수'"
+    )
+    key_levels: str | None = Field(
+        None, description="주요 레벨 요약. 예: '지지: $187/$175, 저항: $200/$250'"
+    )
 
     @field_validator("action")
     @classmethod
@@ -144,4 +159,12 @@ class ActionableSignalOutput(BaseModel):
     def validate_timing(cls, v: str) -> str:
         if v not in {"지금", "조정_대기", "보류"}:
             raise ValueError(f"Invalid timing: {v}")
+        return v
+
+    @field_validator("pattern_insight", "target_price", "entry_zone", "key_levels")
+    @classmethod
+    def validate_non_empty(cls, v):
+        """Ensure Phase 2 fields are not empty strings"""
+        if v is not None and v.strip() == "":
+            return None
         return v
