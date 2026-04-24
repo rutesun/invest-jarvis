@@ -80,8 +80,10 @@ def test_pocket_pivot_detected():
     # Verify 50MA is close to current price (within 2%)
     # 50MA ≈ avg of last 50 closes = (100*50 + 99+98+...+90)/50 ≈ 95
     # Current close = 90, distance = (90-95)/95 ≈ -5.3% (NOT within 2%)
-    # Adjust close to be within 2%
-    df.loc[df.index[-1], "Close"] = df.loc[df.index[-1], "SMA_50"] * 1.01  # +1% from 50MA
+    # Adjust close to be within 2%, and keep it a down day
+    target_close = df.loc[df.index[-1], "SMA_50"] * 0.99  # -1% from 50MA (within 2%)
+    df.loc[df.index[-1], "Close"] = target_close
+    df.loc[df.index[-1], "Open"] = target_close + 0.5  # Ensure close < open (down day)
 
     result = analyze_volume(df)
 
@@ -127,8 +129,10 @@ def test_pocket_pivot_volume_not_exceeded():
     calculator = IndicatorCalculator()
     df = calculator.calculate(df)
 
-    # Adjust close to be within 2% of 50MA
-    df.loc[df.index[-1], "Close"] = df.loc[df.index[-1], "SMA_50"] * 1.01
+    # Adjust close to be within 2% of 50MA, keep down day
+    target_close = df.loc[df.index[-1], "SMA_50"] * 0.99
+    df.loc[df.index[-1], "Close"] = target_close
+    df.loc[df.index[-1], "Open"] = target_close + 0.5
 
     result = analyze_volume(df)
 
