@@ -6,6 +6,7 @@ __pycache__/
 venv/
 data/
 reports/
+charts/
 *.egg-info/
 dist/
 build/
