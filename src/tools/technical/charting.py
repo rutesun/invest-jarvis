@@ -96,14 +96,15 @@ def _right_value_labels(ax: Any, df: pd.DataFrame) -> None:
     """Display moving average labels on the right side of price panel."""
     if df.empty:
         return
-    x = df.index[-1]
+    # mplfinance uses numeric x-axis (0, 1, 2, ...) not datetime
+    x = len(df) - 1
     labels = [
         ("MA50", "SMA_50", "#2196F3", 0),  # 파란색
-        ("MA200", "SMA_200", "#F44336", -10),  # 빨간색
-        ("MA120", "SMA_120", "#FF9800", -20),  # 주황색
-        ("MA20", "SMA_20", "#FFD700", 10),  # 노란색
-        ("MA10", "SMA_10", "#B0B0B0", 20),
-        ("MA150", "SMA_150", "#8A8A8A", 30),  # 최하단
+        ("MA200", "SMA_200", "#F44336", -12),  # 빨간색
+        ("MA120", "SMA_120", "#FF9800", -24),  # 주황색
+        ("MA20", "SMA_20", "#FFD700", 12),  # 노란색
+        ("MA10", "SMA_10", "#B0B0B0", 24),
+        ("MA150", "SMA_150", "#8A8A8A", 36),  # 최하단
     ]
     for name, col, color, dy in labels:
         if col not in df.columns:
@@ -114,17 +115,28 @@ def _right_value_labels(ax: Any, df: pd.DataFrame) -> None:
             continue
         if pd.isna(y):
             continue
+
+        # 가격 값도 함께 표시
+        label_text = f"{name}: ${y:.1f}"
+
         ax.annotate(
-            name,
+            label_text,
             xy=(x, y),
-            xytext=(-6, dy),
+            xytext=(8, dy),  # 오른쪽으로 더 멀리
             textcoords="offset points",
-            ha="right",
+            ha="left",
             va="center",
-            fontsize=9.0,  # 8.0 → 9.0 (더 크게)
+            fontsize=10.0,  # 더 크게
             color=color,
-            bbox={"boxstyle": "round,pad=0.3", "fc": "#2C2C2C", "ec": color, "alpha": 0.9},
-            zorder=6,
+            weight="bold",  # 굵게
+            bbox={
+                "boxstyle": "round,pad=0.4",
+                "fc": "#1A1A1A",
+                "ec": color,
+                "lw": 2,
+                "alpha": 0.95,
+            },
+            zorder=10,  # 맨 앞으로
         )
 
 
@@ -405,7 +417,7 @@ def render_technical_chart(
             gridcolor="#2A2A2A",  # 그리드 색상
             gridstyle="--",  # 점선
             rc={
-                "figure.facecolor": "#000000",  # 바깥 배경
+                "figure.facecolor": "#1A1A1A",  # 바깥 배경 (차트 영역과 동일)
                 "axes.facecolor": "#1A1A1A",  # 차트 영역 배경
                 "axes.edgecolor": "#444444",
                 "axes.labelcolor": "white",
@@ -494,10 +506,10 @@ def render_technical_chart(
             if len(panels) > crsi_panel_i:
                 _badge(panels[crsi_panel_i], "cRSI(dc=20,vib=10,lvl=10%)", xy=(0.01, 0.92))
 
-        # Save
+        # Save (increased pad_inches to make room for right-side MA labels)
         filename = f"{ticker.replace('/', '_')}_technical.png"
         path = os.path.join(out_dir, filename)
-        fig.savefig(path, dpi=130, bbox_inches="tight", pad_inches=0.15)
+        fig.savefig(path, dpi=130, bbox_inches="tight", pad_inches=0.5)
         plt.close(fig)
 
         return ChartResult(ticker=ticker, path=path, success=True)
