@@ -407,6 +407,166 @@ def test_support_resistance(df: pd.DataFrame, snapshot: IndicatorSnapshot) -> Ch
     )
 
 
+def detect_ascending_triangle(df: pd.DataFrame) -> ChartPatternResult:
+    """Ascending Triangle 패턴 감지
+
+    수평 저항선 + 상승 지지선, 돌파 시 상승 기대
+    """
+    if len(df) < 40:
+        return ChartPatternResult(
+            pattern_name="Ascending Triangle",
+            detected=False,
+            confidence=0.0,
+            current_price=df["Close"].iloc[-1],
+            description="데이터 부족 (최소 40일 필요)",
+        )
+
+    import numpy as np
+    from scipy.stats import linregress
+
+    prices = df["Close"].values
+
+    # 고점/저점 추출
+    peaks, _ = find_peaks(prices, distance=10, prominence=prices.mean() * 0.03)
+    valleys, _ = find_peaks(-prices, distance=10, prominence=prices.mean() * 0.03)
+
+    if len(peaks) < 3 or len(valleys) < 3:
+        return ChartPatternResult(
+            pattern_name="Ascending Triangle",
+            detected=False,
+            confidence=0.0,
+            current_price=prices[-1],
+            description="고점/저점 부족 (각 3개 필요)",
+        )
+
+    # 최근 3-4개 고점/저점만 사용
+    recent_peaks = peaks[-4:] if len(peaks) >= 4 else peaks[-3:]
+    recent_valleys = valleys[-4:] if len(valleys) >= 4 else valleys[-3:]
+
+    # 패턴 기간 확인
+    pattern_start = min(recent_peaks[0], recent_valleys[0])
+    pattern_end = max(recent_peaks[-1], recent_valleys[-1])
+    pattern_length = pattern_end - pattern_start
+
+    if not (30 <= pattern_length <= 90):
+        return ChartPatternResult(
+            pattern_name="Ascending Triangle",
+            detected=False,
+            confidence=0.0,
+            current_price=prices[-1],
+            description=f"패턴 기간 부적합 ({pattern_length}일, 30-90일 필요)",
+        )
+
+    # 고점 수평성 확인
+    peak_prices = prices[recent_peaks]
+    peak_std = np.std(peak_prices) / np.mean(peak_prices)
+
+    if peak_std > 0.03:  # 표준편차 >3%면 수평 아님
+        return ChartPatternResult(
+            pattern_name="Ascending Triangle",
+            detected=False,
+            confidence=0.0,
+            current_price=prices[-1],
+            description=f"고점 수평성 부족 (std: {peak_std:.2%} > 3%)",
+        )
+
+    # 저점 상승 추세 확인 (선형회귀)
+    valley_prices = prices[recent_valleys]
+    slope, intercept, r_value, _, _ = linregress(recent_valleys, valley_prices)
+
+    daily_slope = slope / pattern_length
+
+    if daily_slope <= 0.001:  # 일일 0.1% 미만 상승이면 불충분
+        return ChartPatternResult(
+            pattern_name="Ascending Triangle",
+            detected=False,
+            confidence=0.0,
+            current_price=prices[-1],
+            description=f"저점 상승 추세 불충분 (기울기: {daily_slope * 100:.3%}/day)",
+        )
+
+    # 수렴 확인
+    first_gap = peak_prices[0] - valley_prices[0]
+    last_gap = peak_prices[-1] - valley_prices[-1]
+
+    if last_gap > first_gap * 0.5:  # 간격이 50% 이하로 좁아지지 않음
+        return ChartPatternResult(
+            pattern_name="Ascending Triangle",
+            detected=False,
+            confidence=0.0,
+            current_price=prices[-1],
+            description=f"수렴 부족 (gap: {last_gap / first_gap:.1%})",
+        )
+
+    # Confidence 계산
+    resistance_level = np.mean(peak_prices)
+    support_slope_percent = daily_slope * 100
+    convergence_ratio = last_gap / first_gap
+
+    confidence = calculate_triangle_confidence(
+        peak_std, support_slope_percent, convergence_ratio, "ascending"
+    )
+
+    # Target price: resistance + (resistance - first valley)
+    target = resistance_level + (resistance_level - valley_prices[0])
+
+    # Timing
+    completed_date = df.index[pattern_end].strftime("%Y-%m-%d")
+    days_ago = len(df) - pattern_end - 1
+
+    return ChartPatternResult(
+        pattern_name="Ascending Triangle",
+        detected=True,
+        confidence=confidence,
+        completed_date=completed_date,
+        days_ago=days_ago,
+        current_price=prices[-1],
+        breakout_level=resistance_level,
+        support_level=valley_prices[-1],
+        description=f"고점 수평도 {peak_std:.2%}, 저점 기울기 +{support_slope_percent:.2%}/day, {pattern_length}일",
+        key_levels={
+            "resistance": float(resistance_level),
+            "support_start": float(valley_prices[0]),
+            "support_end": float(valley_prices[-1]),
+            "target": float(target),
+        },
+    )
+
+
+def calculate_triangle_confidence(
+    peak_std: float,
+    slope_percent: float,
+    convergence_ratio: float,
+    triangle_type: str,  # "ascending" or "descending"
+) -> float:
+    """Triangle 패턴 confidence scoring
+
+    Args:
+        peak_std: 수평선 표준편차 (ascending은 고점, descending은 저점)
+        slope_percent: 추세선 기울기 (일일 %)
+        convergence_ratio: 마지막/첫 gap 비율 (작을수록 수렴)
+        triangle_type: 패턴 타입
+    """
+    confidence = 0.0
+
+    # 1. 수평선 품질 (0-0.4)
+    horizontal_score = max(0, 1.0 - peak_std / 0.03)
+    confidence += horizontal_score * 0.4
+
+    # 2. 추세선 기울기 (0-0.3)
+    # Ideal: 0.15% per day
+    ideal_slope = 0.15
+    slope_score = max(0, 1.0 - abs(abs(slope_percent) - ideal_slope) / 0.15)
+    confidence += slope_score * 0.3
+
+    # 3. 수렴도 (0-0.3)
+    # 작을수록 좋음 (0이면 완전 수렴)
+    convergence_score = 1.0 - convergence_ratio
+    confidence += convergence_score * 0.3
+
+    return min(confidence, 1.0)
+
+
 def detect_chart_patterns(
     df: pd.DataFrame, snapshot: IndicatorSnapshot | None = None
 ) -> dict[str, ChartPatternResult]:
