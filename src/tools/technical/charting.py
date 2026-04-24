@@ -135,12 +135,12 @@ def _draw_support_resistance(
     for level in support_levels[:3]:
         price = level.get("price")
         if price and not pd.isna(price):
-            ax.axhline(y=price, color="green", linestyle="--", linewidth=1.0, alpha=0.6, zorder=3)
+            ax.axhline(y=price, color="green", linestyle="--", linewidth=0.7, alpha=0.5, zorder=3)
 
     for level in resistance_levels[:3]:
         price = level.get("price")
         if price and not pd.isna(price):
-            ax.axhline(y=price, color="red", linestyle="--", linewidth=1.0, alpha=0.6, zorder=3)
+            ax.axhline(y=price, color="red", linestyle="--", linewidth=0.7, alpha=0.5, zorder=3)
 
 
 def _mark_patterns(ax: Any, df: pd.DataFrame, patterns: dict[str, Any]) -> None:
@@ -232,17 +232,17 @@ def render_technical_chart(
 
         # Moving averages (6개, 우선순위별 스타일)
         if _has_values("SMA_10"):
-            addplots.append(mpf.make_addplot(df_plot["SMA_10"], color="#B0B0B0", width=1.0))
+            addplots.append(mpf.make_addplot(df_plot["SMA_10"], color="#B0B0B0", width=0.7))
         if _has_values("SMA_20"):
-            addplots.append(mpf.make_addplot(df_plot["SMA_20"], color="#4DA3FF", width=1.8))
+            addplots.append(mpf.make_addplot(df_plot["SMA_20"], color="#4DA3FF", width=1.2))
         if _has_values("SMA_50"):
-            addplots.append(mpf.make_addplot(df_plot["SMA_50"], color="#00D1FF", width=3.0))
+            addplots.append(mpf.make_addplot(df_plot["SMA_50"], color="#00D1FF", width=2.0))
         if _has_values("SMA_120"):
-            addplots.append(mpf.make_addplot(df_plot["SMA_120"], color="#FF8C00", width=2.0))
+            addplots.append(mpf.make_addplot(df_plot["SMA_120"], color="#FF8C00", width=1.3))
         if _has_values("SMA_150"):
-            addplots.append(mpf.make_addplot(df_plot["SMA_150"], color="#8A8A8A", width=0.9))
+            addplots.append(mpf.make_addplot(df_plot["SMA_150"], color="#8A8A8A", width=0.7))
         if _has_values("SMA_200"):
-            addplots.append(mpf.make_addplot(df_plot["SMA_200"], color="#FF2D55", width=2.8))
+            addplots.append(mpf.make_addplot(df_plot["SMA_200"], color="#FF2D55", width=1.8))
 
         # Supertrend with signal markers
         if {"SuperTrend_Up", "SuperTrend_Dn", "SuperTrend_Dir"}.issubset(df_plot.columns):
@@ -251,9 +251,11 @@ def render_technical_chart(
             st_dn = df_plot["SuperTrend_Dn"].where(st_dir == -1)
 
             if st_up.notna().any():
-                addplots.append(mpf.make_addplot(st_up, color="green", width=2, secondary_y=False))
+                addplots.append(
+                    mpf.make_addplot(st_up, color="green", width=1.3, secondary_y=False)
+                )
             if st_dn.notna().any():
-                addplots.append(mpf.make_addplot(st_dn, color="red", width=2, secondary_y=False))
+                addplots.append(mpf.make_addplot(st_dn, color="red", width=1.3, secondary_y=False))
 
             # Buy/Sell signal markers
             buy_signal = (st_dir == 1) & (st_dir.shift(1) == -1)
@@ -285,7 +287,9 @@ def render_technical_chart(
 
         # Volume MA50
         if _has_values("Vol_SMA_50"):
-            addplots.append(mpf.make_addplot(df_plot["Vol_SMA_50"], panel=1, color="gold", width=1))
+            addplots.append(
+                mpf.make_addplot(df_plot["Vol_SMA_50"], panel=1, color="gold", width=0.8)
+            )
 
         panel_ratios = (6, 2)
 
@@ -305,9 +309,9 @@ def render_technical_chart(
                     width=0.7,
                 )
             )
-            addplots.append(mpf.make_addplot(df_plot["MACD"], panel=2, color="#4DA3FF", width=1.3))
+            addplots.append(mpf.make_addplot(df_plot["MACD"], panel=2, color="#4DA3FF", width=1.0))
             addplots.append(
-                mpf.make_addplot(df_plot["MACD_Signal"], panel=2, color="#FF8C00", width=1.1)
+                mpf.make_addplot(df_plot["MACD_Signal"], panel=2, color="#FF8C00", width=0.9)
             )
 
         # cRSI panel
@@ -322,7 +326,7 @@ def render_technical_chart(
                     df_plot["cRSI"],
                     panel=crsi_panel,
                     color="#FF00FF",
-                    width=1.2,
+                    width=1.0,
                     ylim=(0, 100),
                 )
             )
@@ -333,7 +337,7 @@ def render_technical_chart(
                         df_plot["cRSI_LowBand"],
                         panel=crsi_panel,
                         color="#00FFFF",
-                        width=1.0,
+                        width=0.8,
                         alpha=0.9,
                     )
                 )
@@ -343,7 +347,7 @@ def render_technical_chart(
                         df_plot["cRSI_HighBand"],
                         panel=crsi_panel,
                         color="#00FFFF",
-                        width=1.0,
+                        width=0.8,
                         alpha=0.9,
                     )
                 )
