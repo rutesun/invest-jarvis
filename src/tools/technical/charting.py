@@ -129,12 +129,13 @@ def _right_value_labels(fig: Any, ax: Any, df: pd.DataFrame) -> None:
 
     combined_text = "\n".join(text_lines)
 
-    # Place grouped label outside chart area (figure coordinates)
-    fig.text(
-        0.99,
-        0.85,
+    # Place grouped label right of chart area y-axis
+    ax.text(
+        1.01,
+        0.98,
         combined_text,
-        ha="right",
+        transform=ax.transAxes,
+        ha="left",
         va="top",
         fontsize=9.0,
         color="white",
@@ -147,6 +148,7 @@ def _right_value_labels(fig: Any, ax: Any, df: pd.DataFrame) -> None:
             "alpha": 0.9,
         },
         zorder=10,
+        clip_on=False,
     )
 
 
