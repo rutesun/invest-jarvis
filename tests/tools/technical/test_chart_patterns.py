@@ -351,6 +351,31 @@ def test_ascending_triangle_perfect():
     # NOTE: Synthetic data detection needs tuning with real historical data in Task 9
 
 
+def test_descending_triangle_implementation():
+    """Descending Triangle implementation exists"""
+    from src.tools.technical.components.chart_patterns import detect_descending_triangle
+
+    dates = pd.date_range(end=pd.Timestamp.now(), periods=60, freq="D")
+    prices = [140 - i * 0.2 for i in range(60)]  # Simple descending trend
+
+    df = pd.DataFrame(
+        {
+            "Open": prices,
+            "High": [p * 1.01 for p in prices],
+            "Low": [p * 0.99 for p in prices],
+            "Close": prices,
+        },
+        index=dates,
+    )
+
+    result = detect_descending_triangle(df)
+
+    # Implementation exists and returns result
+    assert result.pattern_name == "Descending Triangle"
+    assert result.current_price > 0
+    # NOTE: Real data validation in Task 9
+
+
 def test_support_resistance_test_near_level():
     """Test detection when price near support/resistance"""
     from src.tools.technical.components.chart_patterns import test_support_resistance
