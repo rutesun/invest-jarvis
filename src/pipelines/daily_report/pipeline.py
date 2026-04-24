@@ -231,8 +231,8 @@ def format_report(report: DailyReport, data_dir: str = "data") -> str:
                 for idx, (_source_id, content) in enumerate(source_messages.items(), 1):
                     excerpt = _extract_relevant_text(content, news_item.keywords, max_length=200)
                     if excerpt:
-                        # 4칸 들여쓰기로 번호 리스트 포맷
-                        output += f"    {idx}. {excerpt}\n"
+                        # 번호 리스트 (2칸 들여쓰기)
+                        output += f"  {idx}. {excerpt}\n"
                 output += "\n"
 
     return output

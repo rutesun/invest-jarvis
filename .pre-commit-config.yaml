@@ -3,6 +3,14 @@
 # Run manually: uv run pre-commit run --all-files
 
 repos:
+  # Prevent commits to main branch
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: no-commit-to-branch
+        name: prevent commits to main
+        args: ['--branch', 'main']
+
   - repo: local
     hooks:
       - id: ruff-check
