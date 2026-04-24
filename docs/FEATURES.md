@@ -20,11 +20,31 @@ LLM 없이 기술적 분석만 수행하는 빠른 진단 기능.
 | Minervini | 추세 추종 (20/50/150/200일 이평선 배열) |
 | Velocity | 가격 모멘텀 및 가속도 |
 | CRSI | 과매수/과매도 (Cycle RSI) |
-| Volume | 거래량 추세, 평균 대비 비율 |
-| Patterns | 캔들스틱 반전/연속 패턴 |
+| Volume | 거래량 추세, 평균 대비 비율, Pocket Pivot, Tennis Ball/Egg, Power Gap Up |
+| Patterns | VCP 2-Stage, Breakout (신고가/스윙), Candlestick (Hammer, Bullish Engulfing) |
 | Supertrend | ATR 기반 추세 감지 |
 | Divergence | RSI/MACD 다이버전스 |
 | Risk | 최대 낙폭, 변동성 |
+
+**Volume 컴포넌트 상세:**
+
+| 패턴 | 조건 | 점수 | 설명 |
+|------|------|------|------|
+| **Pocket Pivot** | 다운데이 거래량 > 10일 최대 + 50일선 ±2% | 25 | 기관 매집 신호 (Gil Morales) |
+| **Tennis Ball** | 하락 거래량 < 50% 평균 | 15 | 평균회귀 반등 가능성 |
+| **Egg** | 하락 거래량 > 150% 평균 | -15 | 추가 하락 리스크 (첫 negative score!) |
+| **Power Gap Up** | 갭 ≥4% + 거래량 3x | 20 | 강세 갭업 |
+| 거래량 급증 | 거래량 2x + 가격 상승 | 15 | 기존 로직 유지 |
+
+**Patterns 컴포넌트 상세:**
+
+| 패턴 | 조건 | 점수 | 설명 |
+|------|------|------|------|
+| **VCP Strong** | ATR 수축 20% + Tight days 5/20 + 최근 3일 연속 | 20 | Mark Minervini VCP 2-Stage |
+| **VCP General** | ATR 수축 20% 이상 | 10 | 단계 1만 만족 |
+| **Breakout** | 20일 신고가 or 스윙 고점 돌파 | 20 / 10 | 가격 돌파 |
+| **Hammer** | 아래 꼬리 > 몸통 × 2 | 10 | 하단 지지 신호 |
+| **Bullish Engulfing** | 양봉이 이전 음봉 포함 | 15 | 반전 신호 |
 
 **의존성:** yfinance (가격 데이터)
 
