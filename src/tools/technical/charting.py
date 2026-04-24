@@ -131,7 +131,7 @@ def _right_value_labels(fig: Any, ax: Any, df: pd.DataFrame) -> None:
 
     # Place grouped label right of chart area y-axis
     ax.text(
-        1.01,
+        1.08,
         0.98,
         combined_text,
         transform=ax.transAxes,
