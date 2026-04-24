@@ -235,6 +235,59 @@ def test_head_and_shoulders_implementation_exists():
     # NOTE: Detection parameters need tuning with real historical data
 
 
+def test_head_and_shoulders_short_period():
+    """60-70일 짧은 기간 H&S 감지 테스트"""
+    from src.tools.technical.components.chart_patterns import detect_head_and_shoulders
+
+    # 75일 차트에서 65일 H&S 패턴 생성 (left shoulder ~ right shoulder)
+    dates = pd.date_range(end=pd.Timestamp.now(), periods=75, freq="D")
+    prices = []
+
+    # 0-15: 상승 to left shoulder (120)
+    for i in range(15):
+        prices.append(100 + i * (20 / 15))
+
+    # 15-20: Left shoulder plateau
+    for _ in range(5):
+        prices.append(120)
+
+    # 20-30: 하락 to valley (100)
+    for i in range(10):
+        prices.append(120 - i * 2)
+
+    # 30-40: 상승 to head (140)
+    for i in range(10):
+        prices.append(100 + i * 4)
+
+    # 40-50: 하락 to valley (100)
+    for i in range(10):
+        prices.append(140 - i * 4)
+
+    # 50-65: 상승 to right shoulder (118)
+    for i in range(15):
+        prices.append(100 + i * (18 / 15))
+
+    # 65-75: 하락
+    for i in range(10):
+        prices.append(118 - i * 2)
+
+    df = pd.DataFrame(
+        {
+            "Open": prices,
+            "High": [p * 1.01 for p in prices],
+            "Low": [p * 0.99 for p in prices],
+            "Close": prices,
+        },
+        index=dates,
+    )
+
+    result = detect_head_and_shoulders(df)
+
+    assert result.detected is True, f"Failed to detect: {result.description}"
+    assert result.confidence > 0.6  # 짧은 기간 약간 감점
+    assert result.pattern_name == "Head & Shoulders"
+
+
 def test_support_resistance_test_near_level():
     """Test detection when price near support/resistance"""
     from src.tools.technical.components.chart_patterns import test_support_resistance

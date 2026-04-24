@@ -246,19 +246,19 @@ def calculate_double_bottom_confidence(height_diff: float, rebound: float, dista
 def detect_head_and_shoulders(df: pd.DataFrame) -> ChartPatternResult:
     """Head & Shoulders 패턴 감지 (일봉)"""
 
-    if len(df) < 70:
+    if len(df) < 50:
         return ChartPatternResult(
             pattern_name="Head & Shoulders",
             detected=False,
             confidence=0.0,
             current_price=df["Close"].iloc[-1],
-            description="데이터 부족 (최소 70일 필요)",
+            description="데이터 부족 (최소 50일 필요)",
         )
 
     prices = df["Close"].values
 
-    # Find 3 peaks
-    peaks, _ = find_peaks(prices, distance=10, prominence=prices.mean() * 0.05)
+    # Find 3 peaks (distance 증가로 노이즈 필터링)
+    peaks, _ = find_peaks(prices, distance=15, prominence=prices.mean() * 0.05)
 
     if len(peaks) < 3:
         return ChartPatternResult(
@@ -275,7 +275,7 @@ def detect_head_and_shoulders(df: pd.DataFrame) -> ChartPatternResult:
         right_shoulder_idx = peaks[i + 2]
 
         if (
-            right_shoulder_idx - left_shoulder_idx < 60
+            right_shoulder_idx - left_shoulder_idx < 40
             or right_shoulder_idx - left_shoulder_idx > 100
         ):
             continue
@@ -284,8 +284,8 @@ def detect_head_and_shoulders(df: pd.DataFrame) -> ChartPatternResult:
         head = prices[head_idx]
         right_shoulder = prices[right_shoulder_idx]
 
-        # Head must be higher (>5%)
-        if head <= left_shoulder * 1.05 or head <= right_shoulder * 1.05:
+        # Head must be higher (>3%)
+        if head <= left_shoulder * 1.03 or head <= right_shoulder * 1.03:
             continue
 
         # Shoulders similar height (<10%)
