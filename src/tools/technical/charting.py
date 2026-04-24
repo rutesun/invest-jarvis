@@ -92,8 +92,8 @@ def _shade_stage2(ax: Any, df: pd.DataFrame) -> None:
             start_i = None
 
 
-def _right_value_labels(ax: Any, df: pd.DataFrame) -> None:
-    """Display moving average labels grouped in one box."""
+def _right_value_labels(fig: Any, ax: Any, df: pd.DataFrame) -> None:
+    """Display moving average labels grouped in one box outside chart area."""
     if df.empty:
         return
 
@@ -129,12 +129,11 @@ def _right_value_labels(ax: Any, df: pd.DataFrame) -> None:
 
     combined_text = "\n".join(text_lines)
 
-    # Place grouped label at top-right corner
-    ax.text(
-        0.98,
-        0.98,
+    # Place grouped label outside chart area (figure coordinates)
+    fig.text(
+        0.99,
+        0.85,
         combined_text,
-        transform=ax.transAxes,
         ha="right",
         va="top",
         fontsize=9.0,
@@ -477,7 +476,7 @@ def render_technical_chart(
                 ax_price.set_title(ticker, fontname=chosen_font, color="white")
             else:
                 ax_price.set_title(ticker, color="white")
-            _right_value_labels(ax_price, df_plot)
+            _right_value_labels(fig, ax_price, df_plot)
 
             # Stage2 shading
             _shade_stage2(ax_price, df_plot)
