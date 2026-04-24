@@ -88,19 +88,18 @@ class DivergenceStrategy(BaseStrategy):
 
     def _check_macd_divergence(self, df: pd.DataFrame) -> dict | None:
         """Check MACD divergence."""
-        if "MACD_12_26_9" not in df.columns:
+        if "MACD" not in df.columns:
             return None
 
         recent = df.tail(20)
         price_peaks = self._find_peaks(recent["Close"].values)
-        macd_peaks = self._find_peaks(recent["MACD_12_26_9"].values)
+        macd_peaks = self._find_peaks(recent["MACD"].values)
 
         if len(price_peaks) >= 2 and len(macd_peaks) >= 2:
             # Bullish divergence
             if (
                 recent["Close"].iloc[price_peaks[-1]] < recent["Close"].iloc[price_peaks[-2]]
-                and recent["MACD_12_26_9"].iloc[macd_peaks[-1]]
-                > recent["MACD_12_26_9"].iloc[macd_peaks[-2]]
+                and recent["MACD"].iloc[macd_peaks[-1]] > recent["MACD"].iloc[macd_peaks[-2]]
             ):
                 return {
                     "signal": "MACD 강세 다이버전스",
@@ -110,8 +109,7 @@ class DivergenceStrategy(BaseStrategy):
             # Bearish divergence
             elif (
                 recent["Close"].iloc[price_peaks[-1]] > recent["Close"].iloc[price_peaks[-2]]
-                and recent["MACD_12_26_9"].iloc[macd_peaks[-1]]
-                < recent["MACD_12_26_9"].iloc[macd_peaks[-2]]
+                and recent["MACD"].iloc[macd_peaks[-1]] < recent["MACD"].iloc[macd_peaks[-2]]
             ):
                 return {
                     "signal": "MACD 약세 다이버전스",

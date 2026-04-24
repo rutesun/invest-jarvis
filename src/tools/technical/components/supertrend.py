@@ -14,7 +14,7 @@ def analyze_supertrend(df: pd.DataFrame) -> ComponentResult:
         )
 
     # Check for Supertrend columns
-    if "SUPERTd_10_3.0" not in df.columns:
+    if "SuperTrend_Dir" not in df.columns:
         return ComponentResult(
             signals=[],
             evidence=["Supertrend 데이터 없음"],
@@ -25,9 +25,14 @@ def analyze_supertrend(df: pd.DataFrame) -> ComponentResult:
     latest = df.iloc[-1]
     prev = df.iloc[-2] if len(df) > 1 else latest
 
-    supertrend_dir = latest.get("SUPERTd_10_3.0")
-    prev_supertrend_dir = prev.get("SUPERTd_10_3.0")
-    supertrend_value = latest.get("SUPERT_10_3.0")
+    supertrend_dir = latest.get("SuperTrend_Dir")
+    prev_supertrend_dir = prev.get("SuperTrend_Dir")
+    # Select the appropriate trend line based on direction
+    supertrend_value = (
+        latest.get("SuperTrend_Up")
+        if not pd.isna(supertrend_dir) and int(supertrend_dir) == 1
+        else latest.get("SuperTrend_Dn")
+    )
     close = latest.get("Close")
 
     if pd.isna(supertrend_dir):

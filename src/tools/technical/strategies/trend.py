@@ -25,8 +25,8 @@ class TrendStrategy(BaseStrategy):
         sma_20 = self._safe_get(latest, "SMA_20")
         sma_50 = self._safe_get(latest, "SMA_50")
         sma_200 = self._safe_get(latest, "SMA_200")
-        adx = self._safe_get(latest, "ADX_14")
-        supertrend_dir = self._safe_get(latest, "SUPERTd_10_3.0")
+        adx = self._safe_get(latest, "ADX")
+        supertrend_dir = self._safe_get(latest, "SuperTrend_Dir")
 
         # Store metrics
         metrics["close"] = close

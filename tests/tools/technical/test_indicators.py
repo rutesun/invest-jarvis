@@ -59,7 +59,7 @@ def test_extended_indicators(sample_df):
     assert "Swing_Low" in result_df.columns
     assert "Is_Gap_Up" in result_df.columns
     assert "Is_Gap_Down" in result_df.columns
-    assert "MACD_5_35_5" in result_df.columns
+    assert "MACD_Fast" in result_df.columns
 
 
 def test_crsi_calculation(sample_df):
@@ -84,3 +84,174 @@ def test_extended_snapshot(sample_df):
     assert hasattr(snapshot, "swing_high")
     assert hasattr(snapshot, "is_gap_up")
     assert hasattr(snapshot, "macd_fast")
+
+
+def test_macd_column_names():
+    """Test that MACD columns use clear names."""
+    calc = IndicatorCalculator()
+    # Need at least 35 rows for MACD (12+26+9 slow period)
+    df = pd.DataFrame(
+        {
+            "Open": [100 + i * 0.5 for i in range(40)],
+            "High": [102 + i * 0.5 for i in range(40)],
+            "Low": [99 + i * 0.5 for i in range(40)],
+            "Close": [101 + i * 0.5 for i in range(40)],
+            "Volume": [1000 + i * 10 for i in range(40)],
+        }
+    )
+
+    result = calc.calculate(df)
+
+    # Check new column names
+    assert "MACD" in result.columns
+    assert "MACD_Signal" in result.columns
+    assert "MACD_Hist" in result.columns
+
+    # Check old names don't exist
+    assert "MACD_12_26_9" not in result.columns
+    assert "MACDs_12_26_9" not in result.columns
+    assert "MACDh_12_26_9" not in result.columns
+
+
+def test_fast_macd_column_names():
+    """Test that Fast MACD columns use clear names."""
+    calc = IndicatorCalculator()
+    df = pd.DataFrame(
+        {
+            "Open": [100] * 50,
+            "High": [102] * 50,
+            "Low": [99] * 50,
+            "Close": list(range(100, 150)),
+            "Volume": [1000] * 50,
+        }
+    )
+
+    result = calc.calculate(df)
+
+    assert "MACD_Fast" in result.columns
+    assert "MACD_Fast_Signal" in result.columns
+    assert "MACD_Fast_Hist" in result.columns
+
+    assert "MACD_5_35_5" not in result.columns
+
+
+def test_supertrend_column_names():
+    """Test that Supertrend columns use clear names."""
+    calc = IndicatorCalculator()
+    df = pd.DataFrame(
+        {
+            "Open": [100] * 30,
+            "High": [102] * 30,
+            "Low": [99] * 30,
+            "Close": list(range(100, 130)),
+            "Volume": [1000] * 30,
+        }
+    )
+
+    result = calc.calculate(df)
+
+    assert "SuperTrend_Up" in result.columns
+    assert "SuperTrend_Dn" in result.columns
+    assert "SuperTrend_Dir" in result.columns
+
+    assert "SUPERTl_10_3.0" not in result.columns
+    assert "SUPERTd_10_3.0" not in result.columns
+
+
+def test_bollinger_bands_column_names():
+    """Test that Bollinger Bands use clear names."""
+    calc = IndicatorCalculator()
+    df = pd.DataFrame(
+        {
+            "Open": [100] * 25,
+            "High": [102] * 25,
+            "Low": [99] * 25,
+            "Close": list(range(100, 125)),
+            "Volume": [1000] * 25,
+        }
+    )
+
+    result = calc.calculate(df)
+
+    assert "BB_Upper" in result.columns
+    assert "BB_Lower" in result.columns
+
+    assert "BBU_20_2.0" not in result.columns
+    assert "BBL_20_2.0" not in result.columns
+
+
+def test_adx_column_name():
+    """Test that ADX uses clear name."""
+    calc = IndicatorCalculator()
+    df = pd.DataFrame(
+        {
+            "Open": [100] * 20,
+            "High": [102] * 20,
+            "Low": [99] * 20,
+            "Close": list(range(100, 120)),
+            "Volume": [1000] * 20,
+        }
+    )
+
+    result = calc.calculate(df)
+
+    assert "ADX" in result.columns
+    assert "ADX_14" not in result.columns
+
+
+def test_calculate_stage2():
+    """Test Stage2 detection logic."""
+    calc = IndicatorCalculator()
+
+    # Create sample data that meets Stage2 criteria
+    df = pd.DataFrame(
+        {
+            "Open": [100] * 300,
+            "High": [102] * 300,
+            "Low": [99] * 300,
+            "Close": list(range(100, 400)),  # Rising trend
+            "Volume": [1000] * 300,
+        }
+    )
+
+    # Calculate indicators first
+    df = calc.calculate(df)
+
+    # Stage2 conditions:
+    # 1. Close > SMA_150 > SMA_200
+    # 2. SMA_150/200 rising (20-day lookback)
+    # 3. Close >= Low_52w * 1.3
+    # 4. Close >= High_52w * 0.75
+
+    # Check Is_Stage2 column exists
+    assert "Is_Stage2" in df.columns
+
+    # Last rows should be in Stage2
+    assert df["Is_Stage2"].iloc[-1]
+
+    # Early rows should NOT be in Stage2 (SMA not stabilized)
+    assert not df["Is_Stage2"].iloc[0]
+
+
+def test_calculate_stage2_missing_columns():
+    """Test Stage2 handles missing required columns gracefully."""
+    calc = IndicatorCalculator()
+
+    # Minimal data without enough history for 52w high/low
+    df = pd.DataFrame(
+        {
+            "Open": [100] * 10,
+            "High": [102] * 10,
+            "Low": [99] * 10,
+            "Close": [101] * 10,
+            "Volume": [1000] * 10,
+        }
+    )
+
+    df = calc.calculate(df)
+
+    # Should have Is_Stage2 column
+    assert "Is_Stage2" in df.columns
+
+    # All should be False (insufficient data)
+    assert df["Is_Stage2"].sum() == 0

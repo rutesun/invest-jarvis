@@ -63,7 +63,7 @@ def analyze_divergence(df: pd.DataFrame) -> ComponentResult:
         score += bullish_div["score"]
 
     # MACD divergence (if available)
-    if "MACD_12_26_9" in df.columns:
+    if "MACD" in df.columns:
         macd_div = _detect_macd_divergence(df, price_highs_idx, price_lows_idx, price_values)
         if macd_div:
             signals.append(macd_div["signal"])
@@ -166,10 +166,10 @@ def _detect_bullish_divergence(df, price_lows_idx, rsi_lows_idx, price_values, r
 
 def _detect_macd_divergence(df, price_highs_idx, price_lows_idx, price_values):
     """Detect MACD divergence."""
-    if "MACD_12_26_9" not in df.columns:
+    if "MACD" not in df.columns:
         return None
 
-    macd_values = df["MACD_12_26_9"].fillna(0).values
+    macd_values = df["MACD"].fillna(0).values
     macd_highs_idx = argrelextrema(macd_values, np.greater, order=5)[0]
     macd_lows_idx = argrelextrema(macd_values, np.less, order=5)[0]
 
