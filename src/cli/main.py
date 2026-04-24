@@ -615,6 +615,13 @@ def analyze(
             console.print("\n")
             panel = display_actionable_signal(actionable_signal)
             console.print(panel)
+
+        # Display chart path if available
+        chart_result = result.get("chart")
+        if chart_result and chart_result.success:
+            console.print(f"\n[green]📊 차트 저장: {chart_result.path}[/green]")
+        elif chart_result and not chart_result.success:
+            console.print(f"\n[yellow]⚠️  차트 생성 실패: {chart_result.error}[/yellow]")
     except ValueError as e:
         console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1) from None

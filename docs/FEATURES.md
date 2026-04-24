@@ -89,7 +89,29 @@ LLM 없이 기술적 분석만 수행하는 빠른 진단 기능.
 - `entry_zone`: 진입 구간 (예: "현재 $200 횡보, 조정 시 $175-180 매수")
 - `key_levels`: 주요 레벨 요약 (예: "지지: $187/$175, 저항: $200/$250")
 
-**의존성:** yfinance, LLM (OpenAI/Anthropic), scipy (peak detection), SEC EDGAR, OpenDART (선택), KIS API (선택)
+**차트 시각화:**
+
+Deep Dive 분석 실행 시 자동으로 기술적 차트를 생성하여 `charts/` 디렉토리에 저장합니다.
+
+| 항목 | 내용 |
+|------|------|
+| **렌더 엔진** | mplfinance (matplotlib 기반) |
+| **출력 파일** | `charts/{ticker}_technical.png` |
+| **차트 구성** | Price (캔들스틱 + MA 20/50/200 + Supertrend), Volume (막대 + MA 20), MACD (히스토그램 + 시그널), RSI (30/70 기준선) |
+| **패턴 마커** | 검출된 차트 패턴 위치에 화살표 + 라벨 표시 |
+| **가격 레벨** | 지지선(녹색 점선), 저항선(빨간색 점선) 각 최대 3개 |
+| **한글 지원** | 한국어 폰트 자동 감지 (Noto Sans KR, AppleGothic 등) |
+| **기간** | 최근 63일 (약 3개월) |
+
+**Helper 함수:**
+- `_setup_korean_font()`: macOS/Linux 한글 폰트 설정
+- `_badge()`: 패널 레이벨 표시 (VOL, MACD, RSI)
+- `_right_value_labels()`: MA 라인 우측 값 표시
+- `_draw_support_resistance()`: 지지/저항선 그리기
+- `_mark_patterns()`: 패턴 완료 지점 마킹
+
+
+**의존성:** yfinance, LLM (OpenAI/Anthropic), scipy (peak detection), mplfinance, SEC EDGAR, OpenDART (선택), KIS API (선택)
 
 ---
 

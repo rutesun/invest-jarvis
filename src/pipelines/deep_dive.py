@@ -6,7 +6,6 @@ from langchain_core.language_models import BaseChatModel
 from src.llm import analyzer
 from src.llm.analyzer import generate_fundamental_summary
 from src.llm.models import (
-    ActionableSignalOutput,
     FundamentalSummaryInput,
     FundamentalSummaryOutput,
     IntegratedAnalysisInput,
@@ -20,6 +19,7 @@ from src.tools.disclosure import DisclosureItem, DisclosureTool, extract_kr_code
 from src.tools.flow import FlowTool, InvestorFlow
 from src.tools.fundamental import FundamentalSnapshot, FundamentalTool
 from src.tools.news import NewsArticle, NewsTool
+from src.tools.technical.charting import render_technical_chart
 from src.tools.technical.components.chart_patterns import detect_chart_patterns
 from src.tools.technical.models import TechnicalResult
 from src.tools.technical.price_levels import get_fibonacci_base_points, identify_key_levels
@@ -132,11 +132,44 @@ class DeepDivePipeline:
             )
 
         # Generate actionable investment signal
-        actionable_signal = await self._generate_actionable_signal(
-            ticker=ticker,
-            technical_data=technical_data,
-            technical_summary=technical_summary,
+        df = technical_data.raw_dataframe
+        if df is None:
+            raise ValueError("raw_dataframe required for pattern detection and charting")
+
+        chart_patterns = detect_chart_patterns(df, technical_data.snapshot)
+        lookback_high, lookback_low = get_fibonacci_base_points(df, technical_data.snapshot)
+        price_levels = identify_key_levels(
+            snapshot=technical_data.snapshot,
+            pattern_results=chart_patterns,
+            lookback_high=lookback_high,
+            lookback_low=lookback_low,
         )
+
+        actionable_signal = await analyzer.generate_actionable_signal(
+            ticker=ticker,
+            technical_summary=f"{technical_summary.summary}\n\n{technical_summary.rationale}",
+            chart_patterns=chart_patterns,
+            price_levels=price_levels,
+            llm=self.llm,
+        )
+
+        # Render technical chart
+        chart_result = None
+        try:
+            chart_result = render_technical_chart(
+                ticker=ticker,
+                df=df,
+                indicators=technical_data.snapshot.model_dump(),
+                patterns=chart_patterns,
+                price_levels={
+                    "support_levels": price_levels.support_levels,
+                    "resistance_levels": price_levels.resistance_levels,
+                },
+                out_dir="charts",
+                window_days=63,
+            )
+        except Exception as e:
+            logger.warning(f"Chart rendering failed for {ticker}: {e}")
 
         return {
             "ticker": ticker,
@@ -150,6 +183,7 @@ class DeepDivePipeline:
             "flow": flow_data,
             "integrated_analysis": integrated_analysis,
             "actionable_signal": actionable_signal,
+            "chart": chart_result,
         }
 
     async def _generate_technical_summary(
@@ -308,33 +342,3 @@ class DeepDivePipeline:
             flow_summary=self._format_flow_for_llm(flow_data) if flow_data else None,
         )
         return await analyzer.generate_integrated_analysis(input_data, self.llm)
-
-    async def _generate_actionable_signal(
-        self,
-        ticker: str,
-        technical_data: TechnicalResult,
-        technical_summary: TechnicalSummaryOutput,
-    ) -> ActionableSignalOutput:
-        """Generate actionable investment signal with pattern and price analysis."""
-        df = technical_data.raw_dataframe
-        if df is None:
-            raise ValueError("raw_dataframe required for pattern detection")
-
-        chart_patterns = detect_chart_patterns(df, technical_data.snapshot)
-
-        lookback_high, lookback_low = get_fibonacci_base_points(df, technical_data.snapshot)
-
-        price_levels = identify_key_levels(
-            snapshot=technical_data.snapshot,
-            pattern_results=chart_patterns,
-            lookback_high=lookback_high,
-            lookback_low=lookback_low,
-        )
-
-        return await analyzer.generate_actionable_signal(
-            ticker=ticker,
-            technical_summary=f"{technical_summary.summary}\n\n{technical_summary.rationale}",
-            chart_patterns=chart_patterns,
-            price_levels=price_levels,
-            llm=self.llm,
-        )

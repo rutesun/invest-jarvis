@@ -95,6 +95,12 @@ uv run jarvis analyze AAPL --provider anthropic
   - 진입 구간: 구체적 매수/매도 타이밍
   - 주요 레벨: 지지선/저항선 요약
 
+- **차트 시각화**: 기술적 차트 PNG 자동 생성 (`charts/` 디렉토리)
+  - 캔들스틱 + MA 라인 (20/50/200일)
+  - Supertrend 추세선
+  - 거래량 + MACD + RSI 패널
+  - 패턴 마커 및 지지/저항선 표시
+
 **선택 환경변수:**
 - `OPENDART_API_KEY`: 한국주식 공시 조회 (없으면 공시 섹션 생략)
 - `KIS_APP_KEY` / `KIS_APP_SECRET`: 수급 동향 조회 (없으면 수급 섹션 생략)
