@@ -281,50 +281,78 @@ async def test_generate_integrated_analysis_calls_llm():
 
 @pytest.mark.asyncio
 async def test_generate_actionable_signal():
-    """Test generate_actionable_signal generates structured investment signal."""
+    """Test generate_actionable_signal with Phase 2 pattern and price inputs."""
+    from src.tools.technical.models import ChartPatternResult, PriceLevel, PriceLevels
+
+    # Mock chart patterns
+    chart_patterns = {
+        "cup_and_handle": ChartPatternResult(
+            pattern_name="Cup & Handle",
+            detected=True,
+            confidence=0.85,
+            completed_date="2024-01-15",
+            days_ago=8,
+            current_price=150.0,
+            breakout_level=155.0,
+            support_level=145.0,
+            description="Cup & Handle pattern completed 8 days ago",
+            key_levels={"target": 165.0},
+        ),
+    }
+
+    # Mock price levels
+    price_levels = PriceLevels(
+        current_price=150.0,
+        support_levels=[
+            PriceLevel(price=145.0, type="sma_50", distance_pct=-3.3, description="50일선"),
+            PriceLevel(price=140.0, type="swing_low", distance_pct=-6.7, description="스윙 저점"),
+        ],
+        resistance_levels=[
+            PriceLevel(price=155.0, type="pivot_r1", distance_pct=+3.3, description="피봇 저항"),
+            PriceLevel(price=160.0, type="sma_200", distance_pct=+6.7, description="200일선"),
+        ],
+        targets={"cup_and_handle_target": 165.0},
+    )
+
     expected_output = ActionableSignalOutput(
         action="매수",
         timing="지금",
         signal_strength=8,
-        headline="매수. 지금. 이유: RSI 과매도 + 골든크로스",
-        primary_reason="RSI 28 (과매도)",
-        supporting_reasons=["골든크로스 발생", "거래량 증가", "실적 개선"],
-        risks=["금리 인상 위험", "섹터 회전 가능성"],
-        invalidation_point="$145.20",
-        confidence=0.82,
+        headline="Cup & Handle 돌파 직전, RSI 과매도 회복",
+        primary_reason="Cup & Handle 패턴 완성 + 돌파 대기 ($155)",
+        supporting_reasons=["RSI 과매도 회복", "50일선 지지"],
+        risks=["돌파 실패 시 $145 이탈 위험"],
+        invalidation_point="$145.00",
+        confidence=0.85,
+        pattern_insight="Cup & Handle 8일 전 완성, 돌파 준비",
+        target_price="돌파 시 $165, 조정 시 $145 지지",
+        entry_zone="현재 $150 대기, 조정 시 $145-147 분할 매수",
+        key_levels="지지: $145/$140, 저항: $155/$160",
     )
 
-    with patch("src.llm.analyzer.ChatPromptTemplate") as mock_prompt_class:
-        mock_prompt = MagicMock()
-        mock_prompt_class.from_messages.return_value = mock_prompt
+    # Use patch to intercept the actual chain.ainvoke call
+    with patch("src.llm.analyzer.ChatPromptTemplate"):
+        mock_llm = MagicMock()
+        mock_structured_llm = AsyncMock()
+        mock_structured_llm.ainvoke = AsyncMock(return_value=expected_output)
 
-        with patch("src.llm.analyzer.invoke_llm_with_retry") as mock_retry:
-            mock_retry.return_value = expected_output
+        # When with_structured_output is called, return a mock that has ainvoke
+        mock_llm.with_structured_output.return_value = mock_structured_llm
 
-            # Mock the chain
-            mock_chain = MagicMock()
-            mock_prompt.__or__ = MagicMock(return_value=mock_chain)
-
-            mock_llm = MagicMock()
-
-            warnings = [
-                "RSI 28 (과매도)",
-                "골든크로스 발생",
-                "거래량 20% 증가",
-            ]
-
-            result = await generate_actionable_signal(
-                ticker="AAPL",
-                warnings=warnings,
-                recommendation="매수",
-                rationale="기술적 지표 전반 긍정적",
-                llm=mock_llm,
-            )
+        result = await generate_actionable_signal(
+            ticker="AAPL",
+            technical_summary="RSI 과매도 회복, 50일선 지지 확인",
+            chart_patterns=chart_patterns,
+            price_levels=price_levels,
+            llm=mock_llm,
+        )
 
         assert result.action == "매수"
         assert result.timing == "지금"
         assert result.signal_strength == 8
-        assert "매수" in result.headline
-        assert len(result.supporting_reasons) == 3
-        assert len(result.risks) == 2
-        assert mock_retry.called
+        assert "Cup & Handle" in result.headline
+        assert result.pattern_insight is not None
+        assert result.target_price is not None
+        assert result.entry_zone is not None
+        assert result.key_levels is not None
+        assert mock_structured_llm.ainvoke.called
