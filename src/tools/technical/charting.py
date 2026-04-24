@@ -410,9 +410,16 @@ def render_technical_chart(
                 )
             )
 
-        # 커스텀 스타일: 검은 배경 + 기존 캔들 색상
+        # 커스텀 스타일: 검은 배경 + 청록/핑크 캔들
         custom_style = mpf.make_mpf_style(
             base_mpf_style="yahoo",
+            marketcolors=mpf.make_marketcolors(
+                up="#00D4D4",  # 상승 - 청록색
+                down="#FF4757",  # 하락 - 핑크/빨강
+                edge="inherit",  # 캔들 테두리는 본체와 동일
+                wick="inherit",  # 꼬리는 본체와 동일
+                volume="inherit",  # 거래량도 같은 색상
+            ),
             facecolor="#1A1A1A",  # 차트 영역 배경색
             gridcolor="#2A2A2A",  # 그리드 색상
             gridstyle="--",  # 점선
