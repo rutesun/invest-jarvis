@@ -85,35 +85,69 @@ def create_mock_double_bottom(
 
     dates = pd.date_range(end=pd.Timestamp.now(), periods=days, freq="D")
     prices = []
+
+    # Calculate segment lengths (flexible for short periods)
+    start_segment = max(3, days // 12)  # 시작 구간
+    valley1_segment = max(8, days // 4)  # 첫 번째 valley까지
+    plateau1 = max(2, days // 20)  # Plateau
+    middle_segment = max(8, days // 4)  # Neckline까지
+    plateau2 = max(2, days // 20)  # Peak plateau
+    valley2_segment = max(8, days // 4)  # 두 번째 valley까지
+    plateau3 = max(2, days // 20)  # Bottom plateau
+
     for i in range(days):
-        if i < 5:
+        if i < start_segment:
             # Start above neckline
             prices.append(neckline + 5)
-        elif i < days // 3:
+        elif i < start_segment + valley1_segment:
             # Descending to first valley
-            progress = (i - 5) / (days // 3 - 5)
+            progress = (i - start_segment) / valley1_segment
             prices.append((neckline + 5) - ((neckline + 5) - valley1) * progress)
-        elif i < days // 3 + 5:
+        elif i < start_segment + valley1_segment + plateau1:
             # Bottom plateau
             prices.append(valley1 + np.random.normal(0, 0.5))
-        elif i < 2 * days // 3:
+        elif i < start_segment + valley1_segment + plateau1 + middle_segment:
             # Ascending to neckline
-            progress = (i - days // 3 - 5) / (days // 3 - 5)
+            progress = (i - start_segment - valley1_segment - plateau1) / middle_segment
             prices.append(valley1 + (neckline - valley1) * progress)
-        elif i < 2 * days // 3 + 5:
+        elif i < start_segment + valley1_segment + plateau1 + middle_segment + plateau2:
             # Peak plateau
             prices.append(neckline + np.random.normal(0, 0.5))
-        elif i < 5 * days // 6:
+        elif i < (
+            start_segment + valley1_segment + plateau1 + middle_segment + plateau2 + valley2_segment
+        ):
             # Descending to second valley
-            progress = (i - 2 * days // 3 - 5) / (days // 6 - 5)
+            base = start_segment + valley1_segment + plateau1 + middle_segment + plateau2
+            progress = (i - base) / valley2_segment
             prices.append(neckline - (neckline - valley2) * progress)
-        elif i < 5 * days // 6 + 5:
+        elif i < (
+            start_segment
+            + valley1_segment
+            + plateau1
+            + middle_segment
+            + plateau2
+            + valley2_segment
+            + plateau3
+        ):
             # Bottom plateau
             prices.append(valley2 + np.random.normal(0, 0.5))
         else:
             # Ascending again
-            progress = (i - 5 * days // 6 - 5) / (days // 6 - 5)
-            prices.append(valley2 + (neckline - valley2) * progress)
+            base = (
+                start_segment
+                + valley1_segment
+                + plateau1
+                + middle_segment
+                + plateau2
+                + valley2_segment
+                + plateau3
+            )
+            remaining = days - base
+            if remaining > 0:
+                progress = (i - base) / remaining
+                prices.append(valley2 + (neckline - valley2) * progress)
+            else:
+                prices.append(valley2)
 
     return pd.DataFrame(
         {
@@ -137,6 +171,20 @@ def test_double_bottom_implementation_exists():
     assert result.pattern_name == "Double Bottom"
     assert result.current_price > 0
     # NOTE: Detection parameters need tuning with real historical data
+
+
+def test_double_bottom_short_period():
+    """20-40일 짧은 기간 Double Bottom 감지 테스트"""
+    from src.tools.technical.components.chart_patterns import detect_double_bottom
+
+    # 50일 차트에서 25일 간격 패턴 생성
+    df = create_mock_double_bottom(valley1=100.0, valley2=101.0, days=55)
+    result = detect_double_bottom(df)
+
+    # 짧은 기간도 감지되어야 함
+    assert result.detected is True, f"Failed to detect: {result.description}"
+    assert result.confidence > 0.6  # 짧은 기간이므로 약간 낮은 confidence
+    assert result.pattern_name == "Double Bottom"
 
 
 def test_head_and_shoulders_implementation_exists():

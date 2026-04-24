@@ -144,14 +144,15 @@ def detect_double_bottom(df: pd.DataFrame) -> ChartPatternResult:
 
     prices = df["Close"].values
 
-    # Find valleys (inverted peaks)
-    valleys, _ = find_peaks(-prices, distance=10, prominence=prices.mean() * 0.03)
+    # Find valleys (inverted peaks) - prominence 완화: 0.03 → 0.02
+    valleys, _ = find_peaks(-prices, distance=10, prominence=prices.mean() * 0.02)
 
     for i in range(1, len(valleys)):
         valley1_idx = valleys[i - 1]
         valley2_idx = valleys[i]
 
-        if valley2_idx - valley1_idx < 40 or valley2_idx - valley1_idx > 80:
+        # Distance 제약 완화: 40-80일 → 20-80일
+        if valley2_idx - valley1_idx < 20 or valley2_idx - valley1_idx > 80:
             continue
 
         bottom1 = prices[valley1_idx]
@@ -171,8 +172,9 @@ def detect_double_bottom(df: pd.DataFrame) -> ChartPatternResult:
         if rebound < 0.10:
             continue
 
-        # Confidence
-        confidence = calculate_double_bottom_confidence(height_diff, rebound)
+        # Confidence (distance 파라미터 추가)
+        distance = valley2_idx - valley1_idx
+        confidence = calculate_double_bottom_confidence(height_diff, rebound, distance)
 
         # Timing
         completed_idx = valley2_idx
@@ -209,7 +211,7 @@ def detect_double_bottom(df: pd.DataFrame) -> ChartPatternResult:
     )
 
 
-def calculate_double_bottom_confidence(height_diff: float, rebound: float) -> float:
+def calculate_double_bottom_confidence(height_diff: float, rebound: float, distance: int) -> float:
     """Double Bottom confidence scoring"""
     confidence = 0.0
 
@@ -221,8 +223,16 @@ def calculate_double_bottom_confidence(height_diff: float, rebound: float) -> fl
     rebound_score = min(rebound / 0.20, 1.0)
     confidence += rebound_score * 0.3
 
-    # 3. Period fit (0-0.3)
-    confidence += 0.3
+    # 3. Period fit (0-0.3) - 거리에 따라 차등 점수
+    if 40 <= distance <= 60:
+        period_score = 1.0
+    elif 20 <= distance < 40:
+        period_score = 0.85  # 짧은 기간 약간 감점
+    elif 60 < distance <= 80:
+        period_score = 0.95
+    else:
+        period_score = 0.5
+    confidence += period_score * 0.3
 
     return min(confidence, 1.0)
 
