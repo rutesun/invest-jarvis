@@ -90,7 +90,8 @@ class TechnicalScorer:
         # Create snapshot
         snapshot = self.calculator.create_snapshot(df)
 
-        return TechnicalResult(
+        return TechnicalResult.from_analysis(
+            df,
             ticker=ticker,
             timestamp=datetime.now(UTC),
             snapshot=snapshot,

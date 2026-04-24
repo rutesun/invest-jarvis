@@ -20,7 +20,9 @@ from src.tools.disclosure import DisclosureItem, DisclosureTool, extract_kr_code
 from src.tools.flow import FlowTool, InvestorFlow
 from src.tools.fundamental import FundamentalSnapshot, FundamentalTool
 from src.tools.news import NewsArticle, NewsTool
+from src.tools.technical.components.chart_patterns import detect_chart_patterns
 from src.tools.technical.models import TechnicalResult
+from src.tools.technical.price_levels import get_fibonacci_base_points, identify_key_levels
 from src.tools.technical.tool import TechnicalAnalysisTool
 
 
@@ -313,20 +315,26 @@ class DeepDivePipeline:
         technical_data: TechnicalResult,
         technical_summary: TechnicalSummaryOutput,
     ) -> ActionableSignalOutput:
-        """Generate actionable investment signal from technical analysis."""
-        # Collect warnings from technical data
-        warnings = technical_data.warnings or []
+        """Generate actionable investment signal with pattern and price analysis."""
+        df = technical_data.raw_dataframe
+        if df is None:
+            raise ValueError("raw_dataframe required for pattern detection")
 
-        # If no warnings, collect signals from components
-        if not warnings:
-            for _comp_name, comp_data in technical_data.components.items():
-                signals = comp_data.get("signals", [])
-                warnings.extend(signals)
+        chart_patterns = detect_chart_patterns(df, technical_data.snapshot)
+
+        lookback_high, lookback_low = get_fibonacci_base_points(df, technical_data.snapshot)
+
+        price_levels = identify_key_levels(
+            snapshot=technical_data.snapshot,
+            pattern_results=chart_patterns,
+            lookback_high=lookback_high,
+            lookback_low=lookback_low,
+        )
 
         return await analyzer.generate_actionable_signal(
             ticker=ticker,
-            warnings=warnings,
-            recommendation=technical_summary.recommendation,
-            rationale=technical_summary.rationale,
+            technical_summary=f"{technical_summary.summary}\n\n{technical_summary.rationale}",
+            chart_patterns=chart_patterns,
+            price_levels=price_levels,
             llm=self.llm,
         )

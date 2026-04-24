@@ -1,5 +1,6 @@
 from datetime import datetime
 
+import pandas as pd
 from pydantic import BaseModel, Field
 
 
@@ -137,6 +138,9 @@ class TechnicalResult(BaseModel):
     components: dict[str, dict]
     total_score: int = 0
 
+    # NEW: Pattern detection requires OHLC data
+    raw_dataframe: pd.DataFrame | None = None
+
     # Legacy fields for backward compatibility
     indicators: IndicatorSnapshot | None = None
     strategies: list[StrategyResult] | None = None
@@ -144,3 +148,12 @@ class TechnicalResult(BaseModel):
     confidence_score: float | None = None
     key_insights: list[str] | None = None
     warnings: list[str] | None = None
+
+    class Config:
+        arbitrary_types_allowed = True
+
+    @classmethod
+    def from_analysis(cls, df: pd.DataFrame, **kwargs):
+        """메모리 최적화: OHLC 컬럼만 저장"""
+        slim_df = df[["Open", "High", "Low", "Close"]].copy()
+        return cls(raw_dataframe=slim_df, **kwargs)
