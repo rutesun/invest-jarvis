@@ -1,6 +1,7 @@
 from datetime import datetime
 from unittest.mock import AsyncMock, patch
 
+import pandas as pd
 import pytest
 
 from src.core.models import ToolResult
@@ -18,6 +19,19 @@ from src.tools.technical.models import (
 def mock_technical_tool():
     tool = AsyncMock()
     snapshot = IndicatorSnapshot(price=178.50, change_pct=2.5)
+
+    # Create mock OHLC dataframe (150 days for pattern detection)
+    dates = pd.date_range(end=datetime.now(), periods=150, freq="D")
+    mock_df = pd.DataFrame(
+        {
+            "Open": [170.0] * 150,
+            "High": [180.0] * 150,
+            "Low": [165.0] * 150,
+            "Close": [175.0] * 150,
+        },
+        index=dates,
+    )
+
     tech_result = TechnicalResult(
         ticker="AAPL",
         timestamp=datetime.now(),
@@ -25,6 +39,7 @@ def mock_technical_tool():
         indicators=snapshot,
         components={},
         total_score=75,
+        raw_dataframe=mock_df,
         strategies=[
             StrategyResult(
                 name="trend",
