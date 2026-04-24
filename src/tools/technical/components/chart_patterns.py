@@ -693,6 +693,174 @@ def detect_descending_triangle(df: pd.DataFrame) -> ChartPatternResult:
     )
 
 
+def detect_bullish_flag(df: pd.DataFrame) -> ChartPatternResult:
+    """Bullish Flag 패턴 감지
+
+    강한 상승(flagpole) + 짧은 하락 조정(flag), 돌파 시 재상승 기대
+    """
+    if len(df) < 30:
+        return ChartPatternResult(
+            pattern_name="Bullish Flag",
+            detected=False,
+            confidence=0.0,
+            current_price=df["Close"].iloc[-1],
+            description="데이터 부족 (최소 30일 필요)",
+        )
+
+    import numpy as np
+    from scipy.stats import linregress
+
+    prices = df["Close"].values
+
+    # Flagpole 감지: 최근 20일 중 강한 상승 구간 찾기
+    if len(df) < 20:
+        return ChartPatternResult(
+            pattern_name="Bullish Flag",
+            detected=False,
+            confidence=0.0,
+            current_price=prices[-1],
+            description="Flagpole 감지 실패",
+        )
+
+    # 최근 20일 데이터로 flagpole 확인
+    recent_prices = prices[-20:]
+    pole_start = recent_prices[0]
+    pole_end = max(recent_prices[:15])  # 첫 15일 중 최고점
+
+    pole_gain = (pole_end - pole_start) / pole_start
+
+    if pole_gain < 0.10:  # 10% 미만 상승은 약함
+        return ChartPatternResult(
+            pattern_name="Bullish Flag",
+            detected=False,
+            confidence=0.0,
+            current_price=prices[-1],
+            description=f"Flagpole 상승 불충분 ({pole_gain:.1%} < 10%)",
+        )
+
+    # Flag 조정: 최근 5-10일 하락/횡보
+    flag_prices = prices[-10:]
+    flag_slope, _, _, _, _ = linregress(range(len(flag_prices)), flag_prices)
+    flag_slope_percent = (flag_slope / np.mean(flag_prices)) * 100
+
+    # Flag는 하락 or 횡보여야 함
+    if flag_slope_percent > 0.1:  # 상승 중이면 flag 아님
+        return ChartPatternResult(
+            pattern_name="Bullish Flag",
+            detected=False,
+            confidence=0.0,
+            current_price=prices[-1],
+            description=f"Flag 조정 없음 (기울기 {flag_slope_percent:.2%}/day > 0)",
+        )
+
+    # Confidence 계산 (단순화)
+    confidence = min(pole_gain / 0.20, 1.0) * 0.7  # Pole gain 기반
+
+    # Target: pole_end + pole_gain
+    target = pole_end + (pole_end - pole_start)
+
+    return ChartPatternResult(
+        pattern_name="Bullish Flag",
+        detected=True,
+        confidence=confidence,
+        completed_date=df.index[-1].strftime("%Y-%m-%d"),
+        days_ago=0,
+        current_price=prices[-1],
+        breakout_level=pole_end,
+        support_level=flag_prices.min(),
+        description=f"Flagpole 상승 {pole_gain:.1%}, Flag 조정 {flag_slope_percent:.2%}/day",
+        key_levels={
+            "pole_start": float(pole_start),
+            "pole_end": float(pole_end),
+            "target": float(target),
+        },
+    )
+
+
+def detect_bearish_flag(df: pd.DataFrame) -> ChartPatternResult:
+    """Bearish Flag 패턴 감지
+
+    강한 하락(flagpole) + 짧은 상승 조정(flag), 하락 돌파 시 재하락 기대
+    """
+    if len(df) < 30:
+        return ChartPatternResult(
+            pattern_name="Bearish Flag",
+            detected=False,
+            confidence=0.0,
+            current_price=df["Close"].iloc[-1],
+            description="데이터 부족 (최소 30일 필요)",
+        )
+
+    import numpy as np
+    from scipy.stats import linregress
+
+    prices = df["Close"].values
+
+    # Flagpole 감지: 최근 20일 중 강한 하락 구간 찾기
+    if len(df) < 20:
+        return ChartPatternResult(
+            pattern_name="Bearish Flag",
+            detected=False,
+            confidence=0.0,
+            current_price=prices[-1],
+            description="Flagpole 감지 실패",
+        )
+
+    # 최근 20일 데이터로 flagpole 확인
+    recent_prices = prices[-20:]
+    pole_start = recent_prices[0]
+    pole_end = min(recent_prices[:15])  # 첫 15일 중 최저점
+
+    pole_loss = (pole_start - pole_end) / pole_start
+
+    if pole_loss < 0.10:  # 10% 미만 하락은 약함
+        return ChartPatternResult(
+            pattern_name="Bearish Flag",
+            detected=False,
+            confidence=0.0,
+            current_price=prices[-1],
+            description=f"Flagpole 하락 불충분 ({pole_loss:.1%} < 10%)",
+        )
+
+    # Flag 조정: 최근 5-10일 상승/횡보
+    flag_prices = prices[-10:]
+    flag_slope, _, _, _, _ = linregress(range(len(flag_prices)), flag_prices)
+    flag_slope_percent = (flag_slope / np.mean(flag_prices)) * 100
+
+    # Flag는 상승 or 횡보여야 함
+    if flag_slope_percent < -0.1:  # 하락 중이면 flag 아님
+        return ChartPatternResult(
+            pattern_name="Bearish Flag",
+            detected=False,
+            confidence=0.0,
+            current_price=prices[-1],
+            description=f"Flag 조정 없음 (기울기 {flag_slope_percent:.2%}/day < 0)",
+        )
+
+    # Confidence 계산 (단순화)
+    confidence = min(pole_loss / 0.20, 1.0) * 0.7  # Pole loss 기반
+
+    # Target: pole_end - pole_loss
+    target = pole_end - (pole_start - pole_end)
+
+    return ChartPatternResult(
+        pattern_name="Bearish Flag",
+        detected=True,
+        confidence=confidence,
+        completed_date=df.index[-1].strftime("%Y-%m-%d"),
+        days_ago=0,
+        current_price=prices[-1],
+        breakout_level=pole_end,  # 하락 돌파 예상
+        support_level=target,  # 목표가 (하락)
+        description=f"Flagpole 하락 {pole_loss:.1%}, Flag 조정 {flag_slope_percent:.2%}/day",
+        key_levels={
+            "pole_start": float(pole_start),
+            "pole_end": float(pole_end),
+            "target": float(target),
+        },
+    )
+
+
 def detect_chart_patterns(
     df: pd.DataFrame, snapshot: IndicatorSnapshot | None = None
 ) -> dict[str, ChartPatternResult]:

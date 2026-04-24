@@ -376,6 +376,56 @@ def test_descending_triangle_implementation():
     # NOTE: Real data validation in Task 9
 
 
+def test_bullish_flag_implementation():
+    """Bullish Flag implementation exists"""
+    from src.tools.technical.components.chart_patterns import detect_bullish_flag
+
+    dates = pd.date_range(end=pd.Timestamp.now(), periods=40, freq="D")
+    prices = [100 + i * 2 for i in range(40)]  # Simple uptrend
+
+    df = pd.DataFrame(
+        {
+            "Open": prices,
+            "High": [p * 1.01 for p in prices],
+            "Low": [p * 0.99 for p in prices],
+            "Close": prices,
+        },
+        index=dates,
+    )
+
+    result = detect_bullish_flag(df)
+
+    # Implementation exists and returns result
+    assert result.pattern_name == "Bullish Flag"
+    assert result.current_price > 0
+    # NOTE: Real data validation in Task 9
+
+
+def test_bearish_flag_implementation():
+    """Bearish Flag implementation exists"""
+    from src.tools.technical.components.chart_patterns import detect_bearish_flag
+
+    dates = pd.date_range(end=pd.Timestamp.now(), periods=40, freq="D")
+    prices = [140 - i * 2 for i in range(40)]  # Simple downtrend
+
+    df = pd.DataFrame(
+        {
+            "Open": prices,
+            "High": [p * 1.01 for p in prices],
+            "Low": [p * 0.99 for p in prices],
+            "Close": prices,
+        },
+        index=dates,
+    )
+
+    result = detect_bearish_flag(df)
+
+    # Implementation exists and returns result
+    assert result.pattern_name == "Bearish Flag"
+    assert result.current_price > 0
+    # NOTE: Real data validation in Task 9
+
+
 def test_support_resistance_test_near_level():
     """Test detection when price near support/resistance"""
     from src.tools.technical.components.chart_patterns import test_support_resistance
