@@ -98,10 +98,10 @@ def _right_value_labels(ax: Any, df: pd.DataFrame) -> None:
         return
     x = df.index[-1]
     labels = [
-        ("MA50", "SMA_50", "#00D1FF", 0),  # 최상단
+        ("MA50", "SMA_50", "#00B8A9", 0),  # 진한 청록
         ("MA200", "SMA_200", "#FF2D55", -10),
         ("MA120", "SMA_120", "#FF8C00", -20),
-        ("MA20", "SMA_20", "#4DA3FF", 10),
+        ("MA20", "SMA_20", "#9D4EDD", 10),  # 보라색
         ("MA10", "SMA_10", "#B0B0B0", 20),
         ("MA150", "SMA_150", "#8A8A8A", 30),  # 최하단
     ]
@@ -234,9 +234,13 @@ def render_technical_chart(
         if _has_values("SMA_10"):
             addplots.append(mpf.make_addplot(df_plot["SMA_10"], color="#B0B0B0", width=0.7))
         if _has_values("SMA_20"):
-            addplots.append(mpf.make_addplot(df_plot["SMA_20"], color="#4DA3FF", width=1.2))
+            addplots.append(
+                mpf.make_addplot(df_plot["SMA_20"], color="#9D4EDD", width=1.2)
+            )  # 보라색
         if _has_values("SMA_50"):
-            addplots.append(mpf.make_addplot(df_plot["SMA_50"], color="#00D1FF", width=2.0))
+            addplots.append(
+                mpf.make_addplot(df_plot["SMA_50"], color="#00B8A9", width=2.0)
+            )  # 진한 청록
         if _has_values("SMA_120"):
             addplots.append(mpf.make_addplot(df_plot["SMA_120"], color="#FF8C00", width=1.3))
         if _has_values("SMA_150"):
