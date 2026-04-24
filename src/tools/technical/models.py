@@ -160,6 +160,20 @@ class TechnicalResult(BaseModel):
 
     @classmethod
     def from_analysis(cls, df: pd.DataFrame, **kwargs):
-        """메모리 최적화: OHLC 컬럼만 저장"""
-        slim_df = df[["Open", "High", "Low", "Close"]].copy()
+        """메모리 최적화: OHLCV + 지표 컬럼만 저장"""
+        # Flatten MultiIndex columns (yfinance single ticker returns MultiIndex)
+        df_copy = df.copy()
+        if isinstance(df_copy.columns, pd.MultiIndex):
+            df_copy.columns = df_copy.columns.get_level_values(0)
+
+        # Include Volume for charting, plus indicator columns
+        base_cols = ["Open", "High", "Low", "Close", "Volume"]
+        indicator_cols = [
+            col
+            for col in df_copy.columns
+            if col.startswith(("SMA_", "sma_", "vol_sma_", "supertrend_direction"))
+        ]
+        keep_cols = [c for c in base_cols + indicator_cols if c in df_copy.columns]
+
+        slim_df = df_copy[keep_cols].copy()
         return cls(raw_dataframe=slim_df, **kwargs)

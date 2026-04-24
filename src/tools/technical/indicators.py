@@ -16,6 +16,10 @@ class IndicatorCalculator:
 
         df = df.copy()
 
+        # Flatten MultiIndex columns (yfinance single ticker returns MultiIndex)
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+
         # Moving averages
         df["SMA_10"] = ta.sma(df["Close"], length=10)
         df["SMA_20"] = ta.sma(df["Close"], length=20)
