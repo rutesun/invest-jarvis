@@ -14,7 +14,48 @@ from src.llm.models import (
     TechnicalSummaryInput,
     TechnicalSummaryOutput,
 )
-from src.llm.retry import invoke_llm_with_retry
+from src.tools.technical.models import ChartPatternResult, PriceLevels
+
+
+def format_patterns_for_llm(patterns: dict[str, ChartPatternResult]) -> str:
+    """패턴 결과를 LLM용 텍스트로 변환"""
+    lines = []
+    for _pattern_name, result in patterns.items():
+        if result.detected:
+            lines.append(
+                f"- {result.pattern_name}: 감지됨 (신뢰도 {result.confidence:.0%}, {result.days_ago}일 전 완성)"
+            )
+            lines.append(f"  {result.description}")
+            if result.breakout_level:
+                lines.append(f"  돌파 레벨: ${result.breakout_level:.2f}")
+        else:
+            lines.append(f"- {result.pattern_name}: 미감지")
+    return "\n".join(lines) if lines else "패턴 감지 없음"
+
+
+def format_levels_for_llm(levels: PriceLevels) -> str:
+    """가격 레벨을 LLM용 텍스트로 변환"""
+    lines = [f"현재가: ${levels.current_price:.2f}\n"]
+    if levels.support_levels:
+        lines.append("지지선 (가까운 순):")
+        for i, support in enumerate(levels.support_levels, 1):
+            lines.append(
+                f"  {i}. ${support.price:.2f} ({support.description}, {support.distance_pct:+.1f}%)"
+            )
+        lines.append("")
+    if levels.resistance_levels:
+        lines.append("저항선 (가까운 순):")
+        for i, resistance in enumerate(levels.resistance_levels, 1):
+            lines.append(
+                f"  {i}. ${resistance.price:.2f} ({resistance.description}, {resistance.distance_pct:+.1f}%)"
+            )
+        lines.append("")
+    if levels.targets:
+        lines.append("타겟 (상승 시나리오):")
+        for target_name, target_price in levels.targets.items():
+            readable_name = target_name.replace("_", " ").title()
+            lines.append(f"  - {readable_name}: ${target_price:.2f}")
+    return "\n".join(lines)
 
 
 async def analyze_news(
@@ -288,68 +329,80 @@ async def generate_integrated_analysis(
 
 async def generate_actionable_signal(
     ticker: str,
-    warnings: list[str],
-    recommendation: str,
-    rationale: str,
-    llm: BaseChatModel,
+    technical_summary: str,
+    chart_patterns: dict[str, ChartPatternResult],
+    price_levels: PriceLevels,
+    news_analysis: str | None = None,
+    fundamental_summary: str | None = None,
+    llm: BaseChatModel | None = None,
 ) -> ActionableSignalOutput:
-    """
-    Generate actionable investment signal with timing and concrete reasons.
+    """Generate actionable signal with pattern and price insights"""
+    if llm is None:
+        from src.llm.provider import get_llm_instance
 
-    Args:
-        ticker: Stock ticker symbol
-        warnings: List of warning/signal strings from technical analysis
-        recommendation: Overall recommendation ("매수", "매도", "중립")
-        rationale: Reasoning behind the recommendation
-        llm: LangChain chat model to use for generation
+        llm = get_llm_instance()
 
-    Returns:
-        Structured actionable signal with action, timing, strength, and reasons
-    """
-    warnings_text = "\n".join(f"- {w}" for w in warnings)
+    patterns_text = format_patterns_for_llm(chart_patterns)
+    levels_text = format_levels_for_llm(price_levels)
 
     prompt = ChatPromptTemplate.from_messages(
         [
             (
                 "system",
-                "당신은 실행 가능한 투자 시그널을 생성하는 전문가입니다. "
-                "명확한 액션, 타이밍, 이유를 제공하세요.",
+                """당신은 프로 트레이더입니다. 구체적인 가격과 패턴으로 명확한 투자 신호를 제공하세요.
+
+**신규 필드 작성 가이드:**
+
+1. **pattern_insight**: 감지된 패턴을 자연스럽게 해석
+   - 패턴이 있으면: "Cup & Handle 형성 완료 (8일 전), 돌파 준비 중"
+   - 패턴이 없으면: "명확한 차트 패턴 없음, 지지/저항선 중심 분석"
+
+2. **target_price**: 시나리오별 목표가 (자유 서술)
+   - 상승 시: "돌파 시 Cup & Handle 목표 $250, 중간 저항 $210"
+   - 하락 시: "이탈 시 50일선 $175까지 조정 가능"
+
+3. **entry_zone**: 진입 타이밍과 구간
+   - "조정 시 $175-180 (50일선) 분할 매수, 돌파 확인 후 $205 추격 가능"
+
+4. **key_levels**: 핵심 가격 레벨 간결 요약
+   - "지지: $187/$175/$160, 저항: $200/$210/$250"
+
+**기존 필드 작성 규칙:**
+- primary_reason: 반드시 구체적 숫자 포함
+- signal_strength: 1-10, 패턴 신뢰도 포함""",
             ),
             (
                 "user",
                 """종목: {ticker}
-추천: {recommendation}
-근거: {rationale}
 
-기술적 경고/시그널:
-{warnings_text}
+**기술적 분석**:
+{technical_summary}
 
-다음을 포함한 실행 가능한 시그널을 생성하세요:
-- action: "매수", "매도", 또는 "관망"
-- timing: "지금", "조정_대기", 또는 "보류"
-- signal_strength: 1-10 (10=매우 강함)
-- headline: 한 줄 요약 (예: "매수. 지금. 이유: RSI 과매도")
-- primary_reason: 핵심 이유 하나
-- supporting_reasons: 부차적 이유 2-3개 리스트
-- risks: 리스크 요인 1-2개 리스트
-- invalidation_point: 청산/손절 가격 (선택, 없으면 null)
-- confidence: 신뢰도 0.0-1.0""",
+**차트 패턴**:
+{patterns_text}
+
+**가격 레벨**:
+{levels_text}
+
+**뉴스**: {news_analysis}
+**펀더멘탈**: {fundamental_summary}
+
+위 정보를 종합해서 명확한 투자 신호를 생성하세요.""",
             ),
         ]
     )
 
     chain = prompt | llm.with_structured_output(ActionableSignalOutput)
 
-    result = await invoke_llm_with_retry(
-        chain=chain,
-        input_data={
+    result = await chain.ainvoke(
+        {
             "ticker": ticker,
-            "recommendation": recommendation,
-            "rationale": rationale,
-            "warnings_text": warnings_text,
-        },
-        max_retries=3,
-        backoff_factor=1.0,
+            "technical_summary": technical_summary,
+            "patterns_text": patterns_text,
+            "levels_text": levels_text,
+            "news_analysis": news_analysis or "없음",
+            "fundamental_summary": fundamental_summary or "없음",
+        }
     )
 
     return result
