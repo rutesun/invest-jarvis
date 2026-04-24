@@ -41,8 +41,10 @@ def analyze_volume(df: pd.DataFrame) -> ComponentResult:
     metrics = {"vol_ratio": round(vol_ratio, 2), "volume": volume, "vol_sma_20": vol_sma_20}
 
     # Price direction
+    # price_down: day-over-day comparison (종가 vs 전일 종가)
     price_up = not pd.isna(close) and not pd.isna(prev_close) and float(close) > float(prev_close)
     price_down = not pd.isna(close) and not pd.isna(prev_close) and float(close) < float(prev_close)
+    # is_down_day: intraday comparison (종가 vs 시가, 캔들 색상)
     is_down_day = (
         not pd.isna(close) and not pd.isna(open_price) and float(close) < float(open_price)
     )
@@ -146,7 +148,11 @@ def _detect_pocket_pivot(df: pd.DataFrame, latest: pd.Series) -> dict:
     lookback = df.iloc[-(PatternThresholds.PP_LOOKBACK_DAYS + 1) : -1].copy()
     down_days = lookback[lookback["Close"] < lookback["Open"]]
 
-    max_down_volume = 0.0 if down_days.empty else float(down_days["Volume"].max())
+    # Need at least 3 down-days for meaningful comparison
+    if len(down_days) < 3:
+        return {"detected": False, "signals": [], "evidence": [], "metrics": {}, "score": 0}
+
+    max_down_volume = float(down_days["Volume"].max())
 
     if volume <= max_down_volume:
         return {"detected": False, "signals": [], "evidence": [], "metrics": {}, "score": 0}

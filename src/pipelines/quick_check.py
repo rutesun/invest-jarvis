@@ -114,7 +114,7 @@ class QuickCheckPipeline:
         components = result.get("components", [])
         if components:
             lines.append("### 분석 컴포넌트")
-            for comp in components:
+            for i, comp in enumerate(components):
                 if "score" in comp:  # New format
                     lines.append(f"- **{comp['name']}**: {comp['score']}점")
                     # Show all signals first
@@ -128,8 +128,8 @@ class QuickCheckPipeline:
                         lines.append("  **근거:**")  # 2-space indent (same level as signals)
                         for ev in comp["evidence"][:5]:  # Top 5 evidence per component
                             lines.append(f"    - {ev}")  # 4-space indent for evidence items
-                    # Add blank line after component if it has content
-                    if comp.get("signals") or comp.get("evidence"):
+                    # Add blank line between components (not after last one)
+                    if (comp.get("signals") or comp.get("evidence")) and i < len(components) - 1:
                         lines.append("")
                 else:  # Legacy format
                     lines.append(
