@@ -60,10 +60,36 @@ def analyze_minervini(df: pd.DataFrame) -> ComponentResult:
         "sma_200": sma_200,
     }
 
+    # Build evidence with detailed reasons for unmet conditions
+    def _get_failure_reason(name: str) -> str:
+        """Get detailed failure reason for unmet condition."""
+        if name == "ma_stack":
+            if close <= sma_150:
+                return f"{name}: 미충족 (종가 ${close:.2f} ≤ SMA_150 ${sma_150:.2f})"
+            elif sma_150 <= sma_200:
+                return f"{name}: 미충족 (SMA_150 ${sma_150:.2f} ≤ SMA_200 ${sma_200:.2f})"
+            return f"{name}: 미충족"
+        elif name == "sma_200_rising":
+            if sma_200_prev:
+                return f"{name}: 미충족 (SMA_200 ${sma_200:.2f} ≤ 21일 전 ${sma_200_prev:.2f})"
+            return f"{name}: 미충족 (21일 전 데이터 없음)"
+        elif name == "above_50":
+            return f"{name}: 미충족 (종가 ${close:.2f} ≤ SMA_50 ${sma_50:.2f})"
+        elif name == "above_52w_low_30pct":
+            if low_52w:
+                target = low_52w * 1.30
+                return f"{name}: 미충족 (종가 ${close:.2f} < 52주 저점 +30% ${target:.2f})"
+            return f"{name}: 미충족 (52주 데이터 없음)"
+        elif name == "within_52w_high_25pct":
+            if high_52w:
+                target = high_52w * 0.75
+                return f"{name}: 미충족 (종가 ${close:.2f} < 52주 고점 -25% ${target:.2f})"
+            return f"{name}: 미충족 (52주 데이터 없음)"
+        return f"{name}: 미충족"
+
     evidence = []
     for name, met in conditions.items():
-        status = "충족" if met else "미충족"
-        evidence.append(f"{name}: {status}")
+        evidence.append(f"{name}: 충족" if met else _get_failure_reason(name))
 
     if met_count == 5:
         return ComponentResult(

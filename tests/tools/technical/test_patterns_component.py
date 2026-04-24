@@ -21,6 +21,108 @@ def test_analyze_patterns_vcp_detection():
     assert "ATR" in str(result.evidence)
 
 
+def test_analyze_patterns_vcp_strong_both_conditions():
+    """VCP Strong: ATR contraction (30%) + Tightness persistence (7/20 + 3 consecutive)."""
+    # ATR contraction: first 4 avg = 10, last 4 avg = 6.5 → 35% contraction
+    # Tightness: 7 tight days out of 20 (range < ATR × 0.5)
+    # Recent: last 3 days all tight
+    atr_values = [10.0] * 30 + [10, 9, 8, 7, 6, 6, 6, 6]  # 38 values, last 8 for contraction check
+
+    # 20-day window for tightness check (indices 18-37)
+    # Need 7 tight days: indices 27, 29, 31, 33, 34, 35, 36, 37 (last 3 consecutive)
+    high_values = []
+    low_values = []
+    for i in range(38):
+        atr = atr_values[i]
+        if i in [27, 29, 31, 33, 34, 35, 36, 37]:  # Tight days
+            high_values.append(100 + atr * 0.4)  # Range < ATR × 0.5
+            low_values.append(100 - atr * 0.05)
+        else:
+            high_values.append(100 + atr * 0.6)  # Normal range
+            low_values.append(100 - atr * 0.4)
+
+    df = pd.DataFrame(
+        {
+            "Close": [100] * 38,
+            "High": high_values,
+            "Low": low_values,
+            "ATR": atr_values,
+        }
+    )
+
+    result = analyze_patterns(df)
+
+    # Must detect VCP Strong (both conditions met)
+    assert any("VCP Strong" in sig for sig in result.signals), (
+        f"Expected VCP Strong, got: {result.signals}"
+    )
+    # VCP Strong scores 20 points
+    vcp_score = sum(
+        15 if "VCP" in sig and "Strong" not in sig else 20 if "Strong" in sig else 0
+        for sig in result.signals
+    )
+    assert vcp_score == 20, f"Expected VCP Strong score 20, got: {vcp_score}"
+    assert any("ATR" in str(e) and "수축" in str(e) for e in result.evidence)
+    assert any("tight" in str(e).lower() or "응축" in str(e) for e in result.evidence)
+
+
+def test_analyze_patterns_vcp_general_atr_only():
+    """VCP General: ATR contraction (25%) but no tightness persistence."""
+    # ATR contraction: first 4 avg = 10, last 4 avg = 7 → 30% contraction
+    # No tightness: all days have normal range
+    atr_values = [10.0] * 30 + [10, 9, 8, 7, 7, 7, 6, 6]  # 38 values
+
+    # All days have normal range (High-Low > ATR × 0.5)
+    high_values = [100 + atr * 0.6 for atr in atr_values]
+    low_values = [100 - atr * 0.4 for atr in atr_values]
+
+    df = pd.DataFrame(
+        {
+            "Close": [100] * 38,
+            "High": high_values,
+            "Low": low_values,
+            "ATR": atr_values,
+        }
+    )
+
+    result = analyze_patterns(df)
+
+    # Should detect General VCP but not Strong (only stage 1 satisfied)
+    assert any("VCP" in sig for sig in result.signals), (
+        f"Expected VCP signal, got: {result.signals}"
+    )
+    assert all("Strong" not in sig for sig in result.signals), (
+        f"Should not detect Strong, got: {result.signals}"
+    )
+    # General VCP scores 10 points
+    vcp_score = sum(10 if "VCP" in sig and "Strong" not in sig else 0 for sig in result.signals)
+    assert vcp_score == 10, f"Expected General VCP score 10, got: {vcp_score}"
+    assert any("ATR" in str(e) for e in result.evidence)
+
+
+def test_analyze_patterns_vcp_no_detection():
+    """VCP Not Detected: No ATR contraction."""
+    # Stable ATR (no contraction)
+    atr_values = [10.0] * 38
+
+    high_values = [100 + atr * 0.6 for atr in atr_values]
+    low_values = [100 - atr * 0.4 for atr in atr_values]
+
+    df = pd.DataFrame(
+        {
+            "Close": [100] * 38,
+            "High": high_values,
+            "Low": low_values,
+            "ATR": atr_values,
+        }
+    )
+
+    result = analyze_patterns(df)
+
+    # Should NOT detect VCP
+    assert "VCP" not in str(result.signals)
+
+
 def test_analyze_patterns_breakout_rolling_high():
     """Test breakout detection using rolling high."""
     # Create breakout scenario

@@ -3,6 +3,52 @@ import pandas as pd
 from src.tools.technical.models import ComponentResult
 
 
+class PatternThresholds:
+    """패턴 감지 임계값 (백테스팅 최적화용)"""
+
+    # VCP Thresholds
+    VCP_ATR_CONTRACTION = 0.20  # ATR 수축률 최소 20%
+    VCP_TIGHTNESS_MULTIPLIER = 0.5  # Tight day 정의: 일봉 범위 < ATR × 0.5
+    VCP_MIN_TIGHT_DAYS = 5  # 20일 중 최소 tight day 개수
+    VCP_RECENT_TIGHT_WINDOW = 3  # 최근 N일 연속 tight 체크
+
+    # Pocket Pivot Thresholds
+    PP_SMA_DISTANCE_PCT = 0.02  # 50일선 근접 기준 ±2%
+    PP_LOOKBACK_DAYS = 10  # 다운데이 검색 기간
+
+    # Tennis Ball / Egg Thresholds
+    TENNIS_BALL_THRESHOLD = 0.5  # 하락 거래량 < 50% 평균
+    EGG_THRESHOLD = 1.5  # 하락 거래량 > 150% 평균
+    MEAN_REVERSION_LOOKBACK = 5  # 평균회귀 신호 검색 기간
+
+    # Power Gap Up Thresholds
+    GAP_SIZE_MIN_PCT = 0.04  # 갭업 최소 크기 4%
+    GAP_VOLUME_MULTIPLIER = 3.0  # Power Gap Up 거래량 3배
+    VOLUME_SURGE_MULTIPLIER = 2.0  # 일반 거래량 급증 2배
+
+
+def _validate_dataframe(df: pd.DataFrame, min_len: int, required_cols: list[str]) -> bool:
+    """DataFrame validation helper.
+
+    Args:
+        df: DataFrame to validate
+        min_len: Minimum required length
+        required_cols: List of required column names
+
+    Returns:
+        True if valid, False otherwise
+    """
+    if len(df) < min_len:
+        return False
+
+    return all(col in df.columns for col in required_cols)
+
+
+def _empty_result() -> dict:
+    """일관된 empty result 반환."""
+    return {"signals": [], "evidence": [], "metrics": {}, "score": 0}
+
+
 def analyze_patterns(df: pd.DataFrame) -> ComponentResult:
     """Analyze chart patterns (VCP, Breakout, Candlestick)."""
     if df.empty or len(df) < 3:
@@ -48,20 +94,30 @@ def analyze_patterns(df: pd.DataFrame) -> ComponentResult:
 
 
 def _detect_vcp(df: pd.DataFrame) -> dict:
-    """Detect Volatility Contraction Pattern."""
-    if "ATR" not in df.columns or len(df) < 20:
-        return {"signals": [], "evidence": [], "metrics": {}, "score": 0}
+    """Detect Volatility Contraction Pattern (2-Stage Verification).
+
+    Stage 1: ATR contraction (20% 이상)
+    Stage 2: Tightness persistence (20일 중 5+ tight days + 최근 3일 연속 tight)
+
+    Returns:
+        - VCP Strong (20 pts): Stage 1 + Stage 2 만족
+        - VCP General (10 pts): Stage 1만 만족
+    """
+    required_cols = ["High", "Low", "ATR"]
+    if not _validate_dataframe(df, min_len=20, required_cols=required_cols):
+        return _empty_result()
 
     atr_series = df["ATR"].dropna()
     if len(atr_series) < 8:
-        return {"signals": [], "evidence": [], "metrics": {}, "score": 0}
+        return _empty_result()
 
+    # Stage 1: ATR contraction check
     recent_8 = atr_series.iloc[-8:].values
     first_4_avg = recent_8[:4].mean()
     last_4_avg = recent_8[-4:].mean()
 
     if first_4_avg == 0:
-        return {"signals": [], "evidence": [], "metrics": {}, "score": 0}
+        return _empty_result()
 
     contraction_ratio = (first_4_avg - last_4_avg) / first_4_avg
 
@@ -70,16 +126,48 @@ def _detect_vcp(df: pd.DataFrame) -> dict:
         "atr_current": round(recent_8[-1], 2),
     }
 
-    # VCP detected if ATR contracted by >20%
-    if contraction_ratio > 0.20:
+    # Stage 1 failed
+    if contraction_ratio <= PatternThresholds.VCP_ATR_CONTRACTION:
+        return {"signals": [], "evidence": [], "metrics": metrics, "score": 0}
+
+    # Stage 2: Tightness persistence check
+    last_20 = df.iloc[-20:].copy()
+    atr_20 = last_20["ATR"]
+    high_20 = last_20["High"]
+    low_20 = last_20["Low"]
+
+    # Tight day: High-Low < ATR × 0.5
+    tight_threshold = atr_20 * PatternThresholds.VCP_TIGHTNESS_MULTIPLIER
+    is_tight = (high_20 - low_20) < tight_threshold
+
+    tight_count = is_tight.sum()
+    recent_3_tight = is_tight.iloc[-PatternThresholds.VCP_RECENT_TIGHT_WINDOW :].all()
+
+    metrics["tight_days_count"] = int(tight_count)
+    metrics["recent_3_tight"] = bool(recent_3_tight)
+
+    # Determine VCP level
+    stage_2_passed = tight_count >= PatternThresholds.VCP_MIN_TIGHT_DAYS and recent_3_tight
+
+    if stage_2_passed:
+        # VCP Strong
+        return {
+            "signals": ["VCP Strong (단계 1+2 만족)"],
+            "evidence": [
+                f"ATR 수축률 {contraction_ratio * 100:.1f}% (20% 이상)",
+                f"Tight days {tight_count}/20 (최근 3일 연속 tight)",
+            ],
+            "metrics": metrics,
+            "score": 20,
+        }
+    else:
+        # VCP General
         return {
             "signals": ["VCP (에너지 응축)"],
             "evidence": [f"ATR 수축률 {contraction_ratio * 100:.1f}% (20% 이상)"],
             "metrics": metrics,
-            "score": 15,
+            "score": 10,
         }
-
-    return {"signals": [], "evidence": [], "metrics": metrics, "score": 0}
 
 
 def _detect_breakout(df: pd.DataFrame) -> dict:
