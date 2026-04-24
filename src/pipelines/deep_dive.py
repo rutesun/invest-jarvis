@@ -19,7 +19,10 @@ from src.tools.disclosure import DisclosureItem, DisclosureTool, extract_kr_code
 from src.tools.flow import FlowTool, InvestorFlow
 from src.tools.fundamental import FundamentalSnapshot, FundamentalTool
 from src.tools.news import NewsArticle, NewsTool
+from src.tools.technical.charting import render_technical_chart
+from src.tools.technical.components.chart_patterns import detect_chart_patterns
 from src.tools.technical.models import TechnicalResult
+from src.tools.technical.price_levels import get_fibonacci_base_points, identify_key_levels
 from src.tools.technical.tool import TechnicalAnalysisTool
 
 
@@ -60,6 +63,7 @@ class DeepDivePipeline:
                 - disclosure: list[DisclosureItem] | None (SEC 10-Q/8-K or OpenDART)
                 - flow: InvestorFlow | None (외국인/기관 순매수 동향, 한국주식만)
                 - integrated_analysis: IntegratedAnalysisOutput | None (종합 인사이트)
+                - actionable_signal: ActionableSignalOutput | None (실행 가능한 투자 시그널)
         """
         tech_result = await self.technical_tool.execute(ticker)
         if not tech_result.success:
@@ -127,6 +131,46 @@ class DeepDivePipeline:
                 flow_data=flow_data,
             )
 
+        # Generate actionable investment signal
+        df = technical_data.raw_dataframe
+        if df is None:
+            raise ValueError("raw_dataframe required for pattern detection and charting")
+
+        chart_patterns = detect_chart_patterns(df, technical_data.snapshot)
+        lookback_high, lookback_low = get_fibonacci_base_points(df, technical_data.snapshot)
+        price_levels = identify_key_levels(
+            snapshot=technical_data.snapshot,
+            pattern_results=chart_patterns,
+            lookback_high=lookback_high,
+            lookback_low=lookback_low,
+        )
+
+        actionable_signal = await analyzer.generate_actionable_signal(
+            ticker=ticker,
+            technical_summary=f"{technical_summary.summary}\n\n{technical_summary.rationale}",
+            chart_patterns=chart_patterns,
+            price_levels=price_levels,
+            llm=self.llm,
+        )
+
+        # Render technical chart
+        chart_result = None
+        try:
+            chart_result = render_technical_chart(
+                ticker=ticker,
+                df=df,
+                indicators=technical_data.snapshot.model_dump(),
+                patterns=chart_patterns,
+                price_levels={
+                    "support_levels": price_levels.support_levels,
+                    "resistance_levels": price_levels.resistance_levels,
+                },
+                out_dir="charts",
+                window_days=63,
+            )
+        except Exception as e:
+            logger.warning(f"Chart rendering failed for {ticker}: {e}")
+
         return {
             "ticker": ticker,
             "technical": technical_data,
@@ -138,6 +182,8 @@ class DeepDivePipeline:
             "disclosure": disclosure_items,
             "flow": flow_data,
             "integrated_analysis": integrated_analysis,
+            "actionable_signal": actionable_signal,
+            "chart": chart_result,
         }
 
     async def _generate_technical_summary(
@@ -184,6 +230,14 @@ class DeepDivePipeline:
             indicators["rsi"] = snapshot.rsi
         if snapshot.macd is not None:
             indicators["macd"] = snapshot.macd
+        if snapshot.perf_1m is not None:
+            indicators["perf_1m"] = snapshot.perf_1m
+        if snapshot.perf_3m is not None:
+            indicators["perf_3m"] = snapshot.perf_3m
+        if snapshot.perf_6m is not None:
+            indicators["perf_6m"] = snapshot.perf_6m
+        if snapshot.perf_1y is not None:
+            indicators["perf_1y"] = snapshot.perf_1y
 
         input_data = TechnicalSummaryInput(
             ticker=technical_data.ticker or "UNKNOWN",

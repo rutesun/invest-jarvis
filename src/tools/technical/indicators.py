@@ -16,6 +16,10 @@ class IndicatorCalculator:
 
         df = df.copy()
 
+        # Flatten MultiIndex columns (yfinance single ticker returns MultiIndex)
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+
         # Moving averages
         df["SMA_10"] = ta.sma(df["Close"], length=10)
         df["SMA_20"] = ta.sma(df["Close"], length=20)
@@ -134,6 +138,13 @@ class IndicatorCalculator:
         prev_close = df_clean.iloc[-2]["Close"] if len(df_clean) > 1 else latest["Close"]
         change_pct = ((latest["Close"] - prev_close) / prev_close) * 100
 
+        # Calculate performance over different periods
+        current_price = float(latest["Close"])
+        perf_1m = self._calculate_performance(df_clean, current_price, days=21)
+        perf_3m = self._calculate_performance(df_clean, current_price, days=63)
+        perf_6m = self._calculate_performance(df_clean, current_price, days=126)
+        perf_1y = self._calculate_performance(df_clean, current_price, days=252)
+
         def safe_get(key: str) -> float | None:
             val = latest.get(key)
             if pd.isna(val):
@@ -143,6 +154,10 @@ class IndicatorCalculator:
         return IndicatorSnapshot(
             price=float(latest["Close"]),
             change_pct=round(change_pct, 2),
+            perf_1m=perf_1m,
+            perf_3m=perf_3m,
+            perf_6m=perf_6m,
+            perf_1y=perf_1y,
             sma_10=safe_get("SMA_10"),
             sma_20=safe_get("SMA_20"),
             sma_50=safe_get("SMA_50"),
@@ -186,6 +201,17 @@ class IndicatorCalculator:
             macd_fast_signal=safe_get("MACDs_5_35_5"),
             macd_fast_histogram=safe_get("MACDh_5_35_5"),
         )
+
+    def _calculate_performance(
+        self, df: pd.DataFrame, current_price: float, days: int
+    ) -> float | None:
+        """Calculate performance over specified number of trading days."""
+        if len(df) <= days:
+            return None
+        past_price = df.iloc[-days]["Close"]
+        if pd.isna(past_price) or past_price == 0:
+            return None
+        return round(((current_price - past_price) / past_price) * 100, 2)
 
     def _calculate_crsi(self, df: pd.DataFrame) -> pd.DataFrame:
         """Calculate Cycle-Tuned RSI with dynamic bands."""

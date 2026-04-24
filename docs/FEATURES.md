@@ -43,11 +43,51 @@ LLM 없이 기술적 분석만 수행하는 빠른 진단 기능.
 | 레이어 | 데이터 소스 | LLM 출력 |
 |--------|-----------|----------|
 | 기술적 | yfinance → 8개 컴포넌트 | TechnicalSummaryOutput |
+| **패턴** | OHLC → 4개 차트 패턴 | ChartPatternResult |
+| **가격 레벨** | 6개 소스 (MA, Fib, Pivot, Swing, ATR, Pattern) | PriceLevels |
 | 펀더멘탈 | yfinance (선택) | FundamentalSummaryOutput |
 | 뉴스 | yfinance 뉴스 | NewsAnalysisOutput |
 | 공시 | SEC EDGAR / OpenDART (선택) | - |
 | 수급 | KIS API (한국주식 전용) | - |
 | **종합** | 위 전체 통합 | IntegratedAnalysisOutput |
+| **실행 시그널** | 기술 + 패턴 + 가격 레벨 | ActionableSignalOutput |
+
+**차트 패턴 감지 (Phase 2):**
+
+| 패턴 | 기간 | 신뢰도 가중치 | 설명 |
+|------|------|---------------|------|
+| Cup & Handle | 60-120일 | 0.85 | 컵 깊이 15-40%, 손잡이 15% 이내 |
+| Double Bottom | 40-80일 | 0.80 | W 형태, 바닥 간 5% 이내 |
+| Head & Shoulders | 60-100일 | 0.75 | 어깨 높이 차이 10% 이내 |
+| Support/Resistance Test | 최근 20일 | 0.70 | ±2% 레벨 3회 이상 테스트 |
+
+**가격 레벨 분석 (Phase 2):**
+
+| 소스 | 포함 레벨 | 우선순위 |
+|------|----------|---------|
+| MA | 20/50/200일 | 3 (높음) |
+| Swing | High/Low | 3 (높음) |
+| Pivot | S1/R1 | 2 (중간) |
+| Fibonacci | 9개 (0.236~2.0) | 1 (낮음) |
+| ATR | 1x/2x 지지/저항 | 0 (최하) |
+| Pattern | 돌파 레벨 + 목표가 | 패턴 신뢰도 기반 |
+
+- 중복 제거: 현재가 ±5% 내 0.5% threshold, 그 외 1.0%
+- 정렬: 지지선 높은 순, 저항선 낮은 순 (가까운 것 우선)
+- 출력: 각각 상위 5개 + 패턴 타겟
+
+**Actionable Signal Output (Phase 2 확장):**
+
+기존 필드 (Phase 1):
+- `action` (매수/매도/관망), `timing` (지금/조정_대기/보류)
+- `signal_strength` (1-10), `headline`, `primary_reason`
+- `supporting_reasons`, `risks`, `invalidation_point`, `confidence`
+
+신규 필드 (Phase 2):
+- `pattern_insight`: 차트 패턴 해석 (예: "Cup & Handle 8일 전 완성, 돌파 준비")
+- `target_price`: 가격 목표 자유 서술 (예: "돌파 시 $250, 조정 시 $175 지지")
+- `entry_zone`: 진입 구간 (예: "현재 $200 횡보, 조정 시 $175-180 매수")
+- `key_levels`: 주요 레벨 요약 (예: "지지: $187/$175, 저항: $200/$250")
 
 **차트 시각화:**
 
@@ -70,7 +110,7 @@ Deep Dive 분석 실행 시 자동으로 기술적 차트를 생성하여 `chart
 - `_draw_support_resistance()`: 지지/저항선 그리기
 - `_mark_patterns()`: 패턴 완료 지점 마킹
 
-**의존성:** yfinance, LLM (OpenAI/Anthropic), SEC EDGAR, OpenDART (선택), KIS API (선택), mplfinance
+**의존성:** yfinance, LLM (OpenAI/Anthropic), scipy (peak detection), mplfinance, SEC EDGAR, OpenDART (선택), KIS API (선택)
 
 ---
 

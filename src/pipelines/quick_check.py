@@ -90,6 +90,21 @@ class QuickCheckPipeline:
             "",
         ]
 
+        # Performance
+        indicators = result.get("indicators", {})
+        perf_lines = []
+        if indicators.get("perf_1m") is not None:
+            perf_lines.append(f"1M: {indicators['perf_1m']:+.2f}%")
+        if indicators.get("perf_3m") is not None:
+            perf_lines.append(f"3M: {indicators['perf_3m']:+.2f}%")
+        if indicators.get("perf_6m") is not None:
+            perf_lines.append(f"6M: {indicators['perf_6m']:+.2f}%")
+        if indicators.get("perf_1y") is not None:
+            perf_lines.append(f"1Y: {indicators['perf_1y']:+.2f}%")
+        if perf_lines:
+            lines.append(f"**퍼포먼스**: {' | '.join(perf_lines)}")
+            lines.append("")
+
         # Show assessment if available (legacy format)
         if result.get("assessment") and result["assessment"] != "N/A":
             lines.append(f"**평가**: {result['assessment']} (신뢰도: {result['confidence']:.0f}%)")

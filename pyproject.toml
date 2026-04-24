@@ -21,6 +21,7 @@ dependencies = [
     "telethon>=1.36.0",
     "notion-client>=2.0.0",
     "fear-and-greed>=0.4",
+    "mplfinance>=0.12.10b0",
 ]
 
 [project.optional-dependencies]
