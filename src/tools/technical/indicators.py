@@ -35,16 +35,38 @@ class IndicatorCalculator:
         macd = ta.macd(df["Close"])
         if macd is not None:
             df = pd.concat([df, macd], axis=1)
+            # Rename to clear names
+            if "MACD_12_26_9" in df.columns:
+                df["MACD"] = df["MACD_12_26_9"]
+                df["MACD_Signal"] = df["MACDs_12_26_9"]
+                df["MACD_Hist"] = df["MACDh_12_26_9"]
+                df = df.drop(columns=["MACD_12_26_9", "MACDs_12_26_9", "MACDh_12_26_9"])
 
         # Bollinger Bands
         bb = ta.bbands(df["Close"], length=20)
         if bb is not None:
             df = pd.concat([df, bb], axis=1)
+            # Rename to clear names
+            # Note: pandas_ta uses BBU_20_2.0_2.0 format (length_stdev_offset)
+            bb_cols = [c for c in df.columns if c.startswith("BBU_20") or c.startswith("BBL_20")]
+            if bb_cols:
+                if any(c.startswith("BBU_20") for c in bb_cols):
+                    bbu_col = next(c for c in bb_cols if c.startswith("BBU_20"))
+                    df["BB_Upper"] = df[bbu_col]
+                if any(c.startswith("BBL_20") for c in bb_cols):
+                    bbl_col = next(c for c in bb_cols if c.startswith("BBL_20"))
+                    df["BB_Lower"] = df[bbl_col]
+                # Drop old columns
+                df = df.drop(columns=list(bb_cols))
 
         # ADX
         adx = ta.adx(df["High"], df["Low"], df["Close"], length=14)
         if adx is not None:
             df = pd.concat([df, adx], axis=1)
+            # Rename to clear name
+            if "ADX_14" in df.columns:
+                df["ADX"] = df["ADX_14"]
+                df = df.drop(columns=["ADX_14"])
 
         # ATR
         df["ATR"] = ta.atr(df["High"], df["Low"], df["Close"], length=14)
@@ -61,6 +83,14 @@ class IndicatorCalculator:
         st = ta.supertrend(df["High"], df["Low"], df["Close"], length=10, multiplier=3.0)
         if st is not None:
             df = pd.concat([df, st], axis=1)
+            # Rename to clear names
+            if "SUPERTl_10_3.0" in df.columns:
+                df["SuperTrend_Up"] = df["SUPERTl_10_3.0"]
+                df["SuperTrend_Dn"] = df["SUPERTs_10_3.0"]
+                df["SuperTrend_Dir"] = df["SUPERTd_10_3.0"]
+                df = df.drop(
+                    columns=["SUPERTl_10_3.0", "SUPERTs_10_3.0", "SUPERTd_10_3.0", "SUPERT_10_3.0"]
+                )
 
         # Disparity
         for length in [20, 50, 120]:
@@ -85,6 +115,12 @@ class IndicatorCalculator:
         macd_fast = ta.macd(df["Close"], fast=5, slow=35, signal=5)
         if macd_fast is not None:
             df = pd.concat([df, macd_fast], axis=1)
+            # Rename to clear names
+            if "MACD_5_35_5" in df.columns:
+                df["MACD_Fast"] = df["MACD_5_35_5"]
+                df["MACD_Fast_Signal"] = df["MACDs_5_35_5"]
+                df["MACD_Fast_Hist"] = df["MACDh_5_35_5"]
+                df = df.drop(columns=["MACD_5_35_5", "MACDs_5_35_5", "MACDh_5_35_5"])
 
         # Volume SMAs
         df["Vol_SMA_20"] = ta.sma(df["Volume"], length=20)
@@ -121,6 +157,9 @@ class IndicatorCalculator:
 
         # Cycle RSI (cRSI)
         df = self._calculate_crsi(df)
+
+        # Stage2 detection
+        df = self._calculate_stage2(df)
 
         return df
 
@@ -164,15 +203,15 @@ class IndicatorCalculator:
             sma_120=safe_get("SMA_120"),
             sma_200=safe_get("SMA_200"),
             rsi=safe_get("RSI"),
-            macd=safe_get("MACD_12_26_9"),
-            macd_signal=safe_get("MACDs_12_26_9"),
-            macd_histogram=safe_get("MACDh_12_26_9"),
+            macd=safe_get("MACD"),
+            macd_signal=safe_get("MACD_Signal"),
+            macd_histogram=safe_get("MACD_Hist"),
             atr=safe_get("ATR"),
-            bb_upper=safe_get("BBU_20_2.0"),
-            bb_lower=safe_get("BBL_20_2.0"),
-            adx=safe_get("ADX_14"),
-            supertrend_direction=int(safe_get("SUPERTd_10_3.0") or 0)
-            if safe_get("SUPERTd_10_3.0")
+            bb_upper=safe_get("BB_Upper"),
+            bb_lower=safe_get("BB_Lower"),
+            adx=safe_get("ADX"),
+            supertrend_direction=int(safe_get("SuperTrend_Dir") or 0)
+            if safe_get("SuperTrend_Dir")
             else None,
             disparity_20=safe_get("Disparity_20"),
             disparity_50=safe_get("Disparity_50"),
@@ -197,9 +236,9 @@ class IndicatorCalculator:
             is_gap_down=bool(latest.get("Is_Gap_Down"))
             if not pd.isna(latest.get("Is_Gap_Down"))
             else None,
-            macd_fast=safe_get("MACD_5_35_5"),
-            macd_fast_signal=safe_get("MACDs_5_35_5"),
-            macd_fast_histogram=safe_get("MACDh_5_35_5"),
+            macd_fast=safe_get("MACD_Fast"),
+            macd_fast_signal=safe_get("MACD_Fast_Signal"),
+            macd_fast_histogram=safe_get("MACD_Fast_Hist"),
         )
 
     def _calculate_performance(
@@ -256,4 +295,51 @@ class IndicatorCalculator:
         df["cRSI_LowBand"] = crsi_series.rolling(window=lookback, min_periods=10).quantile(0.10)
         df["cRSI_HighBand"] = crsi_series.rolling(window=lookback, min_periods=10).quantile(0.90)
 
+        return df
+
+    def _calculate_stage2(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Calculate Minervini Stage2 flag (상승 추세 구간).
+
+        Stage2 조건:
+        1. Price > SMA_150 > SMA_200
+        2. SMA_150, SMA_200 상승 중 (20일 lookback)
+        3. Price >= Low_52w * 1.3
+        4. Price >= High_52w * 0.75
+        """
+        df["Is_Stage2"] = False  # default
+
+        required_cols = ["SMA_150", "SMA_200", "High_52w", "Low_52w", "Close"]
+        if not all(col in df.columns for col in required_cols):
+            return df
+
+        # Check if we have any valid data for these columns
+        if (
+            df["SMA_150"].isna().all()
+            or df["SMA_200"].isna().all()
+            or df["High_52w"].isna().all()
+            or df["Low_52w"].isna().all()
+        ):
+            return df
+
+        # 조건 1: Price > SMA_150 > SMA_200 (handle NaN)
+        cond1 = (
+            df["SMA_150"].notna()
+            & df["SMA_200"].notna()
+            & (df["Close"] > df["SMA_150"])
+            & (df["SMA_150"] > df["SMA_200"])
+        )
+
+        # 조건 2: SMA_150, SMA_200 상승 중 (20일 lookback)
+        lookback = 20
+        sma150_rising = df["SMA_150"] > df["SMA_150"].shift(lookback)
+        sma200_rising = df["SMA_200"] > df["SMA_200"].shift(lookback)
+        cond2 = sma150_rising & sma200_rising
+
+        # 조건 3: Price >= Low_52w * 1.3
+        cond3 = df["Low_52w"].notna() & (df["Close"] >= (df["Low_52w"] * 1.3))
+
+        # 조건 4: Price >= High_52w * 0.75
+        cond4 = df["High_52w"].notna() & (df["Close"] >= (df["High_52w"] * 0.75))
+
+        df["Is_Stage2"] = cond1 & cond2 & cond3 & cond4
         return df

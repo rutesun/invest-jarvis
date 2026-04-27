@@ -184,16 +184,51 @@ Deep Dive 분석 실행 시 자동으로 기술적 차트를 생성하여 `chart
 |------|------|
 | **렌더 엔진** | mplfinance (matplotlib 기반) |
 | **출력 파일** | `charts/{ticker}_technical.png` |
-| **차트 구성** | Price (캔들스틱 + MA 20/50/200 + Supertrend), Volume (막대 + MA 20), MACD (히스토그램 + 시그널), RSI (30/70 기준선) |
-| **패턴 마커** | 검출된 차트 패턴 위치에 화살표 + 라벨 표시 |
-| **가격 레벨** | 지지선(녹색 점선), 저항선(빨간색 점선) 각 최대 3개 |
-| **한글 지원** | 한국어 폰트 자동 감지 (Noto Sans KR, AppleGothic 등) |
+| **해상도** | 130 DPI |
+| **패널 구조** | 4개 패널 (비율 6:2:2:2) - Price, Volume, MACD, cRSI |
 | **기간** | 최근 63일 (약 3개월) |
+| **한글 지원** | 한국어 폰트 자동 감지 (Noto Sans KR, AppleGothic 등) |
+
+**가격 패널 (Panel 0):**
+- 캔들스틱
+- **6개 이동평균선** (우선순위별 스타일링):
+  - MA50 (#00D1FF, width=3.0) - 최고 강조
+  - MA200 (#FF2D55, width=2.8)
+  - MA120 (#FF8C00, width=2.0)
+  - MA20 (#4DA3FF, width=1.8)
+  - MA10 (#B0B0B0, width=1.0) - 참고용
+  - MA150 (#8A8A8A, width=0.9) - 참고용
+- **Supertrend 추세선**:
+  - 상승 추세: SuperTrend_Up (초록, width=2)
+  - 하락 추세: SuperTrend_Dn (빨강, width=2)
+  - 매수/매도 전환 시그널 마커 (markersize=35)
+- **Stage2 음영**: Minervini Stage2 조건 충족 구간 (초록 배경, alpha=0.08)
+- **차트 패턴 마커**: 검출된 패턴 위치에 화살표 + 라벨 표시
+- **지지/저항선**: 지지선(녹색 점선), 저항선(빨간색 점선) 각 최대 3개
+- **우측 MA 라벨**: 6개 MA의 현재 값 표시 (색상 코딩)
+
+**거래량 패널 (Panel 1):**
+- 거래량 막대 (mplfinance 기본)
+- Volume MA50 오버레이 (골드 라인)
+- 라벨: "VOL + VOL_MA50"
+
+**MACD 패널 (Panel 2):**
+- MACD 히스토그램 (회색, alpha=0.55)
+- MACD 라인 (파랑)
+- Signal 라인 (주황)
+- 라벨: "MACD(12,26,9)"
+
+**cRSI 패널 (Panel 3):**
+- cRSI 라인 (마젠타)
+- 동적 밴드 (청록, 10th/90th percentile over 40-bar lookback)
+- 30/70 참조선 (회색 점선)
+- 라벨: "cRSI(dc=20,vib=10,lvl=10%)"
 
 **Helper 함수:**
 - `_setup_korean_font()`: macOS/Linux 한글 폰트 설정
-- `_badge()`: 패널 레이블 표시 (VOL, MACD, RSI)
-- `_right_value_labels()`: MA 라인 우측 값 표시
+- `_badge()`: 패널 레이블 표시
+- `_shade_stage2()`: Stage2 배경 음영 그리기
+- `_right_value_labels()`: 6개 MA 라인 우측 값 표시
 - `_draw_support_resistance()`: 지지/저항선 그리기
 - `_mark_patterns()`: 패턴 완료 지점 마킹
 
