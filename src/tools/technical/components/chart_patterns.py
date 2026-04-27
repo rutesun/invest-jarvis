@@ -30,7 +30,8 @@ def detect_cup_and_handle(df: pd.DataFrame) -> ChartPatternResult:
             description="데이터 부족 (최소 50일 필요)",
         )
 
-    prices = df["Close"].values
+    # Cup & Handle은 고점 패턴 → High 가격 사용
+    prices = df["High"].values
 
     # Find peaks
     peaks, _ = find_peaks(prices, distance=5, prominence=prices.mean() * 0.05)
@@ -148,10 +149,14 @@ def detect_double_bottom(df: pd.DataFrame) -> ChartPatternResult:
             description="데이터 부족 (최소 50일 필요)",
         )
 
-    prices = df["Close"].values
+    # Double Bottom은 저점 패턴 → Low 가격 사용
+    prices = df["Low"].values
 
     # Find valleys (inverted peaks) - prominence 완화: 0.03 → 0.02
     valleys, _ = find_peaks(-prices, distance=10, prominence=prices.mean() * 0.02)
+
+    # 모든 유효한 패턴을 찾아서 가장 최근 것 선택
+    valid_patterns = []
 
     for i in range(1, len(valleys)):
         valley1_idx = valleys[i - 1]
@@ -190,21 +195,38 @@ def detect_double_bottom(df: pd.DataFrame) -> ChartPatternResult:
         # Target
         target = neckline + (neckline - min(bottom1, bottom2))
 
-        return ChartPatternResult(
-            pattern_name="Double Bottom",
-            detected=True,
-            confidence=confidence,
-            completed_date=completed_date,
-            days_ago=days_ago,
-            current_price=prices[-1],
-            breakout_level=neckline,
-            support_level=min(bottom1, bottom2),
-            description=f"두 저점 높이 차이 {height_diff:.1%}, {days_ago}일 전 완성",
-            key_levels={
+        valid_patterns.append(
+            {
+                "confidence": confidence,
+                "completed_date": completed_date,
+                "days_ago": days_ago,
                 "bottom1": float(bottom1),
                 "bottom2": float(bottom2),
                 "neckline": float(neckline),
                 "target": float(target),
+                "height_diff": height_diff,
+            }
+        )
+
+    # 가장 최근 패턴 선택 (days_ago가 가장 작은 것)
+    if valid_patterns:
+        best_pattern = min(valid_patterns, key=lambda p: p["days_ago"])
+
+        return ChartPatternResult(
+            pattern_name="Double Bottom",
+            detected=True,
+            confidence=best_pattern["confidence"],
+            completed_date=best_pattern["completed_date"],
+            days_ago=best_pattern["days_ago"],
+            current_price=prices[-1],
+            breakout_level=best_pattern["neckline"],
+            support_level=min(best_pattern["bottom1"], best_pattern["bottom2"]),
+            description=f"두 저점 높이 차이 {best_pattern['height_diff']:.1%}, {best_pattern['days_ago']}일 전 완성",
+            key_levels={
+                "bottom1": best_pattern["bottom1"],
+                "bottom2": best_pattern["bottom2"],
+                "neckline": best_pattern["neckline"],
+                "target": best_pattern["target"],
             },
         )
 
@@ -255,7 +277,8 @@ def detect_head_and_shoulders(df: pd.DataFrame) -> ChartPatternResult:
             description="데이터 부족 (최소 50일 필요)",
         )
 
-    prices = df["Close"].values
+    # Head & Shoulders는 고점 패턴 → High 가격 사용
+    prices = df["High"].values
 
     # Find 3 peaks (distance 증가로 노이즈 필터링)
     peaks, _ = find_peaks(prices, distance=15, prominence=prices.mean() * 0.05)
@@ -424,18 +447,21 @@ def detect_ascending_triangle(df: pd.DataFrame) -> ChartPatternResult:
     import numpy as np
     from scipy.stats import linregress
 
-    prices = df["Close"].values
+    # Triangle 패턴은 고점/저점 모두 사용 → High/Low 가격
+    highs = df["High"].values
+    lows = df["Low"].values
+    closes = df["Close"].values
 
     # 고점/저점 추출
-    peaks, _ = find_peaks(prices, distance=10, prominence=prices.mean() * 0.03)
-    valleys, _ = find_peaks(-prices, distance=10, prominence=prices.mean() * 0.03)
+    peaks, _ = find_peaks(highs, distance=10, prominence=highs.mean() * 0.03)
+    valleys, _ = find_peaks(-lows, distance=10, prominence=lows.mean() * 0.03)
 
     if len(peaks) < 3 or len(valleys) < 3:
         return ChartPatternResult(
             pattern_name="Ascending Triangle",
             detected=False,
             confidence=0.0,
-            current_price=prices[-1],
+            current_price=closes[-1],
             description="고점/저점 부족 (각 3개 필요)",
         )
 
@@ -453,12 +479,12 @@ def detect_ascending_triangle(df: pd.DataFrame) -> ChartPatternResult:
             pattern_name="Ascending Triangle",
             detected=False,
             confidence=0.0,
-            current_price=prices[-1],
+            current_price=closes[-1],
             description=f"패턴 기간 부적합 ({pattern_length}일, 30-90일 필요)",
         )
 
     # 고점 수평성 확인
-    peak_prices = prices[recent_peaks]
+    peak_prices = highs[recent_peaks]
     peak_std = np.std(peak_prices) / np.mean(peak_prices)
 
     if peak_std > 0.03:  # 표준편차 >3%면 수평 아님
@@ -466,12 +492,12 @@ def detect_ascending_triangle(df: pd.DataFrame) -> ChartPatternResult:
             pattern_name="Ascending Triangle",
             detected=False,
             confidence=0.0,
-            current_price=prices[-1],
+            current_price=closes[-1],
             description=f"고점 수평성 부족 (std: {peak_std:.2%} > 3%)",
         )
 
     # 저점 상승 추세 확인 (선형회귀)
-    valley_prices = prices[recent_valleys]
+    valley_prices = lows[recent_valleys]
     slope, intercept, r_value, _, _ = linregress(recent_valleys, valley_prices)
 
     daily_slope = slope / pattern_length
@@ -481,7 +507,7 @@ def detect_ascending_triangle(df: pd.DataFrame) -> ChartPatternResult:
             pattern_name="Ascending Triangle",
             detected=False,
             confidence=0.0,
-            current_price=prices[-1],
+            current_price=closes[-1],
             description=f"저점 상승 추세 불충분 (기울기: {daily_slope * 100:.3%}/day)",
         )
 
@@ -494,7 +520,7 @@ def detect_ascending_triangle(df: pd.DataFrame) -> ChartPatternResult:
             pattern_name="Ascending Triangle",
             detected=False,
             confidence=0.0,
-            current_price=prices[-1],
+            current_price=closes[-1],
             description=f"수렴 부족 (gap: {last_gap / first_gap:.1%})",
         )
 
@@ -520,7 +546,7 @@ def detect_ascending_triangle(df: pd.DataFrame) -> ChartPatternResult:
         confidence=confidence,
         completed_date=completed_date,
         days_ago=days_ago,
-        current_price=prices[-1],
+        current_price=closes[-1],
         breakout_level=resistance_level,
         support_level=valley_prices[-1],
         description=f"고점 수평도 {peak_std:.2%}, 저점 기울기 +{support_slope_percent:.2%}/day, {pattern_length}일",
@@ -584,18 +610,21 @@ def detect_descending_triangle(df: pd.DataFrame) -> ChartPatternResult:
     import numpy as np
     from scipy.stats import linregress
 
-    prices = df["Close"].values
+    # Triangle 패턴은 고점/저점 모두 사용 → High/Low 가격
+    highs = df["High"].values
+    lows = df["Low"].values
+    closes = df["Close"].values
 
     # 고점/저점 추출
-    peaks, _ = find_peaks(prices, distance=10, prominence=prices.mean() * 0.03)
-    valleys, _ = find_peaks(-prices, distance=10, prominence=prices.mean() * 0.03)
+    peaks, _ = find_peaks(highs, distance=10, prominence=highs.mean() * 0.03)
+    valleys, _ = find_peaks(-lows, distance=10, prominence=lows.mean() * 0.03)
 
     if len(peaks) < 3 or len(valleys) < 3:
         return ChartPatternResult(
             pattern_name="Descending Triangle",
             detected=False,
             confidence=0.0,
-            current_price=prices[-1],
+            current_price=closes[-1],
             description="고점/저점 부족 (각 3개 필요)",
         )
 
@@ -613,12 +642,12 @@ def detect_descending_triangle(df: pd.DataFrame) -> ChartPatternResult:
             pattern_name="Descending Triangle",
             detected=False,
             confidence=0.0,
-            current_price=prices[-1],
+            current_price=closes[-1],
             description=f"패턴 기간 부적합 ({pattern_length}일, 30-90일 필요)",
         )
 
     # 저점 수평성 확인
-    valley_prices = prices[recent_valleys]
+    valley_prices = lows[recent_valleys]
     valley_std = np.std(valley_prices) / np.mean(valley_prices)
 
     if valley_std > 0.03:  # 표준편차 >3%면 수평 아님
@@ -626,12 +655,12 @@ def detect_descending_triangle(df: pd.DataFrame) -> ChartPatternResult:
             pattern_name="Descending Triangle",
             detected=False,
             confidence=0.0,
-            current_price=prices[-1],
+            current_price=closes[-1],
             description=f"저점 수평성 부족 (std: {valley_std:.2%} > 3%)",
         )
 
     # 고점 하락 추세 확인 (선형회귀)
-    peak_prices = prices[recent_peaks]
+    peak_prices = highs[recent_peaks]
     slope, intercept, r_value, _, _ = linregress(recent_peaks, peak_prices)
 
     daily_slope = slope / pattern_length
@@ -641,7 +670,7 @@ def detect_descending_triangle(df: pd.DataFrame) -> ChartPatternResult:
             pattern_name="Descending Triangle",
             detected=False,
             confidence=0.0,
-            current_price=prices[-1],
+            current_price=closes[-1],
             description=f"고점 하락 추세 불충분 (기울기: {daily_slope * 100:.3%}/day)",
         )
 
@@ -654,7 +683,7 @@ def detect_descending_triangle(df: pd.DataFrame) -> ChartPatternResult:
             pattern_name="Descending Triangle",
             detected=False,
             confidence=0.0,
-            current_price=prices[-1],
+            current_price=closes[-1],
             description=f"수렴 부족 (gap: {last_gap / first_gap:.1%})",
         )
 
@@ -680,7 +709,7 @@ def detect_descending_triangle(df: pd.DataFrame) -> ChartPatternResult:
         confidence=confidence,
         completed_date=completed_date,
         days_ago=days_ago,
-        current_price=prices[-1],
+        current_price=closes[-1],
         breakout_level=support_level,  # 하락 돌파 예상
         support_level=target,  # 목표가 (하락)
         description=f"저점 수평도 {valley_std:.2%}, 고점 기울기 -{resistance_slope_percent:.2%}/day, {pattern_length}일",
@@ -861,6 +890,149 @@ def detect_bearish_flag(df: pd.DataFrame) -> ChartPatternResult:
     )
 
 
+def detect_support_level_test(df: pd.DataFrame) -> ChartPatternResult:
+    """Support Level Test 패턴 감지
+
+    여러 저점이 같은 가격대에서 반복 테스트되는 패턴
+    강한 지지선 확인 → 반등 가능성 높음
+    """
+    if len(df) < 30:
+        return ChartPatternResult(
+            pattern_name="Support Level Test",
+            detected=False,
+            confidence=0.0,
+            current_price=df["Close"].iloc[-1],
+            description="데이터 부족 (최소 30일 필요)",
+        )
+
+    import numpy as np
+
+    lows = df["Low"].values
+    closes = df["Close"].values
+
+    # 최근 60일 내 저점 찾기
+    recent_window = min(60, len(df))
+    recent_lows = lows[-recent_window:]
+
+    valleys, _ = find_peaks(-recent_lows, distance=5, prominence=recent_lows.mean() * 0.015)
+
+    # 최소 3개 저점 필요
+    if len(valleys) < 3:
+        return ChartPatternResult(
+            pattern_name="Support Level Test",
+            detected=False,
+            confidence=0.0,
+            current_price=closes[-1],
+            description="저점 부족 (최소 3개 필요)",
+        )
+
+    # 가격 클러스터링: 가장 밀집된 그룹 찾기
+    all_valley_prices = recent_lows[valleys]
+    sorted_indices = np.argsort(all_valley_prices)
+    sorted_valleys = valleys[sorted_indices]
+    sorted_prices = all_valley_prices[sorted_indices]
+
+    # 연속된 3개 이상 valleys 중 6% 범위 내인 그룹 찾기
+    best_cluster = None
+    best_cluster_size = 0
+
+    for i in range(len(sorted_valleys) - 2):
+        for j in range(i + 2, len(sorted_valleys)):
+            cluster_prices = sorted_prices[i : j + 1]
+            price_range = (cluster_prices[-1] - cluster_prices[0]) / cluster_prices[0]
+
+            if price_range <= 0.06:  # 6% 이내
+                cluster_size = j - i + 1
+                if cluster_size > best_cluster_size:
+                    best_cluster_size = cluster_size
+                    best_cluster = sorted_valleys[i : j + 1]
+
+    if best_cluster is None or best_cluster_size < 3:
+        return ChartPatternResult(
+            pattern_name="Support Level Test",
+            detected=False,
+            confidence=0.0,
+            current_price=closes[-1],
+            description="같은 레벨의 저점 그룹 없음 (최소 3개, 6% 범위 필요)",
+        )
+
+    # 선택된 클러스터로 분석
+    recent_valleys = best_cluster
+    valley_prices = recent_lows[recent_valleys]
+    min_price = np.min(valley_prices)
+    max_price = np.max(valley_prices)
+    price_range_pct = (max_price - min_price) / min_price
+
+    # 각 저점에서 반등 확인 (5% 이상)
+    rebounds = []
+    for valley_idx in recent_valleys:
+        actual_idx = len(lows) - recent_window + valley_idx
+        valley_price = lows[actual_idx]
+
+        # 저점 이후 5일 내 최고가
+        after_window = min(5, len(closes) - actual_idx - 1)
+        if after_window > 0:
+            after_highs = df["High"].iloc[actual_idx : actual_idx + after_window + 1].values
+            rebound_pct = (np.max(after_highs) - valley_price) / valley_price
+            rebounds.append(rebound_pct)
+
+    avg_rebound = np.mean(rebounds) if rebounds else 0
+
+    if avg_rebound < 0.05:  # 평균 반등 5% 미만이면 지지선 약함
+        return ChartPatternResult(
+            pattern_name="Support Level Test",
+            detected=False,
+            confidence=0.0,
+            current_price=closes[-1],
+            description=f"반등 부족 (평균 {avg_rebound:.1%} < 5%)",
+        )
+
+    # Confidence 계산
+    confidence = 0.0
+
+    # 1. 테스트 횟수 (0-0.4): 많을수록 강한 지지선
+    test_count_score = min(len(recent_valleys) / 5.0, 1.0)
+    confidence += test_count_score * 0.4
+
+    # 2. 가격 일치도 (0-0.3): 좁을수록 강한 지지선
+    range_score = max(0.0, 1.0 - (price_range_pct / 0.06))
+    confidence += range_score * 0.3
+
+    # 3. 반등 강도 (0-0.3): 강할수록 지지선 효과
+    rebound_score = min(avg_rebound / 0.20, 1.0)
+    confidence += rebound_score * 0.3
+
+    # Support level
+    support_level = np.mean(valley_prices)
+
+    # 마지막 저점
+    last_valley_idx_global = len(lows) - recent_window + recent_valleys[-1]
+    completed_date = df.index[last_valley_idx_global].strftime("%Y-%m-%d")
+    days_ago = len(df) - last_valley_idx_global - 1
+
+    # Target: 평균 반등률 적용
+    target = support_level * (1 + avg_rebound)
+
+    return ChartPatternResult(
+        pattern_name="Support Level Test",
+        detected=True,
+        confidence=confidence,
+        completed_date=completed_date,
+        days_ago=days_ago,
+        current_price=closes[-1],
+        breakout_level=None,  # 지지선 테스트는 돌파 레벨 없음
+        support_level=support_level,
+        description=f"{len(recent_valleys)}회 테스트, 가격 범위 {price_range_pct:.1%}, 평균 반등 {avg_rebound:.1%}",
+        key_levels={
+            "support": float(support_level),
+            "min_price": float(min_price),
+            "max_price": float(max_price),
+            "target": float(target),
+            "test_count": len(recent_valleys),
+        },
+    )
+
+
 def detect_chart_patterns(
     df: pd.DataFrame, snapshot: IndicatorSnapshot | None = None
 ) -> dict[str, ChartPatternResult]:
@@ -874,6 +1046,7 @@ def detect_chart_patterns(
         "descending_triangle": detect_descending_triangle(df),
         "bullish_flag": detect_bullish_flag(df),
         "bearish_flag": detect_bearish_flag(df),
+        "support_level_test": detect_support_level_test(df),
     }
 
     if snapshot:

@@ -88,11 +88,27 @@ LLM 없이 기술적 분석만 수행하는 빠른 진단 기능.
 | Descending Triangle | 30-90일 | 수평/기울기/수렴 기반 | 수평 지지 + 하락 저항, 하락 돌파 시 추가 하락 |
 | Bullish Flag | 최소 30일 | Pole 강도 기반 | 강한 상승 (>10%) + 하락 조정, 재상승 기대 |
 | Bearish Flag | 최소 30일 | Pole 강도 기반 | 강한 하락 (>10%) + 상승 조정, 재하락 기대 |
+| Support Level Test | 최근 60일 | 테스트 횟수/범위/반등 기반 | 3회 이상 같은 가격대(6% 범위) 테스트, 강한 지지선 확인 |
 
 기타 패턴:
 | 패턴 | 기간 | 설명 |
 |------|------|------|
 | Support/Resistance Test | 최근 20일 | ±2% 레벨 근처 |
+
+**버그 수정 (2026-04-25):**
+
+- **CRITICAL: High/Low 가격 데이터 사용**
+  - 기존 문제: 모든 패턴이 Close 가격만 사용하여 peaks/valleys를 부정확하게 감지
+  - 수정 내용:
+    - Cup & Handle, Head & Shoulders: High 가격으로 peaks 감지
+    - Double Bottom: Low 가격으로 valleys 감지
+    - Triangle 패턴들: High/Low 가격으로 peaks/valleys 감지
+  - 영향: 실제 시장 데이터에서 누락되던 패턴들이 정상적으로 감지됨
+  
+- **Double Bottom 개선: 최근 패턴 우선**
+  - 기존 동작: 첫 번째로 발견된 패턴만 리턴
+  - 개선 내용: 모든 유효 패턴을 찾아 가장 최근 패턴(days_ago가 가장 작은 것) 리턴
+  - 장점: 오래된 패턴보다 최근 패턴이 투자 의사결정에 더 유용
 
 **가격 레벨 분석 (Phase 2):**
 

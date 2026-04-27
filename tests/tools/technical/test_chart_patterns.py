@@ -553,7 +553,7 @@ def test_detect_chart_patterns_integration():
 
     patterns = detect_chart_patterns(df, snapshot)
 
-    # Verify all 8 patterns are included
+    # Verify all 9 patterns are included
     expected_patterns = {
         "cup_and_handle",
         "double_bottom",
@@ -562,6 +562,7 @@ def test_detect_chart_patterns_integration():
         "descending_triangle",
         "bullish_flag",
         "bearish_flag",
+        "support_level_test",
         "support_resistance_test",
     }
 
@@ -592,3 +593,112 @@ def test_support_resistance_test_near_level():
 
     assert result.detected is True
     assert "테스트 중" in result.description
+
+
+def test_support_level_test_multiple_touches():
+    """Support Level Test: 여러 저점이 같은 가격대"""
+    from src.tools.technical.components.chart_patterns import detect_support_level_test
+
+    # 4개 저점이 7.50~7.72 범위 (약 3%)
+    dates = pd.date_range(end=pd.Timestamp.now(), periods=60, freq="D")
+
+    valleys = {10: 7.50, 25: 7.68, 40: 7.72, 55: 7.66}
+
+    prices = []
+    for i in range(60):
+        if i in valleys:
+            prices.append(valleys[i])
+        elif i in [11, 12, 13, 26, 27, 28, 41, 42, 43, 56, 57, 58]:
+            # 저점 직후 10% 반등
+            prices.append(prices[-1] * 1.10)
+        else:
+            # 반등 레벨 유지 (8.2~8.4)
+            prices.append(8.3)
+
+    df = pd.DataFrame(
+        {
+            "Open": prices,
+            "High": [p * 1.02 for p in prices],
+            "Low": prices,
+            "Close": [p * 1.01 for p in prices],
+        },
+        index=dates,
+    )
+
+    result = detect_support_level_test(df)
+
+    assert result.detected is True
+    assert result.confidence > 0.5
+    assert result.pattern_name == "Support Level Test"
+    assert result.key_levels is not None
+    assert result.key_levels["test_count"] >= 3
+    assert "회 테스트" in result.description
+
+
+def test_support_level_test_too_wide_range():
+    """Support Level Test: 가격 범위 너무 넓으면 미감지"""
+    from src.tools.technical.components.chart_patterns import detect_support_level_test
+
+    # 저점들이 10% 차이 (너무 넓음)
+    dates = pd.date_range(end=pd.Timestamp.now(), periods=60, freq="D")
+    prices = []
+    for i in range(60):
+        if i == 10:
+            prices.append(7.0)
+        elif i == 25:
+            prices.append(7.7)  # 10% 차이
+        elif i == 40:
+            prices.append(7.3)
+        else:
+            prices.append(9.0)
+
+    df = pd.DataFrame(
+        {
+            "Open": prices,
+            "High": [p * 1.05 for p in prices],
+            "Low": prices,
+            "Close": [p * 1.02 for p in prices],
+        },
+        index=dates,
+    )
+
+    result = detect_support_level_test(df)
+
+    assert result.detected is False
+    assert "범위 초과" in result.description or "같은 레벨의 저점 그룹 없음" in result.description
+
+
+def test_support_level_test_weak_rebounds():
+    """Support Level Test: 반등 약하면 미감지"""
+    from src.tools.technical.components.chart_patterns import detect_support_level_test
+
+    # 저점 가격대는 유사하지만 반등이 약함 (2%)
+    dates = pd.date_range(end=pd.Timestamp.now(), periods=60, freq="D")
+    prices = []
+    for i in range(60):
+        if i == 10:
+            prices.append(7.35)
+        elif i == 25:
+            prices.append(7.71)
+        elif i == 40:
+            prices.append(7.66)
+        elif i in [11, 12, 26, 27, 41, 42]:
+            # 약한 반등 (2% only)
+            prices.append(prices[-1] * 1.02)
+        else:
+            prices.append(7.5)
+
+    df = pd.DataFrame(
+        {
+            "Open": prices,
+            "High": [p * 1.01 for p in prices],
+            "Low": prices,
+            "Close": prices,
+        },
+        index=dates,
+    )
+
+    result = detect_support_level_test(df)
+
+    assert result.detected is False
+    assert "반등 부족" in result.description
