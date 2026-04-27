@@ -7,19 +7,6 @@
 
 ---
 
-## 🎯 Current Focus (2026-04-27)
-
-**진행 중:**
-- Technical Component Enhancements Phase 1 (60% 완료)
-  - 상세 작업: [TODOS.md](TODOS.md)
-
-**다음 우선순위:**
-1. Technical Component Phase 1 완료 (Pocket Pivot, Tennis Ball/Egg)
-2. Actionable Signal Output 구현
-3. Backtesting Engine 시작
-
----
-
 ## ✅ Completed
 
 ### 2026-04-27
