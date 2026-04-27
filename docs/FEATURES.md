@@ -138,6 +138,16 @@ LLM 없이 기술적 분석만 수행하는 빠른 진단 기능.
     - MA200 라인 정상 표시
     - 토큰 재발급 1분 제한 회피
 
+- **2026-04-27: 차트 지표 컬럼 필터링 버그**
+  - 기존 문제: TechnicalData.from_analysis()가 OHLCV + 일부 지표만 저장하여 차트에 MACD/RSI/Supertrend 미표시
+  - 원인: indicator_cols 필터가 "SMA_", "sma_", "vol_sma_", "supertrend_direction"만 포함
+  - 수정 내용: 필터에 "MACD", "RSI", "SUPERT", "Vol_SMA_" 패턴 추가
+  - 영향: 
+    - MACD 패널 (MACD_12_26_9, MACDh_12_26_9, MACDs_12_26_9) 정상 표시
+    - RSI 패널 (RSI_14) 정상 표시
+    - Supertrend 라인 (SUPERT_10_3.0) 정상 표시
+    - 거래량 이평선 (Vol_SMA_20) 정상 표시
+
 **가격 레벨 분석 (Phase 2):**
 
 | 소스 | 포함 레벨 | 우선순위 |

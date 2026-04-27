@@ -171,7 +171,18 @@ class TechnicalResult(BaseModel):
         indicator_cols = [
             col
             for col in df_copy.columns
-            if col.startswith(("SMA_", "sma_", "vol_sma_", "supertrend_direction"))
+            if col.startswith(
+                (
+                    "SMA_",
+                    "sma_",
+                    "vol_sma_",
+                    "Vol_SMA_",
+                    "supertrend_direction",
+                    "MACD",
+                    "RSI",
+                    "SUPERT",
+                )
+            )
         ]
         keep_cols = [c for c in base_cols + indicator_cols if c in df_copy.columns]
 
