@@ -252,11 +252,11 @@ def render_technical_chart(
         if _has_values("SMA_200"):
             addplots.append(mpf.make_addplot(df_plot["SMA_200"], color="#F44336", width=1.8))
 
-        # Supertrend with directional coloring (pandas_ta raw column names)
-        if {"SUPERTl_10_3.0", "SUPERTs_10_3.0", "SUPERTd_10_3.0"}.issubset(df_plot.columns):
-            st_dir = df_plot["SUPERTd_10_3.0"].fillna(0).astype("int64")
-            st_up = df_plot["SUPERTl_10_3.0"].where(st_dir == 1)
-            st_dn = df_plot["SUPERTs_10_3.0"].where(st_dir == -1)
+        # Supertrend with directional coloring
+        if {"SuperTrend_Up", "SuperTrend_Dn", "SuperTrend_Dir"}.issubset(df_plot.columns):
+            st_dir = df_plot["SuperTrend_Dir"].astype("int64")
+            st_up = df_plot["SuperTrend_Up"].where(st_dir == 1)
+            st_dn = df_plot["SuperTrend_Dn"].where(st_dir == -1)
 
             if st_up.notna().any():
                 addplots.append(
@@ -269,8 +269,8 @@ def render_technical_chart(
             buy_signal = (st_dir == 1) & (st_dir.shift(1) == -1)
             sell_signal = (st_dir == -1) & (st_dir.shift(1) == 1)
 
-            buy_y = df_plot["SUPERTl_10_3.0"].where(buy_signal)
-            sell_y = df_plot["SUPERTs_10_3.0"].where(sell_signal)
+            buy_y = df_plot["SuperTrend_Up"].where(buy_signal)
+            sell_y = df_plot["SuperTrend_Dn"].where(sell_signal)
 
             if buy_y.notna().any():
                 addplots.append(
@@ -301,14 +301,14 @@ def render_technical_chart(
 
         panel_ratios = (6, 2)
 
-        # MACD panel (pandas_ta raw column names)
-        has_macd = {"MACD_12_26_9", "MACDs_12_26_9", "MACDh_12_26_9"}.issubset(
-            df_plot.columns
-        ) and any(_has_values(c) for c in ["MACD_12_26_9", "MACDs_12_26_9", "MACDh_12_26_9"])
+        # MACD panel
+        has_macd = {"MACD", "MACD_Signal", "MACD_Hist"}.issubset(df_plot.columns) and any(
+            _has_values(c) for c in ["MACD", "MACD_Signal", "MACD_Hist"]
+        )
         if has_macd:
             panel_ratios = (*panel_ratios, 2)
-            macd_hist_pos = df_plot["MACDh_12_26_9"].where(df_plot["MACDh_12_26_9"] >= 0)
-            macd_hist_neg = df_plot["MACDh_12_26_9"].where(df_plot["MACDh_12_26_9"] < 0)
+            macd_hist_pos = df_plot["MACD_Hist"].where(df_plot["MACD_Hist"] >= 0)
+            macd_hist_neg = df_plot["MACD_Hist"].where(df_plot["MACD_Hist"] < 0)
 
             if macd_hist_pos.notna().any():
                 addplots.append(
@@ -333,11 +333,9 @@ def render_technical_chart(
                     )
                 )
 
+            addplots.append(mpf.make_addplot(df_plot["MACD"], panel=2, color="#4DA3FF", width=1.0))
             addplots.append(
-                mpf.make_addplot(df_plot["MACD_12_26_9"], panel=2, color="#4DA3FF", width=1.0)
-            )
-            addplots.append(
-                mpf.make_addplot(df_plot["MACDs_12_26_9"], panel=2, color="#FF8C00", width=0.9)
+                mpf.make_addplot(df_plot["MACD_Signal"], panel=2, color="#FF8C00", width=0.9)
             )
 
         # cRSI panel

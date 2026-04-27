@@ -58,7 +58,7 @@ async def test_plan4_complete_flow():
     assert "Vol_SMA_120" in df.columns
     assert "Swing_High" in df.columns
     assert "Swing_Low" in df.columns
-    assert "MACD_5_35_5" in df.columns
+    assert "MACD_Fast" in df.columns
 
     # Step 2: Score with components
     scorer = TechnicalScorer()

@@ -174,14 +174,15 @@ class TechnicalResult(BaseModel):
             if col.startswith(
                 (
                     "SMA_",
-                    "Vol_SMA_",
-                    "SUPERT",
+                    "SuperTrend_",
                     "MACD",
                     "cRSI",
-                    "RSI",
-                    "BB",
+                    "Vol_SMA_",
+                    "Is_Stage2",
+                    "BB_",
                     "ADX",
                     "ATR",
+                    "RSI",
                 )
             )
             or col
