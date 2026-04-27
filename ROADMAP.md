@@ -1,11 +1,71 @@
 # invest-jarvis Development Roadmap
 
-> 생성일: 2026-04-23
+> 📍 **Navigation:** [ROADMAP](ROADMAP.md) (You are here) ↔ [TODOS](TODOS.md)
+> 
+> 최종 업데이트: 2026-04-27
 > 목표: "핵심 인사이트 부족" 문제 해결 → 명확한 투자 신호 제공
 
 ---
 
-## Phase 1: Actionable Signal (즉시 - 1-2시간 CC 구현)
+## 🎯 Current Focus (2026-04-27)
+
+**진행 중:**
+- Technical Component Enhancements Phase 1 (60% 완료)
+  - 상세 작업: [TODOS.md](TODOS.md)
+
+**다음 우선순위:**
+1. Technical Component Phase 1 완료 (Pocket Pivot, Tennis Ball/Egg)
+2. Actionable Signal Output 구현
+3. Backtesting Engine 시작
+
+---
+
+## ✅ Completed
+
+### 2026-04-27
+- **Chart Visualization Enhancement** - PR #21
+  - 6개 이동평균선 (MA10/20/50/120/150/200) with 사용자 색상 스키마
+  - Supertrend 추세선 + 매수/매도 시그널 마커
+  - cRSI 패널 (동적 밴드), MACD 패널 (빨강/초록 히스토그램)
+  - Volume + MA50 오버레이
+  - 다크 테마 (통일된 배경), MA 라벨 (y축 오른쪽 그룹화)
+  - Stage2 음영, 지지/저항선, 차트 패턴 마커
+  - **성과:** 19 commits, 94 tests passing, 코드 리뷰 98점
+
+### 2026-04-25
+- **VCP 2-Stage & Volume Patterns** - PR #20
+  - VCP Strong/General 구분
+  - 3개 새 거래량 패턴
+
+### 2026-04-23
+- **Technical Chart Visualization** - PR #19
+  - 기본 차트 렌더링 및 성능 메트릭
+
+---
+
+## 🚧 In Progress
+
+### Technical Component Enhancements (Phase 1)
+**진행률:** 60% (3/5 core tasks done)  
+**상세:** [TODOS.md](TODOS.md)
+
+**완료:**
+- [x] Chart Enhancement (PR #21)
+- [x] VCP 2-Stage (PR #20)
+- [x] Column name standardization
+
+**남은 작업:**
+- [ ] Pocket Pivot 구현
+- [ ] Tennis Ball/Egg 패턴
+- [ ] Power Gap Up 강화
+- [ ] Score 재조정
+- [ ] 단위/통합 테스트
+
+---
+
+## 📋 Planned
+
+### Phase 1: Actionable Signal (1-2시간)
 
 **목표:** "핵심 인사이트 부족" 문제 해결. 명확한 액션 + 구체적 근거 제공.
 
