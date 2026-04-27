@@ -224,16 +224,14 @@ def render_technical_chart(
         if _has_values("SMA_200"):
             addplots.append(mpf.make_addplot(df_plot["SMA_200"], color="#FF2D55", width=1.5))
 
-        # Supertrend
-        if "SUPERTd_10_3.0" in df_plot.columns and "SUPERT_10_3.0" in df_plot.columns:
-            st_dir = df_plot["SUPERTd_10_3.0"].astype("int64")
+        # Supertrend - 전체 라인 표시 (단일 색으로 연속되게)
+        if "SUPERT_10_3.0" in df_plot.columns:
             st_line = df_plot["SUPERT_10_3.0"]
-            st_up = st_line.where(st_dir == 1)
-            st_dn = st_line.where(st_dir == -1)
-            if st_up.notna().any():
-                addplots.append(mpf.make_addplot(st_up, color="green", width=2, secondary_y=False))
-            if st_dn.notna().any():
-                addplots.append(mpf.make_addplot(st_dn, color="red", width=2, secondary_y=False))
+            if st_line.notna().any():
+                # 전체 라인을 cyan 색으로 표시 (direction은 지표에서 확인)
+                addplots.append(
+                    mpf.make_addplot(st_line, color="#00CED1", width=2.5, secondary_y=False)
+                )
 
         # Volume SMA
         if _has_values("Vol_SMA_20"):
@@ -265,13 +263,13 @@ def render_technical_chart(
             )
 
         # RSI panel
-        has_rsi = "RSI" in df_plot.columns and _has_values("RSI")
+        has_rsi = "RSI_14" in df_plot.columns and _has_values("RSI_14")
         if has_rsi:
             rsi_panel = 3 if has_macd else 2
             panel_ratios = (*panel_ratios, 2)
             addplots.append(
                 mpf.make_addplot(
-                    df_plot["RSI"],
+                    df_plot["RSI_14"],
                     panel=rsi_panel,
                     color="#FF00FF",
                     width=1.2,
