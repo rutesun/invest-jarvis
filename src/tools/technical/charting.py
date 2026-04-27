@@ -131,6 +131,17 @@ def _mark_patterns(ax: Any, df: pd.DataFrame, patterns: dict[str, Any]) -> None:
         try:
             # Find index closest to completion date
             completion_idx = pd.to_datetime(completed_date)
+
+            # Normalize timezone for comparison (df.index is usually timezone-aware)
+            if df.index.tz is not None:
+                if completion_idx.tz is None:
+                    completion_idx = completion_idx.tz_localize(df.index.tz)
+                else:
+                    completion_idx = completion_idx.tz_convert(df.index.tz)
+            else:
+                if completion_idx.tz is not None:
+                    completion_idx = completion_idx.tz_localize(None)
+
             if completion_idx not in df.index:
                 # Find nearest
                 nearest_idx = min(df.index, key=lambda x: abs(x - completion_idx))

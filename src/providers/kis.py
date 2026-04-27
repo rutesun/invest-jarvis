@@ -124,6 +124,8 @@ class KISProvider(BaseProvider):
         if not df.empty:
             df.set_index("Date", inplace=True)
             df.sort_index(inplace=True)
+            # Add timezone (Asia/Seoul) to match yfinance format
+            df.index = df.index.tz_localize("Asia/Seoul")
 
         return df
 

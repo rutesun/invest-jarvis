@@ -206,9 +206,33 @@ async def run_deep_dive(ticker_or_name: str, provider: str) -> dict:
     if not api_key:
         raise ValueError(f"Missing {api_key_env} environment variable")
 
-    yf_provider = YFinanceProvider()
+    # Price data provider: 한국 주식이면 KIS API, 아니면 yfinance
+    from src.providers.kis import KISProvider
+
+    is_korean_stock = ticker.endswith((".KS", ".KQ"))
+    kis_key = os.getenv("KIS_APP_KEY")
+    kis_secret = os.getenv("KIS_APP_SECRET")
+
+    if is_korean_stock and kis_key and kis_secret:
+        # 한국 주식 + KIS API 키 있음 → KIS 사용 (실시간)
+        # KIS API는 .KS/.KQ 접미사 없이 종목코드만 사용
+        logger.info(f"한국 주식 {ticker} → KIS API 사용 (실시간)")
+        from src.providers.kis_wrapper import KISProviderWrapper
+
+        price_provider = KISProviderWrapper(
+            kis_provider=KISProvider(app_key=kis_key, app_secret=kis_secret)
+        )
+    else:
+        # 미국 주식 또는 KIS 키 없음 → yfinance fallback
+        if is_korean_stock:
+            logger.warning(
+                f"한국 주식 {ticker}이지만 KIS API 키가 없습니다. "
+                "yfinance로 fallback (3일 지연 가능)"
+            )
+        price_provider = YFinanceProvider()
+
     scorer = TechnicalScorer()
-    technical_tool = TechnicalAnalysisTool(provider=yf_provider, scorer=scorer)
+    technical_tool = TechnicalAnalysisTool(provider=price_provider, scorer=scorer)
     fundamental_tool = FundamentalTool()
     news_tool = NewsTool()
     llm = LLMProvider.create(
@@ -229,11 +253,8 @@ async def run_deep_dive(ticker_or_name: str, provider: str) -> dict:
     disclosure_tool = DisclosureTool(sec_fetcher=sec_fetcher, dart_fetcher=dart_fetcher)
 
     # 수급 툴: KIS API (get_investor_trend) 사용. 키 없으면 FlowTool이 graceful failure 처리
-    from src.providers.kis import KISProvider
     from src.tools.flow import FlowTool
 
-    kis_key = os.getenv("KIS_APP_KEY")
-    kis_secret = os.getenv("KIS_APP_SECRET")
     if not (kis_key and kis_secret):
         logger.warning(
             "KIS_APP_KEY 또는 KIS_APP_SECRET이 설정되지 않았습니다. "

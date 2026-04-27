@@ -62,8 +62,8 @@ LLM 없이 기술적 분석만 수행하는 빠른 진단 기능.
 
 | 레이어 | 데이터 소스 | LLM 출력 |
 |--------|-----------|----------|
-| 기술적 | yfinance → 8개 컴포넌트 | TechnicalSummaryOutput |
-| **패턴** | OHLC → 4개 차트 패턴 | ChartPatternResult |
+| 기술적 | **KIS API (한국) / yfinance (미국)** → 8개 컴포넌트 | TechnicalSummaryOutput |
+| **패턴** | OHLC → 9개 차트 패턴 | ChartPatternResult |
 | **가격 레벨** | 6개 소스 (MA, Fib, Pivot, Swing, ATR, Pattern) | PriceLevels |
 | 펀더멘탈 | yfinance (선택) | FundamentalSummaryOutput |
 | 뉴스 | yfinance 뉴스 | NewsAnalysisOutput |
@@ -71,6 +71,11 @@ LLM 없이 기술적 분석만 수행하는 빠른 진단 기능.
 | 수급 | KIS API (한국주식 전용) | - |
 | **종합** | 위 전체 통합 | IntegratedAnalysisOutput |
 | **실행 시그널** | 기술 + 패턴 + 가격 레벨 | ActionableSignalOutput |
+
+**데이터 소스 자동 선택:**
+- 한국 주식 (`.KS`, `.KQ`) 감지 시 → KIS API 사용 (실시간)
+- KIS API 키 없으면 → yfinance로 자동 fallback (3일 지연 가능)
+- 미국/글로벌 주식 → yfinance 사용
 
 **차트 패턴 감지 (Phase 2):**
 
