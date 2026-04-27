@@ -88,7 +88,7 @@ async def test_screener_pipeline_run(
     result = await pipeline.run(market="all")
 
     assert result["market"] == "all"
-    assert len(result["leaders"]) == 2
+    assert len(result.get("kr_leaders", []) + result.get("us_leaders", [])) == 2
     assert len(result["themes"]) >= 1
     assert result["themes"][0]["name"] == "AI/반도체"
     assert "news" in result
@@ -207,7 +207,7 @@ async def test_screener_pipeline_format_output(
 
     # Check markdown structure
     assert "# Market Screener" in output
-    assert "## 주도주 TOP 20" in output
+    assert "## 주도주 TOP 50" in output
     assert "삼성전자" in output
     assert "KOSPI" in output
     assert "47" in output  # momentum_total

@@ -28,7 +28,10 @@ def mock_quote_response():
 
 @pytest.mark.asyncio
 async def test_kis_get_access_token(mock_token_response):
-    with patch("httpx.AsyncClient") as mock_client:
+    with (
+        patch("httpx.AsyncClient") as mock_client,
+        patch.object(KISProvider, "_read_cached_token", return_value=None),
+    ):
         mock_response = MagicMock()
         mock_response.json.return_value = mock_token_response
         mock_response.raise_for_status = MagicMock()
@@ -46,7 +49,10 @@ async def test_kis_get_access_token(mock_token_response):
 
 @pytest.mark.asyncio
 async def test_kis_get_quote(mock_token_response, mock_quote_response):
-    with patch("httpx.AsyncClient") as mock_client:
+    with (
+        patch("httpx.AsyncClient") as mock_client,
+        patch.object(KISProvider, "_read_cached_token", return_value=None),
+    ):
         mock_token_resp = MagicMock()
         mock_token_resp.json.return_value = mock_token_response
         mock_token_resp.raise_for_status = MagicMock()
