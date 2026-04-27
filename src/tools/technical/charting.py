@@ -76,9 +76,9 @@ def _right_value_labels(ax: Any, df: pd.DataFrame) -> None:
         return
     x = df.index[-1]
     labels = [
-        ("MA50", "sma_50", "#00D1FF", 0),
-        ("MA20", "sma_20", "#4DA3FF", 10),
-        ("MA200", "sma_200", "#FF2D55", -10),
+        ("MA50", "SMA_50", "#00D1FF", 0),
+        ("MA20", "SMA_20", "#4DA3FF", 10),
+        ("MA200", "SMA_200", "#FF2D55", -10),
     ]
     for name, col, color, dy in labels:
         if col not in df.columns:
@@ -217,16 +217,16 @@ def render_technical_chart(
             return col in df_plot.columns and bool(df_plot[col].notna().any())
 
         # Moving averages
-        if _has_values("sma_20"):
-            addplots.append(mpf.make_addplot(df_plot["sma_20"], color="#4DA3FF", width=1.2))
-        if _has_values("sma_50"):
-            addplots.append(mpf.make_addplot(df_plot["sma_50"], color="#00D1FF", width=2.6))
-        if _has_values("sma_200"):
-            addplots.append(mpf.make_addplot(df_plot["sma_200"], color="#FF2D55", width=1.5))
+        if _has_values("SMA_20"):
+            addplots.append(mpf.make_addplot(df_plot["SMA_20"], color="#4DA3FF", width=1.2))
+        if _has_values("SMA_50"):
+            addplots.append(mpf.make_addplot(df_plot["SMA_50"], color="#00D1FF", width=2.6))
+        if _has_values("SMA_200"):
+            addplots.append(mpf.make_addplot(df_plot["SMA_200"], color="#FF2D55", width=1.5))
 
         # Supertrend
-        if _has_values("supertrend_direction") and "SUPERT_10_3.0" in df_plot.columns:
-            st_dir = df_plot["supertrend_direction"].astype("int64")
+        if "SUPERTd_10_3.0" in df_plot.columns and "SUPERT_10_3.0" in df_plot.columns:
+            st_dir = df_plot["SUPERTd_10_3.0"].astype("int64")
             st_line = df_plot["SUPERT_10_3.0"]
             st_up = st_line.where(st_dir == 1)
             st_dn = st_line.where(st_dir == -1)
@@ -236,20 +236,20 @@ def render_technical_chart(
                 addplots.append(mpf.make_addplot(st_dn, color="red", width=2, secondary_y=False))
 
         # Volume SMA
-        if _has_values("vol_sma_20"):
-            addplots.append(mpf.make_addplot(df_plot["vol_sma_20"], panel=1, color="gold", width=1))
+        if _has_values("Vol_SMA_20"):
+            addplots.append(mpf.make_addplot(df_plot["Vol_SMA_20"], panel=1, color="gold", width=1))
 
         panel_ratios = (6, 2)
 
         # MACD panel
-        has_macd = {"macd", "macd_signal", "macd_histogram"}.issubset(df_plot.columns) and any(
-            _has_values(c) for c in ["macd", "macd_signal", "macd_histogram"]
-        )
+        has_macd = {"MACD_12_26_9", "MACDs_12_26_9", "MACDh_12_26_9"}.issubset(
+            df_plot.columns
+        ) and any(_has_values(c) for c in ["MACD_12_26_9", "MACDs_12_26_9", "MACDh_12_26_9"])
         if has_macd:
             panel_ratios = (*panel_ratios, 2)
             addplots.append(
                 mpf.make_addplot(
-                    df_plot["macd_histogram"],
+                    df_plot["MACDh_12_26_9"],
                     panel=2,
                     type="bar",
                     color="#888888",
@@ -257,19 +257,21 @@ def render_technical_chart(
                     width=0.7,
                 )
             )
-            addplots.append(mpf.make_addplot(df_plot["macd"], panel=2, color="#4DA3FF", width=1.3))
             addplots.append(
-                mpf.make_addplot(df_plot["macd_signal"], panel=2, color="#FF8C00", width=1.1)
+                mpf.make_addplot(df_plot["MACD_12_26_9"], panel=2, color="#4DA3FF", width=1.3)
+            )
+            addplots.append(
+                mpf.make_addplot(df_plot["MACDs_12_26_9"], panel=2, color="#FF8C00", width=1.1)
             )
 
         # RSI panel
-        has_rsi = "rsi" in df_plot.columns and _has_values("rsi")
+        has_rsi = "RSI" in df_plot.columns and _has_values("RSI")
         if has_rsi:
             rsi_panel = 3 if has_macd else 2
             panel_ratios = (*panel_ratios, 2)
             addplots.append(
                 mpf.make_addplot(
-                    df_plot["rsi"],
+                    df_plot["RSI"],
                     panel=rsi_panel,
                     color="#FF00FF",
                     width=1.2,
