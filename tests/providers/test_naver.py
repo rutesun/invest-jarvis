@@ -7,30 +7,28 @@ from src.providers.naver import NaverProvider
 
 @pytest.fixture
 def mock_theme_list_response():
-    return {
-        "stocks": [
-            {
-                "name": "AI/반도체",
-                "changeRate": "3.20",
-                "themeCode": "TH001",
-            },
-            {
-                "name": "2차전지",
-                "changeRate": "2.10",
-                "themeCode": "TH002",
-            },
-        ]
-    }
+    """API returns array directly, not wrapped in {"stocks": [...]}."""
+    return [
+        {
+            "name": "AI/반도체",
+            "changeRate": "3.20",
+            "no": "TH001",
+        },
+        {
+            "name": "2차전지",
+            "changeRate": "2.10",
+            "no": "TH002",
+        },
+    ]
 
 
 @pytest.fixture
 def mock_theme_stocks_response():
-    return {
-        "stocks": [
-            {"itemcode": "005930", "itemname": "삼성전자", "sosok": "0"},
-            {"itemcode": "000660", "itemname": "SK하이닉스", "sosok": "0"},
-        ]
-    }
+    """API returns array directly."""
+    return [
+        {"itemcode": "005930", "itemname": "삼성전자", "sosok": "0"},
+        {"itemcode": "000660", "itemname": "SK하이닉스", "sosok": "0"},
+    ]
 
 
 @pytest.mark.asyncio

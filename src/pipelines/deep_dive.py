@@ -65,7 +65,7 @@ class DeepDivePipeline:
                 - integrated_analysis: IntegratedAnalysisOutput | None (종합 인사이트)
                 - actionable_signal: ActionableSignalOutput | None (실행 가능한 투자 시그널)
         """
-        tech_result = await self.technical_tool.execute(ticker)
+        tech_result = await self.technical_tool.execute(ticker, period="2y")
         if not tech_result.success:
             raise RuntimeError(f"Technical analysis failed: {tech_result.error}")
 
@@ -166,7 +166,7 @@ class DeepDivePipeline:
                     "resistance_levels": price_levels.resistance_levels,
                 },
                 out_dir="charts",
-                window_days=63,
+                window_days=200,  # MA200 표시 + 오래된 패턴도 보이도록
             )
         except Exception as e:
             logger.warning(f"Chart rendering failed for {ticker}: {e}")

@@ -331,13 +331,15 @@ async def test_generate_actionable_signal():
     )
 
     # Use patch to intercept the actual chain.ainvoke call
-    with patch("src.llm.analyzer.ChatPromptTemplate"):
-        mock_llm = MagicMock()
-        mock_structured_llm = AsyncMock()
-        mock_structured_llm.ainvoke = AsyncMock(return_value=expected_output)
+    with patch("src.llm.analyzer.ChatPromptTemplate") as mock_prompt_cls:
+        mock_chain = AsyncMock()
+        mock_chain.ainvoke = AsyncMock(return_value=expected_output)
+        mock_prompt_instance = MagicMock()
+        mock_prompt_instance.__or__ = MagicMock(return_value=mock_chain)
+        mock_prompt_cls.from_messages.return_value = mock_prompt_instance
 
-        # When with_structured_output is called, return a mock that has ainvoke
-        mock_llm.with_structured_output.return_value = mock_structured_llm
+        mock_llm = MagicMock()
+        mock_llm.with_structured_output.return_value = MagicMock()
 
         result = await generate_actionable_signal(
             ticker="AAPL",
@@ -355,4 +357,4 @@ async def test_generate_actionable_signal():
         assert result.target_price is not None
         assert result.entry_zone is not None
         assert result.key_levels is not None
-        assert mock_structured_llm.ainvoke.called
+        assert mock_chain.ainvoke.called

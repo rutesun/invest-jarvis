@@ -28,6 +28,13 @@ def mock_investor_ranking_response():
     }
 
 
+@pytest.fixture(autouse=True)
+def _skip_token_cache():
+    """Bypass file-based token cache for all tests."""
+    with patch.object(KISProvider, "_read_cached_token", return_value=None):
+        yield
+
+
 @pytest.mark.asyncio
 async def test_get_investor_ranking(mock_token_response, mock_investor_ranking_response):
     with patch("httpx.AsyncClient") as mock_client:
@@ -55,17 +62,15 @@ async def test_get_investor_ranking(mock_token_response, mock_investor_ranking_r
 @pytest.mark.asyncio
 async def test_get_us_ranking_updown(mock_token_response):
     mock_us_response = {
-        "output": {
-            "body": [
-                {
-                    "symb": "NVDA",
-                    "name": "NVIDIA Corp",
-                    "rate": "5.20",
-                    "last": "950.00",
-                    "tvol": "50000000",
-                },
-            ]
-        }
+        "output2": [
+            {
+                "symb": "NVDA",
+                "name": "NVIDIA Corp",
+                "rate": "5.20",
+                "last": "950.00",
+                "tvol": "50000000",
+            },
+        ]
     }
 
     with patch("httpx.AsyncClient") as mock_client:
@@ -92,16 +97,14 @@ async def test_get_us_ranking_updown(mock_token_response):
 @pytest.mark.asyncio
 async def test_get_us_ranking_volume(mock_token_response):
     mock_us_response = {
-        "output": {
-            "body": [
-                {
-                    "symb": "AAPL",
-                    "name": "Apple Inc",
-                    "last": "180.00",
-                    "tvol": "75000000",
-                },
-            ]
-        }
+        "output2": [
+            {
+                "symb": "AAPL",
+                "name": "Apple Inc",
+                "last": "180.00",
+                "tvol": "75000000",
+            },
+        ]
     }
 
     with patch("httpx.AsyncClient") as mock_client:

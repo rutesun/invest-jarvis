@@ -1,7 +1,10 @@
+import json
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import httpx
 import pandas as pd
+import yaml
 
 from src.core.interfaces import BaseProvider
 from src.providers.kis_models import KISToken
@@ -18,25 +21,110 @@ class KISProvider(BaseProvider):
         self._token: KISToken | None = None
         self._token_expires: datetime | None = None
 
+        # 토큰 캐시 파일 경로
+        cache_dir = Path.home() / ".cache" / "invest-jarvis"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        self._token_cache_file = cache_dir / "kis_token.yaml"
+
+    def _read_cached_token(self) -> str | None:
+        """캐시된 토큰 읽기 (만료 체크 포함)"""
+        try:
+            if not self._token_cache_file.exists():
+                return None
+
+            with open(self._token_cache_file, encoding="utf-8") as f:
+                data = yaml.safe_load(f)
+
+            if not data or "token" not in data or "valid_date" not in data:
+                return None
+
+            # 만료 체크
+            valid_date = data["valid_date"]
+            now = datetime.now()
+
+            if valid_date > now:
+                return data["token"]
+            return None
+        except Exception:
+            return None
+
+    def _save_token_cache(self, token: str, expires_at: datetime) -> None:
+        """토큰을 파일에 저장"""
+        try:
+            with open(self._token_cache_file, "w", encoding="utf-8") as f:
+                yaml.dump(
+                    {"token": token, "valid_date": expires_at},
+                    f,
+                    allow_unicode=True,
+                )
+        except Exception:
+            pass  # 캐시 저장 실패해도 진행
+
     async def _get_access_token(self) -> KISToken:
         """Get or refresh access token."""
+        # 1. 메모리 캐시 체크
         if self._token and self._token_expires and datetime.now() < self._token_expires:
             return self._token
 
+        # 2. 파일 캐시 체크
+        cached_token = self._read_cached_token()
+        if cached_token:
+            # KISToken 객체로 변환
+            self._token = KISToken(
+                access_token=cached_token,
+                token_type="Bearer",
+                expires_in=86400,
+            )
+            self._token_expires = datetime.now() + timedelta(hours=23)  # 여유 1시간
+            return self._token
+
+        # 3. 새 토큰 발급
         url = f"{self.BASE_URL}/oauth2/tokenP"
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "text/plain",
+            "charset": "UTF-8",
+        }
         payload = {
             "grant_type": "client_credentials",
             "appkey": self.app_key,
             "appsecret": self.app_secret,
         }
 
+        # 공식 KIS API는 json= 대신 data=json.dumps() 사용
         async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(url, json=payload)
+            response = await client.post(url, headers=headers, content=json.dumps(payload))
+
+            if response.status_code == 403:
+                raise ValueError(
+                    f"KIS API 인증 거부 (403 Forbidden)\n"
+                    f"Response: {response.text}\n\n"
+                    "가능한 원인:\n"
+                    "1. APP KEY 또는 APP SECRET이 잘못되었습니다\n"
+                    "2. '국내주식시세' 서비스 승인이 필요합니다\n"
+                    "3. IP 제한이 걸려있을 수 있습니다\n"
+                    "4. 실전투자 계좌가 아닌 모의투자 계좌일 수 있습니다\n"
+                    "5. 모의투자라면 /oauth2/token 엔드포인트를 사용해야 합니다"
+                )
             response.raise_for_status()
             data = response.json()
 
         self._token = KISToken(**data)
         self._token_expires = datetime.now() + timedelta(seconds=data["expires_in"] - 60)
+
+        # 토큰을 파일에 캐시
+        try:
+            if "access_token_token_expired" in data:
+                expires_at = datetime.strptime(
+                    data["access_token_token_expired"], "%Y-%m-%d %H:%M:%S"
+                )
+            else:
+                # access_token_token_expired가 없으면 expires_in 사용 (24시간 - 1시간 여유)
+                expires_at = datetime.now() + timedelta(seconds=data["expires_in"] - 3600)
+            self._save_token_cache(self._token.access_token, expires_at)
+        except Exception:
+            pass  # 저장 실패해도 진행
+
         return self._token
 
     async def get_quote(self, ticker: str) -> dict:
@@ -72,7 +160,10 @@ class KISProvider(BaseProvider):
         }
 
     async def get_price_history(self, ticker: str, period: str = "1y") -> pd.DataFrame:
-        """Get historical price data for Korean stock."""
+        """Get historical price data for Korean stock.
+
+        KIS API는 한 번에 100일만 반환하므로, 필요시 여러 번 호출해서 병합합니다.
+        """
         period_days_map = {
             "1mo": 30,
             "3mo": 90,
@@ -83,47 +174,63 @@ class KISProvider(BaseProvider):
         days = period_days_map.get(period, 365)
 
         token = await self._get_access_token()
-        url = f"{self.BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-daily-price"
-        headers = {
-            "Authorization": f"{token.token_type} {token.access_token}",
-            "appkey": self.app_key,
-            "appsecret": self.app_secret,
-            "tr_id": "FHKST01010400",
-            "Content-Type": "application/json; charset=utf-8",
-        }
+        url = f"{self.BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice"
 
-        datetime.now().strftime("%Y%m%d")
-        (datetime.now() - timedelta(days=days)).strftime("%Y%m%d")
+        all_records = []
+        end_date = datetime.now()
 
-        params = {
-            "FID_COND_MRKT_DIV_CODE": "J",
-            "FID_INPUT_ISCD": ticker,
-            "FID_PERIOD_DIV_CODE": "D",
-            "FID_ORG_ADJ_PRC": "0",
-        }
+        # KIS API는 100일 제한이 있으므로 필요한 만큼 여러 번 호출
+        max_batches = (days // 100) + 1
+        for batch in range(max_batches):
+            if len(all_records) >= days:
+                break
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get(url, headers=headers, params=params)
-            response.raise_for_status()
-            data = response.json()
+            batch_end = end_date - timedelta(days=batch * 100)
+            batch_start = batch_end - timedelta(days=110)  # 여유 10일
 
-        records = []
-        for item in data.get("output", []):
-            records.append(
-                {
-                    "Date": pd.to_datetime(item["stck_bsop_date"]),
-                    "Open": float(item["stck_oprc"]),
-                    "High": float(item["stck_hgpr"]),
-                    "Low": float(item["stck_lwpr"]),
-                    "Close": float(item["stck_clpr"]),
-                    "Volume": int(item["acml_vol"]),
-                }
-            )
+            headers = {
+                "Authorization": f"{token.token_type} {token.access_token}",
+                "appkey": self.app_key,
+                "appsecret": self.app_secret,
+                "tr_id": "FHKST03010100",
+                "Content-Type": "application/json; charset=utf-8",
+            }
 
-        df = pd.DataFrame(records)
+            params = {
+                "FID_COND_MRKT_DIV_CODE": "J",
+                "FID_INPUT_ISCD": ticker,
+                "FID_INPUT_DATE_1": batch_start.strftime("%Y%m%d"),
+                "FID_INPUT_DATE_2": batch_end.strftime("%Y%m%d"),
+                "FID_PERIOD_DIV_CODE": "D",
+                "FID_ORG_ADJ_PRC": "0",
+            }
+
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(url, headers=headers, params=params)
+                response.raise_for_status()
+                data = response.json()
+
+            # output2에서 데이터 추출
+            for item in data.get("output2", []):
+                all_records.append(
+                    {
+                        "Date": pd.to_datetime(item["stck_bsop_date"]),
+                        "Open": float(item["stck_oprc"]),
+                        "High": float(item["stck_hgpr"]),
+                        "Low": float(item["stck_lwpr"]),
+                        "Close": float(item["stck_clpr"]),
+                        "Volume": int(item["acml_vol"]),
+                    }
+                )
+
+        df = pd.DataFrame(all_records)
         if not df.empty:
+            # 중복 제거 (날짜별)
+            df = df.drop_duplicates(subset=["Date"])
             df.set_index("Date", inplace=True)
             df.sort_index(inplace=True)
+            # Add timezone (Asia/Seoul) to match yfinance format
+            df.index = df.index.tz_localize("Asia/Seoul")
 
         return df
 

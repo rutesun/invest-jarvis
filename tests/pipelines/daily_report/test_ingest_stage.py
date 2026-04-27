@@ -70,6 +70,7 @@ def test_fetch_macro_handles_api_failures(mock_ticker, mock_fg):
     assert macro.krw_usd == 0.0
 
 
+@pytest.mark.integration
 def test_ingest_with_real_data():
     """실제 2026-04-14 데이터로 통합 테스트."""
     result = ingest("2026-04-14")

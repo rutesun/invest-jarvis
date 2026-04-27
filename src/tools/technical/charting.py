@@ -64,32 +64,10 @@ def _badge(ax: Any, text: str, *, xy: tuple[float, float] = (0.01, 0.96)) -> Non
         ha="left",
         va="top",
         fontsize=8.5,
-        color="white",  # 검은 배경에 흰색 텍스트
+        color="white",
         bbox={"boxstyle": "round,pad=0.25", "fc": "#2C2C2C", "ec": "#555555", "alpha": 0.85},
         zorder=5,
     )
-
-
-def _shade_stage2(ax: Any, df: pd.DataFrame) -> None:
-    """Stage2 조건 충족 구간을 배경 음영으로 표시."""
-    if "Is_Stage2" not in df.columns:
-        return
-
-    mask = df["Is_Stage2"].astype(bool).fillna(False).to_numpy()
-    if mask.size == 0 or not mask.any():
-        return
-
-    idx = df.index.to_list()
-    start_i: int | None = None
-
-    # 연속된 True 구간을 찾아 음영 처리
-    for i, v in enumerate(mask):
-        if v and start_i is None:
-            start_i = i
-        if (not v or i == len(mask) - 1) and start_i is not None:
-            end_i = i if v and i == len(mask) - 1 else i - 1
-            ax.axvspan(idx[start_i], idx[end_i], facecolor="green", alpha=0.08, zorder=0)
-            start_i = None
 
 
 def _right_value_labels(fig: Any, ax: Any, df: pd.DataFrame) -> None:
@@ -106,7 +84,6 @@ def _right_value_labels(fig: Any, ax: Any, df: pd.DataFrame) -> None:
         ("MA200", "SMA_200", "#F44336"),
     ]
 
-    # Collect all MA values
     ma_texts = []
     for name, col, color in labels:
         if col not in df.columns:
@@ -122,14 +99,12 @@ def _right_value_labels(fig: Any, ax: Any, df: pd.DataFrame) -> None:
     if not ma_texts:
         return
 
-    # Build multi-line text with color coding
     text_lines = []
     for name, value, _color in ma_texts:
         text_lines.append(f"{name}: ${value:.1f}")
 
     combined_text = "\n".join(text_lines)
 
-    # Place grouped label right of chart area y-axis
     ax.text(
         1.08,
         0.98,
@@ -178,10 +153,19 @@ def _mark_patterns(ax: Any, df: pd.DataFrame, patterns: dict[str, Any]) -> None:
             continue
 
         try:
-            # Find index closest to completion date
             completion_idx = pd.to_datetime(completed_date)
+
+            # Normalize timezone for comparison
+            if df.index.tz is not None:
+                if completion_idx.tz is None:
+                    completion_idx = completion_idx.tz_localize(df.index.tz)
+                else:
+                    completion_idx = completion_idx.tz_convert(df.index.tz)
+            else:
+                if completion_idx.tz is not None:
+                    completion_idx = completion_idx.tz_localize(None)
+
             if completion_idx not in df.index:
-                # Find nearest
                 nearest_idx = min(df.index, key=lambda x: abs(x - completion_idx))
             else:
                 nearest_idx = completion_idx
@@ -254,29 +238,21 @@ def render_technical_chart(
         def _has_values(col: str) -> bool:
             return col in df_plot.columns and bool(df_plot[col].notna().any())
 
-        # Moving averages (6개, 사용자 색상 스키마)
+        # Moving averages (6 lines)
         if _has_values("SMA_10"):
             addplots.append(mpf.make_addplot(df_plot["SMA_10"], color="#B0B0B0", width=0.7))
         if _has_values("SMA_20"):
-            addplots.append(
-                mpf.make_addplot(df_plot["SMA_20"], color="#FFD700", width=1.2)
-            )  # 노란색
+            addplots.append(mpf.make_addplot(df_plot["SMA_20"], color="#FFD700", width=1.2))
         if _has_values("SMA_50"):
-            addplots.append(
-                mpf.make_addplot(df_plot["SMA_50"], color="#2196F3", width=2.0)
-            )  # 파란색
+            addplots.append(mpf.make_addplot(df_plot["SMA_50"], color="#2196F3", width=2.0))
         if _has_values("SMA_120"):
-            addplots.append(
-                mpf.make_addplot(df_plot["SMA_120"], color="#FF9800", width=1.3)
-            )  # 주황색
+            addplots.append(mpf.make_addplot(df_plot["SMA_120"], color="#FF9800", width=1.3))
         if _has_values("SMA_150"):
             addplots.append(mpf.make_addplot(df_plot["SMA_150"], color="#8A8A8A", width=0.7))
         if _has_values("SMA_200"):
-            addplots.append(
-                mpf.make_addplot(df_plot["SMA_200"], color="#F44336", width=1.8)
-            )  # 빨간색
+            addplots.append(mpf.make_addplot(df_plot["SMA_200"], color="#F44336", width=1.8))
 
-        # Supertrend with signal markers
+        # Supertrend with directional coloring
         if {"SuperTrend_Up", "SuperTrend_Dn", "SuperTrend_Dir"}.issubset(df_plot.columns):
             st_dir = df_plot["SuperTrend_Dir"].astype("int64")
             st_up = df_plot["SuperTrend_Up"].where(st_dir == 1)
@@ -331,7 +307,6 @@ def render_technical_chart(
         )
         if has_macd:
             panel_ratios = (*panel_ratios, 2)
-            # MACD 히스토그램: 양수 초록, 음수 빨강 (분리해서 그리기)
             macd_hist_pos = df_plot["MACD_Hist"].where(df_plot["MACD_Hist"] >= 0)
             macd_hist_neg = df_plot["MACD_Hist"].where(df_plot["MACD_Hist"] < 0)
 
@@ -379,7 +354,6 @@ def render_technical_chart(
                     ylim=(0, 100),
                 )
             )
-            # Dynamic bands
             if _has_values("cRSI_LowBand"):
                 addplots.append(
                     mpf.make_addplot(
@@ -400,7 +374,6 @@ def render_technical_chart(
                         alpha=0.9,
                     )
                 )
-            # 30/70 reference lines
             addplots.append(
                 mpf.make_addplot(
                     pd.Series(30.0, index=df_plot.index),
@@ -422,15 +395,14 @@ def render_technical_chart(
                 )
             )
 
-        # 커스텀 스타일: 검은 배경 + 기존 캔들 색상
         custom_style = mpf.make_mpf_style(
             base_mpf_style="yahoo",
-            facecolor="#1A1A1A",  # 차트 영역 배경색
-            gridcolor="#2A2A2A",  # 그리드 색상
-            gridstyle="--",  # 점선
+            facecolor="#1A1A1A",
+            gridcolor="#2A2A2A",
+            gridstyle="--",
             rc={
-                "figure.facecolor": "#1A1A1A",  # 바깥 배경 (차트 영역과 동일)
-                "axes.facecolor": "#1A1A1A",  # 차트 영역 배경
+                "figure.facecolor": "#1A1A1A",
+                "axes.facecolor": "#1A1A1A",
                 "axes.edgecolor": "#444444",
                 "axes.labelcolor": "white",
                 "xtick.color": "white",
@@ -480,9 +452,6 @@ def render_technical_chart(
                 ax_price.set_title(ticker, color="white")
             _right_value_labels(fig, ax_price, df_plot)
 
-            # Stage2 shading
-            _shade_stage2(ax_price, df_plot)
-
             # Draw support/resistance levels
             if price_levels:
                 support = price_levels.get("support_levels", [])
@@ -518,7 +487,6 @@ def render_technical_chart(
             if len(panels) > crsi_panel_i:
                 _badge(panels[crsi_panel_i], "cRSI(dc=20,vib=10,lvl=10%)", xy=(0.01, 0.92))
 
-        # Save (increased pad_inches to make room for right-side MA labels)
         filename = f"{ticker.replace('/', '_')}_technical.png"
         path = os.path.join(out_dir, filename)
         fig.savefig(path, dpi=130, bbox_inches="tight", pad_inches=0.5)

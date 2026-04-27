@@ -62,8 +62,8 @@ LLM 없이 기술적 분석만 수행하는 빠른 진단 기능.
 
 | 레이어 | 데이터 소스 | LLM 출력 |
 |--------|-----------|----------|
-| 기술적 | yfinance → 8개 컴포넌트 | TechnicalSummaryOutput |
-| **패턴** | OHLC → 4개 차트 패턴 | ChartPatternResult |
+| 기술적 | **KIS API (한국) / yfinance (미국)** → 8개 컴포넌트 | TechnicalSummaryOutput |
+| **패턴** | OHLC → 9개 차트 패턴 | ChartPatternResult |
 | **가격 레벨** | 6개 소스 (MA, Fib, Pivot, Swing, ATR, Pattern) | PriceLevels |
 | 펀더멘탈 | yfinance (선택) | FundamentalSummaryOutput |
 | 뉴스 | yfinance 뉴스 | NewsAnalysisOutput |
@@ -72,14 +72,81 @@ LLM 없이 기술적 분석만 수행하는 빠른 진단 기능.
 | **종합** | 위 전체 통합 | IntegratedAnalysisOutput |
 | **실행 시그널** | 기술 + 패턴 + 가격 레벨 | ActionableSignalOutput |
 
+**데이터 소스 자동 선택:**
+- 한국 주식 (`.KS`, `.KQ`) 감지 시 → KIS API 사용 (실시간)
+- KIS API 키 없으면 → yfinance로 자동 fallback (3일 지연 가능)
+- 미국/글로벌 주식 → yfinance 사용
+
 **차트 패턴 감지 (Phase 2):**
 
+기존 패턴 (임계값 완화):
 | 패턴 | 기간 | 신뢰도 가중치 | 설명 |
 |------|------|---------------|------|
-| Cup & Handle | 60-120일 | 0.85 | 컵 깊이 15-40%, 손잡이 15% 이내 |
-| Double Bottom | 40-80일 | 0.80 | W 형태, 바닥 간 5% 이내 |
-| Head & Shoulders | 60-100일 | 0.75 | 어깨 높이 차이 10% 이내 |
-| Support/Resistance Test | 최근 20일 | 0.70 | ±2% 레벨 3회 이상 테스트 |
+| Cup & Handle | 40-120일 | 깊이/기간 차등 | 컵 15-40%, 손잡이 <15%, 최소 50일 |
+| Double Bottom | 20-80일 | 기간 차등 (0.85/0.95) | 바닥 간 <5%, 최소 50일 |
+| Head & Shoulders | 40-100일 | - | 어깨 높이 <10%, Head >3%, 최소 50일 |
+
+신규 패턴 (Phase 2 추가):
+| 패턴 | 기간 | 신뢰도 가중치 | 설명 |
+|------|------|---------------|------|
+| Ascending Triangle | 30-90일 | 수평/기울기/수렴 기반 | 수평 저항 + 상승 지지, 돌파 시 상승 기대 |
+| Descending Triangle | 30-90일 | 수평/기울기/수렴 기반 | 수평 지지 + 하락 저항, 하락 돌파 시 추가 하락 |
+| Bullish Flag | 최소 30일 | Pole 강도 기반 | 강한 상승 (>10%) + 하락 조정, 재상승 기대 |
+| Bearish Flag | 최소 30일 | Pole 강도 기반 | 강한 하락 (>10%) + 상승 조정, 재하락 기대 |
+| Support Level Test | 최근 60일 | 테스트 횟수/범위/반등 기반 | 3회 이상 같은 가격대(6% 범위) 테스트, 강한 지지선 확인 |
+
+기타 패턴:
+| 패턴 | 기간 | 설명 |
+|------|------|------|
+| Support/Resistance Test | 최근 20일 | ±2% 레벨 근처 |
+
+**버그 수정:**
+
+- **2026-04-25: CRITICAL - High/Low 가격 데이터 사용**
+  - 기존 문제: 모든 패턴이 Close 가격만 사용하여 peaks/valleys를 부정확하게 감지
+  - 수정 내용:
+    - Cup & Handle, Head & Shoulders: High 가격으로 peaks 감지
+    - Double Bottom: Low 가격으로 valleys 감지
+    - Triangle 패턴들: High/Low 가격으로 peaks/valleys 감지
+  - 영향: 실제 시장 데이터에서 누락되던 패턴들이 정상적으로 감지됨
+  
+- **2026-04-25: Double Bottom 개선 - 최근 패턴 우선**
+  - 기존 동작: 첫 번째로 발견된 패턴만 리턴
+  - 개선 내용: 모든 유효 패턴을 찾아 가장 최근 패턴(days_ago가 가장 작은 것) 리턴
+  - 장점: 오래된 패턴보다 최근 패턴이 투자 의사결정에 더 유용
+
+- **2026-04-27: Supertrend 차트 시각화 버그**
+  - 기존 문제: Supertrend 라인 대신 Close 가격을 direction에 따라 색칠
+  - 수정 내용: SUPERT_10_3.0 라인 값을 direction에 따라 녹색/빨간색으로 표시
+  - 영향: 차트에서 Supertrend 라인 위치가 정확하게 표시됨 (가격 위: 녹색, 가격 아래: 빨간색)
+
+- **2026-04-27: 차트 컬럼 이름 불일치 버그**
+  - 기존 문제: DataFrame 컬럼(SMA_20, MACD_12_26_9 등 대문자)과 차트 코드(sma_20, macd 등 소문자) 불일치
+  - 수정 내용: 차트 코드의 모든 컬럼 참조를 DataFrame 실제 이름으로 변경
+  - 영향: MA, Supertrend, MACD, RSI, Volume 등 모든 지표가 차트에 정상 표시됨
+
+- **2026-04-27: KIS API 100일 제한 해결 (MA200 필수)**
+  - 기존 문제: KIS API가 한 번에 100일만 반환하여 MA200 계산 불가
+  - 수정 내용:
+    - 100일씩 3번 호출로 200+ 일 데이터 수집 (batch 방식)
+    - 파일 기반 토큰 캐싱 (~/.cache/invest-jarvis/kis_token.yaml)
+    - 3-tier 캐싱: 메모리 → 파일 → API (1분 rate limit 회피)
+    - 차트 window_days를 63 → 200일로 확장
+    - KIS API 인증 전처리 (실패 시 즉시 중단, fallback 없음)
+  - 영향: 
+    - 한국 주식 208일 데이터 수집 성공
+    - MA200 라인 정상 표시
+    - 토큰 재발급 1분 제한 회피
+
+- **2026-04-27: 차트 지표 컬럼 필터링 버그**
+  - 기존 문제: TechnicalData.from_analysis()가 OHLCV + 일부 지표만 저장하여 차트에 MACD/RSI/Supertrend 미표시
+  - 원인: indicator_cols 필터가 "SMA_", "sma_", "vol_sma_", "supertrend_direction"만 포함
+  - 수정 내용: 필터에 "MACD", "RSI", "SUPERT", "Vol_SMA_" 패턴 추가
+  - 영향: 
+    - MACD 패널 (MACD_12_26_9, MACDh_12_26_9, MACDs_12_26_9) 정상 표시
+    - RSI 패널 (RSI_14) 정상 표시
+    - Supertrend 라인 (SUPERT_10_3.0) 정상 표시
+    - 거래량 이평선 (Vol_SMA_20) 정상 표시
 
 **가격 레벨 분석 (Phase 2):**
 

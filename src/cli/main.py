@@ -161,7 +161,39 @@ async def run_quick_check(ticker_or_name: str) -> dict:
     # Resolve ticker if company name is provided
     ticker = await resolve_ticker(ticker_or_name)
 
-    provider = YFinanceProvider()
+    # Auto-detect Korean stocks and use KIS API if available
+    is_korean_stock = ticker.endswith((".KS", ".KQ"))
+    kis_key = os.getenv("KIS_APP_KEY")
+    kis_secret = os.getenv("KIS_APP_SECRET")
+
+    if is_korean_stock and kis_key and kis_secret:
+        logger.info(f"한국 주식 {ticker} → KIS API 사용 (실시간)")
+        from src.providers.kis_wrapper import KISProviderWrapper
+
+        kis_provider = KISProvider(app_key=kis_key, app_secret=kis_secret)
+
+        # KIS API 인증 테스트 (필수)
+        try:
+            await kis_provider._get_access_token()
+            logger.info("KIS API 인증 성공")
+        except Exception as e:
+            raise ValueError(
+                f"KIS API 인증 실패: {e}\n"
+                "해결 방법:\n"
+                "1. KIS Developers 포털(https://apiportal.koreainvestment.com) 로그인\n"
+                "2. '서비스 관리' → APP KEY 확인\n"
+                "3. '국내주식시세' 서비스가 '승인' 상태인지 확인\n"
+                "4. .env 파일의 KIS_APP_KEY, KIS_APP_SECRET 재확인"
+            ) from e
+
+        provider = KISProviderWrapper(kis_provider=kis_provider)
+    else:
+        if is_korean_stock:
+            logger.warning(
+                f"한국 주식 {ticker}이지만 KIS API 키가 없습니다. yfinance로 fallback (3일 지연 가능)"
+            )
+        provider = YFinanceProvider()
+
     scorer = TechnicalScorer()
     tool = TechnicalAnalysisTool(provider=provider, scorer=scorer)
     pipeline = QuickCheckPipeline(technical_tool=tool)
@@ -206,9 +238,47 @@ async def run_deep_dive(ticker_or_name: str, provider: str) -> dict:
     if not api_key:
         raise ValueError(f"Missing {api_key_env} environment variable")
 
-    yf_provider = YFinanceProvider()
+    # Price data provider: 한국 주식이면 KIS API, 아니면 yfinance
+    from src.providers.kis import KISProvider
+
+    is_korean_stock = ticker.endswith((".KS", ".KQ"))
+    kis_key = os.getenv("KIS_APP_KEY")
+    kis_secret = os.getenv("KIS_APP_SECRET")
+
+    if is_korean_stock and kis_key and kis_secret:
+        # 한국 주식 + KIS API 키 있음 → KIS 사용 (실시간)
+        # KIS API는 .KS/.KQ 접미사 없이 종목코드만 사용
+        logger.info(f"한국 주식 {ticker} → KIS API 사용 (실시간)")
+        from src.providers.kis_wrapper import KISProviderWrapper
+
+        kis_provider = KISProvider(app_key=kis_key, app_secret=kis_secret)
+
+        # KIS API 인증 테스트 (필수)
+        try:
+            await kis_provider._get_access_token()
+            logger.info("KIS API 인증 성공")
+        except Exception as e:
+            raise ValueError(
+                f"KIS API 인증 실패: {e}\n"
+                "해결 방법:\n"
+                "1. KIS Developers 포털(https://apiportal.koreainvestment.com) 로그인\n"
+                "2. '서비스 관리' → APP KEY 확인\n"
+                "3. '국내주식시세' 서비스가 '승인' 상태인지 확인\n"
+                "4. .env 파일의 KIS_APP_KEY, KIS_APP_SECRET 재확인"
+            ) from e
+
+        price_provider = KISProviderWrapper(kis_provider=kis_provider)
+    else:
+        # 미국 주식 또는 KIS 키 없음 → yfinance fallback
+        if is_korean_stock:
+            logger.warning(
+                f"한국 주식 {ticker}이지만 KIS API 키가 없습니다. "
+                "yfinance로 fallback (3일 지연 가능)"
+            )
+        price_provider = YFinanceProvider()
+
     scorer = TechnicalScorer()
-    technical_tool = TechnicalAnalysisTool(provider=yf_provider, scorer=scorer)
+    technical_tool = TechnicalAnalysisTool(provider=price_provider, scorer=scorer)
     fundamental_tool = FundamentalTool()
     news_tool = NewsTool()
     llm = LLMProvider.create(
@@ -229,11 +299,8 @@ async def run_deep_dive(ticker_or_name: str, provider: str) -> dict:
     disclosure_tool = DisclosureTool(sec_fetcher=sec_fetcher, dart_fetcher=dart_fetcher)
 
     # 수급 툴: KIS API (get_investor_trend) 사용. 키 없으면 FlowTool이 graceful failure 처리
-    from src.providers.kis import KISProvider
     from src.tools.flow import FlowTool
 
-    kis_key = os.getenv("KIS_APP_KEY")
-    kis_secret = os.getenv("KIS_APP_SECRET")
     if not (kis_key and kis_secret):
         logger.warning(
             "KIS_APP_KEY 또는 KIS_APP_SECRET이 설정되지 않았습니다. "

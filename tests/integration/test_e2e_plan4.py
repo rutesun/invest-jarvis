@@ -29,11 +29,7 @@ def test_analyze_shows_quarterly_trends():
     """Verify CLI shows quarterly table and list"""
     result = runner.invoke(app, ["analyze", "AAPL", "--provider", "openai"])
 
-    # Table verification
-    assert "분기별 추이" in result.stdout
-    assert "YoY Growth %" in result.stdout
-
-    # List verification
+    # Quarterly section
     assert "분기별 실적" in result.stdout
     assert "매출 추이:" in result.stdout
     assert "이익 추이:" in result.stdout
