@@ -100,9 +100,9 @@ LLM 없이 기술적 분석만 수행하는 빠른 진단 기능.
 |------|------|------|
 | Support/Resistance Test | 최근 20일 | ±2% 레벨 근처 |
 
-**버그 수정 (2026-04-25):**
+**버그 수정:**
 
-- **CRITICAL: High/Low 가격 데이터 사용**
+- **2026-04-25: CRITICAL - High/Low 가격 데이터 사용**
   - 기존 문제: 모든 패턴이 Close 가격만 사용하여 peaks/valleys를 부정확하게 감지
   - 수정 내용:
     - Cup & Handle, Head & Shoulders: High 가격으로 peaks 감지
@@ -110,10 +110,15 @@ LLM 없이 기술적 분석만 수행하는 빠른 진단 기능.
     - Triangle 패턴들: High/Low 가격으로 peaks/valleys 감지
   - 영향: 실제 시장 데이터에서 누락되던 패턴들이 정상적으로 감지됨
   
-- **Double Bottom 개선: 최근 패턴 우선**
+- **2026-04-25: Double Bottom 개선 - 최근 패턴 우선**
   - 기존 동작: 첫 번째로 발견된 패턴만 리턴
   - 개선 내용: 모든 유효 패턴을 찾아 가장 최근 패턴(days_ago가 가장 작은 것) 리턴
   - 장점: 오래된 패턴보다 최근 패턴이 투자 의사결정에 더 유용
+
+- **2026-04-27: Supertrend 차트 시각화 버그**
+  - 기존 문제: Supertrend 라인 대신 Close 가격을 direction에 따라 색칠
+  - 수정 내용: SUPERT_10_3.0 라인 값을 direction에 따라 녹색/빨간색으로 표시
+  - 영향: 차트에서 Supertrend 라인 위치가 정확하게 표시됨 (가격 위: 녹색, 가격 아래: 빨간색)
 
 **가격 레벨 분석 (Phase 2):**
 

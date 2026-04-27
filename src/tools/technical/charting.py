@@ -225,10 +225,11 @@ def render_technical_chart(
             addplots.append(mpf.make_addplot(df_plot["sma_200"], color="#FF2D55", width=1.5))
 
         # Supertrend
-        if _has_values("supertrend_direction"):
+        if _has_values("supertrend_direction") and "SUPERT_10_3.0" in df_plot.columns:
             st_dir = df_plot["supertrend_direction"].astype("int64")
-            st_up = df_plot["Close"].where(st_dir == 1)
-            st_dn = df_plot["Close"].where(st_dir == -1)
+            st_line = df_plot["SUPERT_10_3.0"]
+            st_up = st_line.where(st_dir == 1)
+            st_dn = st_line.where(st_dir == -1)
             if st_up.notna().any():
                 addplots.append(mpf.make_addplot(st_up, color="green", width=2, secondary_y=False))
             if st_dn.notna().any():

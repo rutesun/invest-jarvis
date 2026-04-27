@@ -161,7 +161,25 @@ async def run_quick_check(ticker_or_name: str) -> dict:
     # Resolve ticker if company name is provided
     ticker = await resolve_ticker(ticker_or_name)
 
-    provider = YFinanceProvider()
+    # Auto-detect Korean stocks and use KIS API if available
+    is_korean_stock = ticker.endswith((".KS", ".KQ"))
+    kis_key = os.getenv("KIS_APP_KEY")
+    kis_secret = os.getenv("KIS_APP_SECRET")
+
+    if is_korean_stock and kis_key and kis_secret:
+        logger.info(f"한국 주식 {ticker} → KIS API 사용 (실시간)")
+        from src.providers.kis_wrapper import KISProviderWrapper
+
+        provider = KISProviderWrapper(
+            kis_provider=KISProvider(app_key=kis_key, app_secret=kis_secret)
+        )
+    else:
+        if is_korean_stock:
+            logger.warning(
+                f"한국 주식 {ticker}이지만 KIS API 키가 없습니다. yfinance로 fallback (3일 지연 가능)"
+            )
+        provider = YFinanceProvider()
+
     scorer = TechnicalScorer()
     tool = TechnicalAnalysisTool(provider=provider, scorer=scorer)
     pipeline = QuickCheckPipeline(technical_tool=tool)
