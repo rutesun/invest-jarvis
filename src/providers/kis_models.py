@@ -7,6 +7,7 @@ class KISToken(BaseModel):
     access_token: str
     token_type: str
     expires_in: int
+    access_token_token_expired: str | None = None  # Optional: 만료 시간 (YYYY-MM-DD HH:MM:SS)
 
 
 class KISQuote(BaseModel):

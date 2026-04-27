@@ -170,9 +170,23 @@ async def run_quick_check(ticker_or_name: str) -> dict:
         logger.info(f"한국 주식 {ticker} → KIS API 사용 (실시간)")
         from src.providers.kis_wrapper import KISProviderWrapper
 
-        provider = KISProviderWrapper(
-            kis_provider=KISProvider(app_key=kis_key, app_secret=kis_secret)
-        )
+        kis_provider = KISProvider(app_key=kis_key, app_secret=kis_secret)
+
+        # KIS API 인증 테스트 (필수)
+        try:
+            await kis_provider._get_access_token()
+            logger.info("KIS API 인증 성공")
+        except Exception as e:
+            raise ValueError(
+                f"KIS API 인증 실패: {e}\n"
+                "해결 방법:\n"
+                "1. KIS Developers 포털(https://apiportal.koreainvestment.com) 로그인\n"
+                "2. '서비스 관리' → APP KEY 확인\n"
+                "3. '국내주식시세' 서비스가 '승인' 상태인지 확인\n"
+                "4. .env 파일의 KIS_APP_KEY, KIS_APP_SECRET 재확인"
+            ) from e
+
+        provider = KISProviderWrapper(kis_provider=kis_provider)
     else:
         if is_korean_stock:
             logger.warning(
@@ -237,9 +251,23 @@ async def run_deep_dive(ticker_or_name: str, provider: str) -> dict:
         logger.info(f"한국 주식 {ticker} → KIS API 사용 (실시간)")
         from src.providers.kis_wrapper import KISProviderWrapper
 
-        price_provider = KISProviderWrapper(
-            kis_provider=KISProvider(app_key=kis_key, app_secret=kis_secret)
-        )
+        kis_provider = KISProvider(app_key=kis_key, app_secret=kis_secret)
+
+        # KIS API 인증 테스트 (필수)
+        try:
+            await kis_provider._get_access_token()
+            logger.info("KIS API 인증 성공")
+        except Exception as e:
+            raise ValueError(
+                f"KIS API 인증 실패: {e}\n"
+                "해결 방법:\n"
+                "1. KIS Developers 포털(https://apiportal.koreainvestment.com) 로그인\n"
+                "2. '서비스 관리' → APP KEY 확인\n"
+                "3. '국내주식시세' 서비스가 '승인' 상태인지 확인\n"
+                "4. .env 파일의 KIS_APP_KEY, KIS_APP_SECRET 재확인"
+            ) from e
+
+        price_provider = KISProviderWrapper(kis_provider=kis_provider)
     else:
         # 미국 주식 또는 KIS 키 없음 → yfinance fallback
         if is_korean_stock:

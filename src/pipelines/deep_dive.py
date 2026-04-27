@@ -166,7 +166,7 @@ class DeepDivePipeline:
                     "resistance_levels": price_levels.resistance_levels,
                 },
                 out_dir="charts",
-                window_days=63,
+                window_days=200,  # MA200 표시 + 오래된 패턴도 보이도록
             )
         except Exception as e:
             logger.warning(f"Chart rendering failed for {ticker}: {e}")
