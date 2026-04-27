@@ -180,8 +180,8 @@ class KISProvider(BaseProvider):
         end_date = datetime.now()
 
         # KIS API는 100일 제한이 있으므로 필요한 만큼 여러 번 호출
-        # MA200을 위해 최대 3번 호출 (300일)
-        for batch in range(3):
+        max_batches = (days // 100) + 1
+        for batch in range(max_batches):
             if len(all_records) >= days:
                 break
 

@@ -181,6 +181,7 @@ class TechnicalResult(BaseModel):
                     "MACD",
                     "RSI",
                     "SUPERT",
+                    "cRSI",
                 )
             )
         ]
