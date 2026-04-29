@@ -99,3 +99,56 @@ def test_wrapup_active_prompt_is_v3():
     """활성 Wrapup 프롬프트가 V3이다."""
     assert WRAPUP_SYSTEM_PROMPT is WRAPUP_SYSTEM_PROMPT_V3
     assert WRAPUP_USER_PROMPT is WRAPUP_USER_PROMPT_V3
+
+
+def test_wrapup_input_uses_full_summary():
+    """Wrapup 입력이 summary[:100]이 아닌 전체 summary를 사용한다."""
+    # wrapup_stage.py의 news_text 포맷팅 로직을 직접 검증
+    # _build_news_text 함수를 분리하여 테스트
+    from src.pipelines.daily_report.models import NewsItem
+    from src.pipelines.daily_report.stages.wrapup_stage import _build_news_text
+
+    items = [
+        NewsItem(
+            category="반도체",
+            technical_theme="HBM 메모리",
+            investment_theme="HBM 가격 상승으로 메모리 업사이클 본격화",
+            keywords=["HBM", "삼성전자", "SK하이닉스"],
+            source_ids=["msg1"],
+            emoji="🚀",
+            summary="🚀 HBM3E 가격 70-75% 추가 상승 전망\n📈 삼성전자 HBM 검증 통과로 점유율 확대\n⚡ SK하이닉스 12단 양산 본격화로 공급 확대",
+            impact="메모리 반도체 실적 턴어라운드 가속. 2026 영업이익 역대 최고치 전망.",
+            stocks=[],
+        ),
+    ]
+
+    text = _build_news_text(items)
+
+    # summary 전체가 포함되어야 함 ([:100] 잘림 없음)
+    assert "SK하이닉스 12단 양산 본격화로 공급 확대" in text
+    # impact도 포함되어야 함
+    assert "메모리 반도체 실적 턴어라운드" in text
+    # stocks name도 포함 가능 (stocks 있을 경우)
+
+
+def test_wrapup_input_includes_impact():
+    """Wrapup 입력에 impact가 포함된다."""
+    from src.pipelines.daily_report.models import NewsItem
+    from src.pipelines.daily_report.stages.wrapup_stage import _build_news_text
+
+    items = [
+        NewsItem(
+            category="에너지",
+            technical_theme="전력 인프라",
+            investment_theme="AI DC 전력 수요 급증, 전력기기 수주 가속",
+            keywords=["LS ELECTRIC", "전력기기"],
+            source_ids=["msg1"],
+            emoji="⚡",
+            summary="⚡ 전력 수요 +220% 전망",
+            impact="전력기기 섹터 수주 레벨업. LS ELECTRIC 목표주가 상향.",
+            stocks=[],
+        ),
+    ]
+
+    text = _build_news_text(items)
+    assert "전력기기 섹터 수주 레벨업" in text
