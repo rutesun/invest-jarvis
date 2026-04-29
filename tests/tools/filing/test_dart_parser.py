@@ -114,3 +114,28 @@ async def test_parse_handles_api_failure(mock_exists, mock_client_cls, parser):
 
     facts = await parser.parse("005930", corp_code="00126380", bsns_year="2025")
     assert facts is None
+
+
+def test_extract_dart_section():
+    from src.tools.filing.dart_parser import _extract_dart_section
+
+    xml_content = """<BODY>
+<TITLE>1. 사업의 개요</TITLE>
+<P>개요 내용</P>
+<TITLE>2. 주요 제품 및 서비스</TITLE>
+<P>반도체 매출 비중 71%</P>
+<TABLE><TD>DS</TD><TD>71%</TD></TABLE>
+<TITLE>3. 원재료 및 생산설비</TITLE>
+<P>평택 P4 라인</P>
+</BODY>"""
+
+    section = _extract_dart_section(xml_content, "주요 제품 및 서비스")
+    assert "반도체 매출 비중 71%" in section
+    assert "평택 P4" not in section
+
+
+def test_extract_dart_section_not_found():
+    from src.tools.filing.dart_parser import _extract_dart_section
+
+    section = _extract_dart_section("<BODY><TITLE>1. 개요</TITLE></BODY>", "주요 제품")
+    assert section == ""
