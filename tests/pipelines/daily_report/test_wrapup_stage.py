@@ -1,5 +1,6 @@
 """Wrapup V3 단위 테스트."""
 
+from src.pipelines.daily_report.examples.wrapup_examples import get_wrapup_examples
 from src.pipelines.daily_report.models import (
     CategoryInsightsList,
     DailyReport,
@@ -54,3 +55,21 @@ def test_category_insights_list_model():
         insights={"반도체": "테스트 인사이트", "에너지": "전력 수요 인사이트"}
     )
     assert len(result.insights) == 2
+
+
+def test_wrapup_examples_not_empty():
+    """Wrapup 예시가 비어있지 않다."""
+    examples = get_wrapup_examples()
+    assert len(examples) > 100  # 충분한 길이
+
+
+def test_wrapup_examples_contains_chain_arrow():
+    """Wrapup 예시에 인과관계 체인(→)이 포함된다."""
+    examples = get_wrapup_examples()
+    assert "→" in examples
+
+
+def test_wrapup_examples_contains_bad_example():
+    """Wrapup 예시에 나쁜 예시가 포함된다."""
+    examples = get_wrapup_examples()
+    assert "나쁜 예시" in examples or "BAD" in examples.upper()
