@@ -29,11 +29,11 @@ Daily report가 단순 요약 수준. "블룸 에너지 계약 체결" → 끝.
 
 ## Checklist
 
-- [ ] Reduce/Wrapup 프롬프트 V3 + stages import 변경
-- [ ] Wrapup 입력 `summary[:100]` → 전체 전달
-- [ ] Few-shot 예시 추가
-- [ ] LLM-as-Judge 평가 구현 (기존 `evaluations/` 확장)
-- [ ] V2 baseline → V3 채점 비교
+- [x] Reduce/Wrapup 프롬프트 V3 + stages import 변경
+- [x] Wrapup 입력 `summary[:100]` → 전체 전달
+- [x] Few-shot 예시 추가
+- [x] LLM-as-Judge 평가 구현 (기존 `evaluations/` 확장)
+- [x] V2 baseline → V3 채점 비교 (V2: 9.0, V3: 9.7, +0.7 개선)
 - [ ] 실전 테스트 3-5일
 - [ ] `docs/FEATURES.md` 업데이트
 
