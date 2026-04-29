@@ -152,3 +152,64 @@ def test_wrapup_input_includes_impact():
 
     text = _build_news_text(items)
     assert "전력기기 섹터 수주 레벨업" in text
+
+
+def test_format_report_renders_category_insights():
+    """format_report가 category_insights를 렌더링한다."""
+    from src.pipelines.daily_report.models import NewsItem
+    from src.pipelines.daily_report.pipeline import format_report
+
+    report = DailyReport(
+        date="2026-04-20",
+        macro=MacroSnapshot(
+            date="2026-04-20",
+            us_markets={"S&P500": 1.0, "NASDAQ": 0.5, "DOW": 0.3},
+            kr_markets={"KOSPI": 0.2, "KOSDAQ": -0.1},
+            vix=18.0,
+            fear_greed=55,
+            krw_usd=1320.0,
+        ),
+        key_insights=["🔥 테스트 인사이트"],
+        category_insights={
+            "반도체": "HBM 가격 상승 + 엔비디아 독점 완화 → 국내 메모리 수혜",
+        },
+        news=[
+            NewsItem(
+                category="반도체",
+                technical_theme="HBM 메모리",
+                investment_theme="HBM 가격 상승으로 메모리 업사이클 본격화",
+                keywords=["HBM", "삼성전자"],
+                source_ids=["msg1"],
+                emoji="🚀",
+                summary="HBM3E 가격 70-75% 추가 상승 전망",
+                impact="메모리 반도체 실적 턴어라운드 가속",
+                stocks=[],
+            )
+        ],
+    )
+    md = format_report(report)
+    assert "## 반도체" in md
+    assert "HBM 가격 상승" in md
+    assert "> HBM 가격 상승 + 엔비디아 독점 완화 → 국내 메모리 수혜" in md
+
+
+def test_format_report_without_category_insights():
+    """category_insights가 비어있으면 해당 섹션 생략."""
+    from src.pipelines.daily_report.pipeline import format_report
+
+    report = DailyReport(
+        date="2026-04-20",
+        macro=MacroSnapshot(
+            date="2026-04-20",
+            us_markets={"S&P500": 1.0, "NASDAQ": 0.5, "DOW": 0.3},
+            kr_markets={"KOSPI": 0.2, "KOSDAQ": -0.1},
+            vix=18.0,
+            fear_greed=55,
+            krw_usd=1320.0,
+        ),
+        key_insights=["🔥 테스트"],
+        news=[],
+    )
+    md = format_report(report)
+    # category_insights 없으면 렌더링 안 함
+    assert "category" not in md.lower() or "Theme Analysis" in md

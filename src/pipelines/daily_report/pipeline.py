@@ -198,9 +198,16 @@ def format_report(report: DailyReport, data_dir: str = "data") -> str:
     for insight in report.key_insights:
         output += f"{insight}\n\n"
 
-    # 테마별 분석
-    output += "## 📰 Theme Analysis\n\n"
+    # 테마별 분석 (카테고리별로 그룹핑)
+    current_category = None
     for news_item in report.news:
+        # 카테고리가 바뀌면 헤딩 추가
+        if news_item.category != current_category:
+            current_category = news_item.category
+            output += f"## {current_category}\n\n"
+            if report.category_insights and current_category in report.category_insights:
+                output += f"> {report.category_insights[current_category]}\n\n"
+
         output += f"### {news_item.emoji} {news_item.investment_theme}\n\n"
 
         # Summary를 bullet list로 포맷팅
