@@ -163,3 +163,40 @@ async def test_parse_handles_api_failure(mock_client_cls, parser):
 
     facts = await parser.parse("AAPL")
     assert facts is None
+
+
+def test_extract_section_item7():
+    from src.tools.filing.sec_parser import _extract_section
+
+    markdown = """## Item 6. Reserved
+Some text.
+## Item 7. Management's Discussion and Analysis
+Revenue increased to $416.2B. We expect Q2 revenue between $100B and $105B.
+## Item 7A. Quantitative
+Market risk stuff."""
+
+    section = _extract_section(markdown, r"Item 7\.")
+    assert "Revenue increased" in section
+    assert "Market risk" not in section
+
+
+def test_extract_section_item1a():
+    from src.tools.filing.sec_parser import _extract_section
+
+    markdown = """## Item 1. Business
+Apple designs.
+## Item 1A. Risk Factors
+Supply chain risks. AI regulation uncertainty.
+## Item 1B. Unresolved Staff Comments
+Nothing."""
+
+    section = _extract_section(markdown, r"Item 1A\.")
+    assert "Supply chain" in section
+    assert "Apple designs" not in section
+
+
+def test_extract_section_not_found():
+    from src.tools.filing.sec_parser import _extract_section
+
+    section = _extract_section("## Item 1. Business\nSome text.", r"Item 7\.")
+    assert section == ""
