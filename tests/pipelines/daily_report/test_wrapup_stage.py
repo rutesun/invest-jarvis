@@ -6,6 +6,12 @@ from src.pipelines.daily_report.models import (
     DailyReport,
     MacroSnapshot,
 )
+from src.pipelines.daily_report.prompts import (
+    WRAPUP_SYSTEM_PROMPT,
+    WRAPUP_SYSTEM_PROMPT_V3,
+    WRAPUP_USER_PROMPT,
+    WRAPUP_USER_PROMPT_V3,
+)
 
 
 def test_daily_report_has_category_insights_field():
@@ -73,3 +79,23 @@ def test_wrapup_examples_contains_bad_example():
     """Wrapup 예시에 나쁜 예시가 포함된다."""
     examples = get_wrapup_examples()
     assert "나쁜 예시" in examples or "BAD" in examples.upper()
+
+
+def test_wrapup_v3_system_prompt_exists():
+    """V3 system prompt가 존재하고 핵심 지시를 포함한다."""
+    assert len(WRAPUP_SYSTEM_PROMPT_V3) > 100
+    assert "인과관계" in WRAPUP_SYSTEM_PROMPT_V3 or "→" in WRAPUP_SYSTEM_PROMPT_V3
+    assert "{examples}" in WRAPUP_SYSTEM_PROMPT_V3
+
+
+def test_wrapup_v3_user_prompt_exists():
+    """V3 user prompt가 존재하고 필수 placeholder를 포함한다."""
+    assert "{macro}" in WRAPUP_USER_PROMPT_V3
+    assert "{news_items}" in WRAPUP_USER_PROMPT_V3
+    assert "{news_count}" in WRAPUP_USER_PROMPT_V3
+
+
+def test_wrapup_active_prompt_is_v3():
+    """활성 Wrapup 프롬프트가 V3이다."""
+    assert WRAPUP_SYSTEM_PROMPT is WRAPUP_SYSTEM_PROMPT_V3
+    assert WRAPUP_USER_PROMPT is WRAPUP_USER_PROMPT_V3
