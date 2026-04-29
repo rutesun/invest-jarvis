@@ -198,6 +198,10 @@ class DailyReport(BaseModel):
     date: str
     macro: MacroSnapshot
     key_insights: list[str] = Field(description="한글 크로스 테마 인사이트")
+    category_insights: dict[str, str] = Field(
+        default_factory=dict,
+        description="카테고리별 인사이트 (카테고리 → 인사이트 문자열)",
+    )
     news: list[NewsItem]
 
 
@@ -217,3 +221,13 @@ class KeyInsightsList(BaseModel):
     """Wrapup stage의 구조화된 인사이트 리스트 래퍼."""
 
     insights: list[str] = Field(description="도출된 메타 인사이트 배열")
+
+
+class CategoryInsightsList(BaseModel):
+    """Wrapup stage의 카테고리별 인사이트."""
+
+    insights: dict[str, str] = Field(
+        description=(
+            "카테고리 → 인사이트 매핑. 예: {'반도체': 'HBM 가격 상승 + 엔비디아 독점 완화 → 국내 메모리 수혜'}"
+        )
+    )
