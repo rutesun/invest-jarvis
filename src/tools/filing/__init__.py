@@ -1,3 +1,4 @@
+from src.tools.filing.impact import ImpactCalculator
 from src.tools.filing.models import (
     Comparison,
     DisclosureDetail,
@@ -16,5 +17,6 @@ __all__ = [
     "FilingImpact",
     "FinancialMetric",
     "GuidanceInfo",
+    "ImpactCalculator",
     "TextInsight",
 ]
