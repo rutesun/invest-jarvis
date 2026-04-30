@@ -107,6 +107,7 @@ class IntegratedAnalysisInput(BaseModel):
     technical_rationale: str  # 기술적 분석 근거 자유 형식
     fundamental_valuation: str | None = None  # "저평가", "적정", "고평가"
     disclosure_items: list[dict[str, Any]] = []  # DisclosureItem dict 리스트
+    filing_summary: str | None = None  # XBRL 재무데이터 요약 (매출, 영업이익, 마진 등)
     flow_summary: str | None = None  # 사전 포맷된 마크다운 테이블 또는 None
 
 

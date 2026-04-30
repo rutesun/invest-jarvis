@@ -48,6 +48,7 @@ SEC_CONCEPT_CHAINS: dict[str, list[str]] = {
 # DART: 계정명 → metric key
 DART_ACCOUNT_MAPPING: dict[str, str] = {
     "매출액": "revenue",
+    "영업수익": "revenue",  # 삼성전자 등 대기업 사용
     "매출원가": "cost_of_revenue",
     "매출총이익": "gross_profit",
     "영업이익": "operating_income",

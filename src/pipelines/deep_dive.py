@@ -16,6 +16,8 @@ from src.llm.models import (
     TechnicalSummaryOutput,
 )
 from src.tools.disclosure import DisclosureItem, DisclosureTool, extract_kr_code, is_korean_ticker
+from src.tools.filing.models import FilingFacts
+from src.tools.filing.parser import FilingParser
 from src.tools.flow import FlowTool, InvestorFlow
 from src.tools.fundamental import FundamentalSnapshot, FundamentalTool
 from src.tools.news import NewsArticle, NewsTool
@@ -39,6 +41,7 @@ class DeepDivePipeline:
         llm: BaseChatModel,
         fundamental_tool: FundamentalTool | None = None,
         disclosure_tool: DisclosureTool | None = None,
+        filing_parser: FilingParser | None = None,
         flow_tool: FlowTool | None = None,
     ):
         self.technical_tool = technical_tool
@@ -46,6 +49,7 @@ class DeepDivePipeline:
         self.llm = llm
         self.fundamental_tool = fundamental_tool
         self.disclosure_tool = disclosure_tool
+        self.filing_parser = filing_parser
         self.flow_tool = flow_tool
 
     async def run(self, ticker: str) -> dict:
@@ -61,6 +65,7 @@ class DeepDivePipeline:
                 - fundamental: FundamentalSnapshot | None
                 - fundamental_summary: FundamentalSummaryOutput | None
                 - disclosure: list[DisclosureItem] | None (SEC 10-Q/8-K or OpenDART)
+                - filing_facts: FilingFacts | None (XBRL 재무데이터 + 텍스트 인사이트)
                 - flow: InvestorFlow | None (외국인/기관 순매수 동향, 한국주식만)
                 - integrated_analysis: IntegratedAnalysisOutput | None (종합 인사이트)
                 - actionable_signal: ActionableSignalOutput | None (실행 가능한 투자 시그널)
@@ -103,6 +108,10 @@ class DeepDivePipeline:
             optional_coros.append(self.disclosure_tool.execute(ticker))
             optional_keys.append("disclosure")
 
+        if self.filing_parser:
+            optional_coros.append(self.filing_parser.parse(ticker))
+            optional_keys.append("filing_facts")
+
         if self.flow_tool and is_korean_ticker(ticker):
             optional_coros.append(self.flow_tool.execute(extract_kr_code(ticker)))
             optional_keys.append("flow")
@@ -118,16 +127,18 @@ class DeepDivePipeline:
                     optional_data[key] = None
 
         disclosure_items: list[DisclosureItem] | None = optional_data.get("disclosure")
+        filing_facts: FilingFacts | None = optional_data.get("filing_facts")
         flow_data: InvestorFlow | None = optional_data.get("flow")
 
-        # 공시 또는 수급 데이터가 있을 때만 종합 인사이트 생성
+        # 공시, 파일링, 또는 수급 데이터가 있을 때만 종합 인사이트 생성
         integrated_analysis = None
-        if disclosure_items is not None or flow_data is not None:
+        if disclosure_items is not None or filing_facts is not None or flow_data is not None:
             integrated_analysis = await self._generate_integrated_analysis(
                 ticker=ticker,
                 technical_summary=technical_summary,
                 fundamental_summary=fundamental_summary,
                 disclosure_items=disclosure_items,
+                filing_facts=filing_facts,
                 flow_data=flow_data,
             )
 
@@ -180,6 +191,7 @@ class DeepDivePipeline:
             "fundamental": fundamental_data,
             "fundamental_summary": fundamental_summary,
             "disclosure": disclosure_items,
+            "filing_facts": filing_facts,
             "flow": flow_data,
             "integrated_analysis": integrated_analysis,
             "actionable_signal": actionable_signal,
@@ -318,12 +330,62 @@ class DeepDivePipeline:
         ]
         return "\n".join(lines)
 
+    def _format_filing_for_llm(self, filing: FilingFacts) -> str:
+        """FilingFacts를 LLM 컨텍스트용 요약 문자열로 변환."""
+        lines = [f"# {filing.ticker} {filing.fiscal_period} XBRL 재무데이터"]
+
+        # 주요 재무 지표 (있는 것만 포함)
+        key_metrics = [
+            "revenue",
+            "operating_income",
+            "net_income",
+            "gross_margin",
+            "operating_margin",
+            "net_margin",
+        ]
+        financial_lines = []
+
+        for metric in key_metrics:
+            if metric in filing.financials:
+                data = filing.financials[metric]
+                if "margin" in metric:
+                    financial_lines.append(f"{metric}: {data.value}%")
+                else:
+                    unit_label = {"USD": "$", "KRW": "₩"}.get(data.unit, data.unit)
+                    financial_lines.append(f"{metric}: {unit_label}{data.value:,.0f}")
+
+        if financial_lines:
+            lines.append("재무지표: " + " | ".join(financial_lines))
+
+        # YoY 변화율 (주요 항목만)
+        yoy_changes = []
+        for metric, comp in filing.comparisons.items():
+            if any(
+                key in metric for key in ["revenue_yoy", "operating_income_yoy", "net_income_yoy"]
+            ):
+                yoy_changes.append(f"{metric.replace('_yoy', '')}: {comp.change_pct:+.1f}%")
+
+        if yoy_changes:
+            lines.append("전년대비 변화: " + " | ".join(yoy_changes))
+
+        # 텍스트 인사이트 요약 (있는 경우)
+        if filing.text_insights:
+            insight_summaries = []
+            for insight in filing.text_insights[:2]:  # 최대 2개만
+                if insight.additional:
+                    insight_summaries.append(f"{insight.section}: {insight.additional[0][:100]}")
+            if insight_summaries:
+                lines.append("텍스트 인사이트: " + " | ".join(insight_summaries))
+
+        return "\n".join(lines)
+
     async def _generate_integrated_analysis(
         self,
         ticker: str,
         technical_summary: TechnicalSummaryOutput,
         fundamental_summary: FundamentalSummaryOutput | None,
         disclosure_items: list[DisclosureItem] | None,
+        filing_facts: FilingFacts | None,
         flow_data: InvestorFlow | None,
     ) -> IntegratedAnalysisOutput:
         # Convert DisclosureItem objects to dicts for LLM input
@@ -347,6 +409,7 @@ class DeepDivePipeline:
                 fundamental_summary.valuation_assessment if fundamental_summary else None
             ),
             disclosure_items=disclosure_dicts,
+            filing_summary=self._format_filing_for_llm(filing_facts) if filing_facts else None,
             flow_summary=self._format_flow_for_llm(flow_data) if flow_data else None,
         )
         return await analyzer.generate_integrated_analysis(input_data, self.llm)

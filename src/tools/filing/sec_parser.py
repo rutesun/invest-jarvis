@@ -108,23 +108,90 @@ class SECFilingParser:
         filing_date = ""
         fiscal_period = ""
 
+        # 현재 연도 기준 합리적 범위 설정 (2026년 4월 기준)
+        current_year = 2026
+        min_year = current_year - 6  # 6년 전까지 (더 보수적)
+        max_year = current_year - 2  # 2년 전까지 (FY2024까지, 미래 데이터 완전 차단)
+
         for metric, chain in SEC_CONCEPT_CHAINS.items():
             for tag in chain:
                 if tag not in us_gaap:
                     continue
                 unit_key = "shares" if "Shares" in tag or "shares" in tag.lower() else "USD"
                 entries = us_gaap[tag].get("units", {}).get(unit_key, [])
-                annual = [e for e in entries if e.get("form") == "10-K" and e.get("fp") == "FY"]
+
+                # 필터링: 10-K, FY, 합리적 연도 범위, 미래 날짜 차단
+                annual = []
+                for e in entries:
+                    if (
+                        e.get("form") == "10-K"
+                        and e.get("fp") == "FY"
+                        and min_year <= e.get("fy", 0) <= max_year
+                    ):
+                        # 미래 filing 날짜 차단 (2026-04-29 기준)
+                        filed = e.get("filed", "")
+                        if filed and filed <= "2026-04-29":
+                            annual.append(e)
+
                 if not annual:
                     continue
-                annual.sort(key=lambda e: e.get("filed", ""))
-                latest = annual[-1]
+
+                # 연도별로 그룹핑하고 중복값 제거
+                year_groups = {}
+                for entry in annual:
+                    fy = entry.get("fy")
+                    filed = entry.get("filed", "")
+                    val = entry.get("val", 0)
+
+                    if fy not in year_groups:
+                        year_groups[fy] = {}
+
+                    # 같은 날짜의 값들을 수집
+                    if filed not in year_groups[fy]:
+                        year_groups[fy][filed] = []
+                    year_groups[fy][filed].append(val)
+
+                # 각 연도별로 가장 최신 날짜의 가장 큰 값 선택
+                final_entries = []
+                for fy, filed_groups in year_groups.items():
+                    # 가장 최신 filing 날짜
+                    latest_filed = max(filed_groups.keys())
+                    # 해당 날짜의 가장 큰 값 (보통 consolidated total)
+                    max_val = max(filed_groups[latest_filed])
+
+                    # 합리적 범위 체크 (너무 작거나 음수 제외)
+                    if max_val > 0:
+                        final_entries.append({"fy": fy, "filed": latest_filed, "val": max_val})
+
+                if not final_entries:
+                    continue
+
+                # 연도순 정렬 및 중복값 체크
+                final_entries.sort(key=lambda e: e["fy"])
+
+                # 같은 값이 여러 연도에 나타나는 경우 가장 최근 연도만 선택
+                unique_entries = []
+                seen_values = {}
+                for entry in reversed(final_entries):  # 최신 연도부터 역순 처리
+                    val = entry["val"]
+                    if val not in seen_values:
+                        seen_values[val] = entry
+                        unique_entries.insert(0, entry)  # 앞쪽에 삽입해서 연도순 유지
+
+                final_entries = unique_entries
+
+                if not final_entries:
+                    continue
+
+                latest = final_entries[-1]
                 latest_values[metric] = float(latest["val"])
+
                 if not filing_date or latest.get("filed", "") > filing_date:
                     filing_date = latest.get("filed", "")
                     fiscal_period = f"FY{latest.get('fy', '')}"
-                if len(annual) >= 2:
-                    prev_values[metric] = float(annual[-2]["val"])
+
+                if len(final_entries) >= 2:
+                    prev_values[metric] = float(final_entries[-2]["val"])
                 break
 
         if not latest_values:

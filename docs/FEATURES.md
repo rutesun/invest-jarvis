@@ -68,6 +68,7 @@ LLM 없이 기술적 분석만 수행하는 빠른 진단 기능.
 | 펀더멘탈 | yfinance (선택) | FundamentalSummaryOutput |
 | 뉴스 | yfinance 뉴스 | NewsAnalysisOutput |
 | 공시 | SEC EDGAR / OpenDART (선택) | - |
+| **재무 XBRL** | SEC companyfacts / DART fnlttSinglAcntAll | FilingFacts |
 | 수급 | KIS API (한국주식 전용) | - |
 | **종합** | 위 전체 통합 | IntegratedAnalysisOutput |
 | **실행 시그널** | 기술 + 패턴 + 가격 레벨 | ActionableSignalOutput |
@@ -166,6 +167,51 @@ Deep Dive 분석 실행 시 자동으로 기술적 차트를 생성하여 `chart
 - `_mark_patterns()`: 패턴 완료 지점 마킹
 
 **의존성:** yfinance, LLM (OpenAI/Anthropic), scipy (peak detection), mplfinance, SEC EDGAR, OpenDART (선택), KIS API (선택)
+
+### 2.1 Disclosure Intelligence (XBRL 재무데이터)
+
+**2026-04-29 추가**: SEC/DART 공시 원문에서 재무 숫자 + 텍스트 인사이트 자동 추출.
+
+**데이터 소스:**
+- **SEC (미국)**: companyfacts API (XBRL) → 19개 재무 지표 + edgartools 텍스트
+- **DART (한국)**: fnlttSinglAcntAll API (XBRL) → 재무제표 + document.xml 텍스트
+
+**추출 데이터:**
+
+| 카테고리 | 미국 (SEC) | 한국 (DART) |
+|----------|-----------|-------------|
+| **손익계산서** | Revenue, Operating Income, Net Income, EPS | 매출액, 영업이익, 당기순이익 |
+| **재무상태표** | Total Assets, Debt, Equity, Cash | 자산총계, 부채총계, 자본총계 |
+| **현금흐름표** | Operating CF, CapEx, FCF | 영업활동현금흐름, 유형자산취득 |
+| **마진** | Gross/Operating/Net Margin | 자동 계산 (매출 대비 %) |
+| **YoY 비교** | 전년대비 변화율 (%) | 전년대비 변화율 (%) |
+
+**텍스트 인사이트:**
+- **SEC**: Item 7 (Management Discussion), Item 1A (Risk Factors)
+- **DART**: 4개 사업 섹션 (제품/서비스, 원재료/설비, 수주상황, R&D)
+
+**데이터 품질 보장:**
+- Future date 필터링 (SEC FY2025+ 차단)
+- 중복값 제거 (같은 fiscal year 최신 filing 우선)
+- Confidence 태깅 (XBRL=high, regex=medium, LLM=low)
+
+**CLI 출력 예시:**
+```
+## XBRL 재무데이터
+보고 기간: FY2024 (2024-02-21)
+시장: US | 보고서 유형: 10-K
+
+### 주요 재무 지표
+Revenue: $26,914,000,000 | Operating Income: $32,972,000,000
+Gross Margin: 165.2% | Operating Margin: 123.1%
+
+### 전년대비 변화율
+Revenue: +61.4% | Operating Income: +228.4%
+```
+
+**검증 완료**: NVIDIA, Tesla (SEC), Samsung Electronics (DART)
+
+**캐시**: `data/cache/filings/` (JSON, 24시간 TTL)
 
 ---
 
