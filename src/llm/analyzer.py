@@ -282,6 +282,7 @@ async def generate_integrated_analysis(
         else "해당 기간 주요 공시 없음"
     )
 
+    filing_text = input_data.filing_summary or "XBRL 재무데이터 없음"
     flow_text = input_data.flow_summary or "수급 데이터 없음 (미국주식 또는 KIS 미설정)"
 
     prompt = ChatPromptTemplate.from_messages(
@@ -301,12 +302,15 @@ async def generate_integrated_analysis(
 **공시 분석 (최근 3개월)**:
 {disclosure_text}
 
+**재무데이터 (XBRL)**:
+{filing_text}
+
 **수급 동향**:
 {flow_text}
 
 다음 형식으로 분석하세요:
 - recommendation: "매수", "매도", 또는 "중립"
-- rationale: 3-4개 근거 (각 항목은 "기술적:", "기본적:", "공시:", "수급:" 중 하나로 시작)
+- rationale: 3-4개 근거 (각 항목은 "기술적:", "기본적:", "공시:", "재무:", "수급:" 중 하나로 시작)
 - risks: 2-3개 리스크 요인
 - action_summary: 한 줄 요약""",
             ),
@@ -322,6 +326,7 @@ async def generate_integrated_analysis(
             "technical_rationale": input_data.technical_rationale,
             "fundamental_valuation": input_data.fundamental_valuation or "N/A",
             "disclosure_text": disclosure_text,
+            "filing_text": filing_text,
             "flow_text": flow_text,
         }
     )

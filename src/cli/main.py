@@ -311,12 +311,18 @@ async def run_deep_dive(ticker_or_name: str, provider: str) -> dict:
     )
     flow_tool = FlowTool(kis_provider=kis_provider)
 
+    # 파일링 파서: XBRL 재무데이터 + 텍스트 인사이트 (SEC + DART)
+    from src.tools.filing.parser import FilingParser
+
+    filing_parser = FilingParser(llm=llm)
+
     pipeline = DeepDivePipeline(
         technical_tool=technical_tool,
         news_tool=news_tool,
         llm=llm,
         fundamental_tool=fundamental_tool,
         disclosure_tool=disclosure_tool,
+        filing_parser=filing_parser,
         flow_tool=flow_tool,
     )
 
@@ -555,12 +561,73 @@ def format_deep_dive_output(result: dict) -> str:
     # ── 신규 섹션 ──────────────────────────────────────────────────────────────
 
     disclosure = result.get("disclosure")
+    filing_facts = result.get("filing_facts")
     if disclosure:
         output += "## 공시 분석\n\n"
         output += f"최근 3개월 주요 공시 {len(disclosure)}건:\n\n"
         for i, item in enumerate(disclosure, 1):
             output += f"{i}. **[{item.form_type}] {item.description}** ({item.date})\n"
             output += f"   → [공시 원문 보기]({item.url})\n\n"
+
+    # XBRL 재무데이터 섹션
+    if filing_facts:
+        output += "## XBRL 재무데이터\n\n"
+        output += f"**보고 기간**: {filing_facts.fiscal_period} ({filing_facts.filing_date})\n"
+        output += (
+            f"**시장**: {filing_facts.market} | **보고서 유형**: {filing_facts.filing_type}\n\n"
+        )
+
+        # 주요 재무 지표
+        output += "### 주요 재무 지표\n\n"
+
+        # 손익계산서 항목
+        income_metrics = ["revenue", "gross_profit", "operating_income", "net_income"]
+        income_data = []
+        for metric in income_metrics:
+            if metric in filing_facts.financials:
+                data = filing_facts.financials[metric]
+                unit_symbol = {"USD": "$", "KRW": "₩", "shares": ""}.get(data.unit, data.unit)
+                formatted_val = f"{unit_symbol}{data.value:,.0f}"
+                income_data.append(f"**{metric.replace('_', ' ').title()}**: {formatted_val}")
+
+        if income_data:
+            output += " | ".join(income_data) + "\n\n"
+
+        # 마진 지표
+        margin_metrics = ["gross_margin", "operating_margin", "net_margin"]
+        margin_data = []
+        for metric in margin_metrics:
+            if metric in filing_facts.financials:
+                data = filing_facts.financials[metric]
+                margin_data.append(f"**{metric.replace('_', ' ').title()}**: {data.value:.1f}%")
+
+        if margin_data:
+            output += " | ".join(margin_data) + "\n\n"
+
+        # 전년대비 변화율
+        if filing_facts.comparisons:
+            output += "### 전년대비 변화율\n\n"
+            yoy_data = []
+            key_yoy = ["revenue_yoy", "operating_income_yoy", "net_income_yoy"]
+
+            for yoy_key in key_yoy:
+                if yoy_key in filing_facts.comparisons:
+                    comp = filing_facts.comparisons[yoy_key]
+                    metric_name = yoy_key.replace("_yoy", "").replace("_", " ").title()
+                    yoy_data.append(f"**{metric_name}**: {comp.change_pct:+.1f}%")
+
+            if yoy_data:
+                output += " | ".join(yoy_data) + "\n\n"
+
+        # 텍스트 인사이트 (있는 경우)
+        if filing_facts.text_insights:
+            output += "### 텍스트 인사이트\n\n"
+            for i, insight in enumerate(filing_facts.text_insights[:3], 1):  # 최대 3개
+                output += f"{i}. **{insight.section}**\n"
+                if insight.additional:
+                    for note in insight.additional[:2]:  # 각 섹션당 최대 2개 인사이트
+                        output += f"   - {note}\n"
+                output += "\n"
 
     flow = result.get("flow")
     if flow:
