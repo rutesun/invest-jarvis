@@ -418,7 +418,101 @@ Daily Report 및 Screener 리포트를 Notion Database에 자동 업로드.
 
 ---
 
-## 9. Ticker Resolution
+## 9. Disclosure Intelligence
+
+SEC 및 DART 공시 파싱을 통한 재무 데이터 추출 및 분석.
+
+**특징:**
+- 자동 시장 감지 (미국: SEC EDGAR, 한국: OpenDART)
+- XBRL 재무제표 데이터 추출
+- 텍스트 인사이트 추출 (선택)
+- 공시 영향도 분석 (4가지 유형)
+
+**구조:**
+
+| 컴포넌트 | 역할 |
+|----------|------|
+| `FilingParser` | 통합 진입점 (시장별 자동 분기) |
+| `SECParser` | SEC companyfacts API 통합 |
+| `DARTParser` | OpenDART fnlttSinglAcntAll API 통합 |
+| `FilingImpact` | 공시 영향도 계산 |
+
+### SEC Parser (미국)
+
+**데이터 소스:** SEC companyfacts API  
+**특징:**
+- 연간 10-K/10-Q 자동 수집
+- 중복 데이터 제거 (같은 회계연도)
+- 미래 날짜 필터링 (FY2020-2024)
+- 최신 filing 우선 선택
+
+### DART Parser (한국) - 개선됨
+
+**데이터 소스:** OpenDART fnlttSinglAcntAll API  
+**주요 개선사항:**
+
+#### 다중 소스 수집
+- **연결재무제표 (CFS)** 우선 (Priority 1)
+- **별도재무제표 (OFS)** 후순위 (Priority 2)
+- **전년도 데이터** 보완 수집 (Priority 3-4)
+
+#### 데이터 품질 검증
+```python
+# 유효성 검사 기준
+- 최소 5개 재무 항목 필요
+- 매출액/영업수익 존재 확인
+- 최소 5개 유효 숫자 데이터
+```
+
+#### 최적 데이터셋 선택 알고리즘
+**점수 체계 (총 100점):**
+
+| 기준 | 배점 | 설명 |
+|------|------|------|
+| 우선순위 | 40점 | 연결 > 별도 > 전년도 |
+| 데이터 완성도 | 30점 | 핵심 계정과목 포함률 |
+| 매출액 합리성 | 20점 | 100억~500조원 범위 검증 |
+| 데이터 신선도 | 10점 | 최신 연도 가중치 |
+
+#### 신뢰도 기반 Confidence 태깅
+- **High confidence**: Priority 1-2 (연결/별도)
+- **Medium confidence**: Priority 3-4 (전년도/fallback)
+
+#### 캐싱 개선
+- 소스별 개별 캐시 키: `dart_{corp_code}_{year}_{reprt}_{fs_div}`
+- 24시간 TTL
+- 실패한 API 호출도 캐시하여 중복 호출 방지
+
+### 통합 사용법
+
+**DeepDive 분석에서 자동 활성화:**
+```bash
+uv run jarvis analyze 005930.KS  # 삼성전자 - DART 사용
+uv run jarvis analyze AAPL       # 애플 - SEC 사용
+```
+
+**출력 내용:**
+- **XBRL 재무데이터**: 매출액, 영업이익, 순이익, ROE 등
+- **전년 대비 변화율**: YoY 성장률
+- **신뢰도 정보**: High/Medium confidence 태깅
+- **데이터 출처**: API URL 및 선택된 데이터셋 정보
+
+### 공시 영향도 분석
+
+**4가지 공시 유형:**
+
+| 유형 | 예시 | 영향도 계산 |
+|------|------|-----------|
+| 실적발표 | 분기/연간 실적 | 성장률, 마진 변화 |
+| 유상증자 | 신주 발행 | 지분 희석률 |
+| 전환사채 | CB 발행 | 잠재 희석률 |
+| 공급계약 | 대규모 수주 | 매출 기여도 |
+
+**의존성:** SEC companyfacts API, OpenDART API, httpx (캐싱)
+
+---
+
+## 10. Ticker Resolution
 
 종목명/티커 자동 변환 시스템. 모든 파이프라인에서 공통 사용.
 
@@ -431,7 +525,7 @@ Daily Report 및 Screener 리포트를 Notion Database에 자동 업로드.
 
 ---
 
-## 환경 변수
+## 11. 환경 변수
 
 | 변수 | 필수 | 용도 |
 |------|------|------|
