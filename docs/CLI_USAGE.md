@@ -146,10 +146,12 @@ uv run jarvis report ticker --provider anthropic
 
 **특징:**
 - 텔레그램 채널 메시지 자동 수집 및 분석
-- MapReduce 패턴 5단계 파이프라인 (Ingest → Map → Shuffle → Reduce → Wrapup)
-- 테마별 클러스터링 및 투자 인사이트 추출
+- evidence-first 6단계 런타임 (Ingest → Extract → Link → Select → Write → Ops Review)
+- 메인 브리프/리서치 덤프/Ops 리포트 분리 출력
 - Claude Haiku 4.5 사용으로 비용 최적화
 - `reports/YYYY-MM/daily_YYYY-MM-DD.md` 자동 저장
+- `reports/YYYY-MM/daily_YYYY-MM-DD_appendix.md` 자동 저장
+- `reports/YYYY-MM/daily_YYYY-MM-DD_ops.md` 자동 저장
 - Notion Database 연동 지원 (선택)
 
 **요구사항:**
@@ -190,6 +192,8 @@ uv run jarvis report daily 2026-04-17
 
 **출력 파일:**
 - `reports/2026-04/daily_2026-04-17.md`
+- `reports/2026-04/daily_2026-04-17_appendix.md`
+- `reports/2026-04/daily_2026-04-17_ops.md`
 
 **리포트 구조:**
 - 매크로 데이터 (VIX, Fear & Greed, 시장 지수, 환율)
@@ -220,12 +224,8 @@ VIX: 15.2 | Fear & Greed: 65 (Greed)
 # 전체 파이프라인 한번에
 ./scripts/test_daily_report_stages.sh 2026-04-17
 
-# 개별 스테이지 실행
-uv run python -m src.pipelines.daily_report.stages.ingest_stage 2026-04-17
-uv run python -m src.pipelines.daily_report.stages.map_stage 2026-04-17
-uv run python -m src.pipelines.daily_report.stages.shuffle_stage 2026-04-17
-uv run python -m src.pipelines.daily_report.stages.reduce_stage 2026-04-17
-uv run python -m src.pipelines.daily_report.stages.wrapup_stage 2026-04-17
+# 핵심 런타임 테스트
+uv run pytest tests/pipelines/daily_report tests/pipelines/test_daily_report_pipeline.py -q
 ```
 
 **상세 테스트 가이드:** [scripts/README_TESTING.md](../scripts/README_TESTING.md)
