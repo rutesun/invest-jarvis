@@ -217,6 +217,15 @@ KIS 계좌의 보유 종목별 기술적 분석 + 최근 뉴스.
 | **Reduce** | 테마별 분석 리포트 | Haiku 4.5 (temp 0.3) | theme groups → NewsItem[] |
 | **Wrapup** | 크로스 테마 인사이트 | Haiku 4.5 (temp 0.4) | news items → DailyReport |
 
+**Map Stage 동작:**
+- 유사 메시지를 하나의 이슈로 클러스터링 (같은 기업/산업 트렌드/인과관계/복수 종목)
+- avg_sources < 1.7 시 품질 경고 로그 출력
+- 같은 투자 내러티브는 같은 테마명 재사용
+
+**Shuffle Stage 동작:**
+- 카테고리 내 테마 정규화 시 issue 제목 컨텍스트 활용
+- 밸류체인/인과관계 기반 테마 통합
+
 **데이터 모델:**
 
 ```
