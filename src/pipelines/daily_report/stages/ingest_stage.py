@@ -2,6 +2,7 @@
 
 import csv
 import logging
+import math
 import time
 from collections.abc import Callable
 from datetime import datetime
@@ -98,6 +99,8 @@ def _fetch_macro(date: str) -> MacroSnapshot:
     us_markets = {}
     for name, symbol in us_tickers.items():
         result = _fetch_with_retry(lambda s=symbol: _get_pct_change(s), f"US:{name}")
+        if result is not None and not math.isfinite(result):
+            result = None
         us_markets[name] = result
         if result is None:
             missing_fields.append(f"us_markets.{name}")
@@ -107,6 +110,8 @@ def _fetch_macro(date: str) -> MacroSnapshot:
     kr_markets = {}
     for name, symbol in kr_tickers.items():
         result = _fetch_with_retry(lambda s=symbol: _get_pct_change(s), f"KR:{name}")
+        if result is not None and not math.isfinite(result):
+            result = None
         kr_markets[name] = result
         if result is None:
             missing_fields.append(f"kr_markets.{name}")
@@ -119,6 +124,8 @@ def _fetch_macro(date: str) -> MacroSnapshot:
         return round(data["Close"].iloc[-1], 1)
 
     vix = _fetch_with_retry(_get_vix, "VIX")
+    if vix is not None and not math.isfinite(vix):
+        vix = None
     if vix is None:
         missing_fields.append("vix")
 
@@ -135,6 +142,8 @@ def _fetch_macro(date: str) -> MacroSnapshot:
         return round(data["Close"].iloc[-1], 1)
 
     krw_usd = _fetch_with_retry(_get_krw_usd, "KRW/USD")
+    if krw_usd is not None and not math.isfinite(krw_usd):
+        krw_usd = None
     if krw_usd is None:
         missing_fields.append("krw_usd")
 

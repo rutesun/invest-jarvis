@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic_core import PydanticCustomError
 
 
@@ -131,15 +131,53 @@ class MappedIssue(BaseModel):
         min_length=1,
         max_length=3,
     )
+    keywords: list[str] = Field(default_factory=list, description="종목/지표/기술 키워드")
     impact: str = Field(description="이 이슈가 시장/종목에 주는 핵심 시사점 (단문)")
     sentiment: Sentiment
-    source_ids: list[str] = Field(description="원본 메시지 ID 리스트")
+    source_ids: list[str] = Field(default_factory=list, description="원본 메시지 ID 리스트")
+    entities: list[str] = Field(default_factory=list, description="핵심 엔티티(기업/지표/상품)")
+    event_type: str = Field(default="general_event", description="이벤트 타입")
+    stance: Sentiment | None = Field(default=None, description="이벤트 스탠스")
+    source_fragment_ids: list[str] = Field(
+        default_factory=list,
+        description="fragment 추적 ID 리스트 (예: channel-123#f0)",
+    )
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    summary_fact: str = Field(default="", description="팩트 요약")
+    summary_interpretation: str = Field(default="", description="해석 요약")
+    source_type: SourceType = Field(default=SourceType.UNKNOWN)
 
     @field_validator("category", mode="before")
     @classmethod
     def normalize_category(cls, v: str) -> str:
         """카테고리 정규화 (LLM이 생성한 alias → 정규 카테고리)."""
         return CATEGORY_ALIASES.get(v, v)
+
+    @model_validator(mode="after")
+    def fill_event_fields(self) -> "MappedIssue":
+        """신규 이벤트 필드의 하위호환 기본값 채우기."""
+        if self.stance is None:
+            self.stance = self.sentiment
+
+        if not self.source_fragment_ids and self.source_ids:
+            self.source_fragment_ids = [f"{source_id}#f0" for source_id in self.source_ids]
+
+        if not self.source_ids and self.source_fragment_ids:
+            self.source_ids = sorted(
+                {
+                    fragment_id.split("#", 1)[0]
+                    for fragment_id in self.source_fragment_ids
+                    if fragment_id
+                }
+            )
+
+        if not self.entities:
+            self.entities = list(dict.fromkeys(self.keywords))[:8]
+
+        if not self.summary_fact:
+            self.summary_fact = self.summary
+
+        return self
 
 
 class ShuffleResult(BaseModel):

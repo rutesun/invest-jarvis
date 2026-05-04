@@ -2,8 +2,11 @@
 
 import pytest
 
+from src.pipelines.daily_report.models import MappedIssue
 from src.pipelines.daily_report.stages.map_stage import (
+    _build_fragments,
     _chunk_messages,
+    _normalize_issue,
     map_stage,
 )
 
@@ -20,6 +23,31 @@ def test_chunk_messages_respects_max_tokens(sample_messages):
     for chunk in chunks:
         total_chars = sum(len(msg.text) for msg in chunk)
         assert total_chars * 2 <= 150  # 약간의 여유 허용
+
+
+def test_map_issue_normalization_fills_event_fields(sample_messages):
+    fragments = _build_fragments(sample_messages[:1])
+    assert fragments
+
+    issue = MappedIssue(
+        category="AI/소프트웨어",
+        title="테스트",
+        summary="팩트 요약",
+        themes=["AI 인프라"],
+        impact="영향",
+        keywords=["엔비디아", "GPU"],
+        sentiment="bull",
+        source_ids=[],
+        source_fragment_ids=[],
+        summary_fact="",
+        summary_interpretation="",
+    )
+
+    normalized = _normalize_issue(issue, fragments)
+    assert normalized.source_fragment_ids
+    assert normalized.source_ids
+    assert normalized.summary_fact == "팩트 요약"
+    assert normalized.stance == "bull"
 
 
 @pytest.mark.integration

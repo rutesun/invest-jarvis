@@ -1,5 +1,6 @@
 """Ingest stage 테스트."""
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -71,6 +72,28 @@ def test_fetch_macro_handles_api_failures(mock_ticker, mock_fg):
     assert "vix" in macro.missing_fields
     assert "fear_greed" in macro.missing_fields
     assert "krw_usd" in macro.missing_fields
+
+
+def test_fetch_macro_converts_nan_to_none(monkeypatch):
+    """NaN 값은 그대로 노출하지 않고 None으로 치환한다."""
+
+    def fake_fetch_with_retry(_fn, label, max_retries=3):  # noqa: ARG001
+        if label == "Fear & Greed":
+            return SimpleNamespace(value=55)
+        return float("nan")
+
+    monkeypatch.setattr(
+        "src.pipelines.daily_report.stages.ingest_stage._fetch_with_retry", fake_fetch_with_retry
+    )
+
+    macro = _fetch_macro("2026-04-14")
+
+    assert macro.us_markets["S&P500"] is None
+    assert macro.kr_markets["KOSPI"] is None
+    assert macro.vix is None
+    assert macro.krw_usd is None
+    assert "us_markets.S&P500" in macro.missing_fields
+    assert "kr_markets.KOSPI" in macro.missing_fields
 
 
 @pytest.mark.integration
