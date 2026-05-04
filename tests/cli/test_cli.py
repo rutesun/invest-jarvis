@@ -4,7 +4,8 @@ from unittest.mock import AsyncMock, patch
 from typer.testing import CliRunner
 
 from src.cli.main import app
-from src.llm.models import NewsAnalysisOutput, TechnicalSummaryOutput
+from src.llm.models import ActionableSignalOutput, NewsAnalysisOutput, TechnicalSummaryOutput
+from src.pipelines.analyze_decision import AnalyzeDecisionSummary, AnalyzeScenario, FactorAssessment
 from src.tools.macro import TickerMacroSnapshot
 from src.tools.technical.models import IndicatorSnapshot, TechnicalResult
 
@@ -80,8 +81,48 @@ def test_cli_analyze_command():
         "ticker": "AAPL",
         "technical": mock_technical,
         "technical_summary": mock_tech_summary,
+        "decision_summary": AnalyzeDecisionSummary(
+            leader="technical",
+            core_variables=["20일선 위 유지", "거래량 유지"],
+            action="관망",
+            timing="조정_대기",
+            action_sentence="조정 확인 후 접근이 유리",
+        ),
+        "factor_assessments": [
+            FactorAssessment(
+                factor_type="technical",
+                role="주도",
+                freshness_score=4,
+                magnitude_score=4,
+                actionability_score=3,
+                total_score=11,
+                summary="20일선 위 유지",
+                role_reason="추세가 현재 액션과 직접 연결됨",
+                evidence=["20일선 > 50일선"],
+            )
+        ],
+        "scenarios": [
+            AnalyzeScenario(
+                name="기본 시나리오",
+                trigger_price_levels=["20일선 유지"],
+                confirming_factors=["거래량 유지"],
+                invalidation_conditions=["20일선 종가 이탈"],
+                expected_path="눌림 후 재상승",
+                recommended_action="조정 구간 접근",
+            )
+        ],
         "news": [],
         "news_analysis": mock_news_analysis,
+        "actionable_signal": ActionableSignalOutput(
+            action="매수",
+            timing="지금",
+            signal_strength=8,
+            headline="매수",
+            primary_reason="골든크로스",
+            supporting_reasons=[],
+            risks=[],
+            confidence=0.75,
+        ),
     }
 
     with (
@@ -95,6 +136,11 @@ def test_cli_analyze_command():
     assert result.exit_code == 0
     assert "AAPL" in result.stdout
     assert "178.50" in result.stdout
+    assert "판단 요약" in result.stdout
+    assert "주도 팩터" in result.stdout
+    assert "가격" in result.stdout
+    assert "조정 대기" in result.stdout
+    assert "실행 가능한 투자 시그널" not in result.stdout
 
 
 def test_cli_report_command():
