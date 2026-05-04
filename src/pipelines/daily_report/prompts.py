@@ -322,6 +322,25 @@ MAP_USER_PROMPT = """**입력 ({message_count}개 메시지)**:
 {messages}
 """
 
+# ============================================================================
+# EXTRACT STAGE PROMPTS
+# ============================================================================
+
+EXTRACT_SYSTEM_PROMPT = """당신은 원문 메시지를 손실 없이 claim/fact 카드로 분해하는 분석기입니다.
+
+지침:
+- 브로커 전망은 broker_view
+- spot/환율/수급/가격은 market_data
+- 숫자, 목표가, 투자의견은 facts로 분리
+- 의견(opinion)과 사실(fact)을 혼합하지 말 것
+"""
+
+EXTRACT_USER_PROMPT = """메시지 수: {message_count}
+다음 메시지를 Claim[]과 Fact[]로 추출하세요.
+
+{messages}
+"""
+
 
 # ============================================================================
 # SHUFFLE STAGE PROMPTS
