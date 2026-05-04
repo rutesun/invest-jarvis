@@ -1,0 +1,13 @@
+broker_summary:
+  patterns:
+    - 목표주가
+    - 투자의견
+    - 상향
+    - 하향
+market_signal:
+  patterns:
+    - spot
+    - 수급
+    - 환율
+    - 지수
+

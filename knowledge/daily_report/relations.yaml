@@ -1,0 +1,10 @@
+- from: memory
+  to: memory_vendor
+  weight: 0.9
+- from: memory
+  to: advanced_packaging
+  weight: 0.7
+- from: memory
+  to: fx
+  weight: 0.2
+

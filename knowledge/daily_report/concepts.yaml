@@ -1,0 +1,11 @@
+HBM4:
+  concept: memory
+DRAM:
+  concept: memory
+CoWoS:
+  concept: advanced_packaging
+Micron:
+  concept: memory_vendor
+KRWUSD:
+  concept: fx
+
