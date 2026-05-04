@@ -2,11 +2,7 @@
 
 import pytest
 
-from src.pipelines.daily_report.models import (
-    MacroSnapshot,
-    MappedIssue,
-    NewsItem,
-)
+from src.pipelines.daily_report.models import DailyReport, MacroSnapshot, MappedIssue, NewsItem
 
 
 def test_macro_snapshot_validation():
@@ -20,6 +16,7 @@ def test_macro_snapshot_validation():
         krw_usd=1320.0,
     )
     assert macro.fear_greed == 52
+    assert macro.missing_fields == []
 
     # Fear & Greed는 0-100이어야 함
     with pytest.raises(ValueError):
@@ -31,6 +28,41 @@ def test_macro_snapshot_validation():
             fear_greed=101,
             krw_usd=1320.0,
         )
+
+
+def test_macro_snapshot_allows_none_values():
+    """매크로 값이 없을 때 None을 허용하고 missing_fields를 유지한다."""
+    macro = MacroSnapshot(
+        date="2026-04-14",
+        us_markets={"S&P500": None},
+        kr_markets={"KOSPI": None},
+        vix=None,
+        fear_greed=None,
+        krw_usd=None,
+        missing_fields=["vix", "krw_usd"],
+    )
+
+    assert macro.vix is None
+    assert macro.fear_greed is None
+    assert "vix" in macro.missing_fields
+
+
+def test_daily_report_layer_fields_default():
+    """DailyReport는 레이어 필드를 기본으로 가진다."""
+    report = DailyReport(
+        date="2026-05-04",
+        macro=MacroSnapshot(
+            date="2026-05-04",
+            us_markets={"S&P500": 1.0},
+            kr_markets={"KOSPI": 0.3},
+            vix=18.0,
+            fear_greed=55,
+            krw_usd=1370.0,
+        ),
+    )
+    assert report.brief_items == []
+    assert report.extended_items == []
+    assert report.broker_pulse_items == []
 
 
 def test_mapped_issue_themes_constraint():

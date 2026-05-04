@@ -57,17 +57,20 @@ def test_fetch_fear_greed_failure_returns_none(mock_fg):
 @patch("src.pipelines.daily_report.stages.ingest_stage.fear_and_greed")
 @patch("yfinance.Ticker")
 def test_fetch_macro_handles_api_failures(mock_ticker, mock_fg):
-    """_fetch_macro가 API 실패 시 기본값을 반환하는지 테스트."""
+    """_fetch_macro가 API 실패 시 None + missing_fields를 반환하는지 테스트."""
     mock_ticker.return_value.history.side_effect = Exception("yfinance 다운")
     mock_fg.get.side_effect = Exception("CNN 다운")
 
     macro = _fetch_macro("2026-04-14")
 
-    assert macro.vix == 0.0
-    assert macro.fear_greed == 50
-    assert macro.us_markets["S&P500"] == 0.0
-    assert macro.kr_markets["KOSPI"] == 0.0
-    assert macro.krw_usd == 0.0
+    assert macro.vix is None
+    assert macro.fear_greed is None
+    assert macro.us_markets["S&P500"] is None
+    assert macro.kr_markets["KOSPI"] is None
+    assert macro.krw_usd is None
+    assert "vix" in macro.missing_fields
+    assert "fear_greed" in macro.missing_fields
+    assert "krw_usd" in macro.missing_fields
 
 
 @pytest.mark.integration
@@ -77,5 +80,9 @@ def test_ingest_with_real_data():
 
     assert result.date == "2026-04-14"
     assert len(result.messages) > 0
-    assert result.macro.vix >= 0
-    assert 0 <= result.macro.fear_greed <= 100
+    assert result.messages[0].row_index is not None
+    assert result.messages[0].source_file is not None
+    if result.macro.vix is not None:
+        assert result.macro.vix >= 0
+    if result.macro.fear_greed is not None:
+        assert 0 <= result.macro.fear_greed <= 100

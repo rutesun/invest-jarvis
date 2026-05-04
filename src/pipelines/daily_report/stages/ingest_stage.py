@@ -83,6 +83,7 @@ def _fetch_fear_greed() -> int | None:
 
 def _fetch_macro(date: str) -> MacroSnapshot:
     """주어진 날짜의 매크로 지표 수집."""
+    missing_fields: list[str] = []
 
     def _get_pct_change(ticker: str) -> float:
         data = yf.Ticker(ticker).history(period="2d")
@@ -97,14 +98,18 @@ def _fetch_macro(date: str) -> MacroSnapshot:
     us_markets = {}
     for name, symbol in us_tickers.items():
         result = _fetch_with_retry(lambda s=symbol: _get_pct_change(s), f"US:{name}")
-        us_markets[name] = result if result is not None else 0.0
+        us_markets[name] = result
+        if result is None:
+            missing_fields.append(f"us_markets.{name}")
 
     # 한국 시장
     kr_tickers = {"KOSPI": "^KS11", "KOSDAQ": "^KQ11"}
     kr_markets = {}
     for name, symbol in kr_tickers.items():
         result = _fetch_with_retry(lambda s=symbol: _get_pct_change(s), f"KR:{name}")
-        kr_markets[name] = result if result is not None else 0.0
+        kr_markets[name] = result
+        if result is None:
+            missing_fields.append(f"kr_markets.{name}")
 
     # VIX
     def _get_vix() -> float:
@@ -115,12 +120,12 @@ def _fetch_macro(date: str) -> MacroSnapshot:
 
     vix = _fetch_with_retry(_get_vix, "VIX")
     if vix is None:
-        vix = 0.0
+        missing_fields.append("vix")
 
     # Fear & Greed (CNN)
     fg = _fetch_fear_greed()
     if fg is None:
-        fg = 50
+        missing_fields.append("fear_greed")
 
     # KRW/USD
     def _get_krw_usd() -> float:
@@ -131,7 +136,7 @@ def _fetch_macro(date: str) -> MacroSnapshot:
 
     krw_usd = _fetch_with_retry(_get_krw_usd, "KRW/USD")
     if krw_usd is None:
-        krw_usd = 0.0
+        missing_fields.append("krw_usd")
 
     return MacroSnapshot(
         date=date,
@@ -140,6 +145,7 @@ def _fetch_macro(date: str) -> MacroSnapshot:
         vix=vix,
         fear_greed=fg,
         krw_usd=krw_usd,
+        missing_fields=missing_fields,
     )
 
 
@@ -163,7 +169,7 @@ def _load_telegram_csvs(date: str, data_dir: str) -> list[TelegramMessage]:
 
         with open(csv_file, encoding="utf-8") as f:
             reader = csv.DictReader(f)
-            for row in reader:
+            for row_index, row in enumerate(reader):
                 # content가 비어있으면 스킵
                 if not row.get("content"):
                     continue
@@ -173,6 +179,8 @@ def _load_telegram_csvs(date: str, data_dir: str) -> list[TelegramMessage]:
                         message_id=row["message_id"],
                         timestamp=datetime.fromisoformat(row["timestamp"]),
                         text=row["content"],
+                        row_index=row_index,
+                        source_file=str(csv_file),
                     )
                 )
 

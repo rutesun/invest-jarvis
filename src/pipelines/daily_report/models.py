@@ -67,11 +67,14 @@ class MacroSnapshot(BaseModel):
     """시장 매크로 지표 스냅샷."""
 
     date: str
-    us_markets: dict[str, float] = Field(description="미국 시장 변동률. Keys: S&P500, NASDAQ, DOW")
-    kr_markets: dict[str, float] = Field(description="한국 시장 변동률. Keys: KOSPI, KOSDAQ")
-    vix: float
-    fear_greed: int = Field(ge=0, le=100)
-    krw_usd: float
+    us_markets: dict[str, float | None] = Field(
+        description="미국 시장 변동률. Keys: S&P500, NASDAQ, DOW"
+    )
+    kr_markets: dict[str, float | None] = Field(description="한국 시장 변동률. Keys: KOSPI, KOSDAQ")
+    vix: float | None = None
+    fear_greed: int | None = Field(default=None, ge=0, le=100)
+    krw_usd: float | None = None
+    missing_fields: list[str] = Field(default_factory=list)
 
 
 class TelegramMessage(BaseModel):
@@ -81,6 +84,8 @@ class TelegramMessage(BaseModel):
     message_id: str
     timestamp: datetime
     text: str
+    row_index: int | None = None
+    source_file: str | None = None
 
 
 class IngestResult(BaseModel):
@@ -89,6 +94,30 @@ class IngestResult(BaseModel):
     date: str
     macro: MacroSnapshot
     messages: list[TelegramMessage]
+
+
+class SourceType(StrEnum):
+    """Evidence source type for confidence control."""
+
+    PRIMARY_NEWS = "primary_news"
+    PRIMARY_RESEARCH = "primary_research"
+    BROKER_SUMMARY = "broker_summary"
+    MARKET_SIGNAL = "market_signal"
+    VIDEO_SOCIAL = "video_social"
+    UNKNOWN = "unknown"
+
+
+class ArticleFragment(BaseModel):
+    """Split unit from a raw telegram message row."""
+
+    fragment_id: str
+    raw_message_id: str
+    channel_id: str
+    title: str
+    body: str
+    url: str | None = None
+    fragment_index: int
+    source_type: SourceType = SourceType.UNKNOWN
 
 
 class MappedIssue(BaseModel):
@@ -219,12 +248,15 @@ class DailyReport(BaseModel):
 
     date: str
     macro: MacroSnapshot
-    key_insights: list[str] = Field(description="한글 크로스 테마 인사이트")
+    key_insights: list[str] = Field(default_factory=list, description="한글 크로스 테마 인사이트")
     category_insights: dict[str, str] = Field(
         default_factory=dict,
         description="카테고리별 인사이트 (카테고리 → 인사이트 문자열)",
     )
-    news: list[NewsItem]
+    news: list[NewsItem] = Field(default_factory=list)
+    brief_items: list[NewsItem] = Field(default_factory=list)
+    extended_items: list[NewsItem] = Field(default_factory=list)
+    broker_pulse_items: list[NewsItem] = Field(default_factory=list)
 
 
 class MappedIssueList(BaseModel):
