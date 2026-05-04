@@ -1,14 +1,30 @@
 """Tests for daily report pipeline formatting."""
 
+from datetime import datetime
+
 import pytest
 
 from src.pipelines.daily_report.models import (
+    Claim,
+    ClaimCluster,
+    ClaimType,
     DailyReport,
+    DailyReportRun,
+    ExtractResult,
+    IngestedMessage,
+    IngestResult,
+    KnowledgeCandidate,
     MacroSnapshot,
+    MessageType,
     NewsItem,
+    OpsKnowledgeReport,
+    SelectedCluster,
+    Sentiment,
     StockDetail,
 )
 from src.pipelines.daily_report.pipeline import format_report
+from src.pipelines.daily_report.stages.link_stage import LinkResult
+from src.pipelines.daily_report.stages.select_stage import SelectResult
 
 
 @pytest.fixture
@@ -121,3 +137,129 @@ def test_format_report_structure(sample_report):
     # 관련 종목 확인
     assert "**관련 종목**:" in result
     assert "SK하이닉스" in result
+
+
+def test_run_pipeline_returns_daily_report_run(monkeypatch, tmp_path):
+    from src.pipelines.daily_report.knowledge import ApprovedKnowledge
+    from src.pipelines.daily_report.pipeline import run_pipeline
+
+    def fake_ingest(date: str, data_dir: str) -> IngestResult:
+        del data_dir
+        return IngestResult(
+            date=date,
+            macro=MacroSnapshot(
+                date=date,
+                us_markets={"S&P500": 1.0},
+                kr_markets={"KOSPI": 0.5},
+                vix=18.0,
+                fear_greed=55,
+                krw_usd=1380.0,
+            ),
+            messages=[
+                IngestedMessage(
+                    source_id="kwusa-1",
+                    channel_id="kwusa",
+                    message_id="1",
+                    timestamp=datetime.fromisoformat("2026-05-05T01:00:00+00:00"),
+                    raw_text="마이크론 목표주가 상향",
+                    message_type=MessageType.BROKER_SUMMARY,
+                    source_file="data/2026-05/2026-05-05-kwusa.csv",
+                )
+            ],
+        )
+
+    def fake_extract(messages, date: str) -> ExtractResult:
+        del messages, date
+        return ExtractResult(
+            claims=[
+                Claim(
+                    claim_id="c1",
+                    category="반도체",
+                    claim_type=ClaimType.BROKER_VIEW,
+                    text="마이크론 목표주가 상향",
+                    canonical_entities=["Micron"],
+                    target_scope="memory",
+                    polarity=Sentiment.BULL,
+                    source_ids=["kwusa-1"],
+                    fact_ids=[],
+                    confidence=0.9,
+                )
+            ],
+            facts=[],
+        )
+
+    def fake_knowledge(base_dir):
+        del base_dir
+        return ApprovedKnowledge(
+            aliases={},
+            concepts={"Micron": {"concept": "memory_vendor"}},
+            relations=[],
+            message_types={},
+        )
+
+    def fake_link(claims, knowledge, date: str, telemetry=None) -> LinkResult:
+        del claims, knowledge, date, telemetry
+        return LinkResult(
+            edges=[],
+            clusters=[
+                ClaimCluster(
+                    cluster_id="2026-05-05-cluster-1",
+                    category="반도체",
+                    claim_ids=["c1"],
+                    source_ids=["kwusa-1"],
+                    bull_claim_ids=["c1"],
+                    bear_claim_ids=[],
+                    title="메모리 공급망",
+                )
+            ],
+        )
+
+    def fake_select(clusters, macro, date: str) -> SelectResult:
+        del clusters, macro, date
+        return SelectResult(
+            selected_clusters=[
+                SelectedCluster(
+                    cluster_id="2026-05-05-cluster-1",
+                    score=0.8,
+                    selected_for_brief=True,
+                    selected_for_dump=True,
+                    reasons=["independent_sources=1"],
+                )
+            ],
+            contrarian_signals=[],
+        )
+
+    def fake_ops(telemetry, date: str) -> OpsKnowledgeReport:
+        del telemetry
+        return OpsKnowledgeReport(
+            date=date,
+            candidates=[
+                KnowledgeCandidate(
+                    candidate_type="concept",
+                    key="Micron",
+                    reason="unknown_entity_repeated",
+                    evidence_source_ids=[],
+                    priority=2,
+                    confidence=0.6,
+                )
+            ],
+            markdown="# ops",
+        )
+
+    monkeypatch.setattr("src.pipelines.daily_report.pipeline.ingest", fake_ingest)
+    monkeypatch.setattr("src.pipelines.daily_report.pipeline.extract_stage", fake_extract)
+    monkeypatch.setattr(
+        "src.pipelines.daily_report.pipeline.load_approved_knowledge", fake_knowledge
+    )
+    monkeypatch.setattr("src.pipelines.daily_report.pipeline.link_stage", fake_link)
+    monkeypatch.setattr("src.pipelines.daily_report.pipeline.select_stage", fake_select)
+    monkeypatch.setattr("src.pipelines.daily_report.pipeline.build_ops_knowledge_report", fake_ops)
+    monkeypatch.setattr(
+        "src.pipelines.daily_report.pipeline.ARTIFACTS_ROOT", tmp_path / "artifacts"
+    )
+
+    result = run_pipeline("2026-05-05", data_dir="data")
+
+    assert isinstance(result, DailyReportRun)
+    assert result.main_report.key_insights[0] == "메모리 공급망"
+    assert result.research_dump.markdown.startswith("# Research Dump")

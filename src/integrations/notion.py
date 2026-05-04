@@ -316,7 +316,7 @@ def _load_source_excerpts(
     Args:
         cache: CSV 캐시 딕셔너리 (성능 최적화)
     """
-    from src.pipelines.daily_report.pipeline import _extract_relevant_text, _load_source_messages
+    from src.pipelines.daily_report.renderers import _extract_relevant_text, _load_source_messages
 
     # 캐시가 없으면 새로 로드
     if cache is None:
@@ -434,7 +434,7 @@ def update_daily_report(report: DailyReport, date: str, data_dir: str = "data") 
         all_source_ids.update(news_item.source_ids)
 
     if all_source_ids:
-        from src.pipelines.daily_report.pipeline import _load_source_messages
+        from src.pipelines.daily_report.renderers import _load_source_messages
 
         csv_cache = _load_source_messages(list(all_source_ids), date, data_dir)
         logger.info(f"CSV cache loaded: {len(csv_cache)} messages")

@@ -1083,7 +1083,12 @@ def report_daily(
     from datetime import timedelta
     from pathlib import Path
 
-    from src.pipelines.daily_report.pipeline import format_report, run_pipeline
+    from src.pipelines.daily_report.pipeline import run_pipeline
+    from src.pipelines.daily_report.renderers import (
+        render_main_report,
+        render_ops_knowledge_report,
+        render_research_dump,
+    )
 
     if date is None:
         date = (dt.now() - timedelta(days=1)).strftime("%Y-%m-%d")
@@ -1092,27 +1097,35 @@ def report_daily(
 
     try:
         # 파이프라인 실행
-        report = run_pipeline(date, data_dir)
-        output = format_report(report)
+        run = run_pipeline(date, data_dir)
+        main_output = render_main_report(run.main_report, data_dir=data_dir)
+        dump_output = render_research_dump(run.research_dump)
+        ops_output = render_ops_knowledge_report(run.ops_report)
 
         # 터미널 출력
-        console.print(Markdown(output))
+        console.print(Markdown(main_output))
 
         # MD 파일 저장 (필수)
         year_month = date[:7]  # YYYY-MM
         report_dir = Path(f"reports/{year_month}")
         report_dir.mkdir(parents=True, exist_ok=True)
 
-        output_file = report_dir / f"daily_{date}.md"
-        output_file.write_text(output, encoding="utf-8")
-        console.print(f"\n[green]✓ 리포트 저장: {output_file}[/green]")
+        main_output_file = report_dir / f"daily_{date}.md"
+        dump_output_file = report_dir / f"daily_{date}_appendix.md"
+        ops_output_file = report_dir / f"daily_{date}_ops.md"
+        main_output_file.write_text(main_output, encoding="utf-8")
+        dump_output_file.write_text(dump_output, encoding="utf-8")
+        ops_output_file.write_text(ops_output, encoding="utf-8")
+        console.print(f"\n[green]✓ 메인 리포트 저장: {main_output_file}[/green]")
+        console.print(f"[green]✓ 리서치 덤프 저장: {dump_output_file}[/green]")
+        console.print(f"[green]✓ Ops 리포트 저장: {ops_output_file}[/green]")
 
         # Notion 업데이트 (옵션)
         if notion:
             try:
                 from src.integrations.notion import update_daily_report
 
-                page_url = update_daily_report(report, date, data_dir)
+                page_url = update_daily_report(run.main_report, date, data_dir)
                 console.print(f"[green]✓ Notion 업데이트 완료: {page_url}[/green]")
             except ImportError:
                 console.print(
