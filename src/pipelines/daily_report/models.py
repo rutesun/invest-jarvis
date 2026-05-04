@@ -67,11 +67,14 @@ class MacroSnapshot(BaseModel):
     """시장 매크로 지표 스냅샷."""
 
     date: str
-    us_markets: dict[str, float] = Field(description="미국 시장 변동률. Keys: S&P500, NASDAQ, DOW")
-    kr_markets: dict[str, float] = Field(description="한국 시장 변동률. Keys: KOSPI, KOSDAQ")
-    vix: float
-    fear_greed: int = Field(ge=0, le=100)
-    krw_usd: float
+    us_markets: dict[str, float | None] = Field(
+        description="미국 시장 변동률. Keys: S&P500, NASDAQ, DOW"
+    )
+    kr_markets: dict[str, float | None] = Field(description="한국 시장 변동률. Keys: KOSPI, KOSDAQ")
+    vix: float | None = None
+    fear_greed: int | None = Field(default=None, ge=0, le=100)
+    krw_usd: float | None = None
+    missing_fields: list[str] = Field(default_factory=list)
 
 
 class TelegramMessage(BaseModel):
@@ -89,6 +92,136 @@ class IngestResult(BaseModel):
     date: str
     macro: MacroSnapshot
     messages: list[TelegramMessage]
+
+
+class MessageType(StrEnum):
+    """Ingested message type."""
+
+    RAW_INTELLIGENCE = "raw_intelligence"
+    BROKER_SUMMARY = "broker_summary"
+    MARKET_SIGNAL = "market_signal"
+    OTHER = "other"
+
+
+class IngestedMessage(BaseModel):
+    """Normalized message with source metadata."""
+
+    source_id: str
+    channel_id: str
+    message_id: str
+    timestamp: datetime
+    raw_text: str
+    message_type: MessageType
+    source_file: str
+
+
+class ClaimType(StrEnum):
+    """Claim semantic type."""
+
+    FACT = "fact"
+    OPINION = "opinion"
+    BROKER_VIEW = "broker_view"
+    MARKET_DATA = "market_data"
+
+
+class Fact(BaseModel):
+    """Structured fact extracted from source text."""
+
+    fact_id: str
+    source_id: str
+    kind: str
+    label: str
+    value: str
+    numeric_value: float | None = None
+    unit: str | None = None
+
+
+class Claim(BaseModel):
+    """Claim unit linked to one or more source messages."""
+
+    claim_id: str
+    category: IssueCategory
+    claim_type: ClaimType
+    text: str
+    canonical_entities: list[str]
+    target_scope: str
+    polarity: Sentiment
+    source_ids: list[str]
+    fact_ids: list[str]
+    confidence: float = Field(ge=0.0, le=1.0)
+
+
+class ExtractResult(BaseModel):
+    """Extract stage output."""
+
+    claims: list[Claim]
+    facts: list[Fact]
+
+
+class ClaimEdge(BaseModel):
+    """Edge score between two claims."""
+
+    left_claim_id: str
+    right_claim_id: str
+    score: float = Field(ge=0.0, le=1.0)
+    reasons: list[str] = Field(default_factory=list)
+    contradiction: bool = False
+
+
+class ClaimCluster(BaseModel):
+    """Grouped claims in link/select stages."""
+
+    cluster_id: str
+    category: IssueCategory
+    claim_ids: list[str]
+    source_ids: list[str]
+    bull_claim_ids: list[str] = Field(default_factory=list)
+    bear_claim_ids: list[str] = Field(default_factory=list)
+    title: str
+
+
+class SelectedCluster(BaseModel):
+    """Selection result metadata."""
+
+    cluster_id: str
+    score: float = Field(ge=0.0, le=1.0)
+    selected_for_brief: bool
+    selected_for_dump: bool
+    reasons: list[str] = Field(default_factory=list)
+
+
+class ContrarianSignal(BaseModel):
+    """Contradictory signals preserved for final report."""
+
+    cluster_id: str
+    summary: str
+    supporting_claim_ids: list[str]
+
+
+class ResearchDump(BaseModel):
+    """Expanded research markdown output."""
+
+    date: str
+    markdown: str
+
+
+class KnowledgeCandidate(BaseModel):
+    """Candidate item for approved knowledge update queue."""
+
+    candidate_type: Literal["alias", "concept", "relation", "message_type"]
+    key: str
+    reason: str
+    evidence_source_ids: list[str]
+    priority: int = Field(ge=0, le=3)
+    confidence: float = Field(ge=0.0, le=1.0)
+
+
+class OpsKnowledgeReport(BaseModel):
+    """Ops review output for knowledge governance."""
+
+    date: str
+    candidates: list[KnowledgeCandidate]
+    markdown: str
 
 
 class MappedIssue(BaseModel):
@@ -225,6 +358,16 @@ class DailyReport(BaseModel):
         description="카테고리별 인사이트 (카테고리 → 인사이트 문자열)",
     )
     news: list[NewsItem]
+
+
+class DailyReportRun(BaseModel):
+    """Pipeline runtime output bundle."""
+
+    date: str
+    main_report: DailyReport
+    research_dump: ResearchDump
+    ops_report: OpsKnowledgeReport
+    artifacts_dir: str
 
 
 class MappedIssueList(BaseModel):

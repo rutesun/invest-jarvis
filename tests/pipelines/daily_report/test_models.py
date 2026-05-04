@@ -1,11 +1,22 @@
 """Daily report Pydantic 모델 테스트."""
 
+from datetime import datetime
+
 import pytest
 
 from src.pipelines.daily_report.models import (
+    Claim,
+    ClaimCluster,
+    ClaimType,
+    DailyReport,
+    DailyReportRun,
+    IngestedMessage,
     MacroSnapshot,
     MappedIssue,
+    MessageType,
     NewsItem,
+    OpsKnowledgeReport,
+    ResearchDump,
 )
 
 
@@ -264,3 +275,81 @@ def test_validation_error_context():
         # Check examples
         assert isinstance(ctx["examples"], list)
         assert len(ctx["examples"]) == 2
+
+
+def test_macro_snapshot_allows_missing_values():
+    snapshot = MacroSnapshot(
+        date="2026-05-05",
+        us_markets={"S&P500": None},
+        kr_markets={"KOSPI": None},
+        vix=None,
+        fear_greed=None,
+        krw_usd=None,
+        missing_fields=["vix", "krw_usd"],
+    )
+    assert snapshot.vix is None
+    assert snapshot.missing_fields == ["vix", "krw_usd"]
+
+
+def test_daily_report_run_groups_three_outputs():
+    report = DailyReport(
+        date="2026-05-05",
+        macro=MacroSnapshot(
+            date="2026-05-05",
+            us_markets={"S&P500": 1.0},
+            kr_markets={"KOSPI": 0.5},
+            vix=18.0,
+            fear_greed=55,
+            krw_usd=1380.0,
+        ),
+        key_insights=["메모리 업황 혼재"],
+        news=[],
+    )
+    run = DailyReportRun(
+        date="2026-05-05",
+        main_report=report,
+        research_dump=ResearchDump(date="2026-05-05", markdown="# dump"),
+        ops_report=OpsKnowledgeReport(date="2026-05-05", candidates=[], markdown="# ops"),
+        artifacts_dir="artifacts/daily_report/2026-05-05/run-1",
+    )
+    assert run.main_report.date == "2026-05-05"
+    assert run.research_dump.markdown.startswith("# dump")
+
+
+def test_ingested_message_carries_source_metadata():
+    message = IngestedMessage(
+        source_id="growthresearch-25537",
+        channel_id="growthresearch",
+        message_id="25537",
+        timestamp=datetime.fromisoformat("2026-04-29T09:00:34+00:00"),
+        raw_text="DRAM spot은 보수적",
+        message_type=MessageType.MARKET_SIGNAL,
+        source_file="data/2026-04/2026-04-29-growthresearch.csv",
+    )
+    assert message.source_id == "growthresearch-25537"
+    assert message.message_type is MessageType.MARKET_SIGNAL
+
+
+def test_claim_cluster_preserves_contradiction_lists():
+    claim = Claim(
+        claim_id="c1",
+        category="반도체",
+        claim_type=ClaimType.MARKET_DATA,
+        text="DRAM spot 약세",
+        canonical_entities=["DRAM", "spot_price"],
+        target_scope="memory_cycle",
+        polarity="bear",
+        source_ids=["growthresearch-25537"],
+        fact_ids=[],
+        confidence=0.8,
+    )
+    cluster = ClaimCluster(
+        cluster_id="memory-1",
+        category="반도체",
+        claim_ids=[claim.claim_id],
+        source_ids=claim.source_ids,
+        bull_claim_ids=[],
+        bear_claim_ids=[claim.claim_id],
+        title="메모리 업황 혼재",
+    )
+    assert cluster.bear_claim_ids == ["c1"]
