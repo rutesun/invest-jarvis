@@ -46,6 +46,8 @@ uv run jarvis telegram catch-up # 누락분 보충 수집
 
 | 변경 | 업데이트 문서 |
 |------|---------------|
+| 기능 설계 완료 | `docs/spec/{name}.md` (Feature Spec 작성. 핵심만. 구현 상세는 plan에) |
+| 기능 구현 완료 | `docs/spec/{name}.md` (Status → Shipped, Checklist 체크) |
 | 기능 동작 변경 | `docs/FEATURES.md` (현재 기능명세) |
 | 아키텍처적 결정 | `docs/adr/NNNN-제목.md` (ADR, 변경 이유 기록) |
 | 새 CLI 커맨드 | `docs/CLI_USAGE.md` |

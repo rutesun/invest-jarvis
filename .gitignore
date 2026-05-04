@@ -17,3 +17,4 @@ build/
 .claude/settings.local.jsonanon.session
 tests/pipelines/daily_report/fixtures/stage_outputs/
 anon.session
+.obsidian/

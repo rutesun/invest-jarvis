@@ -110,7 +110,7 @@ def test_format_report_structure(sample_report):
     assert "# Daily Market Report - 2026-04-24" in result
     assert "## 📊 Macro Snapshot" in result
     assert "## 💡 Key Insights" in result
-    assert "## 📰 Theme Analysis" in result
+    assert "## 반도체" in result  # 카테고리 헤딩
 
     # 테마 제목 확인
     assert "### 🚀 AI 메모리 수요 폭증, HBM 가격 파워 강화" in result

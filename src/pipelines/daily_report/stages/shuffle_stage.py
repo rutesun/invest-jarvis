@@ -100,7 +100,7 @@ async def _normalize_themes_for_category(
     if len(unique_themes) <= 2:
         theme_mapping = {theme: [theme] for theme in unique_themes}
     else:
-        theme_mapping = await _normalize_themes(llm, unique_themes, category, date)
+        theme_mapping = await _normalize_themes(llm, unique_themes, category, issues, date)
 
     # 이슈를 정규화된 테마로 그룹핑
     theme_groups: dict[str, list[MappedIssue]] = {}
@@ -128,14 +128,28 @@ async def _normalize_themes(
     llm,
     themes: list[str],
     category: str,
+    issues: list[MappedIssue],
     date: str,
 ) -> dict[str, list[str]]:
     """LLM으로 테마 정규화."""
 
-    themes_text = "\n".join([f"- {theme}" for theme in themes])
+    # 테마별 이슈 컨텍스트 구성 (테마명 + 관련 이슈 제목)
+    theme_context = {}
+    for issue in issues:
+        for theme in issue.themes:
+            if theme not in theme_context:
+                theme_context[theme] = []
+            theme_context[theme].append(issue.title)
+
+    themes_with_context = "\n".join(
+        f"- **{theme}**: {', '.join(titles)}" for theme, titles in theme_context.items()
+    )
 
     system_prompt = SHUFFLE_SYSTEM_PROMPT
-    user_prompt = SHUFFLE_USER_PROMPT.format(themes=themes_text)
+    user_prompt = SHUFFLE_USER_PROMPT.format(
+        category=category,
+        themes_with_context=themes_with_context,
+    )
 
     # LangSmith 태깅
     run_name = f"Shuffle Stage - {date} - {category}"

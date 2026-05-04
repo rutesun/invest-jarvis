@@ -87,6 +87,8 @@ uv run pytest tests/tools/test_technical.py::test_trend_strategy
 
 | 변경 | 업데이트 문서 |
 |------|---------------|
+| 기능 설계 완료 | `docs/spec/{name}.md` (Feature Spec 작성) |
+| 기능 구현 완료 | `docs/spec/{name}.md` (Status → Shipped, Checklist 체크) |
 | 기능 동작 변경 | `docs/FEATURES.md` (현재 기능명세) |
 | 아키텍처적 결정 | `docs/adr/NNNN-제목.md` (ADR, 변경 이유 기록) |
 | 새 CLI 커맨드 추가 | `docs/CLI_USAGE.md` |
@@ -94,6 +96,28 @@ uv run pytest tests/tools/test_technical.py::test_trend_strategy
 | 개발 프로세스 변경 | `docs/DEVELOPMENT.md` |
 
 **문서 업데이트는 코드 변경과 같은 커밋에 포함.**
+
+### Feature Spec 작성 가이드
+
+**위치**: `docs/spec/{name}.md`
+**템플릿**: `docs/spec/_templates/feature-spec.md`
+
+**원칙:**
+- **핵심만 기록.** Why (왜 필요한지) + What (뭘 바꾸는지) + Checklist (완료 기준). 구현 상세 넣지 말 것.
+- **구현 상세는 plan에.** `/brainstorming` → `/writing-plans`로 생성된 plan (`docs/superpowers/plans/`)이 코드 레벨 상세를 담당.
+- **Spec = 사람이 읽는 문서.** Plan = LLM이 구현할 때 쓰는 문서.
+- **설계 완료 시 작성** (Status: Draft), **구현 완료 시 업데이트** (Status: Shipped, Checklist 체크).
+- ROADMAP에서 Spec을 링크. Spec은 ROADMAP을 몰라도 됨 (독립적).
+
+**워크플로우:**
+```
+ROADMAP Task 정의 (러프)
+  → Feature Spec 작성 (Why/What/Checklist)
+  → /brainstorming → /writing-plans (구현 상세 plan 생성)
+  → 구현
+  → Spec Status → Shipped + Checklist 체크
+  → FEATURES.md 업데이트
+```
 
 ### ADR (Architecture Decision Record) 운영
 - **작성 시점**: 기능명세(`FEATURES.md`)가 변경되는 PR에서 아키텍처적으로 중요한 결정이 있을 때

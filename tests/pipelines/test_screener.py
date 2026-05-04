@@ -235,7 +235,10 @@ async def test_screener_pipeline_save_report(
         # Check path structure
         assert saved_path.exists()
         assert "reports" in str(saved_path)
-        assert "2026-04" in str(saved_path)
+        # Check year-month pattern (e.g., "2026-04" or "2026-05")
+        import re
+
+        assert re.search(r"202\d-\d{2}", str(saved_path))
         assert "screen-" in saved_path.name
         assert saved_path.name.endswith(".md")
 

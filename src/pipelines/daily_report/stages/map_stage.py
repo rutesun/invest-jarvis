@@ -70,6 +70,16 @@ def map_stage(
 
     elapsed = time.time() - start_time
 
+    # 클러스터링 품질 검증 (경고만, 실패는 아님)
+    if all_issues:
+        avg_sources = sum(len(issue.source_ids) for issue in all_issues) / len(all_issues)
+        if avg_sources < 1.7:
+            logger.warning(
+                "Map stage clustering quality below target: avg_sources=%.2f (target: ≥1.7). "
+                "Consider strengthening clustering instructions.",
+                avg_sources,
+            )
+
     logger.info(
         "Map stage completed: %d messages → %d issues in %.1fs (%.1f msg/s)",
         len(messages),

@@ -38,7 +38,7 @@ class StageLLMConfig:
 MAP_LLM = StageLLMConfig(
     provider="anthropic",
     model="us.anthropic.claude-haiku-4-5-20251001-v1:0",
-    temperature=0.2,
+    temperature=0.2,  # 실험 결과: 0.2가 최적 (avg_sources 1.57, 안정적)
 )
 
 SHUFFLE_LLM = StageLLMConfig(

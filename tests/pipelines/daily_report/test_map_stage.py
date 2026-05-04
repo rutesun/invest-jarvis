@@ -22,8 +22,9 @@ def test_chunk_messages_respects_max_tokens(sample_messages):
         assert total_chars * 2 <= 150  # 약간의 여유 허용
 
 
+@pytest.mark.integration
 def test_map_stage_with_sample_messages(sample_messages):
-    """샘플 메시지로 Map stage 테스트."""
+    """샘플 메시지로 Map stage 테스트 (LLM 필요)."""
     issues = map_stage(sample_messages)
 
     # 최소 1개 이슈 추출되어야 함
@@ -57,7 +58,7 @@ def test_map_stage_with_real_data():
     # 클러스터링 품질 체크
     avg_sources = sum(len(issue.source_ids) for issue in issues) / len(issues)
     print(f"평균 소스/이슈: {avg_sources:.1f}")
-    assert avg_sources >= 1.5  # 평균 1.5개 이상의 소스
+    assert avg_sources >= 1.6  # 평균 1.6개 이상의 소스 (V6 기준)
 
     # 테마 다양성 체크
     unique_themes = len({theme for issue in issues for theme in issue.themes})

@@ -1,4 +1,4 @@
-"""Wrapup stage: 전체 테마 종합 및 메타 인사이트 도출."""
+"""Wrapup stage: 전체 테마 종합 및 인과관계 인사이트 도출."""
 
 import json
 import logging
@@ -11,15 +11,36 @@ load_dotenv()
 from langsmith import traceable
 
 from src.pipelines.daily_report.config import WRAPUP_LLM
+from src.pipelines.daily_report.examples.wrapup_examples import get_wrapup_examples
 from src.pipelines.daily_report.llm_utils import invoke_llm_with_retry
 from src.pipelines.daily_report.models import DailyReport, KeyInsightsList, MacroSnapshot, NewsItem
 from src.pipelines.daily_report.prompts import (
-    WRAPUP_SYSTEM_PROMPT_V2,
-    WRAPUP_USER_PROMPT_V2,
+    WRAPUP_SYSTEM_PROMPT_V3,
+    WRAPUP_USER_PROMPT_V3,
 )
 
 
 logger = logging.getLogger(__name__)
+
+
+def _build_news_text(news_items: list[NewsItem]) -> str:
+    """테마별 분석을 Wrapup 입력 텍스트로 포맷팅.
+
+    summary 전체 + impact 전체 + stocks 이름을 포함한다.
+    """
+    parts = []
+    for item in news_items:
+        section = (
+            f"[{item.category}] {item.investment_theme}\n"
+            f"(기술 테마: {item.technical_theme})\n"
+            f"{item.summary}\n"
+            f"Impact: {item.impact}"
+        )
+        if item.stocks:
+            stock_names = ", ".join(s.name for s in item.stocks)
+            section += f"\n종목: {stock_names}"
+        parts.append(section)
+    return "\n\n".join(parts)
 
 
 @traceable(name="Wrapup Stage")
@@ -29,7 +50,7 @@ def wrapup_stage(
     date: str = None,
 ) -> DailyReport:
     """
-    전체 시장 인사이트 도출 (테마 간 관계 + 매크로 연결).
+    전체 시장 인사이트 도출 (테마 간 인과관계 체인 + 매크로 연결).
 
     Args:
         news_items: Reduce stage 출력 (테마별 분석)
@@ -37,7 +58,7 @@ def wrapup_stage(
         date: 날짜 문자열
 
     Returns:
-        DailyReport (key_insights 포함)
+        DailyReport (key_insights + category_insights 포함)
     """
     import asyncio
     import time
@@ -79,19 +100,13 @@ Fear & Greed: {macro.fear_greed}
 한국 시장: {", ".join(f"{k} {v:+.2f}%" for k, v in macro.kr_markets.items())}
 KRW/USD: {macro.krw_usd}"""
 
-    # 테마별 분석 포맷팅 (investment_theme 사용)
-    news_text = "\n\n".join(
-        [
-            f"[{item.category}] {item.investment_theme}\n"  # investment_theme 사용
-            f"(기술 테마: {item.technical_theme})\n"
-            f"{item.emoji} {item.summary[:100]}..."  # 요약 일부만
-            for item in news_items
-        ]
-    )
+    # 테마별 분석 포맷팅 (V3: summary 전체 + impact 전체 + stocks)
+    news_text = _build_news_text(news_items)
 
-    # V2 프롬프트 사용
-    system_prompt = WRAPUP_SYSTEM_PROMPT_V2
-    user_prompt = WRAPUP_USER_PROMPT_V2.format(
+    # V3 프롬프트 + examples 주입
+    examples = get_wrapup_examples()
+    system_prompt = WRAPUP_SYSTEM_PROMPT_V3.format(examples=examples)
+    user_prompt = WRAPUP_USER_PROMPT_V3.format(
         macro=macro_text, news_count=len(news_items), news_items=news_text
     )
 
