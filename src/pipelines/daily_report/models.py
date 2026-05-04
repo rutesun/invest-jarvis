@@ -91,7 +91,7 @@ class IngestResult(BaseModel):
 
     date: str
     macro: MacroSnapshot
-    messages: list[TelegramMessage]
+    messages: list["TelegramMessage | IngestedMessage"]
 
 
 class MessageType(StrEnum):
@@ -113,6 +113,11 @@ class IngestedMessage(BaseModel):
     raw_text: str
     message_type: MessageType
     source_file: str
+
+    @property
+    def text(self) -> str:
+        """Legacy compatibility for map-stage consumers."""
+        return self.raw_text
 
 
 class ClaimType(StrEnum):

@@ -1,9 +1,11 @@
 """Ingest stage 테스트."""
 
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from src.pipelines.daily_report.models import MacroSnapshot
 from src.pipelines.daily_report.stages.ingest_stage import _fetch_macro, _fetch_with_retry, ingest
 
 
@@ -63,11 +65,14 @@ def test_fetch_macro_handles_api_failures(mock_ticker, mock_fg):
 
     macro = _fetch_macro("2026-04-14")
 
-    assert macro.vix == 0.0
-    assert macro.fear_greed == 50
-    assert macro.us_markets["S&P500"] == 0.0
-    assert macro.kr_markets["KOSPI"] == 0.0
-    assert macro.krw_usd == 0.0
+    assert macro.vix is None
+    assert macro.fear_greed is None
+    assert macro.us_markets["S&P500"] is None
+    assert macro.kr_markets["KOSPI"] is None
+    assert macro.krw_usd is None
+    assert "vix" in macro.missing_fields
+    assert "fear_greed" in macro.missing_fields
+    assert "krw_usd" in macro.missing_fields
 
 
 @pytest.mark.integration
@@ -77,5 +82,31 @@ def test_ingest_with_real_data():
 
     assert result.date == "2026-04-14"
     assert len(result.messages) > 0
-    assert result.macro.vix >= 0
-    assert 0 <= result.macro.fear_greed <= 100
+    assert result.macro.date == "2026-04-14"
+    assert isinstance(result.macro.missing_fields, list)
+
+
+@patch("src.pipelines.daily_report.stages.ingest_stage._fetch_macro")
+def test_ingest_sorts_messages_and_sets_source_ids(mock_macro, tmp_path: Path):
+    mock_macro.return_value = MacroSnapshot(
+        date="2026-04-29",
+        us_markets={"S&P500": None},
+        kr_markets={"KOSPI": None},
+        vix=None,
+        fear_greed=None,
+        krw_usd=None,
+        missing_fields=["vix", "krw_usd"],
+    )
+    csv_dir = tmp_path / "data" / "2026-04"
+    csv_dir.mkdir(parents=True)
+    csv_dir.joinpath("2026-04-29-test.csv").write_text(
+        "message_id,timestamp,content\n2,2026-04-29T11:00:00+00:00,목표주가 상향\n1,2026-04-29T09:00:00+00:00,DRAM spot 약세\n",
+        encoding="utf-8",
+    )
+
+    result = ingest("2026-04-29", data_dir=str(tmp_path / "data"))
+
+    assert [m.source_id for m in result.messages] == ["test-1", "test-2"]
+    assert result.messages[0].message_type.value == "market_signal"
+    assert result.messages[1].message_type.value == "broker_summary"
+    assert result.macro.vix is None

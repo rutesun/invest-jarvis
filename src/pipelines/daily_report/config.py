@@ -1,6 +1,7 @@
 """Daily report 파이프라인 설정."""
 
 from dataclasses import dataclass
+from pathlib import Path
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
@@ -68,3 +69,7 @@ LLM_MAX_RETRIES = 3
 
 # 매크로 데이터 수집 재시도
 MACRO_MAX_RETRIES = 3
+
+# 런타임 아티팩트/지식 경로
+ARTIFACTS_ROOT = Path("artifacts/daily_report")
+APPROVED_KNOWLEDGE_DIR = Path("knowledge/daily_report")

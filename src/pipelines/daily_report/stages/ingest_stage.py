@@ -19,9 +19,10 @@ from src.pipelines.daily_report.config import MACRO_MAX_RETRIES
 # 환경변수 로드
 load_dotenv()
 from src.pipelines.daily_report.models import (
+    IngestedMessage,
     IngestResult,
     MacroSnapshot,
-    TelegramMessage,
+    MessageType,
 )
 
 
@@ -53,6 +54,14 @@ def ingest(date: str, data_dir: str = "data") -> IngestResult:
         )
 
     return IngestResult(date=date, macro=macro, messages=messages)
+
+
+def _classify_message_type(text: str) -> MessageType:
+    if any(token in text for token in ("목표주가", "투자의견", "상향", "하향")):
+        return MessageType.BROKER_SUMMARY
+    if any(token in text for token in ("spot", "환율", "수급", "가격", "지수")):
+        return MessageType.MARKET_SIGNAL
+    return MessageType.RAW_INTELLIGENCE
 
 
 def _fetch_with_retry(
@@ -94,17 +103,22 @@ def _fetch_macro(date: str) -> MacroSnapshot:
 
     # 미국 시장
     us_tickers = {"S&P500": "^GSPC", "NASDAQ": "^IXIC", "DOW": "^DJI"}
-    us_markets = {}
+    missing_fields: list[str] = []
+    us_markets: dict[str, float | None] = {}
     for name, symbol in us_tickers.items():
         result = _fetch_with_retry(lambda s=symbol: _get_pct_change(s), f"US:{name}")
-        us_markets[name] = result if result is not None else 0.0
+        us_markets[name] = result
+        if result is None:
+            missing_fields.append(f"us_markets.{name}")
 
     # 한국 시장
     kr_tickers = {"KOSPI": "^KS11", "KOSDAQ": "^KQ11"}
-    kr_markets = {}
+    kr_markets: dict[str, float | None] = {}
     for name, symbol in kr_tickers.items():
         result = _fetch_with_retry(lambda s=symbol: _get_pct_change(s), f"KR:{name}")
-        kr_markets[name] = result if result is not None else 0.0
+        kr_markets[name] = result
+        if result is None:
+            missing_fields.append(f"kr_markets.{name}")
 
     # VIX
     def _get_vix() -> float:
@@ -115,12 +129,12 @@ def _fetch_macro(date: str) -> MacroSnapshot:
 
     vix = _fetch_with_retry(_get_vix, "VIX")
     if vix is None:
-        vix = 0.0
+        missing_fields.append("vix")
 
     # Fear & Greed (CNN)
     fg = _fetch_fear_greed()
     if fg is None:
-        fg = 50
+        missing_fields.append("fear_greed")
 
     # KRW/USD
     def _get_krw_usd() -> float:
@@ -131,7 +145,7 @@ def _fetch_macro(date: str) -> MacroSnapshot:
 
     krw_usd = _fetch_with_retry(_get_krw_usd, "KRW/USD")
     if krw_usd is None:
-        krw_usd = 0.0
+        missing_fields.append("krw_usd")
 
     return MacroSnapshot(
         date=date,
@@ -140,10 +154,11 @@ def _fetch_macro(date: str) -> MacroSnapshot:
         vix=vix,
         fear_greed=fg,
         krw_usd=krw_usd,
+        missing_fields=missing_fields,
     )
 
 
-def _load_telegram_csvs(date: str, data_dir: str) -> list[TelegramMessage]:
+def _load_telegram_csvs(date: str, data_dir: str) -> list[IngestedMessage]:
     """주어진 날짜의 모든 텔레그램 CSV 로드."""
     date_obj = datetime.strptime(date, "%Y-%m-%d")
     year_month = date_obj.strftime("%Y-%m")
@@ -154,9 +169,9 @@ def _load_telegram_csvs(date: str, data_dir: str) -> list[TelegramMessage]:
 
     # 날짜 패턴과 일치하는 모든 CSV 찾기
     pattern = f"{date}-*.csv"
-    csv_files = list(csv_dir.glob(pattern))
+    csv_files = sorted(csv_dir.glob(pattern))
 
-    messages = []
+    messages: list[IngestedMessage] = []
     for csv_file in csv_files:
         # 파일명에서 channel_id 추출 (예: "2026-04-14-shinhanresearch.csv")
         channel_id = csv_file.stem.split("-", 3)[-1]
@@ -168,15 +183,18 @@ def _load_telegram_csvs(date: str, data_dir: str) -> list[TelegramMessage]:
                 if not row.get("content"):
                     continue
                 messages.append(
-                    TelegramMessage(
+                    IngestedMessage(
+                        source_id=f"{channel_id}-{row['message_id']}",
                         channel_id=channel_id,
                         message_id=row["message_id"],
                         timestamp=datetime.fromisoformat(row["timestamp"]),
-                        text=row["content"],
+                        raw_text=row["content"],
+                        message_type=_classify_message_type(row["content"]),
+                        source_file=str(csv_file),
                     )
                 )
 
-    return messages
+    return sorted(messages, key=lambda item: item.timestamp)
 
 
 # 테스트용 CLI 진입점
