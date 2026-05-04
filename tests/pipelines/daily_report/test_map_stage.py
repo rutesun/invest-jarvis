@@ -57,7 +57,7 @@ def test_map_stage_with_real_data():
     # 클러스터링 품질 체크
     avg_sources = sum(len(issue.source_ids) for issue in issues) / len(issues)
     print(f"평균 소스/이슈: {avg_sources:.1f}")
-    assert avg_sources >= 1.5  # 평균 1.5개 이상의 소스
+    assert avg_sources >= 1.6  # 평균 1.6개 이상의 소스 (V6 기준)
 
     # 테마 다양성 체크
     unique_themes = len({theme for issue in issues for theme in issue.themes})
