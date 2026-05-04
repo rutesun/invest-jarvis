@@ -22,8 +22,9 @@ def test_chunk_messages_respects_max_tokens(sample_messages):
         assert total_chars * 2 <= 150  # 약간의 여유 허용
 
 
+@pytest.mark.integration
 def test_map_stage_with_sample_messages(sample_messages):
-    """샘플 메시지로 Map stage 테스트."""
+    """샘플 메시지로 Map stage 테스트 (LLM 필요)."""
     issues = map_stage(sample_messages)
 
     # 최소 1개 이슈 추출되어야 함
