@@ -5,6 +5,12 @@
 **범위**: `src/pipelines/daily_report/` 내부 품질 개선 + `jarvis report daily` 출력 포맷 개선 + Notion 업로드 반영  
 **우선순위**: 정보 커버리지를 유지하면서 품질을 올리는 것이 1순위
 
+## 적용 메모
+
+- 본 설계의 초기 구현 범위에서는 `wrapup`을 제외한다.
+- 각 단계는 반드시 실행 결과를 확인하는 `Review Gate`를 통과해야 다음 단계로 넘어간다.
+- 즉, `코드 작성 완료`가 아니라 `산출물 품질 확인 완료`가 단계 종료 조건이다.
+
 ## 1. 목표
 
 현재 Daily Report는 정보량은 많지만, 다음 문제가 반복된다.
@@ -30,6 +36,7 @@
 - Telegram 수집 포맷 전체 재설계
 - LLM provider 교체
 - Notion 업로드를 위한 별도 데이터 모델 분리
+- 초기 구현에서 `wrapup` 단계 개선/확장
 
 즉, 기존 Daily Report 제품을 유지하되 내부 구조와 출력 계약을 개선한다.
 
@@ -53,6 +60,7 @@
 ### 옵션 B. 중간 재설계형
 
 - 기존 `Ingest -> Map -> Shuffle -> Reduce -> Wrapup` 뼈대 유지
+- 단, 초기 구현은 `wrapup` 제외 범위에서 진행
 - 앞단에 `fragment split / source classify`
 - 중간에 `global merge / rank / select`
 - 출력단에 `brief / extended / broker pulse`
@@ -85,13 +93,13 @@
 
 ## 4. 최종 아키텍처
 
-기존 개념:
+현재 개념:
 
 ```text
 Ingest -> Map -> Shuffle -> Reduce -> Wrapup
 ```
 
-개선 개념:
+초기 개선 개념 (wrapup 제외):
 
 ```text
 Ingest
@@ -103,7 +111,6 @@ Ingest
   -> Score
   -> Select
   -> Reduce
-  -> Wrapup
   -> Render
 ```
 
@@ -299,24 +306,12 @@ Ingest
 - 브로커 전망은 반드시 `전망`, `추정`, `의견`으로 표시
 - low confidence 항목은 watchlist 전용 톤 사용
 
-### 5.9 Wrapup
+### 5.9 Wrapup (초기 구현 제외)
 
-**대상 파일**: `src/pipelines/daily_report/stages/wrapup_stage.py`
+`wrapup`은 초기 구현 범위에서 제외한다.  
+이유는 앞단 산출물 품질이 불안정한 상태에서 wrapup이 문제를 포장할 위험이 크기 때문이다.
 
-역할:
-- `brief_candidates` 중심으로 key insight 생성
-- mixed signal 보존
-
-변경사항:
-- key insight는 단순 `list[str]`가 아니라 추적 가능한 객체로 저장
-- 각 insight는 최소 1개 이상의 cluster/source bundle 참조를 가진다.
-
-권장 필드:
-- `title`
-- `summary`
-- `cluster_ids`
-- `source_fragment_ids`
-- `counter_signal_ids`
+초기 구현에서는 `brief/extended/watchlist` 산출물 품질을 먼저 고정하고, 이후 별도 단계에서 wrapup 도입 여부를 검토한다.
 
 ## 6. 데이터 모델 설계
 
@@ -329,7 +324,6 @@ Ingest
 - `MergedCluster`
 - `ThemeCluster`
 - `ScoredTheme`
-- `KeyInsight`
 
 ### 기존 모델 변경
 
@@ -341,7 +335,6 @@ Ingest
   - `brief_items`
   - `extended_items`
   - `broker_pulse_items`
-  - `key_insights`
   를 구조적으로 저장
 
 ## 7. 출력 구조
@@ -350,7 +343,6 @@ Ingest
 
 ### 7.1 Daily Brief
 
-- `Key Insights 3~5개`
 - `핵심 테마 10~20개`
 - 빠르게 읽히는 본문
 
@@ -422,7 +414,7 @@ uv run jarvis report daily <date>
 
 ## 10. 테스트 설계
 
-테스트 전략은 아래 3층 구조를 사용한다.
+테스트 전략은 아래 4층 구조를 사용한다.
 
 ### 10.1 단계별 결정적 회귀 테스트
 
@@ -440,7 +432,6 @@ uv run jarvis report daily <date>
 - evidence cluster dedupe
 - rank 결과 레이어 분류
 - reduce 문체 제약
-- wrapup 추적성
 
 ### 10.2 날짜별 골든셋 회귀 테스트
 
@@ -502,6 +493,50 @@ uv run jarvis report daily 2026-04-28
 - 브로커 digest가 메인을 장악하지 않는가
 - Extended Themes는 제목이 보이고 내부 상세만 접히는가
 
+### 10.4 단계별 Review Gate
+
+각 게이트는 `실행 결과 + 체크리스트`를 통과해야 다음 단계 구현을 시작할 수 있다.
+
+#### Gate 1: Ingest + Fragment Split + Map
+
+필수 확인:
+- 묶음형 row가 기대한 fragment 수로 분해되는가
+- map 결과에서 명백한 섹터 오분류가 과도하지 않은가
+- source fragment mapping이 row 첫머리로 쏠리지 않는가
+
+통과 시 다음 단계:
+- Global Merge 구현/검증
+
+#### Gate 2: Global Merge
+
+필수 확인:
+- 같은 이벤트의 반복 요약이 하나의 evidence cluster로 접히는가
+- 서로 무관한 이벤트가 하나의 cluster로 섞이지 않는가
+- 청크 경계를 넘는 dedupe가 실제로 동작하는가
+
+통과 시 다음 단계:
+- Rank/Select 구현/검증
+
+#### Gate 3: Rank / Select
+
+필수 확인:
+- digest-only/single-source 항목이 watchlist로 내려가는가
+- 핵심 brief는 과도하게 길지 않은가
+- extended가 커버리지를 보존하는가
+
+통과 시 다음 단계:
+- Reduce + Render + CLI/Notion 반영
+
+#### Gate 4: Reduce + Render + CLI/Notion
+
+필수 확인:
+- single-source 항목이 과장 문체로 렌더되지 않는가
+- `UNKNOWN`, `PRIVATE`, `0.0` 누수가 없는가
+- Notion에서 `Extended Themes`는 제목이 보이고 내부 카드만 접히는가
+
+통과 시 상태:
+- 초기 remediation 완료
+
 ## 11. 오류 처리
 
 - `source_parsing` 실패 시
@@ -519,24 +554,35 @@ uv run jarvis report daily 2026-04-28
 
 ## 12. 도입 순서
 
-### Phase 1. 신뢰도 복원
+### Phase 1. Ingest/Map 기초 복구
 
 1. macro historical 조회 및 sentinel 제거
 2. source parsing
 3. source type 분류
-4. renderer hygiene (`UNKNOWN`, `PRIVATE`, source excerpt`)
+4. map 결과 안정화
+5. Gate 1 리뷰 통과
 
-### Phase 2. 중복 제어
+### Phase 2. Global Merge 도입
 
-5. evidence clustering
-6. global merge
-7. rank/select
+6. evidence clustering
+7. global merge
+8. Gate 2 리뷰 통과
 
-### Phase 3. 출력 구조 전환
+### Phase 3. Rank/Select 도입
 
-8. brief / extended / broker pulse 렌더
-9. CLI/Notion 동일 구조 반영
-10. 날짜별 골든셋 회귀 정착
+9. rank/select
+10. Gate 3 리뷰 통과
+
+### Phase 4. Reduce + 출력 계약 반영
+
+11. reduce 문체 제약
+12. brief / extended / broker pulse 렌더
+13. CLI/Notion 동일 구조 반영
+14. Gate 4 리뷰 통과
+
+### Phase 5. 선택 과제 (후속)
+
+15. wrapup 재도입 여부 검토
 
 ## 13. 성공 기준
 
@@ -547,9 +593,9 @@ uv run jarvis report daily 2026-04-28
 - Broker Pulse가 잡음 격리 역할을 한다.
 - 브로커 digest가 메인 narrative를 직접 지배하지 못한다.
 - 동일 이벤트 반복 요약이 evidence cluster 단위로 접힌다.
-- mixed signal이 필요한 날짜에는 실제로 유지된다.
 - `UNKNOWN`, `PRIVATE`, `0.0` 같은 신뢰도 저하 표기가 본문에서 사라진다.
 - CLI와 Notion이 동일한 정보 계층을 유지한다.
+- 각 단계 산출물 리뷰 게이트를 통과한 뒤에만 다음 단계가 진행된다.
 
 ## 14. 변경 대상 파일
 
@@ -562,7 +608,6 @@ uv run jarvis report daily 2026-04-28
 - `src/pipelines/daily_report/stages/map_stage.py`
 - `src/pipelines/daily_report/stages/shuffle_stage.py`
 - `src/pipelines/daily_report/stages/reduce_stage.py`
-- `src/pipelines/daily_report/stages/wrapup_stage.py`
 - `src/integrations/notion.py`
 - `src/cli/main.py`
 - 관련 테스트 및 fixture
@@ -577,11 +622,13 @@ uv run jarvis report daily 2026-04-28
 ## 15. 최종 요약
 
 이 설계는 Daily Report를 새로 만들지 않는다.  
-대신 기존 파이프라인에 아래 네 가지를 추가해 신뢰도와 사용성을 동시에 복구한다.
+대신 기존 파이프라인에 아래 다섯 가지를 추가해 신뢰도와 사용성을 동시에 복구한다.
 
 1. 기사 fragment 기반 입력 처리
 2. evidence cluster 기반 dedupe
 3. rank/select 기반 편집 레이어
 4. brief / extended / broker pulse 기반 출력 구조
+5. 단계별 실행 결과 Review Gate 운영
 
-결과적으로 메인 본문은 짧고 읽히게 만들고, 정보량은 확장 섹션에서 유지하며, 근거 추적성과 테스트 가능성은 오히려 강화한다.
+결과적으로 메인 본문은 짧고 읽히게 만들고, 정보량은 확장 섹션에서 유지하며, 근거 추적성과 테스트 가능성은 오히려 강화한다.  
+또한 초기 범위에서는 wrapup을 제외해, 기초 산출물 검증을 선행한 뒤에만 고차 합성 단계를 도입한다.
