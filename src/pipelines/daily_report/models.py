@@ -35,6 +35,9 @@ IssueCategory = Literal[
     # 소비
     "유통/소비재",
     "K-푸드",
+    "엔터/미디어",
+    # 운송/물류
+    "운송/물류",
     # 에너지/인프라
     "에너지",
     "건설/부동산",
@@ -45,6 +48,19 @@ IssueCategory = Literal[
     # 기타
     "기타",
 ]
+
+# 카테고리 alias 매핑 (LLM이 자연스럽게 생성하는 변형 → 정규 카테고리)
+CATEGORY_ALIASES: dict[str, IssueCategory] = {
+    "의료/제약": "바이오/제약",
+    "제약": "바이오/제약",
+    "헬스케어": "바이오/제약",
+    "운송": "운송/물류",
+    "물류": "운송/물류",
+    "항공": "운송/물류",
+    "엔터테인먼트": "엔터/미디어",
+    "게임": "엔터/미디어",
+    "미디어": "엔터/미디어",
+}
 
 
 class MacroSnapshot(BaseModel):
@@ -89,6 +105,12 @@ class MappedIssue(BaseModel):
     impact: str = Field(description="이 이슈가 시장/종목에 주는 핵심 시사점 (단문)")
     sentiment: Sentiment
     source_ids: list[str] = Field(description="원본 메시지 ID 리스트")
+
+    @field_validator("category", mode="before")
+    @classmethod
+    def normalize_category(cls, v: str) -> str:
+        """카테고리 정규화 (LLM이 생성한 alias → 정규 카테고리)."""
+        return CATEGORY_ALIASES.get(v, v)
 
 
 class ShuffleResult(BaseModel):
