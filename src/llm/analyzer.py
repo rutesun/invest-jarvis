@@ -58,6 +58,37 @@ def format_levels_for_llm(levels: PriceLevels) -> str:
     return "\n".join(lines)
 
 
+def format_structure_context_for_llm(
+    structure_levels: dict | None,
+    execution_levels: list[dict] | None,
+) -> str:
+    """구조 zone과 실행 레벨을 LLM용 텍스트로 변환"""
+    lines: list[str] = ["구조 레벨:"]
+
+    if structure_levels:
+        demand_zones = structure_levels.get("demand_zones") or []
+        supply_zones = structure_levels.get("supply_zones") or []
+        invalidation = structure_levels.get("invalidation")
+
+        lines.append(f"- 수요 존: {', '.join(demand_zones) if demand_zones else '없음'}")
+        lines.append(f"- 공급 존: {', '.join(supply_zones) if supply_zones else '없음'}")
+        lines.append(f"- 무효화: {invalidation or '없음'}")
+    else:
+        lines.append("- 구조 존 데이터 없음")
+
+    lines.append("")
+    lines.append("실행 레벨:")
+    if execution_levels:
+        for index, level in enumerate(execution_levels, start=1):
+            lines.append(
+                f"{index}. ${level['price']:.2f} ({level['description']}, {level['distance_pct']:+.1f}%)"
+            )
+    else:
+        lines.append("- 실행 레벨 데이터 없음")
+
+    return "\n".join(lines)
+
+
 async def analyze_news(
     input_data: NewsAnalysisInput,
     llm: BaseChatModel,
@@ -332,6 +363,8 @@ async def generate_actionable_signal(
     technical_summary: str,
     chart_patterns: dict[str, ChartPatternResult],
     price_levels: PriceLevels,
+    structure_levels: dict | None = None,
+    execution_levels: list[dict] | None = None,
     news_analysis: str | None = None,
     fundamental_summary: str | None = None,
     llm: BaseChatModel | None = None,
@@ -344,6 +377,7 @@ async def generate_actionable_signal(
 
     patterns_text = format_patterns_for_llm(chart_patterns)
     levels_text = format_levels_for_llm(price_levels)
+    structure_context = format_structure_context_for_llm(structure_levels, execution_levels)
 
     prompt = ChatPromptTemplate.from_messages(
         [
@@ -384,6 +418,9 @@ async def generate_actionable_signal(
 **가격 레벨**:
 {levels_text}
 
+**구조/실행 레벨**:
+{structure_context}
+
 **뉴스**: {news_analysis}
 **펀더멘탈**: {fundamental_summary}
 
@@ -400,6 +437,7 @@ async def generate_actionable_signal(
             "technical_summary": technical_summary,
             "patterns_text": patterns_text,
             "levels_text": levels_text,
+            "structure_context": structure_context,
             "news_analysis": news_analysis or "없음",
             "fundamental_summary": fundamental_summary or "없음",
         }

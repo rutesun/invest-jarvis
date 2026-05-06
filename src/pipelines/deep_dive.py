@@ -22,8 +22,10 @@ from src.tools.fundamental import FundamentalSnapshot, FundamentalTool
 from src.tools.news import NewsArticle, NewsTool
 from src.tools.technical.charting import render_technical_chart
 from src.tools.technical.components.chart_patterns import detect_chart_patterns
+from src.tools.technical.level_composer import compose_level_payload
 from src.tools.technical.models import TechnicalResult
 from src.tools.technical.price_levels import get_fibonacci_base_points, identify_key_levels
+from src.tools.technical.structure_zones import StructureZoneDetector
 from src.tools.technical.tool import TechnicalAnalysisTool
 
 
@@ -167,12 +169,18 @@ class DeepDivePipeline:
             lookback_high=lookback_high,
             lookback_low=lookback_low,
         )
+        zone_set = StructureZoneDetector().detect(df, technical_data.snapshot)
+        level_payload = compose_level_payload(zone_set, price_levels)
+        structure_levels = level_payload["structure_levels"]
+        execution_levels = level_payload["execution_levels"]
 
         actionable_signal = await analyzer.generate_actionable_signal(
             ticker=ticker,
             technical_summary=f"{technical_summary.summary}\n\n{technical_summary.rationale}",
             chart_patterns=chart_patterns,
             price_levels=price_levels,
+            structure_levels=structure_levels,
+            execution_levels=execution_levels,
             llm=self.llm,
         )
 
@@ -221,6 +229,8 @@ class DeepDivePipeline:
             "flow": flow_data,
             "integrated_analysis": integrated_analysis,
             "actionable_signal": actionable_signal,
+            "structure_levels": structure_levels,
+            "execution_levels": execution_levels,
             "chart": chart_result,
         }
 

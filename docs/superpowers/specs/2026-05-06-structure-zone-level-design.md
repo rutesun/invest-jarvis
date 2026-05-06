@@ -31,6 +31,26 @@
 - 최종 출력은 `구조 레벨`과 `실행 레벨`을 분리한다.
 - 테스트는 CSV fixture 기반으로 파라미터/결과/점수 분해를 저장한다.
 
+## Product Success Criteria
+
+이번 설계의 성공은 `zone detector를 구현했다`가 아니라, 사용자가 기존 출력보다 더 빠르고 더 덜 헷갈리게 판단하느냐로 본다.
+
+초기 성공 기준은 다음과 같이 둔다.
+
+- 사용자는 상단 출력만 보고 `구조 레벨`과 `실행 레벨`의 역할 차이를 바로 구분할 수 있어야 한다.
+- 기존 출력 대비 `이 지지/저항이 왜 중요한지 모르겠다`는 해석 혼선을 줄여야 한다.
+- 내부 비교 샘플에서 동일 종목의 기존 출력과 신규 출력을 나란히 봤을 때, 사람이 `신규 출력이 더 행동 가능하다`고 판단하는 비율이 과반을 넘어야 한다.
+- 동일 종목 재실행 시 구조 zone과 구조 무효화가 불안정하게 흔들리지 않아야 한다.
+
+정량/정성 검증은 아래 두 축으로 본다.
+
+- 제품 검증
+  - 내부 샘플 리뷰에서 `더 신뢰 가능함`, `더 행동 가능함`, `덜 기계적임`을 체크한다.
+  - 기존 출력 대비 오해 사례를 수집한다.
+- 엔지니어링 검증
+  - fixture/golden/score decomposition 테스트로 결과 안정성을 본다.
+  - latency budget과 artifact diff를 통해 튜닝의 부작용을 본다.
+
 ## Non-Goals
 
 - 이번 범위에서 `LLM as judge`를 도입하지 않는다.
@@ -65,6 +85,7 @@
 - `StructureZoneSet`
   - `demand_zones`
   - `supply_zones`
+  - `invalidation_candidates`
   - `invalidation_zone`
   - `all_candidates`
 
@@ -113,6 +134,63 @@
 
 CSV fixture와 결과 스냅샷을 사용하는 테스트/튜닝 보조 장치를 만든다.
 
+## Output Contract
+
+구현자, 테스트, LLM 프롬프트가 같은 계약을 보도록 최종 출력 계약을 먼저 고정한다.
+
+### StructureZoneSet contract
+
+| field | type | rule |
+|-------|------|------|
+| `demand_zones` | list[`StructureZone`] | `total_score DESC` 정렬, 최대 `top_n_per_side` 보관 |
+| `supply_zones` | list[`StructureZone`] | `total_score DESC` 정렬, 최대 `top_n_per_side` 보관 |
+| `invalidation_candidates` | list[`StructureZone`] | 내부 전용, 최종 노출 전 후보 저장 |
+| `invalidation_zone` | `StructureZone \| None` | 최종 한 개만 선택 |
+| `all_candidates` | list[`StructureZone`] | 디버깅/테스트용 전체 후보 |
+
+동점 처리 규칙:
+
+- 1순위: `total_score DESC`
+- 2순위: `last_touch_date DESC`
+- 3순위: `touch_count DESC`
+- 4순위: 현재가와의 거리 절대값 `ASC`
+
+### Final analyze output contract
+
+Phase 1의 기본 출력 수량은 아래처럼 고정한다. 이는 영구 UI 정책이 아니라 초기 안정화용 계약이다.
+
+| block | count | selection rule |
+|-------|-------|----------------|
+| `구조 레벨 > 수요 구간` | 최대 2개 | `demand_zones` 상위 순 |
+| `구조 레벨 > 공급 구간` | 최대 2개 | `supply_zones` 상위 순 |
+| `구조 레벨 > 구조 무효화` | 최대 1개 | `invalidation_zone` |
+| `실행 레벨` | 최대 3개 | 현재가 근접도 + line 타입 우선순위로 선택 |
+
+출력 부족 시 fallback 규칙:
+
+- 유효한 수요/공급 zone이 2개 미만이면 존재하는 개수만 노출한다.
+- 유효한 `invalidation_zone`이 없으면 장기 MA 기반 fallback을 사용한다.
+- 실행 레벨이 부족하면 pivot → MA → ATR → fib 순으로 후보를 보충한다.
+
+### LLM payload contract
+
+LLM에는 기존 `지지/저항` 평문 묶음 대신 구조/실행 분리 payload를 전달한다.
+
+필수 필드:
+
+- `structure_levels.demand_zones[]`
+- `structure_levels.supply_zones[]`
+- `structure_levels.invalidation`
+- `execution_levels[]`
+- `structure_summary`
+- `execution_summary`
+
+LLM은 아래 원칙을 따른다.
+
+- 구조 레벨은 방향과 무효화 기준 설명에 사용한다.
+- 실행 레벨은 진입/추격/대기/손절의 실행 문장에 사용한다.
+- 구조와 실행이 충돌하면 `구조 우선, 실행 보조` 원칙으로 해석한다.
+
 ## Data Model
 
 ### StructureZone
@@ -145,6 +223,7 @@ CSV fixture와 결과 스냅샷을 사용하는 테스트/튜닝 보조 장치�
 
 ### ZoneTestArtifact
 
+- `schema_version`
 - `symbol`
 - `csv_path`
 - `params`
@@ -221,6 +300,30 @@ zone 폭은 `ATR + 퍼센트 하한/상한 혼합` 규칙으로 계산한다.
 - `invalidation`: 수요/공급 zone과 장기 MA(특히 150/200일선)를 고려한 구조 붕괴 기준
 
 `구조 무효화`는 최종 한 개만 노출하되, 내부적으로는 여러 후보를 둘 수 있다.
+
+### 7. Invalidation and conflict handling
+
+`구조 무효화`는 사용자가 `이 시나리오가 틀렸다고 보는 기준`으로 읽는 값이므로, 선택 규칙을 고정한다.
+
+우선순위:
+
+1. 가장 강한 `core demand zone`의 하단 이탈
+2. 가장 설명력이 높은 장기 MA 이탈
+3. 최근 주요 swing low 이탈
+
+세부 규칙:
+
+- `core demand zone`이 존재하면 그 하단을 1차 무효화 후보로 둔다.
+- 150일선 또는 200일선이 1차 무효화 후보와 `3%` 이내면 `복합 무효화`로 묶어 설명한다.
+- 강한 수요 zone이 없으면 장기 MA 기반 후보를 사용한다.
+- zone과 MA가 모두 약하면 최근 주요 swing low를 fallback으로 사용한다.
+- 세 후보 모두 품질 기준 미달이면 `구조 무효화 계산 불충분` 상태로 두고, 실행 레벨 기반 손절선으로 대체하지 않는다.
+
+구조/실행 충돌 처리:
+
+- 구조는 상방인데 실행 레벨은 단기 저항 압력이 큰 경우: `구조는 유효하지만 추격보다 조정 대기`로 쓴다.
+- 구조는 약한데 실행 레벨은 단기 반등 신호가 있는 경우: `단기 반등 가능, 구조 추세 전환 확인 전 보수적 접근`으로 쓴다.
+- 실행 레벨은 구조 레벨을 뒤집지 않는다. 구조는 방향, 실행은 타이밍으로 제한한다.
 
 ## Output Design
 
@@ -323,6 +426,43 @@ zone별 점수 분해를 검증한다.
 - 기대값과 비교
 - 필요 시 파라미터 조정
 - regression suite 재실행
+
+## Rollout and Operational Guardrails
+
+이번 변경은 계산 로직뿐 아니라 최종 LLM 입력과 사용자 출력 해석을 바꾸므로, 안전하게 rollout한다.
+
+### Rollout strategy
+
+- 초기에는 feature flag 뒤에서 old/new 결과를 병행 생성한다.
+- old/new 비교 대상:
+  - 구조 레벨 상위 zone 범위
+  - 구조 무효화 위치
+  - 실행 레벨 상위 후보
+  - 최종 한줄 판단 차이
+- 초기 샘플 리뷰는 소수 종목 수동 검토로 시작한다.
+
+### Latency budget
+
+- `jarvis analyze` 단건 실행에서 structure zone 계산이 추가하는 지연은 기본적으로 제한되어야 한다.
+- Phase 1의 임시 예산은 `기존 analyze baseline 대비 +20% 이내`를 기본 원칙으로 두고, 단건 추가 지연은 `+500ms` 이내를 우선 목표로 둔다.
+- baseline, 측정 구간, p50/p95 집계 방식은 implementation plan에서 고정하고 결과는 artifact에 남긴다.
+- fixture 기반 regression은 CI에서 실행 가능해야 하며, tuning용 상세 artifact 생성은 운영 경로와 분리한다.
+
+### Artifact and golden governance
+
+- `ZoneTestArtifact`에는 schema version을 둔다.
+- score 축이나 정렬 규칙이 바뀌면 artifact version도 같이 올린다.
+- golden 갱신은 `의도된 변경`일 때만 fixture, expected output, score breakdown을 함께 갱신한다.
+- golden diff는 단순 문자열보다 구조화 필드 diff를 우선 사용한다.
+
+### Rollback conditions
+
+아래 조건 중 하나라도 발생하면 old path로 즉시 되돌릴 수 있어야 한다.
+
+- 구조 zone 미검출률이 비정상적으로 증가
+- 구조 무효화가 자주 비거나 fallback만 반복됨
+- analyze latency가 예산을 넘김
+- 내부 샘플 리뷰에서 `기존 대비 더 혼란스럽다` 평가가 우세
 
 ## Excluded for this phase
 

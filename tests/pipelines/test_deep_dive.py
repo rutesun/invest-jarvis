@@ -97,6 +97,8 @@ async def test_deep_dive_pipeline_success(mock_technical_tool, mock_news_tool, m
         ) as mock_tech_summary,
         patch("src.llm.analyzer.analyze_news", new_callable=AsyncMock) as mock_news_analysis,
         patch("src.llm.analyzer.generate_actionable_signal", new_callable=AsyncMock) as mock_signal,
+        patch("src.pipelines.deep_dive.StructureZoneDetector") as mock_zone_detector_cls,
+        patch("src.pipelines.deep_dive.compose_level_payload") as mock_compose_levels,
     ):
         # Mock LLM outputs
         mock_tech_summary.return_value = TechnicalSummaryOutput(
@@ -123,6 +125,23 @@ async def test_deep_dive_pipeline_success(mock_technical_tool, mock_news_tool, m
             risks=["변동성"],
             confidence=0.75,
         )
+        mock_zone_detector = mock_zone_detector_cls.return_value
+        mock_zone_detector.detect.return_value = object()
+        mock_compose_levels.return_value = {
+            "structure_levels": {
+                "demand_zones": ["170.00~172.00"],
+                "supply_zones": ["180.00~182.00"],
+                "invalidation": "170.00 하향 이탈",
+            },
+            "execution_levels": [
+                {
+                    "type": "pivot_s1",
+                    "description": "피봇 S1",
+                    "price": 172.0,
+                    "distance_pct": -3.6,
+                }
+            ],
+        }
 
         pipeline = DeepDivePipeline(
             technical_tool=mock_technical_tool,
@@ -140,9 +159,15 @@ async def test_deep_dive_pipeline_success(mock_technical_tool, mock_news_tool, m
         assert result["actionable_signal"] is not None
         assert result["actionable_signal"].action == "매수"
         assert result["actionable_signal"].timing == "지금"
+        assert result["structure_levels"]["demand_zones"] == ["170.00~172.00"]
+        assert result["execution_levels"][0]["description"] == "피봇 S1"
         assert result["decision_summary"].leader in {"technical", "혼합", "판단 보류"}
         assert result["factor_assessments"]
         assert result["scenarios"]
+        assert (
+            mock_signal.await_args.kwargs["structure_levels"]["invalidation"] == "170.00 하향 이탈"
+        )
+        assert mock_signal.await_args.kwargs["execution_levels"][0]["type"] == "pivot_s1"
 
 
 @pytest.mark.asyncio

@@ -80,6 +80,25 @@ def test_format_deep_dive_output_shows_top_summary_and_factor_reasons():
                 recommended_action="조정 구간 접근",
             )
         ],
+        "structure_levels": {
+            "demand_zones": ["88000.00~89500.00"],
+            "supply_zones": ["96000.00~97500.00"],
+            "invalidation": "88000.00 하향 이탈",
+        },
+        "execution_levels": [
+            {
+                "type": "pivot_s1",
+                "description": "피봇 S1",
+                "price": 90000.0,
+                "distance_pct": -1.6,
+            },
+            {
+                "type": "sma_50",
+                "description": "50일선",
+                "price": 88500.0,
+                "distance_pct": -3.3,
+            },
+        ],
     }
 
     output = format_deep_dive_output(result)
@@ -88,11 +107,16 @@ def test_format_deep_dive_output_shows_top_summary_and_factor_reasons():
     assert "핵심 변수" in output
     assert "액션" in output
     assert "## 판단 요약" in output
+    assert "## 구조 레벨" in output
+    assert "## 실행 레벨" in output
     assert "## 원시 데이터" in output
     assert output.index("## 판단 요약") < output.index("## 원시 데이터")
     assert "- **주도 팩터**: 혼합" in output
     assert "- **가격**: 신고가 돌파" in output
     assert "- **이벤트**: 반복 기대 기사" in output
+    assert "수요 존" in output
+    assert "88000.00~89500.00" in output
+    assert "피봇 S1" in output
     assert "조정 대기" in output
     assert "RSI 과열로 추격 부담" in output
     assert "신규 정보가 부족해 actionability가 낮음" in output

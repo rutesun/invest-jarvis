@@ -396,6 +396,35 @@ def _format_scenario_section(scenarios: list) -> str:
     return "\n".join(lines)
 
 
+def _format_structure_levels(structure_levels: dict | None) -> str:
+    if not structure_levels:
+        return ""
+
+    demand_zones = structure_levels.get("demand_zones") or []
+    supply_zones = structure_levels.get("supply_zones") or []
+    invalidation = structure_levels.get("invalidation")
+
+    lines = ["## 구조 레벨", ""]
+    lines.append(f"- **수요 존**: {', '.join(demand_zones) if demand_zones else '없음'}")
+    lines.append(f"- **공급 존**: {', '.join(supply_zones) if supply_zones else '없음'}")
+    lines.append(f"- **무효화 기준**: {invalidation or '없음'}")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _format_execution_levels(execution_levels: list[dict] | None) -> str:
+    if not execution_levels:
+        return ""
+
+    lines = ["## 실행 레벨", ""]
+    for level in execution_levels:
+        lines.append(
+            f"- **{level['description']}**: ${level['price']:.2f} ({level['distance_pct']:+.1f}%)"
+        )
+    lines.append("")
+    return "\n".join(lines)
+
+
 def _format_raw_analysis_sections(result: dict) -> str:
     technical = result["technical"]
     tech_summary = result["technical_summary"]
@@ -644,6 +673,8 @@ def format_deep_dive_output(result: dict) -> str:
     decision_summary = result.get("decision_summary")
     factor_assessments = result.get("factor_assessments", [])
     scenarios = result.get("scenarios", [])
+    structure_levels = result.get("structure_levels")
+    execution_levels = result.get("execution_levels")
 
     output = f"# Deep Dive Analysis: {ticker}\n\n"
     output += f"## 가격: ${snapshot.price:.2f} ({snapshot.change_pct:+.2f}%)\n\n"
@@ -654,7 +685,12 @@ def format_deep_dive_output(result: dict) -> str:
         output += _format_factor_section(factor_assessments) + "\n"
     if scenarios:
         output += _format_scenario_section(scenarios) + "\n"
+    if structure_levels:
+        output += _format_structure_levels(structure_levels)
+    if execution_levels:
+        output += _format_execution_levels(execution_levels)
 
+    output += "\n"
     output += _format_raw_analysis_sections(result)
     return output
 
