@@ -42,19 +42,7 @@ uv run jarvis telegram catch-up # 누락분 보충 수집
 
 ## Documentation Rules
 
-**모든 구현 작업 시 반드시 문서 업데이트 (같은 커밋에 포함)**:
-
-| 변경 | 업데이트 문서 |
-|------|---------------|
-| 기능 설계 완료 | `docs/spec/{name}.md` (Feature Spec 작성. 핵심만. 구현 상세는 plan에) |
-| 기능 구현 완료 | `docs/spec/{name}.md` (Status → Shipped, Checklist 체크) |
-| 기능 동작 변경 | `docs/FEATURES.md` (현재 기능명세) |
-| 아키텍처적 결정 | `docs/adr/NNNN-제목.md` (ADR, 변경 이유 기록) |
-| 새 CLI 커맨드 | `docs/CLI_USAGE.md` |
-| 아키텍처 변경 | `docs/ARCHITECTURE.md` |
-| 개발 프로세스 변경 | `docs/DEVELOPMENT.md` |
-
-**상세 가이드**: [@docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
+문서 생성/업데이트 원칙과 ADR 운영 규칙은 [@docs/DOCUMENTATION.md](docs/DOCUMENTATION.md)를 따른다.
 
 ## Skills
 

@@ -1,9 +1,11 @@
-# Feature Spec: 공시 원문 파싱 + 정량 시뮬레이션 (Disclosure Intelligence)
+# Change Record: 공시 원문 파싱 + 정량 시뮬레이션 (Disclosure Intelligence)
 
 **Status**: Draft
 **Created**: 2026-04-29
 **PRs**: -
 **Tasks**: ROADMAP Task 1 + Task 6
+
+> 이 문서는 PR/머지 단위 변경 기록입니다. 현재 기능 상태는 `docs/FEATURES.md`를 기준으로 봅니다.
 
 ---
 
