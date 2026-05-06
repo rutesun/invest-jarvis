@@ -6,7 +6,14 @@ import pytest
 
 from src.core.models import ToolResult
 from src.llm.models import ActionableSignalOutput, NewsAnalysisOutput, TechnicalSummaryOutput
+from src.pipelines.analyze_decision import (
+    AnalyzeDecisionBundle,
+    AnalyzeDecisionSummary,
+    AnalyzeScenario,
+    FactorAssessment,
+)
 from src.pipelines.deep_dive import DeepDivePipeline
+from src.tools.fundamental import FundamentalSnapshot
 from src.tools.news import NewsArticle
 from src.tools.technical.models import (
     IndicatorSnapshot,
@@ -133,6 +140,96 @@ async def test_deep_dive_pipeline_success(mock_technical_tool, mock_news_tool, m
         assert result["actionable_signal"] is not None
         assert result["actionable_signal"].action == "매수"
         assert result["actionable_signal"].timing == "지금"
+        assert result["decision_summary"].leader in {"technical", "혼합", "판단 보류"}
+        assert result["factor_assessments"]
+        assert result["scenarios"]
+
+
+@pytest.mark.asyncio
+async def test_deep_dive_pipeline_returns_decision_bundle(
+    mock_technical_tool, mock_news_tool, mock_llm
+):
+    with (
+        patch(
+            "src.llm.analyzer.generate_technical_summary", new_callable=AsyncMock
+        ) as mock_tech_summary,
+        patch("src.llm.analyzer.analyze_news", new_callable=AsyncMock) as mock_news_analysis,
+        patch("src.llm.analyzer.generate_actionable_signal", new_callable=AsyncMock) as mock_signal,
+        patch("src.pipelines.deep_dive.build_analyze_decision_bundle") as mock_bundle,
+    ):
+        mock_tech_summary.return_value = TechnicalSummaryOutput(
+            summary="강세",
+            key_insights=["골든크로스"],
+            recommendation="매수",
+            confidence=0.75,
+            rationale="좋음",
+        )
+        mock_news_analysis.return_value = NewsAnalysisOutput(
+            sentiment="긍정",
+            confidence=0.85,
+            key_themes=["신제품"],
+            summary="긍정적",
+            impact_assessment="좋음",
+        )
+        mock_signal.return_value = ActionableSignalOutput(
+            action="매수",
+            timing="지금",
+            signal_strength=8,
+            headline="매수",
+            primary_reason="골든크로스",
+            supporting_reasons=[],
+            risks=[],
+            confidence=0.75,
+        )
+        mock_bundle.return_value = AnalyzeDecisionBundle(
+            summary=AnalyzeDecisionSummary(
+                leader="technical",
+                core_variables=["가격 모멘텀"],
+                action="관망",
+                timing="조정_대기",
+                action_sentence="눌림 확인 후 접근",
+            ),
+            factor_assessments=[
+                FactorAssessment(
+                    factor_type="technical",
+                    role="주도",
+                    freshness_score=4,
+                    magnitude_score=4,
+                    actionability_score=3,
+                    total_score=11,
+                    summary="가격 모멘텀",
+                    role_reason="추세가 현재 액션과 직접 연결됨",
+                    evidence=["technical total_score=75"],
+                )
+            ],
+            scenarios=[
+                AnalyzeScenario(
+                    name="기본 시나리오",
+                    trigger_price_levels=["20일선 유지"],
+                    confirming_factors=["거래량 유지"],
+                    invalidation_conditions=["20일선 종가 이탈"],
+                    expected_path="눌림 후 재상승",
+                    recommended_action="조정 구간 접근",
+                )
+            ],
+        )
+
+        pipeline = DeepDivePipeline(
+            technical_tool=mock_technical_tool,
+            news_tool=mock_news_tool,
+            llm=mock_llm,
+        )
+
+        result = await pipeline.run("AAPL")
+
+        mock_bundle.assert_called_once()
+        bundle_kwargs = mock_bundle.call_args.kwargs
+
+        assert result["decision_summary"].leader == "technical"
+        assert result["factor_assessments"][0].role == "주도"
+        assert result["scenarios"][0].name == "기본 시나리오"
+        assert bundle_kwargs["technical_summary"].summary == "강세"
+        assert bundle_kwargs["news_analysis"].summary == "긍정적"
 
 
 @pytest.mark.asyncio
@@ -212,3 +309,76 @@ async def test_deep_dive_pipeline_empty_news(mock_technical_tool, mock_llm):
         assert result["ticker"] == "AAPL"
         assert result["news_analysis"] is None  # No news analysis when news is empty
         assert result["actionable_signal"] is not None
+        assert result["decision_summary"].leader == "판단 보류"
+        assert result["decision_summary"].action == "관망"
+        assert result["decision_summary"].timing == "보류"
+        assert result["decision_summary"].defer_reason is not None
+
+
+@pytest.mark.asyncio
+async def test_deep_dive_pipeline_uses_defer_state_when_news_and_flow_are_missing(
+    mock_technical_tool, mock_llm
+):
+    empty_news_tool = AsyncMock()
+    empty_news_tool.execute.return_value = ToolResult(success=True, data=[])
+
+    with (
+        patch(
+            "src.llm.analyzer.generate_technical_summary", new_callable=AsyncMock
+        ) as mock_tech_summary,
+        patch("src.llm.analyzer.generate_actionable_signal", new_callable=AsyncMock) as mock_signal,
+    ):
+        mock_tech_summary.return_value = TechnicalSummaryOutput(
+            summary="강세",
+            key_insights=["골든크로스"],
+            recommendation="매수",
+            confidence=0.75,
+            rationale="좋음",
+        )
+        mock_signal.return_value = ActionableSignalOutput(
+            action="관망",
+            timing="보류",
+            signal_strength=5,
+            headline="관망",
+            primary_reason="근거 부족",
+            supporting_reasons=[],
+            risks=[],
+            confidence=0.45,
+        )
+
+        pipeline = DeepDivePipeline(
+            technical_tool=mock_technical_tool,
+            news_tool=empty_news_tool,
+            llm=mock_llm,
+        )
+
+        result = await pipeline.run("AAPL")
+
+        assert result["decision_summary"].leader == "판단 보류"
+        assert result["decision_summary"].action == "관망"
+        assert result["decision_summary"].timing == "보류"
+        assert result["decision_summary"].defer_reason is not None
+
+
+@pytest.mark.asyncio
+async def test_generate_fundamental_summary_uses_rule_based_fallback_when_metrics_are_sparse(
+    mock_technical_tool, mock_news_tool, mock_llm
+):
+    pipeline = DeepDivePipeline(
+        technical_tool=mock_technical_tool,
+        news_tool=mock_news_tool,
+        llm=mock_llm,
+    )
+
+    with patch(
+        "src.pipelines.deep_dive.generate_fundamental_summary", new_callable=AsyncMock
+    ) as mock_generate:
+        summary = await pipeline._generate_fundamental_summary(
+            "033100.KQ",
+            FundamentalSnapshot(),
+        )
+
+    mock_generate.assert_not_awaited()
+    assert summary.summary == "핵심 재무 지표가 부족해 밸류 판단을 유보합니다."
+    assert summary.valuation_assessment == "적정"
+    assert summary.confidence == pytest.approx(0.2)

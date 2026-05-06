@@ -1,10 +1,12 @@
 from datetime import datetime
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from typer.testing import CliRunner
 
-from src.cli.main import app
-from src.llm.models import NewsAnalysisOutput, TechnicalSummaryOutput
+from src.cli.main import app, run_deep_dive
+from src.llm.models import ActionableSignalOutput, NewsAnalysisOutput, TechnicalSummaryOutput
+from src.pipelines.analyze_decision import AnalyzeDecisionSummary, AnalyzeScenario, FactorAssessment
 from src.tools.macro import TickerMacroSnapshot
 from src.tools.technical.models import IndicatorSnapshot, TechnicalResult
 
@@ -80,8 +82,48 @@ def test_cli_analyze_command():
         "ticker": "AAPL",
         "technical": mock_technical,
         "technical_summary": mock_tech_summary,
+        "decision_summary": AnalyzeDecisionSummary(
+            leader="technical",
+            core_variables=["20일선 위 유지", "거래량 유지"],
+            action="관망",
+            timing="조정_대기",
+            action_sentence="조정 확인 후 접근이 유리",
+        ),
+        "factor_assessments": [
+            FactorAssessment(
+                factor_type="technical",
+                role="주도",
+                freshness_score=4,
+                magnitude_score=4,
+                actionability_score=3,
+                total_score=11,
+                summary="20일선 위 유지",
+                role_reason="추세가 현재 액션과 직접 연결됨",
+                evidence=["20일선 > 50일선"],
+            )
+        ],
+        "scenarios": [
+            AnalyzeScenario(
+                name="기본 시나리오",
+                trigger_price_levels=["20일선 유지"],
+                confirming_factors=["거래량 유지"],
+                invalidation_conditions=["20일선 종가 이탈"],
+                expected_path="눌림 후 재상승",
+                recommended_action="조정 구간 접근",
+            )
+        ],
         "news": [],
         "news_analysis": mock_news_analysis,
+        "actionable_signal": ActionableSignalOutput(
+            action="매수",
+            timing="지금",
+            signal_strength=8,
+            headline="매수",
+            primary_reason="골든크로스",
+            supporting_reasons=[],
+            risks=[],
+            confidence=0.75,
+        ),
     }
 
     with (
@@ -95,6 +137,11 @@ def test_cli_analyze_command():
     assert result.exit_code == 0
     assert "AAPL" in result.stdout
     assert "178.50" in result.stdout
+    assert "판단 요약" in result.stdout
+    assert "주도 팩터" in result.stdout
+    assert "가격" in result.stdout
+    assert "조정 대기" in result.stdout
+    assert "실행 가능한 투자 시그널" not in result.stdout
 
 
 def test_cli_report_command():
@@ -159,3 +206,35 @@ def test_cli_version():
     result = runner.invoke(app, ["--version"])
     assert result.exit_code == 0
     assert "0.3.0" in result.stdout
+
+
+@pytest.mark.asyncio
+async def test_run_deep_dive_korean_stock_without_kis_credentials_uses_yfinance(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
+    monkeypatch.delenv("KIS_APP_KEY", raising=False)
+    monkeypatch.delenv("KIS_APP_SECRET", raising=False)
+    monkeypatch.delenv("OPENDART_API_KEY", raising=False)
+
+    expected = {"ticker": "066970.KQ", "success": True}
+    mock_pipeline = AsyncMock()
+    mock_pipeline.run = AsyncMock(return_value=expected)
+
+    with (
+        patch("src.cli.main.resolve_ticker", new=AsyncMock(return_value="066970.KQ")),
+        patch("src.cli.main.YFinanceProvider", return_value=object()) as mock_yfinance_provider,
+        patch("src.cli.main.TechnicalScorer", return_value=object()),
+        patch("src.cli.main.TechnicalAnalysisTool", return_value=object()),
+        patch("src.cli.main.FundamentalTool", return_value=object()) as mock_fundamental_tool,
+        patch("src.cli.main.NewsTool", return_value=object()),
+        patch("src.cli.main.LLMProvider.create", return_value=object()),
+        patch("src.tools.disclosure.SECDisclosureFetcher", return_value=object()),
+        patch("src.tools.disclosure.DARTDisclosureFetcher", return_value=object()),
+        patch("src.tools.disclosure.DisclosureTool", return_value=object()),
+        patch("src.tools.flow.FlowTool", return_value=object()),
+        patch("src.cli.main.DeepDivePipeline", return_value=mock_pipeline),
+    ):
+        result = await run_deep_dive("엘앤에프", "openai")
+
+    assert result == expected
+    mock_yfinance_provider.assert_called_once()
+    mock_fundamental_tool.assert_called_once_with(kis_provider=None)

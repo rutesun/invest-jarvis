@@ -78,7 +78,7 @@ def _get_metric_display_name(metric_name: str) -> str:
     return METRIC_DISPLAY_NAMES[metric_name]
 
 
-def _format_metric_value(metric_name: str, value: float) -> str:
+def _format_metric_value(metric_name: str, value: float | None) -> str:
     """지표 타입에 따라 값 포맷팅
 
     Args:
@@ -88,6 +88,9 @@ def _format_metric_value(metric_name: str, value: float) -> str:
     Returns:
         포맷팅된 문자열
     """
+    if value is None:
+        return "N/A"
+
     # 퍼센트 지표
     if metric_name in [
         "revenue_growth",
@@ -165,6 +168,7 @@ async def run_quick_check(ticker_or_name: str) -> dict:
     is_korean_stock = ticker.endswith((".KS", ".KQ"))
     kis_key = os.getenv("KIS_APP_KEY")
     kis_secret = os.getenv("KIS_APP_SECRET")
+    kis_provider = None
 
     if is_korean_stock and kis_key and kis_secret:
         logger.info(f"한국 주식 {ticker} → KIS API 사용 (실시간)")
@@ -244,6 +248,7 @@ async def run_deep_dive(ticker_or_name: str, provider: str) -> dict:
     is_korean_stock = ticker.endswith((".KS", ".KQ"))
     kis_key = os.getenv("KIS_APP_KEY")
     kis_secret = os.getenv("KIS_APP_SECRET")
+    kis_provider = None
 
     if is_korean_stock and kis_key and kis_secret:
         # 한국 주식 + KIS API 키 있음 → KIS 사용 (실시간)
@@ -279,7 +284,7 @@ async def run_deep_dive(ticker_or_name: str, provider: str) -> dict:
 
     scorer = TechnicalScorer()
     technical_tool = TechnicalAnalysisTool(provider=price_provider, scorer=scorer)
-    fundamental_tool = FundamentalTool()
+    fundamental_tool = FundamentalTool(kis_provider=kis_provider if is_korean_stock else None)
     news_tool = NewsTool()
     llm = LLMProvider.create(
         provider=provider,
@@ -306,10 +311,10 @@ async def run_deep_dive(ticker_or_name: str, provider: str) -> dict:
             "KIS_APP_KEY 또는 KIS_APP_SECRET이 설정되지 않았습니다. "
             "한국주식 수급 데이터가 제외됩니다."
         )
-    kis_provider = (
+    flow_provider = (
         KISProvider(app_key=kis_key, app_secret=kis_secret) if kis_key and kis_secret else None
     )
-    flow_tool = FlowTool(kis_provider=kis_provider)
+    flow_tool = FlowTool(kis_provider=flow_provider)
 
     pipeline = DeepDivePipeline(
         technical_tool=technical_tool,
@@ -330,22 +335,77 @@ def _format_growth_rate(value: float | None) -> str:
     return f"{value * 100:+.2f}%"
 
 
-def format_deep_dive_output(result: dict) -> str:
-    """Format deep dive result as markdown."""
-    ticker = result["ticker"]
+def _format_factor_label(value: str) -> str:
+    return {
+        "technical": "가격",
+        "flow": "수급",
+        "event": "이벤트",
+        "valuation": "밸류에이션",
+    }.get(value, value)
+
+
+def _format_timing_label(value: str) -> str:
+    return {
+        "조정_대기": "조정 대기",
+        "보류": "보류",
+        "지금": "지금",
+    }.get(value, value)
+
+
+def _format_top_summary(decision_summary) -> str:
+    lines = [
+        "## 판단 요약",
+        "",
+        f"- **주도 팩터**: {_format_factor_label(decision_summary.leader)}",
+        f"- **핵심 변수**: {', '.join(decision_summary.core_variables)}",
+        f"- **액션**: {decision_summary.action} | {_format_timing_label(decision_summary.timing)}",
+        f"- **한줄 판단**: {decision_summary.action_sentence}",
+    ]
+    if decision_summary.defer_reason:
+        lines.append(f"- **보류 이유**: {decision_summary.defer_reason}")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _format_factor_section(factor_assessments: list) -> str:
+    lines = ["## 팩터 분류", ""]
+    for role in ("주도", "보조", "참고"):
+        filtered = [item for item in factor_assessments if item.role == role]
+        if not filtered:
+            continue
+        lines.append(f"### {role}")
+        lines.append("")
+        for item in filtered:
+            lines.append(f"- **{_format_factor_label(item.factor_type)}**: {item.summary}")
+            lines.append(f"  이유: {item.role_reason}")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def _format_scenario_section(scenarios: list) -> str:
+    lines = ["## 액션 시나리오", ""]
+    for scenario in scenarios:
+        lines.append(f"### {scenario.name}")
+        lines.append("")
+        lines.append(f"- **가격 레벨**: {', '.join(scenario.trigger_price_levels)}")
+        lines.append(f"- **확인 조건**: {', '.join(scenario.confirming_factors)}")
+        lines.append(f"- **무효화 조건**: {', '.join(scenario.invalidation_conditions)}")
+        lines.append(f"- **예상 경로**: {scenario.expected_path}")
+        lines.append(f"- **대응**: {scenario.recommended_action}")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def _format_raw_analysis_sections(result: dict) -> str:
     technical = result["technical"]
     tech_summary = result["technical_summary"]
     news_analysis = result.get("news_analysis")
     fundamental = result.get("fundamental")
     fundamental_summary = result.get("fundamental_summary")
-
-    output = f"# Deep Dive Analysis: {ticker}\n\n"
-
-    # Support both old (indicators) and new (snapshot) field
     snapshot = technical.indicators or technical.snapshot
-    output += f"## 가격: ${snapshot.price:.2f} ({snapshot.change_pct:+.2f}%)\n\n"
 
-    # Performance
+    output = ""
+
     perf_parts = []
     if snapshot.perf_1m is not None:
         perf_parts.append(f"1M: {snapshot.perf_1m:+.2f}%")
@@ -358,10 +418,9 @@ def format_deep_dive_output(result: dict) -> str:
     if perf_parts:
         output += f"**퍼포먼스**: {' | '.join(perf_parts)}\n\n"
 
-    # Raw technical indicators
+    output += "## 원시 데이터\n\n"
     output += "### 기술적 지표\n\n"
 
-    # Moving averages
     if snapshot.sma_20 is not None:
         output += f"- **20일 이동평균선**: ${snapshot.sma_20:.2f}\n"
     if snapshot.sma_50 is not None:
@@ -373,7 +432,6 @@ def format_deep_dive_output(result: dict) -> str:
 
     output += "\n"
 
-    # Momentum indicators
     if snapshot.rsi is not None:
         output += f"- **RSI (14일)**: {snapshot.rsi:.1f}\n"
     if snapshot.crsi is not None:
@@ -389,23 +447,18 @@ def format_deep_dive_output(result: dict) -> str:
 
     output += "\n"
 
-    # Trend strength
     if snapshot.adx is not None:
         output += f"- **ADX (추세 강도)**: {snapshot.adx:.1f}\n"
 
-    # Supertrend
     if snapshot.supertrend_direction is not None:
         direction = "상승" if snapshot.supertrend_direction == 1 else "하락"
         output += f"- **Supertrend**: {direction}"
 
-        # Get supertrend value and calculate distance from current price
         if technical.components and "supertrend" in technical.components:
             supertrend_metrics = technical.components["supertrend"]["metrics"]
             if "supertrend_value" in supertrend_metrics:
                 st_value = supertrend_metrics["supertrend_value"]
                 output += f" (라인: ${st_value:.2f})"
-
-                # Calculate distance
                 distance = ((snapshot.price - st_value) / st_value) * 100
                 if abs(distance) > 0.1:
                     output += f", 현재가 대비 {distance:+.2f}%"
@@ -414,15 +467,12 @@ def format_deep_dive_output(result: dict) -> str:
 
     output += "\n"
 
-    # Support/Resistance
     if snapshot.pivot is not None:
         output += f"- **피봇 포인트**: ${snapshot.pivot:.2f}\n"
     if snapshot.support_s1 is not None:
         output += f"- **지지선 S1**: ${snapshot.support_s1:.2f}\n"
     if snapshot.resistance_r1 is not None:
         output += f"- **저항선 R1**: ${snapshot.resistance_r1:.2f}\n"
-
-    # 52-week high/low
     if snapshot.high_52w is not None:
         output += f"- **52주 최고가**: ${snapshot.high_52w:.2f}\n"
     if snapshot.low_52w is not None:
@@ -430,7 +480,7 @@ def format_deep_dive_output(result: dict) -> str:
 
     output += "\n"
 
-    output += "### 종합 분석\n\n"
+    output += "### 기술 요약\n\n"
     output += f"**총점**: {technical.total_score}\n\n"
     output += f"**요약**: {tech_summary.summary}\n\n"
     output += f"**추천**: {tech_summary.recommendation} (신뢰도: {tech_summary.confidence * 100:.0f}%)\n\n"
@@ -444,27 +494,20 @@ def format_deep_dive_output(result: dict) -> str:
 
     if fundamental and fundamental_summary:
         output += "## Fundamental Analysis\n\n"
-
         output += "### Key Metrics\n\n"
 
-        # Sector/Industry 정보는 그대로 유지
-        if fundamental.sector or fundamental.industry:
-            output += f"**Sector/Industry**: {fundamental.sector or 'N/A'} / {fundamental.industry or 'N/A'}\n\n"
+        output += f"**Sector/Industry**: {fundamental.sector or 'N/A'} / {fundamental.industry or 'N/A'}\n\n"
 
-        # 섹터별 우선순위 지표 가져오기
-        priority_metrics = SectorMetrics.get_priority_metrics(fundamental.sector)
+        priority_metrics = SectorMetrics.get_priority_metrics(fundamental.sector or "")
 
-        # 우선순위 지표를 ⭐와 함께 먼저 렌더링
         for metric_name in priority_metrics:
             value = getattr(fundamental, metric_name, None)
-            if value is not None:
-                display_name = _get_metric_display_name(metric_name)
-                formatted = _format_metric_value(metric_name, value)
-                output += f"⭐ **{display_name}**: {formatted}\n\n"
+            display_name = _get_metric_display_name(metric_name)
+            formatted = _format_metric_value(metric_name, value)
+            output += f"⭐ **{display_name}**: {formatted}\n\n"
 
         output += "\n"
 
-        # 나머지 지표 렌더링
         all_metric_names = [
             "market_cap",
             "pe_ratio",
@@ -494,18 +537,14 @@ def format_deep_dive_output(result: dict) -> str:
 
         for metric_name in remaining_metrics:
             value = getattr(fundamental, metric_name, None)
-            if value is not None:
-                display_name = _get_metric_display_name(metric_name)
-                formatted = _format_metric_value(metric_name, value)
-                output += f"- **{display_name}**: {formatted}\n"
+            display_name = _get_metric_display_name(metric_name)
+            formatted = _format_metric_value(metric_name, value)
+            output += f"- **{display_name}**: {formatted}\n"
 
         output += "\n"
 
-        # Quarterly Performance section
         if fundamental.quarterly_data is not None and len(fundamental.quarterly_data) > 0:
             output += "### 분기별 실적\n\n"
-
-            # Revenue trends
             output += "**매출 추이:**\n\n"
             for q in fundamental.quarterly_data:
                 if q.revenue is not None:
@@ -515,8 +554,6 @@ def format_deep_dive_output(result: dict) -> str:
                     output += f"- {q.period}: {revenue_str} (YoY {yoy_str}, QoQ {qoq_str})\n"
 
             output += "\n"
-
-            # Earnings trends
             output += "**이익 추이:**\n\n"
             for q in fundamental.quarterly_data:
                 if q.earnings is not None:
@@ -552,8 +589,6 @@ def format_deep_dive_output(result: dict) -> str:
         if news_analysis.key_themes:
             output += "**Key Themes**: " + ", ".join(news_analysis.key_themes) + "\n\n"
 
-    # ── 신규 섹션 ──────────────────────────────────────────────────────────────
-
     disclosure = result.get("disclosure")
     if disclosure:
         output += "## 공시 분석\n\n"
@@ -585,9 +620,8 @@ def format_deep_dive_output(result: dict) -> str:
 
     integrated = result.get("integrated_analysis")
     if integrated:
-        output += "## 종합 인사이트\n\n"
-        output += f"**투자 추천**: {integrated.recommendation}\n\n"
-        output += f"**액션**: {integrated.action_summary}\n\n"
+        output += "## 종합 인사이트 참고\n\n"
+        output += f"**요약 메모**: {integrated.action_summary}\n\n"
         if integrated.rationale:
             output += "**근거**:\n"
             for r in integrated.rationale:
@@ -599,6 +633,29 @@ def format_deep_dive_output(result: dict) -> str:
                 output += f"- {r}\n"
             output += "\n"
 
+    return output
+
+
+def format_deep_dive_output(result: dict) -> str:
+    """Format deep dive result as markdown."""
+    ticker = result["ticker"]
+    technical = result["technical"]
+    snapshot = technical.indicators or technical.snapshot
+    decision_summary = result.get("decision_summary")
+    factor_assessments = result.get("factor_assessments", [])
+    scenarios = result.get("scenarios", [])
+
+    output = f"# Deep Dive Analysis: {ticker}\n\n"
+    output += f"## 가격: ${snapshot.price:.2f} ({snapshot.change_pct:+.2f}%)\n\n"
+
+    if decision_summary:
+        output += _format_top_summary(decision_summary)
+    if factor_assessments:
+        output += _format_factor_section(factor_assessments) + "\n"
+    if scenarios:
+        output += _format_scenario_section(scenarios) + "\n"
+
+    output += _format_raw_analysis_sections(result)
     return output
 
 
@@ -691,7 +748,7 @@ def analyze(
 
         # Display actionable signal panel if available
         actionable_signal = result.get("actionable_signal")
-        if actionable_signal:
+        if actionable_signal and not result.get("decision_summary"):
             console.print("\n")
             panel = display_actionable_signal(actionable_signal)
             console.print(panel)

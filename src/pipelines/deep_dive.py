@@ -15,6 +15,7 @@ from src.llm.models import (
     TechnicalSummaryInput,
     TechnicalSummaryOutput,
 )
+from src.pipelines.analyze_decision import build_analyze_decision_bundle
 from src.tools.disclosure import DisclosureItem, DisclosureTool, extract_kr_code, is_korean_ticker
 from src.tools.flow import FlowTool, InvestorFlow
 from src.tools.fundamental import FundamentalSnapshot, FundamentalTool
@@ -27,6 +28,25 @@ from src.tools.technical.tool import TechnicalAnalysisTool
 
 
 logger = logging.getLogger(__name__)
+_FUNDAMENTAL_SIGNAL_FIELDS = (
+    "pe_ratio",
+    "forward_pe",
+    "peg_ratio",
+    "ev_ebitda",
+    "ps_ratio",
+    "roe",
+    "roa",
+    "revenue_growth",
+    "earnings_growth",
+    "gross_margin",
+    "operating_margin",
+    "profit_margin",
+    "debt_to_equity",
+    "free_cash_flow",
+    "fcf_yield",
+    "dividend_yield",
+    "payout_ratio",
+)
 
 
 class DeepDivePipeline:
@@ -56,6 +76,9 @@ class DeepDivePipeline:
                 - ticker: str
                 - technical: TechnicalResult
                 - technical_summary: TechnicalSummaryOutput
+                - decision_summary: AnalyzeDecisionSummary
+                - factor_assessments: list[FactorAssessment]
+                - scenarios: list[AnalyzeScenario]
                 - news: list[NewsArticle]
                 - news_analysis: NewsAnalysisOutput | None
                 - fundamental: FundamentalSnapshot | None
@@ -153,6 +176,18 @@ class DeepDivePipeline:
             llm=self.llm,
         )
 
+        decision_bundle = build_analyze_decision_bundle(
+            technical_data=technical_data,
+            technical_summary=technical_summary,
+            news_articles=news_articles,
+            news_analysis=news_analysis,
+            fundamental_summary=fundamental_summary,
+            disclosure_items=disclosure_items,
+            flow_data=flow_data,
+            chart_patterns=chart_patterns,
+            price_levels=price_levels,
+        )
+
         # Render technical chart
         chart_result = None
         try:
@@ -175,6 +210,9 @@ class DeepDivePipeline:
             "ticker": ticker,
             "technical": technical_data,
             "technical_summary": technical_summary,
+            "decision_summary": decision_bundle.summary,
+            "factor_assessments": decision_bundle.factor_assessments,
+            "scenarios": decision_bundle.scenarios,
             "news": news_articles,
             "news_analysis": news_analysis,
             "fundamental": fundamental_data,
@@ -275,6 +313,20 @@ class DeepDivePipeline:
         self, ticker: str, fundamental_data: FundamentalSnapshot
     ) -> FundamentalSummaryOutput:
         """Generate LLM summary of fundamental analysis."""
+        available_metric_count = sum(
+            1
+            for field in _FUNDAMENTAL_SIGNAL_FIELDS
+            if getattr(fundamental_data, field) is not None
+        )
+        if available_metric_count < 3:
+            return FundamentalSummaryOutput(
+                summary="핵심 재무 지표가 부족해 밸류 판단을 유보합니다.",
+                strengths=[],
+                weaknesses=["확인 가능한 재무 지표가 제한적임"],
+                valuation_assessment="적정",
+                confidence=0.2,
+            )
+
         input_data = FundamentalSummaryInput(
             ticker=ticker,
             sector=fundamental_data.sector,
