@@ -272,75 +272,51 @@ KIS 계좌의 보유 종목별 기술적 분석 + 최근 뉴스.
 
 ## 5. Daily Report Pipeline (`jarvis report daily`)
 
-텔레그램 채널 메시지를 5단계 MapReduce로 분석하여 일일 시장 리포트 생성.
+텔레그램 채널 메시지를 evidence-first 런타임으로 분석해 3종 출력(메인/덤프/Ops)을 생성.
 
-**5단계 파이프라인:**
+**런타임 스테이지:**
 
-| Stage | 역할 | LLM | 입력 → 출력 |
-|-------|------|-----|------------|
-| **Ingest** | 메시지 + 매크로 로드 | X | CSV → IngestResult |
-| **Map** | 이슈 추출, 카테고리 분류 | Haiku 4.5 (temp 0.2) | messages → MappedIssue[] |
-| **Shuffle** | 카테고리 그룹핑 + 테마 정규화 | Haiku 4.5 (temp 0.1) | issues → ShuffleResult |
-| **Reduce** | 테마별 분석 리포트 | Haiku 4.5 (temp 0.3) | theme groups → NewsItem[] |
-| **Wrapup** | 크로스 테마 인사이트 | Haiku 4.5 (temp 0.4) | news items → DailyReport |
+| Stage | 역할 | 입력 → 출력 |
+|-------|------|------------|
+| **Ingest** | 메시지/매크로 로드, source 메타 부여 | CSV → `IngestResult` |
+| **Extract** | 원문을 claim/fact 카드로 분해 | messages → `ExtractResult` |
+| **Link** | 승인 지식 기반 edge 점수 + 클러스터링 | claims + knowledge → `LinkResult` |
+| **Select** | 클러스터 중요도 랭킹 + 반대 신호 추출 | clusters → `SelectResult` |
+| **Write** | 메인 브리프 + 리서치 덤프 렌더링 | select 결과 → markdown |
+| **Ops Review** | unknown entity/저신뢰 연결을 운영 후보로 변환 | telemetry → `OpsKnowledgeReport` |
 
-**Map Stage 동작:**
-- 유사 메시지를 하나의 이슈로 클러스터링 (같은 기업/산업 트렌드/인과관계/복수 종목)
-- avg_sources < 1.7 시 품질 경고 로그 출력
-- 같은 투자 내러티브는 같은 테마명 재사용
+**핵심 모델:**
+- `IngestedMessage`: `source_id`, `message_type`, `source_file` 포함 원문 단위
+- `Claim` / `Fact`: 해석(주장)과 수치(사실) 분리
+- `ClaimEdge` / `ClaimCluster`: 전역 연결/묶음 단위
+- `SelectedCluster` / `ContrarianSignal`: 메인 선택 및 상충 신호
+- `DailyReportRun`: `main_report`, `research_dump`, `ops_report`, `artifacts_dir`
 
-**Shuffle Stage 동작:**
-- 카테고리 내 테마 정규화 시 issue 제목 컨텍스트 활용
-- 밸류체인/인과관계 기반 테마 통합
+**승인 지식(읽기 전용):**
+- `knowledge/daily_report/aliases.yaml`
+- `knowledge/daily_report/concepts.yaml`
+- `knowledge/daily_report/relations.yaml`
+- `knowledge/daily_report/message_types.yaml`
 
-**데이터 모델:**
+**출력 파일:**
+- 메인 브리프: `reports/YYYY-MM/daily_YYYY-MM-DD.md`
+- 리서치 덤프: `reports/YYYY-MM/daily_YYYY-MM-DD_appendix.md`
+- Ops 리포트: `reports/YYYY-MM/daily_YYYY-MM-DD_ops.md`
 
-```
-TelegramMessage → MappedIssue → ShuffleResult → ThemeAnalysis/NewsItem → DailyReport
-```
+**재현/셀프리뷰 아티팩트:**
+- `artifacts/daily_report/<date>/run-1/ingest.json`
+- `artifacts/daily_report/<date>/run-1/extract.json`
+- `artifacts/daily_report/<date>/run-1/link.json`
+- `artifacts/daily_report/<date>/run-1/select.json`
+- `artifacts/daily_report/<date>/run-1/main_report.md`
+- `artifacts/daily_report/<date>/run-1/research_dump.md`
+- `artifacts/daily_report/<date>/run-1/ops_report.md`
 
-| 모델 | 역할 |
-|------|------|
-| `MacroSnapshot` | VIX, CNN Fear & Greed, KRW/USD, 미국/한국 시장 변동률 |
-| `MappedIssue` | 카테고리(18종), 제목, 요약, 테마(1-3), 감성(Sentiment enum), 소스 ID |
-| `ThemeAnalysis` | Reduce LLM 출력 (category 제외): 투자 테마명, 검색 키워드, 이모지, 요약, 임팩트, 관련종목 |
-| `NewsItem` | ThemeAnalysis + category + technical_theme + source_ids (원본 메시지 추적용) |
-| `DailyReport` | 날짜, 매크로, 핵심 인사이트, 테마별 뉴스 |
+**검증 명령:**
+- `uv run pytest tests/pipelines/daily_report tests/pipelines/test_daily_report_pipeline.py -q`
+- `bash scripts/test_daily_report_stages.sh <YYYY-MM-DD>`
 
-**18개 고정 카테고리:**
-반도체, 디스플레이, 이차전지, 소재/화학, 자동차, 조선/중공업, 방산, AI/소프트웨어, 통신, 바이오/제약, 유통/소비재, K-푸드, 에너지, 건설/부동산, 금융/보험, 매크로, 정책/규제, 기타
-
-**설정 (`config.py`):**
-
-| 설정 | 값 | 용도 |
-|------|---|------|
-| `MAP_LLM` | Anthropic Haiku 4.5, temp 0.2 | Map 스테이지 |
-| `SHUFFLE_LLM` | Anthropic Haiku 4.5, temp 0.1 | Shuffle 스테이지 |
-| `REDUCE_LLM` | Anthropic Haiku 4.5, temp 0.3 | Reduce 스테이지 |
-| `WRAPUP_LLM` | Anthropic Haiku 4.5, temp 0.4 | Wrapup 스테이지 |
-| `MAP_MAX_TOKENS_PER_CHUNK` | 80,000 | Map 청크 크기 |
-| `LLM_TIMEOUT_SECONDS` | 180 | LLM 호출 타임아웃 (Map 100+ 메시지 대응) |
-| `LLM_MAX_RETRIES` | 3 | LLM 재시도 (exponential backoff) |
-| `MACRO_MAX_RETRIES` | 3 | 매크로 데이터 재시도 |
-
-**매크로 데이터:**
-- 미국/한국 시장 지수 변동률 (yfinance)
-- VIX (yfinance)
-- Fear & Greed Index (CNN `fear-and-greed` 패키지)
-- KRW/USD 환율 (yfinance)
-- 모든 항목 3회 리트라이 (exponential backoff)
-
-**프롬프트 캐싱:**
-- Anthropic provider일 때 system prompt에 `cache_control: ephemeral` 자동 적용
-- OpenAI로 전환 시 자동 비활성화 (`StageLLMConfig.build_messages()`)
-
-**리포트 출력:**
-- Markdown 파일: `reports/YYYY-MM/daily_YYYY-MM-DD.md`
-- 각 테마마다 **출처** 섹션에 원본 메시지 발췌 포함
-- source_ids로 CSV에서 원본 메시지 로드 → keywords 매칭 시 주변 ~200자 발췌, 매칭 없으면 전체 메시지
-- **포맷**: 개행문자 변환, 출처에 채널명+인용블록, 테마 구분선(`---`)
-
-**의존성:** 텔레그램 CSV, Anthropic Haiku 4.5, yfinance, fear-and-greed
+**의존성:** 텔레그램 CSV, Anthropic Haiku 4.5, yfinance, fear-and-greed, jq
 
 ---
 
