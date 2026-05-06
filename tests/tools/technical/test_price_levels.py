@@ -3,12 +3,13 @@
 import pandas as pd
 import pytest
 
-from src.tools.technical.models import IndicatorSnapshot, PriceLevel
+from src.tools.technical.models import IndicatorSnapshot, PriceLevel, PriceLevels
 from src.tools.technical.price_levels import (
     calculate_fibonacci_levels,
     deduplicate_levels,
     get_fibonacci_base_points,
     identify_key_levels,
+    select_execution_levels,
 )
 
 
@@ -79,3 +80,21 @@ def test_identify_key_levels_integration():
     assert len(levels.resistance_levels) > 0
     # Supports sorted by price descending (closest first)
     assert levels.support_levels[0].price > levels.support_levels[-1].price
+
+
+def test_select_execution_levels_prefers_nearest_priority_levels():
+    levels = PriceLevels(
+        current_price=200.0,
+        support_levels=[
+            PriceLevel(price=198.0, type="pivot_s1", distance_pct=-1.0, description="피봇"),
+            PriceLevel(price=195.0, type="atr_support_1x", distance_pct=-2.5, description="ATR"),
+        ],
+        resistance_levels=[
+            PriceLevel(price=203.0, type="sma_20", distance_pct=1.5, description="20일선"),
+            PriceLevel(price=205.0, type="fib_0.382", distance_pct=2.5, description="피보나치"),
+        ],
+    )
+
+    selected = select_execution_levels(levels, max_count=3)
+
+    assert [item.type for item in selected] == ["pivot_s1", "sma_20", "atr_support_1x"]

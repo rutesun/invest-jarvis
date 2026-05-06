@@ -59,8 +59,10 @@ class StructureZoneDetector:
             reverse=True,
         )[: self.config.top_n_per_side]
 
-        invalidation_candidates = list(demand_zones[:1])
-        invalidation_zone = invalidation_candidates[0] if invalidation_candidates else None
+        invalidation_candidates, invalidation_zone = self.choose_invalidation_zone(
+            demand_zones=demand_zones,
+            snapshot=snapshot,
+        )
 
         return StructureZoneSet(
             demand_zones=demand_zones,
@@ -81,6 +83,37 @@ class StructureZoneDetector:
             *self._build_side_zones(low_candidates, "demand", snapshot),
             *self._build_side_zones(high_candidates, "supply", snapshot),
         ]
+
+    def choose_invalidation_zone(
+        self,
+        demand_zones: list[StructureZone],
+        snapshot: IndicatorSnapshot,
+    ) -> tuple[list[StructureZone], StructureZone | None]:
+        candidates: list[StructureZone] = []
+        if demand_zones:
+            candidates.append(demand_zones[0])
+
+        if snapshot.sma_150:
+            candidates.append(
+                StructureZone(
+                    zone_type="invalidation",
+                    lower_bound=snapshot.sma_150,
+                    upper_bound=snapshot.sma_150,
+                    mid_price=snapshot.sma_150,
+                    touch_count=0,
+                    last_touch_date=None,
+                    touch_score=0.0,
+                    recency_score=0.0,
+                    volume_reaction_score=0.0,
+                    confluence_score=1.0,
+                    total_score=1.0,
+                    strength="secondary",
+                    reasons=["150일선 fallback"],
+                )
+            )
+
+        selected = candidates[0] if candidates else None
+        return candidates, selected
 
     def _extract_swing_candidates(self, df: pd.DataFrame, side: str) -> list[_SwingCandidate]:
         value_col = "Low" if side == "demand" else "High"
