@@ -1,8 +1,16 @@
+import pandas as pd
+
 from src.tools.technical.models import (
+    IndicatorSnapshot,
     StructureZone,
     StructureZoneConfig,
     StructureZoneSet,
     ZoneTestArtifact,
+)
+from src.tools.technical.structure_zones import (
+    StructureZoneDetector,
+    calculate_zone_half_width,
+    cluster_price_candidates,
 )
 
 
@@ -53,3 +61,39 @@ def test_structure_zone_config_defaults_are_explicit():
 
     assert config.top_n_per_side == 5
     assert config.min_zone_width_pct > 0
+
+
+def test_calculate_zone_half_width_respects_pct_floor_and_ceiling():
+    width = calculate_zone_half_width(price=100.0, atr=1.0, config=StructureZoneConfig())
+
+    assert width >= 1.0
+    assert width <= 5.0
+
+
+def test_cluster_price_candidates_groups_nearby_swings():
+    clusters = cluster_price_candidates([100.0, 101.0, 118.0], half_width=2.0)
+
+    assert clusters == [[100.0, 101.0], [118.0]]
+
+
+def test_detector_sorts_demand_zones_by_total_score():
+    dates = pd.date_range("2025-01-01", periods=220, freq="D")
+    df = pd.DataFrame(
+        {
+            "Open": [100 + (i % 5) for i in range(220)],
+            "High": [102 + (i % 5) for i in range(220)],
+            "Low": [98 + (i % 5) for i in range(220)],
+            "Close": [100 + (i % 5) for i in range(220)],
+            "Volume": [1_000_000 + i * 1000 for i in range(220)],
+        },
+        index=dates,
+    )
+    snapshot = IndicatorSnapshot(price=104.0, change_pct=1.0, atr=3.0, sma_150=95.0)
+
+    result = StructureZoneDetector().detect(df, snapshot)
+
+    assert result.demand_zones == sorted(
+        result.demand_zones,
+        key=lambda zone: zone.total_score,
+        reverse=True,
+    )
