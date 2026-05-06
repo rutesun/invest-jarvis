@@ -169,7 +169,8 @@ def test_technical_assessment_downgrades_stale_pattern_to_reference():
         ],
     )
 
-    assert assessment.role == "참고"
+    assert assessment.role == "보조"
+    assert assessment.headline == "신고가 돌파"
     assert "145일 전" in assessment.role_reason
 
 
@@ -204,6 +205,7 @@ def test_technical_assessment_marks_negative_score_as_bearish():
 
     assert assessment.role == "보조"
     assert assessment.bias == "bearish"
+    assert assessment.headline == "추세 약화"
     assert "약세" in assessment.summary
 
 
@@ -238,6 +240,7 @@ def test_event_assessment_keeps_directionless_disclosure_as_reference():
 
     assert assessment.role == "참고"
     assert assessment.total_score == 0
+    assert assessment.headline == "신규 재료 제한적"
     assert assessment.bias == "neutral"
 
 
@@ -259,6 +262,7 @@ def test_flow_assessment_scores_supportive_flow_data():
     assert assessment.factor_type == "flow"
     assert assessment.role == "주도"
     assert assessment.total_score == 10
+    assert assessment.headline == "외인·기관 동행"
 
 
 def test_valuation_assessment_uses_high_confidence_undervalued_signal():
@@ -274,7 +278,95 @@ def test_valuation_assessment_uses_high_confidence_undervalued_signal():
 
     assert assessment.factor_type == "valuation"
     assert assessment.role == "보조"
+    assert assessment.headline == "밸류 매력"
     assert assessment.bias == "bullish"
+
+
+def test_valuation_assessment_sets_short_headline_for_bearish_valuation():
+    assessment = build_valuation_assessment(
+        FundamentalSummaryOutput(
+            summary="전반적으로 강력한 재무 성과를 보여주지만 현재 밸류는 부담스럽다.",
+            strengths=["높은 ROE"],
+            weaknesses=["매출 성장 둔화"],
+            valuation_assessment="고평가",
+            confidence=0.85,
+        )
+    )
+
+    assert assessment.headline == "고평가 부담"
+    assert "전반적으로 강력한 재무 성과" in assessment.summary
+
+
+def test_build_decision_summary_prefers_headline_for_core_variables():
+    summary = build_decision_summary(
+        leader_label="valuation",
+        assessments=[
+            FactorAssessment(
+                factor_type="valuation",
+                role="보조",
+                freshness_score=3,
+                magnitude_score=3,
+                actionability_score=2,
+                total_score=7,
+                headline="고평가 부담",
+                summary="전반적으로 강력한 재무 성과를 보여주지만 현재 밸류는 부담스럽다.",
+                role_reason="고평가 해석이라 공격적 추격을 경계해야 함",
+                evidence=["valuation=고평가"],
+                bias="bearish",
+            ),
+            FactorAssessment(
+                factor_type="flow",
+                role="보조",
+                freshness_score=4,
+                magnitude_score=2,
+                actionability_score=4,
+                total_score=7,
+                headline="기관 매수 우위",
+                summary="외인/기관 수급이 현재 흐름을 뒷받침함",
+                role_reason="한 축의 수급은 우호적이지만 일치도는 제한적임",
+                evidence=["기관 5일: 매수"],
+                bias="bullish",
+            ),
+        ],
+    )
+
+    assert summary.core_variables == ["고평가 부담", "기관 매수 우위"]
+
+
+def test_build_decision_summary_gives_price_weight_in_mixed_core_variables():
+    summary = build_decision_summary(
+        leader_label="혼합",
+        assessments=[
+            FactorAssessment(
+                factor_type="flow",
+                role="보조",
+                freshness_score=4,
+                magnitude_score=2,
+                actionability_score=4,
+                total_score=7,
+                headline="기관 매수 우위",
+                summary="외인/기관 수급이 현재 흐름을 뒷받침함",
+                role_reason="한 축의 수급은 우호적이지만 일치도는 제한적임",
+                evidence=["기관 5일: 매수"],
+                bias="bullish",
+            ),
+            FactorAssessment(
+                factor_type="technical",
+                role="참고",
+                freshness_score=2,
+                magnitude_score=4,
+                actionability_score=2,
+                total_score=6,
+                headline="단기 과열",
+                summary="기술 신호는 살아 있으나 오래된 패턴은 참고용",
+                role_reason="145일 전 Double Bottom 패턴이라 현재 액션은 최근 추세를 더 우선해야 함",
+                evidence=["technical total_score=140"],
+                bias="bullish",
+            ),
+        ],
+    )
+
+    assert summary.core_variables == ["단기 과열", "기관 매수 우위"]
 
 
 def test_build_decision_summary_uses_defer_reason_when_signal_is_weak():

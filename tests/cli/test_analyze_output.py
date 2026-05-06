@@ -117,6 +117,21 @@ def test_format_deep_dive_output_shows_defer_reason():
     assert "수급 데이터 부재 + event 신호 약함" in output
 
 
+def test_format_deep_dive_output_uses_headline_in_top_summary_only():
+    summary = AnalyzeDecisionSummary(
+        leader="혼합",
+        core_variables=["고평가 부담", "기관 매수 우위"],
+        action="관망",
+        timing="조정_대기",
+        action_sentence="지금 추격보다 핵심 레벨 확인 후 접근이 유리",
+    )
+
+    output = _format_top_summary(summary)
+
+    assert "고평가 부담" in output
+    assert "기관 매수 우위" in output
+
+
 def test_format_deep_dive_output_marks_event_as_reference_with_reason():
     assessment = FactorAssessment(
         factor_type="event",
@@ -191,3 +206,93 @@ def test_format_deep_dive_output_hides_integrated_recommendation_labels():
 
     assert "## 종합 인사이트 참고" in output
     assert "투자 추천" not in output
+
+
+def test_format_deep_dive_output_shows_na_for_missing_fundamental_metrics():
+    snapshot = IndicatorSnapshot(price=100.0, change_pct=1.0, rsi=55.0)
+    technical = TechnicalResult(
+        ticker="033100.KQ",
+        timestamp=datetime.now(),
+        snapshot=snapshot,
+        indicators=snapshot,
+        components={},
+        total_score=75,
+        strategies=[],
+        overall_assessment="매수",
+        confidence_score=75.0,
+        key_insights=[],
+        warnings=[],
+    )
+
+    result = {
+        "ticker": "033100.KQ",
+        "technical": technical,
+        "technical_summary": type(
+            "TechSummary",
+            (),
+            {
+                "summary": "강세",
+                "key_insights": [],
+                "recommendation": "매수",
+                "confidence": 0.75,
+                "rationale": "기술적 강세",
+            },
+        )(),
+        "decision_summary": AnalyzeDecisionSummary(
+            leader="technical",
+            core_variables=["기관 매수 우위"],
+            action="관망",
+            timing="조정_대기",
+            action_sentence="조정 확인 후 접근이 유리",
+        ),
+        "factor_assessments": [],
+        "scenarios": [],
+        "fundamental": type(
+            "Fundamental",
+            (),
+            {
+                "sector": None,
+                "industry": None,
+                "market_cap": None,
+                "pe_ratio": None,
+                "forward_pe": None,
+                "peg_ratio": None,
+                "pb_ratio": None,
+                "ps_ratio": None,
+                "ev_ebitda": None,
+                "roe": None,
+                "roa": None,
+                "gross_margin": None,
+                "operating_margin": None,
+                "profit_margin": None,
+                "revenue_growth": None,
+                "earnings_growth": None,
+                "debt_to_equity": None,
+                "current_ratio": None,
+                "quick_ratio": None,
+                "free_cash_flow": None,
+                "operating_cash_flow": None,
+                "fcf_yield": None,
+                "dividend_yield": None,
+                "payout_ratio": None,
+                "quarterly_data": None,
+            },
+        )(),
+        "fundamental_summary": type(
+            "FundSummary",
+            (),
+            {
+                "summary": "데이터가 제한적이다.",
+                "valuation_assessment": "적정",
+                "confidence": 0.5,
+                "strengths": [],
+                "weaknesses": [],
+            },
+        )(),
+    }
+
+    output = format_deep_dive_output(result)
+
+    assert "Sector/Industry**: N/A / N/A" in output
+    assert "**시가총액**: N/A" in output
+    assert "**ROE**: N/A" in output

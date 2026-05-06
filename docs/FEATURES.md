@@ -52,11 +52,11 @@ LLM 없이 기술적 분석만 수행하는 빠른 진단 기능.
 
 ## 2. Deep Dive Analysis (`jarvis analyze`)
 
-기술적 분석 + 펀더멘탈 + 뉴스 + 공시 + 수급을 LLM으로 종합하여 투자 추천을 생성.
+기술적 분석 + 펀더멘탈 + 뉴스 + 공시 + 수급을 종합해 판단 우선 요약과 투자 해석을 생성.
 
 **입출력:**
 - 입력: 티커, LLM provider (openai/anthropic)
-- 출력: 종합 추천 (매수/매도/중립), 근거, 리스크
+- 출력: 판단 요약(주도 팩터, 핵심 변수, 액션, 보류 이유), 액션 시나리오, 원시 분석
 
 **분석 레이어:**
 
@@ -65,7 +65,7 @@ LLM 없이 기술적 분석만 수행하는 빠른 진단 기능.
 | 기술적 | **KIS API (한국) / yfinance (미국)** → 8개 컴포넌트 | TechnicalSummaryOutput |
 | **패턴** | OHLC → 9개 차트 패턴 | ChartPatternResult |
 | **가격 레벨** | 6개 소스 (MA, Fib, Pivot, Swing, ATR, Pattern) | PriceLevels |
-| 펀더멘탈 | yfinance (선택) | FundamentalSummaryOutput |
+| 펀더멘탈 | **KIS 재무 API 5종 (한국) / yfinance (미국)** | FundamentalSummaryOutput |
 | 뉴스 | yfinance 뉴스 | NewsAnalysisOutput |
 | 공시 | SEC EDGAR / OpenDART (선택) | - |
 | 수급 | KIS API (한국주식 전용) | - |
@@ -76,6 +76,12 @@ LLM 없이 기술적 분석만 수행하는 빠른 진단 기능.
 - 한국 주식 (`.KS`, `.KQ`) 감지 시 → KIS API 사용 (실시간)
 - KIS API 키 없으면 → yfinance로 자동 fallback (3일 지연 가능)
 - 미국/글로벌 주식 → yfinance 사용
+
+**판단 우선 요약 규칙:**
+- 상단 `핵심 변수`는 장문 요약이 아니라 짧은 headline 라벨 2개만 노출
+- `혼합` 구간에서는 가격 팩터를 약간 우선해 핵심 변수를 정렬
+- 오래된 차트 패턴은 headline이 아니라 상세 이유에서 감점 근거로 설명
+- 한국 주식 재무 지표가 부족하면 밸류 판단을 유보하고 원시 지표는 `N/A`로 표시
 
 **차트 패턴 감지 (Phase 2):**
 

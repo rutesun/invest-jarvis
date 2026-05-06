@@ -1,5 +1,5 @@
-# src/tools/fundamental.py
 import asyncio
+import math
 from functools import partial
 
 import yfinance as yf
@@ -7,6 +7,8 @@ from pydantic import BaseModel
 
 from src.core.interfaces import BaseTool
 from src.core.models import ToolResult
+from src.providers.kis import KISProvider
+from src.tools.disclosure import is_korean_ticker
 
 
 class QuarterlyData(BaseModel):
@@ -73,20 +75,28 @@ class FundamentalSnapshot(BaseModel):
 
 
 class FundamentalTool(BaseTool):
-    """Fundamental analysis tool using yfinance."""
+    """Fundamental analysis tool using KIS for Korean stocks and yfinance elsewhere."""
 
     name = "fundamental"
     description = "펀더멘털 분석 (밸류에이션, 수익성, 성장성, 재무건전성)"
 
+    def __init__(self, kis_provider: KISProvider | None = None):
+        self.kis_provider = kis_provider
+
     async def execute(self, ticker: str, **kwargs) -> ToolResult:
         try:
-            loop = asyncio.get_running_loop()
-            snapshot = await loop.run_in_executor(None, partial(self._fetch_fundamentals, ticker))
+            if is_korean_ticker(ticker) and self.kis_provider is not None:
+                snapshot = await self._fetch_kis_fundamentals(ticker)
+            else:
+                loop = asyncio.get_running_loop()
+                snapshot = await loop.run_in_executor(
+                    None, partial(self._fetch_yfinance_fundamentals, ticker)
+                )
             return ToolResult(success=True, data=snapshot)
         except Exception as e:
             return ToolResult(success=False, data=None, error=str(e))
 
-    def _fetch_fundamentals(self, ticker: str) -> FundamentalSnapshot:
+    def _fetch_yfinance_fundamentals(self, ticker: str) -> FundamentalSnapshot:
         t = yf.Ticker(ticker)
         info = t.info
 
@@ -225,4 +235,230 @@ class FundamentalTool(BaseTool):
             payout_ratio=info.get("payoutRatio"),
             shares_outstanding=info.get("sharesOutstanding"),
             float_shares=info.get("floatShares"),
+        )
+
+    @staticmethod
+    def _to_float(value) -> float | None:
+        if value in (None, "", "-", "N/A"):
+            return None
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            return None
+        if not math.isfinite(parsed):
+            return None
+        if parsed == 99.99:
+            return None
+        return parsed
+
+    @classmethod
+    def _filter_valid_rows(cls, rows: list[dict], signal_keys: list[str]) -> list[dict]:
+        valid_rows: list[dict] = []
+        for row in rows:
+            values = [cls._to_float(row.get(key)) for key in signal_keys]
+            if any(value is not None and value != 0 for value in values):
+                valid_rows.append(row)
+        return valid_rows
+
+    @classmethod
+    def _build_kis_quarterly_data(cls, rows: list[dict]) -> list[QuarterlyData] | None:
+        valid_rows = cls._filter_valid_rows(rows, ["sale_account", "op_prfi", "thtr_ntin"])
+        if not valid_rows:
+            return None
+
+        quarterly_data: list[QuarterlyData] = []
+        for index, row in enumerate(valid_rows[:4]):
+            revenue = cls._to_float(row.get("sale_account"))
+            earnings = cls._to_float(row.get("thtr_ntin"))
+            revenue_qoq = None
+            earnings_qoq = None
+
+            if index + 1 < len(valid_rows):
+                previous = valid_rows[index + 1]
+                previous_revenue = cls._to_float(previous.get("sale_account"))
+                previous_earnings = cls._to_float(previous.get("thtr_ntin"))
+                if revenue is not None and previous_revenue not in (None, 0):
+                    revenue_qoq = (revenue - previous_revenue) / previous_revenue
+                if earnings is not None and previous_earnings not in (None, 0):
+                    earnings_qoq = (earnings - previous_earnings) / previous_earnings
+
+            quarterly_data.append(
+                QuarterlyData(
+                    period=f"{row.get('stac_yymm', '')[:4]}-{row.get('stac_yymm', '')[4:]}",
+                    revenue=revenue,
+                    earnings=earnings,
+                    revenue_qoq=revenue_qoq,
+                    earnings_qoq=earnings_qoq,
+                )
+            )
+
+        return quarterly_data
+
+    def _normalize_kis_snapshot(
+        self,
+        *,
+        ticker: str,
+        quote_data: dict,
+        profit_ratio: list[dict],
+        financial_ratio: list[dict],
+        other_major_ratios: list[dict],
+        income_statement: list[dict],
+        balance_sheet: list[dict],
+    ) -> FundamentalSnapshot:
+        valid_profit_ratio = self._filter_valid_rows(profit_ratio, ["roe_val", "eps", "bps", "sps"])
+        valid_financial_ratio = self._filter_valid_rows(
+            financial_ratio,
+            ["cras", "flow_lblt", "total_lblt", "total_cptl"],
+        )
+        valid_other_major = self._filter_valid_rows(
+            other_major_ratios,
+            ["ebitda", "ev_ebitda", "payout_rate"],
+        )
+        valid_income_statement = self._filter_valid_rows(
+            income_statement,
+            ["cptl_ntin_rate", "self_cptl_ntin_inrt", "sale_ntin_rate", "sale_totl_rate"],
+        )
+        valid_balance_sheet = self._filter_valid_rows(
+            balance_sheet,
+            ["sale_account", "sale_totl_prfi", "op_prfi", "thtr_ntin"],
+        )
+
+        profit_row = valid_profit_ratio[0] if valid_profit_ratio else {}
+        financial_row = valid_financial_ratio[0] if valid_financial_ratio else {}
+        other_major_row = valid_other_major[0] if valid_other_major else {}
+        income_row = valid_income_statement[0] if valid_income_statement else {}
+        balance_row = valid_balance_sheet[0] if valid_balance_sheet else {}
+
+        price = self._to_float(quote_data.get("price"))
+        eps = self._to_float(profit_row.get("eps"))
+        bps = self._to_float(profit_row.get("bps"))
+        sps = self._to_float(profit_row.get("sps"))
+        ebitda = self._to_float(other_major_row.get("ebitda"))
+
+        sale_account = self._to_float(balance_row.get("sale_account"))
+        sale_totl_prfi = self._to_float(balance_row.get("sale_totl_prfi"))
+        op_prfi = self._to_float(balance_row.get("op_prfi"))
+        thtr_ntin = self._to_float(balance_row.get("thtr_ntin"))
+
+        cras = self._to_float(financial_row.get("cras"))
+        flow_lblt = self._to_float(financial_row.get("flow_lblt"))
+        total_lblt = self._to_float(financial_row.get("total_lblt"))
+        total_cptl = self._to_float(financial_row.get("total_cptl"))
+
+        revenue_growth = None
+        earnings_growth = None
+        if len(valid_balance_sheet) >= 2:
+            current_row = valid_balance_sheet[0]
+            previous_row = valid_balance_sheet[1]
+            current_revenue = self._to_float(current_row.get("sale_account"))
+            previous_revenue = self._to_float(previous_row.get("sale_account"))
+            current_earnings = self._to_float(current_row.get("thtr_ntin"))
+            previous_earnings = self._to_float(previous_row.get("thtr_ntin"))
+            if current_revenue is not None and previous_revenue not in (None, 0):
+                revenue_growth = (current_revenue - previous_revenue) / previous_revenue
+            if current_earnings is not None and previous_earnings not in (None, 0):
+                earnings_growth = (current_earnings - previous_earnings) / previous_earnings
+
+        return FundamentalSnapshot(
+            market_cap=None,
+            sector=None,
+            industry=None,
+            pe_ratio=(price / eps) if price is not None and eps not in (None, 0) else None,
+            forward_pe=None,
+            peg_ratio=None,
+            pb_ratio=(price / bps) if price is not None and bps not in (None, 0) else None,
+            ps_ratio=(price / sps) if price is not None and sps not in (None, 0) else None,
+            ev_ebitda=self._to_float(other_major_row.get("ev_ebitda")),
+            eps=eps,
+            ebitda=ebitda,
+            gross_margin=(
+                self._to_float(income_row.get("sale_totl_rate")) / 100
+                if self._to_float(income_row.get("sale_totl_rate")) is not None
+                else (
+                    sale_totl_prfi / sale_account
+                    if sale_totl_prfi is not None and sale_account not in (None, 0)
+                    else None
+                )
+            ),
+            operating_margin=(
+                op_prfi / sale_account
+                if op_prfi is not None and sale_account not in (None, 0)
+                else None
+            ),
+            profit_margin=(
+                self._to_float(income_row.get("sale_ntin_rate")) / 100
+                if self._to_float(income_row.get("sale_ntin_rate")) is not None
+                else (
+                    thtr_ntin / sale_account
+                    if thtr_ntin is not None and sale_account not in (None, 0)
+                    else None
+                )
+            ),
+            roe=(
+                self._to_float(profit_row.get("roe_val")) / 100
+                if self._to_float(profit_row.get("roe_val")) is not None
+                else (
+                    self._to_float(income_row.get("self_cptl_ntin_inrt")) / 100
+                    if self._to_float(income_row.get("self_cptl_ntin_inrt")) is not None
+                    else None
+                )
+            ),
+            roa=(
+                self._to_float(income_row.get("cptl_ntin_rate")) / 100
+                if self._to_float(income_row.get("cptl_ntin_rate")) is not None
+                else None
+            ),
+            revenue_growth=revenue_growth,
+            earnings_growth=earnings_growth,
+            quarterly_data=self._build_kis_quarterly_data(valid_balance_sheet),
+            debt_to_equity=(
+                total_lblt / total_cptl
+                if total_lblt is not None and total_cptl not in (None, 0)
+                else None
+            ),
+            current_ratio=(
+                cras / flow_lblt if cras is not None and flow_lblt not in (None, 0) else None
+            ),
+            quick_ratio=None,
+            free_cash_flow=None,
+            operating_cash_flow=None,
+            fcf_yield=None,
+            dividend_yield=None,
+            payout_ratio=(
+                self._to_float(other_major_row.get("payout_rate")) / 100
+                if self._to_float(other_major_row.get("payout_rate")) is not None
+                else None
+            ),
+            shares_outstanding=None,
+            float_shares=None,
+        )
+
+    async def _fetch_kis_fundamentals(self, ticker: str) -> FundamentalSnapshot:
+        if self.kis_provider is None:
+            raise ValueError("KIS provider is required for Korean stock fundamentals")
+
+        (
+            quote_data,
+            financial_ratio,
+            balance_sheet,
+            profit_ratio,
+            income_statement,
+            other_major,
+        ) = await asyncio.gather(
+            self.kis_provider.get_quote(ticker.replace(".KS", "").replace(".KQ", "")),
+            self.kis_provider.get_financial_ratio(ticker),
+            self.kis_provider.get_balance_sheet(ticker),
+            self.kis_provider.get_profit_ratio(ticker),
+            self.kis_provider.get_income_statement(ticker),
+            self.kis_provider.get_other_major_ratios(ticker),
+        )
+
+        return self._normalize_kis_snapshot(
+            ticker=ticker,
+            quote_data=quote_data,
+            profit_ratio=profit_ratio,
+            financial_ratio=financial_ratio,
+            other_major_ratios=other_major,
+            income_statement=income_statement,
+            balance_sheet=balance_sheet,
         )

@@ -549,3 +549,62 @@ class KISProvider(BaseProvider):
                 }
             )
         return results
+
+    async def _get_finance_data(self, path: str, tr_id: str, ticker: str) -> list[dict]:
+        """Get domestic stock finance data from KIS API."""
+        token = await self._get_access_token()
+        url = f"{self.BASE_URL}{path}"
+        headers = {
+            "Authorization": f"{token.token_type} {token.access_token}",
+            "appkey": self.app_key,
+            "appsecret": self.app_secret,
+            "tr_id": tr_id,
+            "Content-Type": "application/json; charset=utf-8",
+        }
+        params = {
+            "FID_DIV_CLS_CODE": "0",
+            "FID_COND_MRKT_DIV_CODE": "J",
+            "FID_INPUT_ISCD": ticker.replace(".KS", "").replace(".KQ", ""),
+        }
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(url, headers=headers, params=params)
+            response.raise_for_status()
+            data = response.json()
+
+        return data.get("output", [])
+
+    async def get_financial_ratio(self, ticker: str) -> list[dict]:
+        return await self._get_finance_data(
+            path="/uapi/domestic-stock/v1/finance/financial-ratio",
+            tr_id="FHKST66430100",
+            ticker=ticker,
+        )
+
+    async def get_balance_sheet(self, ticker: str) -> list[dict]:
+        return await self._get_finance_data(
+            path="/uapi/domestic-stock/v1/finance/balance-sheet",
+            tr_id="FHKST66430200",
+            ticker=ticker,
+        )
+
+    async def get_profit_ratio(self, ticker: str) -> list[dict]:
+        return await self._get_finance_data(
+            path="/uapi/domestic-stock/v1/finance/profit-ratio",
+            tr_id="FHKST66430300",
+            ticker=ticker,
+        )
+
+    async def get_income_statement(self, ticker: str) -> list[dict]:
+        return await self._get_finance_data(
+            path="/uapi/domestic-stock/v1/finance/income-statement",
+            tr_id="FHKST66430400",
+            ticker=ticker,
+        )
+
+    async def get_other_major_ratios(self, ticker: str) -> list[dict]:
+        return await self._get_finance_data(
+            path="/uapi/domestic-stock/v1/finance/other-major-ratios",
+            tr_id="FHKST66430500",
+            ticker=ticker,
+        )

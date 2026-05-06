@@ -78,7 +78,7 @@ def _get_metric_display_name(metric_name: str) -> str:
     return METRIC_DISPLAY_NAMES[metric_name]
 
 
-def _format_metric_value(metric_name: str, value: float) -> str:
+def _format_metric_value(metric_name: str, value: float | None) -> str:
     """지표 타입에 따라 값 포맷팅
 
     Args:
@@ -88,6 +88,9 @@ def _format_metric_value(metric_name: str, value: float) -> str:
     Returns:
         포맷팅된 문자열
     """
+    if value is None:
+        return "N/A"
+
     # 퍼센트 지표
     if metric_name in [
         "revenue_growth",
@@ -165,6 +168,7 @@ async def run_quick_check(ticker_or_name: str) -> dict:
     is_korean_stock = ticker.endswith((".KS", ".KQ"))
     kis_key = os.getenv("KIS_APP_KEY")
     kis_secret = os.getenv("KIS_APP_SECRET")
+    kis_provider = None
 
     if is_korean_stock and kis_key and kis_secret:
         logger.info(f"한국 주식 {ticker} → KIS API 사용 (실시간)")
@@ -279,7 +283,7 @@ async def run_deep_dive(ticker_or_name: str, provider: str) -> dict:
 
     scorer = TechnicalScorer()
     technical_tool = TechnicalAnalysisTool(provider=price_provider, scorer=scorer)
-    fundamental_tool = FundamentalTool()
+    fundamental_tool = FundamentalTool(kis_provider=kis_provider if is_korean_stock else None)
     news_tool = NewsTool()
     llm = LLMProvider.create(
         provider=provider,
@@ -306,10 +310,10 @@ async def run_deep_dive(ticker_or_name: str, provider: str) -> dict:
             "KIS_APP_KEY 또는 KIS_APP_SECRET이 설정되지 않았습니다. "
             "한국주식 수급 데이터가 제외됩니다."
         )
-    kis_provider = (
+    flow_provider = (
         KISProvider(app_key=kis_key, app_secret=kis_secret) if kis_key and kis_secret else None
     )
-    flow_tool = FlowTool(kis_provider=kis_provider)
+    flow_tool = FlowTool(kis_provider=flow_provider)
 
     pipeline = DeepDivePipeline(
         technical_tool=technical_tool,
@@ -354,10 +358,10 @@ def _format_top_summary(decision_summary) -> str:
         f"- **주도 팩터**: {_format_factor_label(decision_summary.leader)}",
         f"- **핵심 변수**: {', '.join(decision_summary.core_variables)}",
         f"- **액션**: {decision_summary.action} | {_format_timing_label(decision_summary.timing)}",
-        f"  {decision_summary.action_sentence}",
+        f"- **한줄 판단**: {decision_summary.action_sentence}",
     ]
     if decision_summary.defer_reason:
-        lines.append(f"  이유: {decision_summary.defer_reason}")
+        lines.append(f"- **보류 이유**: {decision_summary.defer_reason}")
     lines.append("")
     return "\n".join(lines)
 
@@ -491,17 +495,15 @@ def _format_raw_analysis_sections(result: dict) -> str:
         output += "## Fundamental Analysis\n\n"
         output += "### Key Metrics\n\n"
 
-        if fundamental.sector or fundamental.industry:
-            output += f"**Sector/Industry**: {fundamental.sector or 'N/A'} / {fundamental.industry or 'N/A'}\n\n"
+        output += f"**Sector/Industry**: {fundamental.sector or 'N/A'} / {fundamental.industry or 'N/A'}\n\n"
 
-        priority_metrics = SectorMetrics.get_priority_metrics(fundamental.sector)
+        priority_metrics = SectorMetrics.get_priority_metrics(fundamental.sector or "")
 
         for metric_name in priority_metrics:
             value = getattr(fundamental, metric_name, None)
-            if value is not None:
-                display_name = _get_metric_display_name(metric_name)
-                formatted = _format_metric_value(metric_name, value)
-                output += f"⭐ **{display_name}**: {formatted}\n\n"
+            display_name = _get_metric_display_name(metric_name)
+            formatted = _format_metric_value(metric_name, value)
+            output += f"⭐ **{display_name}**: {formatted}\n\n"
 
         output += "\n"
 
@@ -534,10 +536,9 @@ def _format_raw_analysis_sections(result: dict) -> str:
 
         for metric_name in remaining_metrics:
             value = getattr(fundamental, metric_name, None)
-            if value is not None:
-                display_name = _get_metric_display_name(metric_name)
-                formatted = _format_metric_value(metric_name, value)
-                output += f"- **{display_name}**: {formatted}\n"
+            display_name = _get_metric_display_name(metric_name)
+            formatted = _format_metric_value(metric_name, value)
+            output += f"- **{display_name}**: {formatted}\n"
 
         output += "\n"
 

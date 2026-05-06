@@ -13,6 +13,7 @@ from src.pipelines.analyze_decision import (
     FactorAssessment,
 )
 from src.pipelines.deep_dive import DeepDivePipeline
+from src.tools.fundamental import FundamentalSnapshot
 from src.tools.news import NewsArticle
 from src.tools.technical.models import (
     IndicatorSnapshot,
@@ -357,3 +358,27 @@ async def test_deep_dive_pipeline_uses_defer_state_when_news_and_flow_are_missin
         assert result["decision_summary"].action == "관망"
         assert result["decision_summary"].timing == "보류"
         assert result["decision_summary"].defer_reason is not None
+
+
+@pytest.mark.asyncio
+async def test_generate_fundamental_summary_uses_rule_based_fallback_when_metrics_are_sparse(
+    mock_technical_tool, mock_news_tool, mock_llm
+):
+    pipeline = DeepDivePipeline(
+        technical_tool=mock_technical_tool,
+        news_tool=mock_news_tool,
+        llm=mock_llm,
+    )
+
+    with patch(
+        "src.pipelines.deep_dive.generate_fundamental_summary", new_callable=AsyncMock
+    ) as mock_generate:
+        summary = await pipeline._generate_fundamental_summary(
+            "033100.KQ",
+            FundamentalSnapshot(),
+        )
+
+    mock_generate.assert_not_awaited()
+    assert summary.summary == "핵심 재무 지표가 부족해 밸류 판단을 유보합니다."
+    assert summary.valuation_assessment == "적정"
+    assert summary.confidence == pytest.approx(0.2)

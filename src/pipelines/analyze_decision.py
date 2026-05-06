@@ -10,6 +10,7 @@ class FactorAssessment(BaseModel):
     magnitude_score: int = Field(ge=0, le=5)
     actionability_score: int = Field(ge=0, le=5)
     total_score: int = Field(ge=0, le=15)
+    headline: str | None = None
     summary: str
     role_reason: str
     evidence: list[str]
@@ -47,6 +48,12 @@ class FactorScoreEntry(TypedDict):
 
 _POSITIVE_EVENT_KEYWORDS = ("계약", "수주", "승인", "투자", "자사주", "자기주식")
 _NEGATIVE_EVENT_KEYWORDS = ("유상증자", "소송", "내부자매도", "횡령", "하향", "리콜")
+_MIXED_CORE_PRIORITY = {
+    "technical": 0,
+    "flow": 1,
+    "event": 2,
+    "valuation": 3,
+}
 
 
 def classify_leader_label(factor_scores: list[FactorScoreEntry]) -> str:
@@ -67,6 +74,72 @@ def classify_leader_label(factor_scores: list[FactorScoreEntry]) -> str:
     return ranked[0]["factor_type"]
 
 
+def _compact_summary(text: str, limit: int = 18) -> str:
+    compact = " ".join(text.split())
+    return compact if len(compact) <= limit else f"{compact[:limit].rstrip()}..."
+
+
+def _pick_core_variable_label(assessment: FactorAssessment) -> str:
+    return assessment.headline or _compact_summary(assessment.summary)
+
+
+def _mixed_core_variable_sort_key(assessment: FactorAssessment) -> tuple[int, int, int]:
+    weighted_score = assessment.total_score + (
+        1 if assessment.factor_type == "technical" and assessment.total_score > 0 else 0
+    )
+    return (
+        -weighted_score,
+        _MIXED_CORE_PRIORITY.get(assessment.factor_type, 99),
+        -assessment.total_score,
+    )
+
+
+def _technical_headline(total_score: int, rsi: float | None, bias: str) -> str:
+    if bias == "bearish":
+        return "추세 약화"
+    if rsi is not None and rsi >= 80:
+        return "단기 과열"
+    if total_score >= 100:
+        return "신고가 돌파"
+    return "가격 모멘텀"
+
+
+def _event_headline(total_score: int, bias: str, evidence: list[str]) -> str:
+    if total_score == 0:
+        return "신규 재료 제한적"
+    if bias == "bearish":
+        return "규제 리스크"
+    if any("계약" in item or "수주" in item for item in evidence):
+        return "공급계약 재료"
+    if any("승인" in item for item in evidence):
+        return "승인 모멘텀"
+    return "이벤트 부각"
+
+
+def _flow_headline(score: int, foreign_positive: bool, institution_positive: bool) -> str:
+    if score == 0:
+        return "수급 약함"
+    if foreign_positive and institution_positive:
+        return "외인·기관 동행"
+    if institution_positive:
+        return "기관 매수 우위"
+    if foreign_positive:
+        return "외인 매수 우위"
+    return "수급 엇갈림"
+
+
+def _valuation_headline(valuation: str, confidence: float) -> str:
+    if confidence < 0.45:
+        return "재무 데이터 부족"
+    if confidence < 0.7:
+        return "재무 판단 유보"
+    if valuation == "적정":
+        return "밸류 중립"
+    if valuation == "저평가":
+        return "밸류 매력"
+    return "고평가 부담"
+
+
 def build_technical_assessment(
     total_score: int,
     rsi: float | None,
@@ -80,22 +153,8 @@ def build_technical_assessment(
     )
 
     rsi_evidence = f"RSI {rsi:.1f}" if rsi is not None else "RSI 없음"
-
-    if freshest_pattern and freshest_pattern.get("days_ago", 0) > 120:
-        return FactorAssessment(
-            factor_type="technical",
-            role="참고",
-            freshness_score=1,
-            magnitude_score=4,
-            actionability_score=1,
-            total_score=6,
-            summary="기술 신호는 존재하지만 오래된 패턴 중심",
-            role_reason=(
-                f"{freshest_pattern['days_ago']}일 전 완성된 패턴이라 현재 액션과 거리 있음"
-            ),
-            evidence=[freshest_pattern["pattern_name"], rsi_evidence],
-            bias="neutral",
-        )
+    stale_pattern_days = freshest_pattern.get("days_ago", 0) if freshest_pattern else 0
+    stale_pattern_name = freshest_pattern.get("pattern_name") if freshest_pattern else None
 
     absolute_score = abs(total_score)
     if absolute_score >= 100:
@@ -107,6 +166,16 @@ def build_technical_assessment(
     else:
         score = 0
         role = "참고"
+
+    stale_pattern_note = None
+    if stale_pattern_days > 120 and score > 0:
+        stale_pattern_note = f"{stale_pattern_days}일 전 {stale_pattern_name} 패턴이라 현재 액션은 최근 추세를 더 우선해야 함"
+        if absolute_score >= 100:
+            score = 8
+            role = "보조"
+        else:
+            score = 6
+            role = "참고"
 
     if freshest_pattern and freshest_pattern.get("days_ago", 0) > 60 and score >= 10:
         score = 8
@@ -125,16 +194,36 @@ def build_technical_assessment(
         role_reason = "신고가/거래량/추세 지표가 현재 액션과 직접 연결됨"
         bias = "bullish"
 
+    if stale_pattern_note:
+        role_reason = stale_pattern_note
+
     return FactorAssessment(
         factor_type="technical",
         role=role,
-        freshness_score=4 if score > 0 else 1,
+        freshness_score=2 if stale_pattern_note else 4 if score > 0 else 1,
         magnitude_score=4 if score > 0 else 1,
-        actionability_score=3 if score > 0 else 1,
+        actionability_score=2 if stale_pattern_note else 3 if score > 0 else 1,
         total_score=score,
-        summary=summary,
+        headline=_technical_headline(total_score, rsi, bias),
+        summary=(
+            "기술 신호는 살아 있으나 오래된 패턴은 참고용"
+            if stale_pattern_note and score > 0
+            else summary
+        ),
         role_reason=role_reason,
-        evidence=[f"technical total_score={total_score}", rsi_evidence],
+        evidence=[
+            item
+            for item in [
+                f"technical total_score={total_score}",
+                rsi_evidence,
+                (
+                    f"{stale_pattern_name} {stale_pattern_days}일 전"
+                    if stale_pattern_note and stale_pattern_name
+                    else None
+                ),
+            ]
+            if item is not None
+        ],
         bias=bias,
     )
 
@@ -194,6 +283,7 @@ def build_event_assessment(
         magnitude_score=4 if (positive_signal or negative_signal) else 2 if total_score > 0 else 0,
         actionability_score=4 if has_disclosure else 2 if news_titles else 0,
         total_score=total_score,
+        headline=_event_headline(total_score, bias, news_titles[:2] + disclosure_evidence),
         summary=summary,
         role_reason=reason,
         evidence=news_titles[:2] + disclosure_evidence,
@@ -238,6 +328,7 @@ def build_flow_assessment(flow_data) -> FactorAssessment:
         magnitude_score=4 if foreign_positive and institution_positive else 2,
         actionability_score=4 if score >= 7 else 1,
         total_score=score,
+        headline=_flow_headline(score, foreign_positive, institution_positive),
         summary="외인/기관 수급이 현재 흐름을 뒷받침함" if score >= 7 else "수급 뒷받침이 약함",
         role_reason=reason,
         evidence=[
@@ -291,6 +382,7 @@ def build_valuation_assessment(fundamental_summary) -> FactorAssessment:
         magnitude_score=3 if score > 0 else 0,
         actionability_score=2 if score > 0 else 0,
         total_score=score,
+        headline=_valuation_headline(valuation, confidence),
         summary=fundamental_summary.summary,
         role_reason=reason,
         evidence=[
@@ -326,8 +418,12 @@ def build_decision_summary(
         ]
         prioritized_assessments = leader_assessments + other_assessments
         leader_assessment = leader_assessments[0] if leader_assessments else None
+    else:
+        prioritized_assessments = sorted(assessments, key=_mixed_core_variable_sort_key)
 
-    core_variables = [assessment.summary for assessment in prioritized_assessments[:2]]
+    core_variables = [
+        _pick_core_variable_label(assessment) for assessment in prioritized_assessments[:2]
+    ]
 
     if leader_label == "혼합":
         action = "관망"

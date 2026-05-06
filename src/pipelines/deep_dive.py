@@ -28,6 +28,25 @@ from src.tools.technical.tool import TechnicalAnalysisTool
 
 
 logger = logging.getLogger(__name__)
+_FUNDAMENTAL_SIGNAL_FIELDS = (
+    "pe_ratio",
+    "forward_pe",
+    "peg_ratio",
+    "ev_ebitda",
+    "ps_ratio",
+    "roe",
+    "roa",
+    "revenue_growth",
+    "earnings_growth",
+    "gross_margin",
+    "operating_margin",
+    "profit_margin",
+    "debt_to_equity",
+    "free_cash_flow",
+    "fcf_yield",
+    "dividend_yield",
+    "payout_ratio",
+)
 
 
 class DeepDivePipeline:
@@ -294,6 +313,20 @@ class DeepDivePipeline:
         self, ticker: str, fundamental_data: FundamentalSnapshot
     ) -> FundamentalSummaryOutput:
         """Generate LLM summary of fundamental analysis."""
+        available_metric_count = sum(
+            1
+            for field in _FUNDAMENTAL_SIGNAL_FIELDS
+            if getattr(fundamental_data, field) is not None
+        )
+        if available_metric_count < 3:
+            return FundamentalSummaryOutput(
+                summary="핵심 재무 지표가 부족해 밸류 판단을 유보합니다.",
+                strengths=[],
+                weaknesses=["확인 가능한 재무 지표가 제한적임"],
+                valuation_assessment="적정",
+                confidence=0.2,
+            )
+
         input_data = FundamentalSummaryInput(
             ticker=ticker,
             sector=fundamental_data.sector,

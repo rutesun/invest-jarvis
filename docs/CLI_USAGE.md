@@ -82,7 +82,7 @@ uv run jarvis analyze AAPL --provider anthropic
 **출력 내용:**
 - 상단 판단 요약
   - `주도 팩터`
-  - `핵심 변수`
+  - `핵심 변수` (짧은 headline 기준)
   - `액션`
   - 판단이 약하면 `판단 보류`와 이유 표시
 - 팩터 분류
@@ -107,7 +107,7 @@ uv run jarvis analyze AAPL --provider anthropic
 
 **선택 환경변수:**
 - `OPENDART_API_KEY`: 한국주식 공시 조회 (없으면 공시 섹션 생략)
-- `KIS_APP_KEY` / `KIS_APP_SECRET`: 수급 동향 조회 (없으면 수급 섹션 생략)
+- `KIS_APP_KEY` / `KIS_APP_SECRET`: 한국주식 수급 + 펀더멘털 조회 (없으면 일부 한국주식 데이터 fallback 또는 생략)
 
 ---
 
