@@ -248,6 +248,7 @@ async def run_deep_dive(ticker_or_name: str, provider: str) -> dict:
     is_korean_stock = ticker.endswith((".KS", ".KQ"))
     kis_key = os.getenv("KIS_APP_KEY")
     kis_secret = os.getenv("KIS_APP_SECRET")
+    kis_provider = None
 
     if is_korean_stock and kis_key and kis_secret:
         # 한국 주식 + KIS API 키 있음 → KIS 사용 (실시간)

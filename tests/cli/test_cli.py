@@ -1,9 +1,10 @@
 from datetime import datetime
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from typer.testing import CliRunner
 
-from src.cli.main import app
+from src.cli.main import app, run_deep_dive
 from src.llm.models import ActionableSignalOutput, NewsAnalysisOutput, TechnicalSummaryOutput
 from src.pipelines.analyze_decision import AnalyzeDecisionSummary, AnalyzeScenario, FactorAssessment
 from src.tools.macro import TickerMacroSnapshot
@@ -205,3 +206,35 @@ def test_cli_version():
     result = runner.invoke(app, ["--version"])
     assert result.exit_code == 0
     assert "0.3.0" in result.stdout
+
+
+@pytest.mark.asyncio
+async def test_run_deep_dive_korean_stock_without_kis_credentials_uses_yfinance(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
+    monkeypatch.delenv("KIS_APP_KEY", raising=False)
+    monkeypatch.delenv("KIS_APP_SECRET", raising=False)
+    monkeypatch.delenv("OPENDART_API_KEY", raising=False)
+
+    expected = {"ticker": "066970.KQ", "success": True}
+    mock_pipeline = AsyncMock()
+    mock_pipeline.run = AsyncMock(return_value=expected)
+
+    with (
+        patch("src.cli.main.resolve_ticker", new=AsyncMock(return_value="066970.KQ")),
+        patch("src.cli.main.YFinanceProvider", return_value=object()) as mock_yfinance_provider,
+        patch("src.cli.main.TechnicalScorer", return_value=object()),
+        patch("src.cli.main.TechnicalAnalysisTool", return_value=object()),
+        patch("src.cli.main.FundamentalTool", return_value=object()) as mock_fundamental_tool,
+        patch("src.cli.main.NewsTool", return_value=object()),
+        patch("src.cli.main.LLMProvider.create", return_value=object()),
+        patch("src.tools.disclosure.SECDisclosureFetcher", return_value=object()),
+        patch("src.tools.disclosure.DARTDisclosureFetcher", return_value=object()),
+        patch("src.tools.disclosure.DisclosureTool", return_value=object()),
+        patch("src.tools.flow.FlowTool", return_value=object()),
+        patch("src.cli.main.DeepDivePipeline", return_value=mock_pipeline),
+    ):
+        result = await run_deep_dive("엘앤에프", "openai")
+
+    assert result == expected
+    mock_yfinance_provider.assert_called_once()
+    mock_fundamental_tool.assert_called_once_with(kis_provider=None)

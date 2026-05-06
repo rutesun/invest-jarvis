@@ -662,13 +662,16 @@ def build_analyze_decision_bundle(
         disclosure_items=disclosure_payload,
     )
     if news_analysis is not None and event_assessment.total_score > 0:
-        event_assessment = event_assessment.model_copy(
-            update={
-                "summary": news_analysis.summary,
-                "evidence": event_assessment.evidence + [news_analysis.impact_assessment],
-                "bias": "bearish" if news_analysis.sentiment == "부정" else "bullish",
-            }
-        )
+        update_payload = {
+            "summary": news_analysis.summary,
+            "evidence": event_assessment.evidence + [news_analysis.impact_assessment],
+        }
+        if news_analysis.sentiment == "부정":
+            update_payload["bias"] = "bearish"
+        elif news_analysis.sentiment == "긍정":
+            update_payload["bias"] = "bullish"
+
+        event_assessment = event_assessment.model_copy(update=update_payload)
 
     assessments = [
         technical_assessment,

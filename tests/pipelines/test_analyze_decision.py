@@ -621,3 +621,45 @@ def test_build_analyze_decision_bundle_scores_disclosure_only_event():
     assert event_assessment.total_score >= 7
     assert event_assessment.role in {"보조", "주도"}
     assert "공급계약" in event_assessment.summary
+
+
+def test_build_analyze_decision_bundle_keeps_event_bias_for_neutral_news_sentiment():
+    technical_data = SimpleNamespace(
+        total_score=75,
+        indicators=None,
+        snapshot=SimpleNamespace(rsi=55.0),
+    )
+    technical_summary = TechnicalSummaryOutput(
+        summary="기술 흐름 양호",
+        key_insights=["20일선 위 유지"],
+        recommendation="매수",
+        confidence=0.75,
+        rationale="추세 유지",
+    )
+    news_analysis = NewsAnalysisOutput(
+        sentiment="중립",
+        confidence=0.86,
+        key_themes=["자금조달"],
+        summary="단기 이벤트 영향은 제한적",
+        impact_assessment="중립적인 이벤트로 해석됨",
+    )
+
+    bundle = build_analyze_decision_bundle(
+        technical_data=technical_data,
+        technical_summary=technical_summary,
+        news_articles=[],
+        news_analysis=news_analysis,
+        fundamental_summary=None,
+        disclosure_items=[SimpleNamespace(form_type="DART", description="유상증자 결정 공시")],
+        flow_data=None,
+        chart_patterns={},
+        price_levels=SimpleNamespace(support_levels=[], resistance_levels=[]),
+    )
+
+    event_assessment = next(
+        assessment for assessment in bundle.factor_assessments if assessment.factor_type == "event"
+    )
+
+    assert event_assessment.total_score >= 7
+    assert event_assessment.bias == "bearish"
+    assert event_assessment.summary == "단기 이벤트 영향은 제한적"
