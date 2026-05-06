@@ -93,7 +93,7 @@ def identify_key_levels(
     all_levels: list[PriceLevel] = []
 
     # 1. Moving averages
-    for ma in [20, 50, 200]:
+    for ma in [20, 50, 150, 200]:
         ma_val = getattr(snapshot, f"sma_{ma}", None)
         if ma_val:
             all_levels.append(

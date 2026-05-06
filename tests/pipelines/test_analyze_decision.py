@@ -473,6 +473,80 @@ def test_build_default_scenarios_switches_template_for_bearish_action():
     assert "비중 축소" in scenarios[0].recommended_action
 
 
+def test_build_default_scenarios_expands_trigger_levels_with_ma50_ma150_and_invalidation():
+    summary = AnalyzeDecisionSummary(
+        leader="혼합",
+        core_variables=["단기 과열", "기관 매수 우위"],
+        action="관망",
+        timing="조정_대기",
+        action_sentence="핵심 레벨 확인 후 접근",
+    )
+
+    scenarios = build_default_scenarios(
+        summary,
+        SimpleNamespace(
+            support_levels=[
+                SimpleNamespace(type="swing_low", description="스윙 저점", price=205000),
+                SimpleNamespace(type="sma_150", description="150일 이평선", price=182000),
+            ],
+            resistance_levels=[
+                SimpleNamespace(type="pivot_r1", description="피봇 저항1", price=223000),
+                SimpleNamespace(type="sma_50", description="50일 이평선", price=198000),
+            ],
+        ),
+        [
+            FactorAssessment(
+                factor_type="flow",
+                role="보조",
+                freshness_score=4,
+                magnitude_score=2,
+                actionability_score=4,
+                total_score=7,
+                summary="외인/기관 수급이 현재 흐름을 뒷받침함",
+                role_reason="한 축의 수급은 우호적이지만 일치도는 제한적임",
+                evidence=["기관 5일: 매수"],
+                bias="bullish",
+            )
+        ],
+    )
+
+    assert any("최근 지지" in level for level in scenarios[0].trigger_price_levels)
+    assert any("최근 저항" in level for level in scenarios[0].trigger_price_levels)
+    assert any("50일선" in level for level in scenarios[0].trigger_price_levels)
+    assert any("150일선" in level for level in scenarios[0].trigger_price_levels)
+    assert any("무효화 레벨" in condition for condition in scenarios[0].invalidation_conditions)
+
+
+def test_build_default_scenarios_uses_snapshot_ma_levels_when_price_levels_missing_ma():
+    summary = AnalyzeDecisionSummary(
+        leader="혼합",
+        core_variables=["단기 과열", "기관 매수 우위"],
+        action="관망",
+        timing="조정_대기",
+        action_sentence="핵심 레벨 확인 후 접근",
+    )
+    scenarios = build_default_scenarios(
+        summary,
+        SimpleNamespace(
+            support_levels=[
+                SimpleNamespace(type="pivot_s1", description="피봇 지지1", price=205000)
+            ],
+            resistance_levels=[
+                SimpleNamespace(type="pivot_r1", description="피봇 저항1", price=223000)
+            ],
+        ),
+        [],
+        snapshot=SimpleNamespace(sma_50=151996.0, sma_150=126301.33),
+    )
+
+    assert any(
+        "50일선: 50일 이평선 (151,996)" in level for level in scenarios[0].trigger_price_levels
+    )
+    assert any(
+        "150일선: 150일 이평선 (126,301)" in level for level in scenarios[0].trigger_price_levels
+    )
+
+
 def test_build_analyze_decision_bundle_keeps_strong_non_contract_news_event():
     technical_data = SimpleNamespace(
         total_score=75,

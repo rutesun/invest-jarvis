@@ -1,5 +1,6 @@
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
 
 from src.providers.kis import KISProvider
@@ -119,3 +120,51 @@ def test_normalize_kis_snapshot_maps_core_metrics_and_growth():
     assert snapshot.quarterly_data[0].revenue_qoq == pytest.approx(
         (3336059.0 - 3008709.0) / 3008709.0
     )
+
+
+def _http_status_error(status_code: int) -> httpx.HTTPStatusError:
+    request = httpx.Request("GET", "https://openapi.koreainvestment.com")
+    response = httpx.Response(status_code, request=request)
+    return httpx.HTTPStatusError(
+        f"status={status_code}",
+        request=request,
+        response=response,
+    )
+
+
+@pytest.mark.asyncio
+async def test_fetch_kis_fundamentals_retries_endpoint_and_keeps_partial_success():
+    provider = AsyncMock()
+    provider.get_quote.return_value = {"price": 10000.0}
+    provider.get_financial_ratio.return_value = []
+    provider.get_balance_sheet.return_value = []
+    provider.get_profit_ratio.return_value = [
+        {"stac_yymm": "202512", "eps": "1000.0", "roe_val": "12.5"}
+    ]
+    provider.get_income_statement.side_effect = _http_status_error(500)
+    provider.get_other_major_ratios.return_value = []
+
+    tool = FundamentalTool(kis_provider=provider)
+    snapshot = await tool._fetch_kis_fundamentals("000000.KQ")  # type: ignore[attr-defined]
+
+    assert snapshot.pe_ratio == pytest.approx(10.0)
+    assert snapshot.roe == pytest.approx(0.125)
+    assert provider.get_income_statement.await_count == 3
+
+
+@pytest.mark.asyncio
+async def test_fetch_kis_fundamentals_raises_when_all_endpoints_fail():
+    provider = AsyncMock()
+    provider.get_quote.side_effect = _http_status_error(500)
+    provider.get_financial_ratio.side_effect = _http_status_error(500)
+    provider.get_balance_sheet.side_effect = _http_status_error(500)
+    provider.get_profit_ratio.side_effect = _http_status_error(500)
+    provider.get_income_statement.side_effect = _http_status_error(500)
+    provider.get_other_major_ratios.side_effect = _http_status_error(500)
+
+    tool = FundamentalTool(kis_provider=provider)
+
+    with pytest.raises(RuntimeError, match="모든 재무 엔드포인트 응답이 비어 있습니다"):
+        await tool._fetch_kis_fundamentals("000000.KQ")  # type: ignore[attr-defined]
+
+    assert provider.get_quote.await_count == 3

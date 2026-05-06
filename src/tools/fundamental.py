@@ -1,7 +1,9 @@
 import asyncio
+import logging
 import math
 from functools import partial
 
+import httpx
 import yfinance as yf
 from pydantic import BaseModel
 
@@ -9,6 +11,9 @@ from src.core.interfaces import BaseTool
 from src.core.models import ToolResult
 from src.providers.kis import KISProvider
 from src.tools.disclosure import is_korean_ticker
+
+
+logger = logging.getLogger(__name__)
 
 
 class QuarterlyData(BaseModel):
@@ -82,6 +87,34 @@ class FundamentalTool(BaseTool):
 
     def __init__(self, kis_provider: KISProvider | None = None):
         self.kis_provider = kis_provider
+
+    @staticmethod
+    def _is_retryable_error(error: Exception) -> bool:
+        if isinstance(error, (httpx.TimeoutException, httpx.NetworkError, httpx.RequestError)):
+            return True
+        if isinstance(error, httpx.HTTPStatusError):
+            return error.response.status_code in {429, 500, 502, 503, 504}
+        return False
+
+    async def _run_with_retry(self, name: str, coro_factory, retries: int = 2):
+        last_error: Exception | None = None
+        for attempt in range(retries + 1):
+            try:
+                return await coro_factory(), None
+            except Exception as error:
+                last_error = error
+                if attempt >= retries or not self._is_retryable_error(error):
+                    break
+                backoff = 0.4 * (2**attempt)
+                logger.warning(
+                    "KIS %s call failed (attempt=%s/%s): %s",
+                    name,
+                    attempt + 1,
+                    retries + 1,
+                    error,
+                )
+                await asyncio.sleep(backoff)
+        return None, last_error
 
     async def execute(self, ticker: str, **kwargs) -> ToolResult:
         try:
@@ -437,21 +470,45 @@ class FundamentalTool(BaseTool):
         if self.kis_provider is None:
             raise ValueError("KIS provider is required for Korean stock fundamentals")
 
-        (
-            quote_data,
-            financial_ratio,
-            balance_sheet,
-            profit_ratio,
-            income_statement,
-            other_major,
-        ) = await asyncio.gather(
-            self.kis_provider.get_quote(ticker.replace(".KS", "").replace(".KQ", "")),
-            self.kis_provider.get_financial_ratio(ticker),
-            self.kis_provider.get_balance_sheet(ticker),
-            self.kis_provider.get_profit_ratio(ticker),
-            self.kis_provider.get_income_statement(ticker),
-            self.kis_provider.get_other_major_ratios(ticker),
-        )
+        kr_code = ticker.replace(".KS", "").replace(".KQ", "")
+        tasks = {
+            "quote": self._run_with_retry("quote", lambda: self.kis_provider.get_quote(kr_code)),
+            "financial_ratio": self._run_with_retry(
+                "financial_ratio", lambda: self.kis_provider.get_financial_ratio(ticker)
+            ),
+            "balance_sheet": self._run_with_retry(
+                "balance_sheet", lambda: self.kis_provider.get_balance_sheet(ticker)
+            ),
+            "profit_ratio": self._run_with_retry(
+                "profit_ratio", lambda: self.kis_provider.get_profit_ratio(ticker)
+            ),
+            "income_statement": self._run_with_retry(
+                "income_statement", lambda: self.kis_provider.get_income_statement(ticker)
+            ),
+            "other_major_ratios": self._run_with_retry(
+                "other_major_ratios", lambda: self.kis_provider.get_other_major_ratios(ticker)
+            ),
+        }
+        results = await asyncio.gather(*tasks.values())
+        merged = dict(zip(tasks.keys(), results, strict=True))
+
+        errors = {name: error for name, (_, error) in merged.items() if error is not None}
+        for name, error in errors.items():
+            logger.warning("KIS %s failed after retries: %s", name, error)
+
+        quote_data = merged["quote"][0] or {}
+        financial_ratio = merged["financial_ratio"][0] or []
+        balance_sheet = merged["balance_sheet"][0] or []
+        profit_ratio = merged["profit_ratio"][0] or []
+        income_statement = merged["income_statement"][0] or []
+        other_major = merged["other_major_ratios"][0] or []
+
+        if not quote_data and not any(
+            [financial_ratio, balance_sheet, profit_ratio, income_statement, other_major]
+        ):
+            raise RuntimeError(
+                "KIS 재무 조회 실패: 모든 재무 엔드포인트 응답이 비어 있습니다."
+            ) from errors.get("quote")
 
         return self._normalize_kis_snapshot(
             ticker=ticker,

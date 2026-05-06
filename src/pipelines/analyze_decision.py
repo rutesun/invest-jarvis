@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from typing import TypedDict
 
 from pydantic import BaseModel, Field
@@ -461,14 +462,94 @@ def build_default_scenarios(
     summary: AnalyzeDecisionSummary,
     price_levels,
     assessments: list[FactorAssessment],
+    snapshot=None,
 ) -> list[AnalyzeScenario]:
-    support_description = "주요 지지선 유지"
-    resistance_description = "주요 저항선 돌파"
+    support_levels = list(getattr(price_levels, "support_levels", []) or [])
+    resistance_levels = list(getattr(price_levels, "resistance_levels", []) or [])
+    all_levels = support_levels + resistance_levels
 
-    if getattr(price_levels, "support_levels", None):
-        support_description = price_levels.support_levels[0].description
-    if getattr(price_levels, "resistance_levels", None):
-        resistance_description = price_levels.resistance_levels[0].description
+    def pick_level(levels, preferred_types: tuple[str, ...], *, allow_fallback: bool = True):
+        for level_type in preferred_types:
+            for level in levels:
+                if getattr(level, "type", "") == level_type:
+                    return level
+        if allow_fallback:
+            return levels[0] if levels else None
+        return None
+
+    def format_level(label: str, level):
+        if level is None:
+            return None
+        description = getattr(level, "description", "레벨")
+        price = getattr(level, "price", None)
+        if price is None:
+            return f"{label}: {description}"
+        return f"{label}: {description} ({float(price):,.0f})"
+
+    def add_unique(items: list[str], value: str | None):
+        if value and value not in items:
+            items.append(value)
+
+    recent_support_level = pick_level(support_levels, ("swing_low", "pivot_s1", "sma_20", "sma_50"))
+    recent_resistance_level = pick_level(
+        resistance_levels, ("swing_high", "pivot_r1", "sma_20", "sma_50")
+    )
+    ma50_level = pick_level(all_levels, ("sma_50",), allow_fallback=False)
+    ma150_level = pick_level(all_levels, ("sma_150",), allow_fallback=False)
+    if (
+        ma50_level is None
+        and snapshot is not None
+        and getattr(snapshot, "sma_50", None) is not None
+    ):
+        ma50_level = SimpleNamespace(
+            type="sma_50",
+            description="50일 이평선",
+            price=float(snapshot.sma_50),
+        )
+    if (
+        ma150_level is None
+        and snapshot is not None
+        and getattr(snapshot, "sma_150", None) is not None
+    ):
+        ma150_level = SimpleNamespace(
+            type="sma_150",
+            description="150일 이평선",
+            price=float(snapshot.sma_150),
+        )
+
+    trigger_levels: list[str] = []
+    add_unique(trigger_levels, format_level("최근 지지", recent_support_level))
+    add_unique(trigger_levels, format_level("최근 저항", recent_resistance_level))
+    add_unique(trigger_levels, format_level("50일선", ma50_level))
+    add_unique(trigger_levels, format_level("150일선", ma150_level))
+
+    support_description = getattr(recent_support_level, "description", "주요 지지선 유지")
+    resistance_description = getattr(recent_resistance_level, "description", "주요 저항선 돌파")
+    if not trigger_levels:
+        trigger_levels = [support_description, resistance_description]
+
+    bullish_invalidation_level = ma150_level or pick_level(
+        support_levels,
+        ("sma_150", "sma_200", "swing_low", "pivot_s1"),
+    )
+    bearish_invalidation_level = ma50_level or pick_level(
+        resistance_levels,
+        ("sma_50", "sma_150", "swing_high", "pivot_r1"),
+    )
+    bullish_invalidation = (
+        f"무효화 레벨: {getattr(bullish_invalidation_level, 'description', '주요 지지')} "
+        f"({float(bullish_invalidation_level.price):,.0f}) 하향 이탈"
+        if bullish_invalidation_level is not None
+        and getattr(bullish_invalidation_level, "price", None) is not None
+        else f"{support_description} 무효화"
+    )
+    bearish_invalidation = (
+        f"무효화 레벨: {getattr(bearish_invalidation_level, 'description', '주요 저항')} "
+        f"({float(bearish_invalidation_level.price):,.0f}) 상향 돌파"
+        if bearish_invalidation_level is not None
+        and getattr(bearish_invalidation_level, "price", None) is not None
+        else f"{resistance_description} 무효화"
+    )
 
     confirming_factors = [
         assessment.summary for assessment in assessments if assessment.total_score >= 7
@@ -480,17 +561,20 @@ def build_default_scenarios(
         return [
             AnalyzeScenario(
                 name="기본 시나리오",
-                trigger_price_levels=[support_description],
+                trigger_price_levels=trigger_levels,
                 confirming_factors=confirming_factors[:2],
-                invalidation_conditions=[resistance_description, f"{support_description} 무효화"],
+                invalidation_conditions=[
+                    bearish_invalidation,
+                    f"{support_description} 회복 시 재평가",
+                ],
                 expected_path="반등 실패 후 하락 압력 확대",
                 recommended_action=summary.action_sentence,
             ),
             AnalyzeScenario(
                 name="반대 시나리오",
-                trigger_price_levels=[resistance_description],
+                trigger_price_levels=trigger_levels,
                 confirming_factors=["주도 약세 요인 완화"],
-                invalidation_conditions=[support_description, f"{resistance_description} 무효화"],
+                invalidation_conditions=[bullish_invalidation, f"{resistance_description} 무효화"],
                 expected_path="약세 완화 또는 추세 반전",
                 recommended_action="가격 회복과 약세 요인 완화를 함께 확인하면 대응을 재평가",
             ),
@@ -499,17 +583,17 @@ def build_default_scenarios(
     return [
         AnalyzeScenario(
             name="기본 시나리오",
-            trigger_price_levels=[support_description],
+            trigger_price_levels=trigger_levels,
             confirming_factors=confirming_factors[:2],
-            invalidation_conditions=[f"{support_description} 무효화", resistance_description],
+            invalidation_conditions=[bullish_invalidation, f"{resistance_description} 돌파 실패"],
             expected_path="눌림 후 재확인",
             recommended_action=summary.action_sentence,
         ),
         AnalyzeScenario(
             name="반대 시나리오",
-            trigger_price_levels=[resistance_description],
+            trigger_price_levels=trigger_levels,
             confirming_factors=["주도 팩터 약화"],
-            invalidation_conditions=[f"{resistance_description} 무효화", support_description],
+            invalidation_conditions=[bearish_invalidation, support_description],
             expected_path="기존 판단 약화 또는 반전",
             recommended_action="기본 시나리오와 다른 흐름이 확인되면 대응을 재평가",
         ),
@@ -602,7 +686,7 @@ def build_analyze_decision_bundle(
     ]
     leader_label = classify_leader_label(score_entries)
     summary = build_decision_summary(leader_label, assessments)
-    scenarios = build_default_scenarios(summary, price_levels, assessments)
+    scenarios = build_default_scenarios(summary, price_levels, assessments, snapshot=snapshot)
     return AnalyzeDecisionBundle(
         summary=summary,
         factor_assessments=assessments,

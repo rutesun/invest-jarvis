@@ -91,7 +91,7 @@ uv run jarvis analyze AAPL --provider anthropic
   - `참고`는 왜 참고로 내렸는지 함께 표시
 - 액션 시나리오
   - `기본 시나리오`
-  - 가격 레벨 / 확인 조건 / 무효화 조건 / 대응
+  - 가격 레벨(`최근 지지/저항 + 50/150일선`) / 확인 조건 / 무효화 조건 / 대응
 - 원시 데이터
   - 가격 및 변동률
   - 기술적 분석 요약과 핵심 인사이트
@@ -100,7 +100,7 @@ uv run jarvis analyze AAPL --provider anthropic
   - **수급 동향** (외인/기관 1d/5d/10d 순매수, 한국주식 전용)
   - **종합 인사이트** (모든 팩터 통합 추천 + 리스크)
 - **차트 시각화**: 기술적 차트 PNG 자동 생성 (`charts/` 디렉토리)
-  - 캔들스틱 + MA 라인 (20/50/200일)
+  - 캔들스틱 + MA 라인 (20/50/150/200일)
   - Supertrend 추세선
   - 거래량 + MACD + RSI 패널
   - 패턴 마커 및 지지/저항선 표시
@@ -108,6 +108,7 @@ uv run jarvis analyze AAPL --provider anthropic
 **선택 환경변수:**
 - `OPENDART_API_KEY`: 한국주식 공시 조회 (없으면 공시 섹션 생략)
 - `KIS_APP_KEY` / `KIS_APP_SECRET`: 한국주식 수급 + 펀더멘털 조회 (없으면 일부 한국주식 데이터 fallback 또는 생략)
+  - KIS 재무 API는 엔드포인트별 재시도 후 부분 성공 데이터를 우선 사용
 
 ---
 
