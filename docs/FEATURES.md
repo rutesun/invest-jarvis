@@ -288,15 +288,24 @@ KIS 계좌의 보유 종목별 기술적 분석 + 최근 뉴스.
 - 유사 메시지를 하나의 이슈로 클러스터링 (같은 기업/산업 트렌드/인과관계/복수 종목)
 - avg_sources < 1.7 시 품질 경고 로그 출력
 - 같은 투자 내러티브는 같은 테마명 재사용
+- 메시지를 row 단위로 바로 해석하지 않고 fragment 단위 입력으로 전처리
+- LLM 호출 실패(예: 401) 시 fragment 기반 fallback 이슈 생성
 
 **Shuffle Stage 동작:**
 - 카테고리 내 테마 정규화 시 issue 제목 컨텍스트 활용
 - 밸류체인/인과관계 기반 테마 통합
 
+**2026-05 품질 개선 사항:**
+- `source_parsing.py`: `▶️` 묶음 메시지를 `ArticleFragment`로 분해
+- `evidence.py`: `SourceType(primary_news / broker_summary / market_signal / video_social / unknown)` 분류
+- `MacroSnapshot`에서 sentinel `0.0` 대신 `None + missing_fields`로 결측 추적
+- `TelegramMessage`에 `row_index`, `source_file` 메타데이터 보존
+- `MappedIssue`에 `source_fragment_ids`, `summary_fact`, `summary_interpretation`, `confidence` 필드 추가
+
 **데이터 모델:**
 
 ```
-TelegramMessage → MappedIssue → ShuffleResult → ThemeAnalysis/NewsItem → DailyReport
+TelegramMessage → ArticleFragment/SourceType → MappedIssue → ShuffleResult → ThemeAnalysis/NewsItem → DailyReport
 ```
 
 | 모델 | 역할 |
