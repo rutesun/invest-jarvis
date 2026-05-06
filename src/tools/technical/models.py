@@ -135,6 +135,67 @@ class PriceLevels(BaseModel):
     targets: dict[str, float] = Field(default_factory=dict)
 
 
+class StructureZone(BaseModel):
+    """구조적 수요/공급/무효화 zone"""
+
+    zone_type: str
+    lower_bound: float
+    upper_bound: float
+    mid_price: float
+    touch_count: int
+    last_touch_date: str | None = None
+    touch_score: float
+    recency_score: float
+    volume_reaction_score: float
+    confluence_score: float
+    total_score: float
+    strength: str
+    reasons: list[str] = Field(default_factory=list)
+
+
+class StructureZoneSet(BaseModel):
+    """구조 zone 계산 결과 묶음"""
+
+    demand_zones: list[StructureZone] = Field(default_factory=list)
+    supply_zones: list[StructureZone] = Field(default_factory=list)
+    invalidation_candidates: list[StructureZone] = Field(default_factory=list)
+    invalidation_zone: StructureZone | None = None
+    all_candidates: list[StructureZone] = Field(default_factory=list)
+
+
+class StructureZoneConfig(BaseModel):
+    """구조 zone 계산 파라미터"""
+
+    lookback_days: int = 756
+    atr_width_multiplier: float = 0.8
+    min_zone_width_pct: float = 0.01
+    max_zone_width_pct: float = 0.05
+    recent_window_days: int = 60
+    mid_window_days: int = 180
+    volume_baseline_window: int = 20
+    top_n_per_side: int = 5
+    score_weights: dict[str, float] = Field(
+        default_factory=lambda: {
+            "touch": 0.35,
+            "recency": 0.20,
+            "volume": 0.30,
+            "confluence": 0.15,
+        }
+    )
+
+
+class ZoneTestArtifact(BaseModel):
+    """회귀 테스트용 structure zone 산출물"""
+
+    schema_version: str
+    symbol: str
+    csv_path: str
+    params: dict
+    candidates: list[dict]
+    selected_zones: list[dict]
+    score_breakdown: list[dict]
+
+
 class TechnicalResult(BaseModel):
     """Complete technical analysis result."""
 
