@@ -9,6 +9,7 @@
 ## 요약
 
 Map stage의 클러스터링 품질을 개선하기 위한 10가지 개선 포인트를 정리한 문서입니다.
+현재 기능의 기준 문서는 `docs/FEATURES.md`, 설계 탐색 결과는 `docs/superpowers/specs/`, 이 문서는 변경 후보/기록 성격으로 유지합니다.
 
 **현재 문제:**
 - avg_sources 1.5-1.6 수준 (목표 1.7-2.0 미달)
@@ -652,7 +653,7 @@ MAP_LLM = StageLLMConfig(
 
 ### 관련 문서
 - `docs/ARCHITECTURE.md` - Daily Report 파이프라인 구조
-- `docs/spec/daily-report-causal-reasoning.md` - Wrapup V3 개선 사례
+- `docs/changes/daily-report-causal-reasoning.md` - Wrapup V3 개선 사례
 - `src/pipelines/daily_report/prompts.py` - 현재 프롬프트 (V6)
 - `src/pipelines/daily_report/examples/map_examples.py` - Few-shot 예시
 

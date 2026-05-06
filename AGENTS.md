@@ -81,15 +81,7 @@ Providers → Tools → Pipelines → CLI (src/cli/main.py)
 
 ## Documentation Rules
 
-모든 구현 작업 시 아래 규칙을 반드시 따를 것:
-
-- **새 기능/파이프라인 추가** → `README.md`의 Features 섹션 업데이트
-- **새 CLI 커맨드 추가** → `docs/CLI_USAGE.md`의 Commands 섹션에 커맨드 + 설명 + 예시 추가
-- **새 모듈/패키지 추가** → `docs/` 아래 대응하는 문서 생성 또는 기존 문서 업데이트
-- **아키텍처 변경** → 이 파일(AGENTS.md)의 Architecture 섹션 업데이트
-- **의존성 추가** → `README.md`의 설치/설정 섹션 반영
-
-문서 업데이트는 코드 변경과 **같은 커밋**에 포함할 것.
+문서 생성/업데이트 원칙과 ADR 운영 규칙의 기준 문서는 `docs/DOCUMENTATION.md`.
 
 ## Skills
 

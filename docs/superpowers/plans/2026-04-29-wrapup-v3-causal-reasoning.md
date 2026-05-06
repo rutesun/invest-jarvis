@@ -1180,10 +1180,10 @@ git commit -m "feat(evaluation): add wrapup V2 vs V3 LLM-as-Judge evaluation scr
 
 ---
 
-### Task 7: Spec 업데이트 + 통합 검증
+### Task 7: Change record 업데이트 + 통합 검증
 
 **Files:**
-- Modify: `docs/spec/daily-report-causal-reasoning.md`
+- Modify: `docs/changes/daily-report-causal-reasoning.md`
 
 - [ ] **Step 1: Run full test suite**
 
@@ -1195,9 +1195,9 @@ Expected: 모든 테스트 PASS.
 Run: `uv run python -m src.pipelines.daily_report.stages.wrapup_stage 2026-04-20`
 Expected: 인사이트 출력에 `→` 체인 포함. 500자 덩어리 없음.
 
-- [ ] **Step 3: Spec checklist 업데이트**
+- [ ] **Step 3: Change record checklist 업데이트**
 
-`docs/spec/daily-report-causal-reasoning.md`에서 완료 항목 체크:
+`docs/changes/daily-report-causal-reasoning.md`에서 완료 항목 체크:
 
 ```markdown
 ## Checklist
@@ -1216,8 +1216,8 @@ Note: "V2 baseline → V3 채점 비교"와 "실전 테스트"는 `evaluations/e
 - [ ] **Step 4: Commit**
 
 ```bash
-git add docs/spec/daily-report-causal-reasoning.md
-git commit -m "docs: update causal reasoning spec checklist with implementation progress"
+git add docs/changes/daily-report-causal-reasoning.md
+git commit -m "docs: update causal reasoning change record checklist with implementation progress"
 ```
 
 ---

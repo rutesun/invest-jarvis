@@ -80,7 +80,7 @@ Daily report가 **단순 요약** 수준.
 - 판단 기준: 원문 안 봐도 되면 성공 / 여전히 원문 봐야 하면 Task 3으로
 
 **상태:** 🟢 Ready
-**Spec:** [`docs/spec/daily-report-causal-reasoning.md`](spec/daily-report-causal-reasoning.md)
+**Change record:** [`docs/changes/daily-report-causal-reasoning.md`](changes/daily-report-causal-reasoning.md)
 **예상:** 2-3시간 (프롬프트) + 3-5일 (실전 테스트)
 **의존성:** 없음
 

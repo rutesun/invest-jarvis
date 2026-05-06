@@ -5,7 +5,7 @@ Branch: main
 Repo: invest-jarvis
 Status: APPROVED
 Tasks: ROADMAP Task 1 (공시 원문 파싱) + Task 6 (공시 정량 시뮬레이션)
-Feature Spec: `docs/spec/disclosure-intelligence.md`
+Change record: `docs/changes/disclosure-intelligence.md`
 
 ---
 

@@ -1,18 +1,20 @@
-# Feature Spec: {기능명}
+# Change Record: {기능명}
 
-**Status**: Draft | Shipped
+**Status**: Draft | In Progress | Merged
 **Created**: {YYYY-MM-DD}
 **PRs**: #{PR 번호}
+
+> 이 문서는 PR/머지 단위 변경 기록입니다. 현재 기능 상태는 `docs/FEATURES.md`를 기준으로 봅니다.
 
 ---
 
 ## Why
 
-{왜 필요한지. 현재 문제, 동기. 1-3문장. 간결하게.}
+{왜 이 변경이 필요했는지. 현재 문제, 동기. 1-3문장. 간결하게.}
 
 ## What
 
-{어떤 변경을 하는지. 핵심만 번호 목록으로. 구현 상세 넣지 말 것.}
+{이번 변경에서 실제로 무엇을 바꾸는지. 핵심만 번호 목록으로. 구현 상세 넣지 말 것.}
 
 ## Constraints
 
