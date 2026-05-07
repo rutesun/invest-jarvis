@@ -61,6 +61,7 @@ def test_structure_zone_config_defaults_are_explicit():
 
     assert config.top_n_per_side == 5
     assert config.min_zone_width_pct > 0
+    assert config.selection_max_distance_pct > 0
 
 
 def test_calculate_zone_half_width_respects_pct_floor_and_ceiling():
@@ -74,6 +75,22 @@ def test_cluster_price_candidates_groups_nearby_swings():
     clusters = cluster_price_candidates([100.0, 101.0, 118.0], half_width=2.0)
 
     assert clusters == [[100.0, 101.0], [118.0]]
+
+
+def test_cluster_price_candidates_breaks_chain_when_center_is_far():
+    clusters = cluster_price_candidates([60.0, 69.0, 78.0], half_width=10.0)
+
+    assert clusters == [[60.0, 69.0], [78.0]]
+
+
+def test_cluster_price_candidates_respects_span_cap():
+    clusters = cluster_price_candidates(
+        [60.0, 65.0, 70.0, 75.0, 80.0],
+        half_width=10.0,
+        span_cap_multiplier=1.4,
+    )
+
+    assert clusters == [[60.0, 65.0, 70.0], [75.0, 80.0]]
 
 
 def test_detector_sorts_demand_zones_by_total_score():
@@ -97,3 +114,530 @@ def test_detector_sorts_demand_zones_by_total_score():
         key=lambda zone: zone.total_score,
         reverse=True,
     )
+
+
+def test_detector_tie_break_prefers_recent_touch_then_touch_count():
+    snapshot = IndicatorSnapshot(price=104.0, change_pct=1.0, atr=3.0, sma_150=95.0)
+    detector = StructureZoneDetector()
+
+    older = StructureZone(
+        zone_type="demand",
+        lower_bound=95.0,
+        upper_bound=98.0,
+        mid_price=96.5,
+        touch_count=4,
+        last_touch_date="2025-06-01",
+        touch_score=4.0,
+        recency_score=3.0,
+        volume_reaction_score=2.0,
+        confluence_score=1.0,
+        total_score=10.0,
+        strength="core",
+        reasons=["older"],
+    )
+    newer = StructureZone(
+        zone_type="demand",
+        lower_bound=99.0,
+        upper_bound=101.0,
+        mid_price=100.0,
+        touch_count=2,
+        last_touch_date="2025-08-01",
+        touch_score=4.0,
+        recency_score=3.0,
+        volume_reaction_score=2.0,
+        confluence_score=1.0,
+        total_score=10.0,
+        strength="core",
+        reasons=["newer"],
+    )
+
+    ordered = detector._sort_zones([older, newer], snapshot.price)
+
+    assert ordered[0].last_touch_date == "2025-08-01"
+
+
+def test_select_with_guard_prioritizes_recent_and_nearby_zones():
+    detector = StructureZoneDetector(
+        StructureZoneConfig(
+            top_n_per_side=2,
+            selection_max_distance_pct=0.2,
+            selection_min_recency_score=3.0,
+        )
+    )
+    current_price = 100.0
+    far_old = StructureZone(
+        zone_type="demand",
+        lower_bound=40.0,
+        upper_bound=50.0,
+        mid_price=45.0,
+        touch_count=20,
+        last_touch_date="2025-01-01",
+        touch_score=20.0,
+        recency_score=1.0,
+        volume_reaction_score=5.0,
+        confluence_score=0.0,
+        total_score=15.0,
+        strength="core",
+        reasons=["far old"],
+    )
+    near_recent = StructureZone(
+        zone_type="demand",
+        lower_bound=92.0,
+        upper_bound=98.0,
+        mid_price=95.0,
+        touch_count=5,
+        last_touch_date="2026-04-20",
+        touch_score=5.0,
+        recency_score=5.0,
+        volume_reaction_score=3.0,
+        confluence_score=0.0,
+        total_score=8.0,
+        strength="core",
+        reasons=["near recent"],
+    )
+    near_recent_2 = StructureZone(
+        zone_type="demand",
+        lower_bound=101.0,
+        upper_bound=106.0,
+        mid_price=103.5,
+        touch_count=4,
+        last_touch_date="2026-04-19",
+        touch_score=4.0,
+        recency_score=5.0,
+        volume_reaction_score=3.0,
+        confluence_score=0.0,
+        total_score=7.0,
+        strength="core",
+        reasons=["near recent 2"],
+    )
+
+    sorted_zones = [far_old, near_recent, near_recent_2]
+    selected = detector._select_with_guard(
+        sorted_zones,
+        current_price,
+        zone_type="demand",
+        max_count=2,
+    )
+
+    assert selected[0].reasons[0] == "near recent"
+    assert selected[1].reasons[0] == "near recent 2"
+
+
+def test_select_with_guard_backfills_when_filtered_candidates_are_insufficient():
+    detector = StructureZoneDetector(
+        StructureZoneConfig(
+            top_n_per_side=2,
+            selection_max_distance_pct=0.05,
+            selection_min_recency_score=5.0,
+        )
+    )
+    current_price = 100.0
+    near_recent = StructureZone(
+        zone_type="supply",
+        lower_bound=102.0,
+        upper_bound=104.0,
+        mid_price=103.0,
+        touch_count=3,
+        last_touch_date="2026-04-20",
+        touch_score=3.0,
+        recency_score=5.0,
+        volume_reaction_score=2.0,
+        confluence_score=0.0,
+        total_score=6.0,
+        strength="core",
+        reasons=["near recent"],
+    )
+    far_old = StructureZone(
+        zone_type="supply",
+        lower_bound=150.0,
+        upper_bound=160.0,
+        mid_price=155.0,
+        touch_count=10,
+        last_touch_date="2025-01-01",
+        touch_score=10.0,
+        recency_score=1.0,
+        volume_reaction_score=4.0,
+        confluence_score=0.0,
+        total_score=9.0,
+        strength="core",
+        reasons=["far old"],
+    )
+
+    selected = detector._select_with_guard(
+        [near_recent, far_old],
+        current_price,
+        zone_type="supply",
+        max_count=2,
+    )
+
+    assert len(selected) == 2
+    assert selected[0].reasons[0] == "near recent"
+    assert selected[1].reasons[0] == "far old"
+
+
+def test_select_with_guard_for_supply_prefers_zones_above_current_price():
+    detector = StructureZoneDetector(StructureZoneConfig(top_n_per_side=1))
+    current_price = 100.0
+    absorbed_supply = StructureZone(
+        zone_type="supply",
+        lower_bound=70.0,
+        upper_bound=80.0,
+        mid_price=75.0,
+        touch_count=12,
+        last_touch_date="2026-05-01",
+        touch_score=12.0,
+        recency_score=5.0,
+        volume_reaction_score=5.0,
+        confluence_score=0.0,
+        total_score=9.5,
+        strength="core",
+        reasons=["absorbed"],
+    )
+    active_supply = StructureZone(
+        zone_type="supply",
+        lower_bound=110.0,
+        upper_bound=120.0,
+        mid_price=115.0,
+        touch_count=6,
+        last_touch_date="2026-05-01",
+        touch_score=6.0,
+        recency_score=5.0,
+        volume_reaction_score=4.0,
+        confluence_score=0.0,
+        total_score=6.5,
+        strength="core",
+        reasons=["active"],
+    )
+
+    selected = detector._select_with_guard(
+        [absorbed_supply, active_supply],
+        current_price,
+        zone_type="supply",
+        max_count=1,
+    )
+
+    assert selected[0].reasons[0] == "active"
+
+
+def test_select_with_guard_for_demand_prefers_zones_not_above_current_price():
+    detector = StructureZoneDetector(StructureZoneConfig(top_n_per_side=1))
+    current_price = 100.0
+    broken_demand = StructureZone(
+        zone_type="demand",
+        lower_bound=112.0,
+        upper_bound=120.0,
+        mid_price=116.0,
+        touch_count=10,
+        last_touch_date="2026-05-01",
+        touch_score=10.0,
+        recency_score=5.0,
+        volume_reaction_score=5.0,
+        confluence_score=0.0,
+        total_score=8.5,
+        strength="core",
+        reasons=["broken demand"],
+    )
+    active_demand = StructureZone(
+        zone_type="demand",
+        lower_bound=90.0,
+        upper_bound=97.0,
+        mid_price=93.5,
+        touch_count=5,
+        last_touch_date="2026-05-01",
+        touch_score=5.0,
+        recency_score=5.0,
+        volume_reaction_score=4.0,
+        confluence_score=0.0,
+        total_score=6.0,
+        strength="core",
+        reasons=["active demand"],
+    )
+
+    selected = detector._select_with_guard(
+        [broken_demand, active_demand],
+        current_price,
+        zone_type="demand",
+        max_count=1,
+    )
+
+    assert selected[0].reasons[0] == "active demand"
+
+
+def test_detect_uses_ma_fallback_when_selected_demand_is_only_above_current_price():
+    detector = StructureZoneDetector(StructureZoneConfig(top_n_per_side=1))
+    demand_above = StructureZone(
+        zone_type="demand",
+        lower_bound=112.0,
+        upper_bound=120.0,
+        mid_price=116.0,
+        touch_count=8,
+        last_touch_date="2026-05-01",
+        touch_score=8.0,
+        recency_score=5.0,
+        volume_reaction_score=5.0,
+        confluence_score=0.0,
+        total_score=8.0,
+        strength="core",
+        reasons=["only above demand"],
+    )
+    supply_above = StructureZone(
+        zone_type="supply",
+        lower_bound=130.0,
+        upper_bound=138.0,
+        mid_price=134.0,
+        touch_count=6,
+        last_touch_date="2026-05-01",
+        touch_score=6.0,
+        recency_score=5.0,
+        volume_reaction_score=4.0,
+        confluence_score=0.0,
+        total_score=6.0,
+        strength="core",
+        reasons=["supply"],
+    )
+    detector._build_candidates = lambda _df, _snapshot: [demand_above, supply_above]
+
+    snapshot = IndicatorSnapshot(price=100.0, change_pct=1.0, sma_150=95.0)
+    result = detector.detect(pd.DataFrame({"Close": [100.0]}), snapshot)
+
+    assert result.invalidation_zone is not None
+    assert "fallback" in " ".join(result.invalidation_zone.reasons)
+
+
+def test_detect_promotes_above_current_demand_as_supply_candidate():
+    detector = StructureZoneDetector(StructureZoneConfig(top_n_per_side=1))
+    broken_demand = StructureZone(
+        zone_type="demand",
+        lower_bound=121.0,
+        upper_bound=126.0,
+        mid_price=123.5,
+        touch_count=7,
+        last_touch_date="2026-05-01",
+        touch_score=7.0,
+        recency_score=5.0,
+        volume_reaction_score=5.0,
+        confluence_score=0.0,
+        total_score=7.2,
+        strength="core",
+        reasons=["old demand"],
+    )
+    weak_supply = StructureZone(
+        zone_type="supply",
+        lower_bound=130.0,
+        upper_bound=133.0,
+        mid_price=131.5,
+        touch_count=3,
+        last_touch_date="2026-05-01",
+        touch_score=3.0,
+        recency_score=5.0,
+        volume_reaction_score=3.0,
+        confluence_score=0.0,
+        total_score=4.0,
+        strength="secondary",
+        reasons=["supply"],
+    )
+    detector._build_candidates = lambda _df, _snapshot: [broken_demand, weak_supply]
+
+    snapshot = IndicatorSnapshot(price=100.0, change_pct=1.0, sma_150=95.0)
+    result = detector.detect(pd.DataFrame({"Close": [100.0]}), snapshot)
+
+    assert result.supply_zones
+    assert "전환 저항" in " ".join(result.supply_zones[0].reasons)
+
+
+def test_merge_overlapping_demand_supply_creates_balance_zone():
+    detector = StructureZoneDetector(StructureZoneConfig(top_n_per_side=2))
+    demand = StructureZone(
+        zone_type="demand",
+        lower_bound=10.0,
+        upper_bound=12.0,
+        mid_price=11.0,
+        touch_count=3,
+        last_touch_date="2026-04-20",
+        touch_score=3.0,
+        recency_score=5.0,
+        volume_reaction_score=2.0,
+        confluence_score=0.5,
+        total_score=8.0,
+        strength="core",
+        reasons=["반복 지지"],
+    )
+    supply = StructureZone(
+        zone_type="supply",
+        lower_bound=11.0,
+        upper_bound=13.0,
+        mid_price=12.0,
+        touch_count=2,
+        last_touch_date="2026-04-18",
+        touch_score=2.0,
+        recency_score=5.0,
+        volume_reaction_score=2.5,
+        confluence_score=0.5,
+        total_score=7.0,
+        strength="secondary",
+        reasons=["반복 저항"],
+    )
+
+    kept_demand, kept_supply, balance = detector._merge_overlapping_opposite_zones(
+        demand_zones=[demand],
+        supply_zones=[supply],
+        atr=1.5,
+        current_price=12.0,
+    )
+
+    assert kept_demand == []
+    assert kept_supply == []
+    assert len(balance) == 1
+    assert balance[0].zone_type == "balance"
+    assert "중첩 구간 통합" in " ".join(balance[0].reasons)
+    assert balance[0].touch_count == 5
+
+
+def test_merge_overlapping_demand_supply_keeps_both_when_touch_dates_far():
+    detector = StructureZoneDetector(
+        StructureZoneConfig(
+            overlap_max_last_touch_gap_days=15,
+        )
+    )
+    demand = StructureZone(
+        zone_type="demand",
+        lower_bound=10.0,
+        upper_bound=12.0,
+        mid_price=11.0,
+        touch_count=3,
+        last_touch_date="2026-04-20",
+        touch_score=3.0,
+        recency_score=5.0,
+        volume_reaction_score=2.0,
+        confluence_score=0.5,
+        total_score=8.0,
+        strength="core",
+        reasons=["반복 지지"],
+    )
+    supply = StructureZone(
+        zone_type="supply",
+        lower_bound=11.0,
+        upper_bound=13.0,
+        mid_price=12.0,
+        touch_count=2,
+        last_touch_date="2026-02-01",
+        touch_score=2.0,
+        recency_score=1.0,
+        volume_reaction_score=2.5,
+        confluence_score=0.5,
+        total_score=7.0,
+        strength="secondary",
+        reasons=["반복 저항"],
+    )
+
+    kept_demand, kept_supply, balance = detector._merge_overlapping_opposite_zones(
+        demand_zones=[demand],
+        supply_zones=[supply],
+        atr=1.5,
+        current_price=12.0,
+    )
+
+    assert len(kept_demand) == 1
+    assert len(kept_supply) == 1
+    assert balance == []
+
+
+def test_merge_balance_zones_collapses_overlapping_ranges():
+    detector = StructureZoneDetector(StructureZoneConfig())
+    balance_a = StructureZone(
+        zone_type="balance",
+        lower_bound=9.9,
+        upper_bound=11.6,
+        mid_price=10.75,
+        touch_count=20,
+        last_touch_date="2026-03-30",
+        touch_score=8.0,
+        recency_score=5.0,
+        volume_reaction_score=5.0,
+        confluence_score=0.0,
+        total_score=9.4,
+        strength="core",
+        reasons=["수요/공급 중첩 구간 통합"],
+    )
+    balance_b = StructureZone(
+        zone_type="balance",
+        lower_bound=11.0,
+        upper_bound=13.0,
+        mid_price=12.0,
+        touch_count=25,
+        last_touch_date="2026-04-13",
+        touch_score=8.2,
+        recency_score=5.0,
+        volume_reaction_score=5.0,
+        confluence_score=0.0,
+        total_score=9.3,
+        strength="core",
+        reasons=["수요/공급 중첩 구간 통합"],
+    )
+
+    merged = detector._merge_balance_zones([balance_a, balance_b], atr=0.9)
+
+    assert len(merged) == 1
+    assert merged[0].lower_bound == 9.9
+    assert merged[0].upper_bound == 13.0
+    assert merged[0].touch_count == 45
+    assert "밸런스 존 중첩 병합" in merged[0].reasons[0]
+
+
+def test_choose_invalidation_zone_prefers_core_zone_then_ma_and_swing_low():
+    snapshot = IndicatorSnapshot(
+        price=200.0,
+        change_pct=1.0,
+        sma_150=192.0,
+        sma_200=190.0,
+        swing_low=185.0,
+    )
+    detector = StructureZoneDetector()
+    core_zone = StructureZone(
+        zone_type="demand",
+        lower_bound=188.0,
+        upper_bound=194.0,
+        mid_price=191.0,
+        touch_count=4,
+        last_touch_date="2026-05-01",
+        touch_score=4.0,
+        recency_score=5.0,
+        volume_reaction_score=3.0,
+        confluence_score=1.0,
+        total_score=10.0,
+        strength="core",
+        reasons=["반복 지지"],
+    )
+
+    candidates, selected = detector.choose_invalidation_zone([core_zone], snapshot)
+
+    assert selected is not None
+    assert selected.reasons
+    assert "150일선" in " ".join(selected.reasons)
+    assert any(candidate.zone_type == "invalidation" for candidate in candidates)
+
+
+def test_choose_invalidation_zone_falls_back_to_recent_swing_low():
+    snapshot = IndicatorSnapshot(price=200.0, change_pct=1.0, swing_low=185.0)
+    detector = StructureZoneDetector()
+    secondary_zone = StructureZone(
+        zone_type="demand",
+        lower_bound=188.0,
+        upper_bound=194.0,
+        mid_price=191.0,
+        touch_count=1,
+        last_touch_date="2026-01-01",
+        touch_score=1.0,
+        recency_score=1.0,
+        volume_reaction_score=0.5,
+        confluence_score=0.0,
+        total_score=1.5,
+        strength="secondary",
+        reasons=["약한 지지"],
+    )
+
+    _, selected = detector.choose_invalidation_zone([secondary_zone], snapshot)
+
+    assert selected is not None
+    assert selected.lower_bound == 185.0
+    assert "swing low" in " ".join(selected.reasons).lower()

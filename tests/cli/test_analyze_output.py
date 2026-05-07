@@ -81,9 +81,37 @@ def test_format_deep_dive_output_shows_top_summary_and_factor_reasons():
             )
         ],
         "structure_levels": {
-            "demand_zones": ["88000.00~89500.00"],
-            "supply_zones": ["96000.00~97500.00"],
-            "invalidation": "88000.00 하향 이탈",
+            "demand_zones": [
+                {
+                    "lower_bound": 88000.0,
+                    "upper_bound": 89500.0,
+                    "mid_price": 88750.0,
+                    "strength": "core",
+                    "reasons": ["반복 지지"],
+                    "touch_count": 3,
+                    "last_touch_date": "2026-05-01",
+                    "total_score": 10.0,
+                }
+            ],
+            "supply_zones": [
+                {
+                    "lower_bound": 96000.0,
+                    "upper_bound": 97500.0,
+                    "mid_price": 96750.0,
+                    "strength": "secondary",
+                    "reasons": ["공급"],
+                    "touch_count": 2,
+                    "last_touch_date": "2026-04-28",
+                    "total_score": 8.0,
+                }
+            ],
+            "invalidation": {
+                "label": "88000.00~89500.00 하향 이탈",
+                "lower_bound": 88000.0,
+                "upper_bound": 89500.0,
+                "reference": "반복 지지",
+                "reasons": ["반복 지지"],
+            },
         },
         "execution_levels": [
             {
@@ -115,6 +143,8 @@ def test_format_deep_dive_output_shows_top_summary_and_factor_reasons():
     assert "- **가격**: 신고가 돌파" in output
     assert "- **이벤트**: 반복 기대 기사" in output
     assert "수요 존" in output
+    assert "흡수 공급 존" in output
+    assert "밸런스 존" in output
     assert "88000.00~89500.00" in output
     assert "피봇 S1" in output
     assert "조정 대기" in output
@@ -123,6 +153,97 @@ def test_format_deep_dive_output_shows_top_summary_and_factor_reasons():
     assert "technical" not in output
     assert "event" not in output
     assert "조정_대기" not in output
+
+
+def test_format_deep_dive_output_relabels_supply_below_current_as_absorbed():
+    snapshot = IndicatorSnapshot(price=100.0, change_pct=1.0)
+    technical = TechnicalResult(
+        ticker="ALAB",
+        timestamp=datetime.now(),
+        snapshot=snapshot,
+        indicators=snapshot,
+        components={},
+        total_score=120,
+        strategies=[],
+        overall_assessment="관망",
+        confidence_score=60.0,
+        key_insights=[],
+        warnings=[],
+    )
+    result = {
+        "ticker": "ALAB",
+        "technical": technical,
+        "technical_summary": type(
+            "TechSummary",
+            (),
+            {
+                "summary": "중립",
+                "key_insights": [],
+                "recommendation": "관망",
+                "confidence": 0.6,
+                "rationale": "구조 레벨 확인 필요",
+            },
+        )(),
+        "decision_summary": AnalyzeDecisionSummary(
+            leader="혼합",
+            core_variables=["구조 레벨 혼재"],
+            action="관망",
+            timing="보류",
+            action_sentence="핵심 레벨 확인 전 대기",
+        ),
+        "factor_assessments": [],
+        "scenarios": [],
+        "structure_levels": {
+            "demand_zones": [
+                {
+                    "lower_bound": 90.0,
+                    "upper_bound": 95.0,
+                    "mid_price": 92.5,
+                    "strength": "core",
+                    "reasons": ["반복 지지"],
+                    "touch_count": 3,
+                    "last_touch_date": "2026-05-01",
+                    "total_score": 8.0,
+                }
+            ],
+            "supply_zones": [
+                {
+                    "lower_bound": 70.0,
+                    "upper_bound": 80.0,
+                    "mid_price": 75.0,
+                    "strength": "core",
+                    "reasons": ["과거 공급"],
+                    "touch_count": 4,
+                    "last_touch_date": "2026-04-20",
+                    "total_score": 7.0,
+                },
+                {
+                    "lower_bound": 110.0,
+                    "upper_bound": 120.0,
+                    "mid_price": 115.0,
+                    "strength": "core",
+                    "reasons": ["현재 상단 공급"],
+                    "touch_count": 2,
+                    "last_touch_date": "2026-04-28",
+                    "total_score": 6.0,
+                },
+            ],
+            "invalidation": {
+                "label": "90.00~95.00 하향 이탈",
+                "lower_bound": 90.0,
+                "upper_bound": 95.0,
+                "reference": "반복 지지",
+                "reasons": ["반복 지지"],
+            },
+        },
+        "execution_levels": [],
+    }
+
+    output = format_deep_dive_output(result)
+
+    assert "- **공급 존**: 110.00~120.00" in output
+    assert "- **흡수 공급 존**: 70.00~80.00" in output
+    assert "- **밸런스 존**: 없음" in output
 
 
 def test_format_deep_dive_output_shows_defer_reason():

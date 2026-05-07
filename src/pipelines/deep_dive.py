@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from collections.abc import Callable
 
 from langchain_core.language_models import BaseChatModel
 
@@ -62,6 +63,8 @@ class DeepDivePipeline:
         fundamental_tool: FundamentalTool | None = None,
         disclosure_tool: DisclosureTool | None = None,
         flow_tool: FlowTool | None = None,
+        structure_zone_detector: StructureZoneDetector | None = None,
+        level_payload_composer: Callable | None = None,
     ):
         self.technical_tool = technical_tool
         self.news_tool = news_tool
@@ -69,6 +72,8 @@ class DeepDivePipeline:
         self.fundamental_tool = fundamental_tool
         self.disclosure_tool = disclosure_tool
         self.flow_tool = flow_tool
+        self.structure_zone_detector = structure_zone_detector or StructureZoneDetector()
+        self.level_payload_composer = level_payload_composer or compose_level_payload
 
     async def run(self, ticker: str) -> dict:
         """Run deep dive analysis for a ticker.
@@ -90,7 +95,7 @@ class DeepDivePipeline:
                 - integrated_analysis: IntegratedAnalysisOutput | None (종합 인사이트)
                 - actionable_signal: ActionableSignalOutput | None (실행 가능한 투자 시그널)
         """
-        tech_result = await self.technical_tool.execute(ticker, period="2y")
+        tech_result = await self.technical_tool.execute(ticker, period="3y")
         if not tech_result.success:
             raise RuntimeError(f"Technical analysis failed: {tech_result.error}")
 
@@ -169,10 +174,14 @@ class DeepDivePipeline:
             lookback_high=lookback_high,
             lookback_low=lookback_low,
         )
-        zone_set = StructureZoneDetector().detect(df, technical_data.snapshot)
-        level_payload = compose_level_payload(zone_set, price_levels)
-        structure_levels = level_payload["structure_levels"]
-        execution_levels = level_payload["execution_levels"]
+        zone_set = self.structure_zone_detector.detect(df, technical_data.snapshot)
+        level_payload = self.level_payload_composer(
+            zone_set,
+            price_levels,
+            atr=technical_data.snapshot.atr,
+        )
+        structure_levels = level_payload.structure_levels
+        execution_levels = level_payload.execution_levels
 
         actionable_signal = await analyzer.generate_actionable_signal(
             ticker=ticker,
@@ -181,6 +190,8 @@ class DeepDivePipeline:
             price_levels=price_levels,
             structure_levels=structure_levels,
             execution_levels=execution_levels,
+            structure_summary=level_payload.structure_summary,
+            execution_summary=level_payload.execution_summary,
             llm=self.llm,
         )
 

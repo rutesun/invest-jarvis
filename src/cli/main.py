@@ -396,30 +396,67 @@ def _format_scenario_section(scenarios: list) -> str:
     return "\n".join(lines)
 
 
-def _format_structure_levels(structure_levels: dict | None) -> str:
+def _to_payload_dict(item):
+    if item is None:
+        return None
+    return item if isinstance(item, dict) else item.model_dump()
+
+
+def _format_zone_bounds(zone) -> str:
+    zone_dict = _to_payload_dict(zone)
+    return f"{zone_dict['lower_bound']:.2f}~{zone_dict['upper_bound']:.2f}"
+
+
+def _split_supply_zones_by_price(supply_zones, current_price: float) -> tuple[list, list]:
+    active_supply = []
+    absorbed_supply = []
+    for zone in supply_zones:
+        zone_dict = _to_payload_dict(zone)
+        if zone_dict["upper_bound"] <= current_price:
+            absorbed_supply.append(zone)
+        else:
+            active_supply.append(zone)
+    return active_supply, absorbed_supply
+
+
+def _format_structure_levels(structure_levels, current_price: float) -> str:
     if not structure_levels:
         return ""
 
-    demand_zones = structure_levels.get("demand_zones") or []
-    supply_zones = structure_levels.get("supply_zones") or []
-    invalidation = structure_levels.get("invalidation")
+    structure_dict = _to_payload_dict(structure_levels)
+    demand_zones = structure_dict.get("demand_zones") or []
+    supply_zones = structure_dict.get("supply_zones") or []
+    balance_zones = structure_dict.get("balance_zones") or []
+    active_supply, absorbed_supply = _split_supply_zones_by_price(supply_zones, current_price)
+    invalidation = _to_payload_dict(structure_dict.get("invalidation"))
 
     lines = ["## 구조 레벨", ""]
-    lines.append(f"- **수요 존**: {', '.join(demand_zones) if demand_zones else '없음'}")
-    lines.append(f"- **공급 존**: {', '.join(supply_zones) if supply_zones else '없음'}")
-    lines.append(f"- **무효화 기준**: {invalidation or '없음'}")
+    lines.append(
+        f"- **수요 존**: {', '.join(_format_zone_bounds(zone) for zone in demand_zones) if demand_zones else '없음'}"
+    )
+    lines.append(
+        f"- **공급 존**: {', '.join(_format_zone_bounds(zone) for zone in active_supply) if active_supply else '없음'}"
+    )
+    lines.append(
+        f"- **흡수 공급 존**: {', '.join(_format_zone_bounds(zone) for zone in absorbed_supply) if absorbed_supply else '없음'}"
+    )
+    lines.append(
+        f"- **밸런스 존**: {', '.join(_format_zone_bounds(zone) for zone in balance_zones) if balance_zones else '없음'}"
+    )
+    lines.append(f"- **무효화 기준**: {invalidation['label'] if invalidation else '없음'}")
     lines.append("")
     return "\n".join(lines)
 
 
-def _format_execution_levels(execution_levels: list[dict] | None) -> str:
+def _format_execution_levels(execution_levels) -> str:
     if not execution_levels:
         return ""
 
     lines = ["## 실행 레벨", ""]
     for level in execution_levels:
+        level_dict = _to_payload_dict(level)
         lines.append(
-            f"- **{level['description']}**: ${level['price']:.2f} ({level['distance_pct']:+.1f}%)"
+            f"- **{level_dict['description']}**: ${level_dict['price']:.2f} ({level_dict['distance_pct']:+.1f}%)"
         )
     lines.append("")
     return "\n".join(lines)
@@ -686,7 +723,7 @@ def format_deep_dive_output(result: dict) -> str:
     if scenarios:
         output += _format_scenario_section(scenarios) + "\n"
     if structure_levels:
-        output += _format_structure_levels(structure_levels)
+        output += _format_structure_levels(structure_levels, snapshot.price)
     if execution_levels:
         output += _format_execution_levels(execution_levels)
 

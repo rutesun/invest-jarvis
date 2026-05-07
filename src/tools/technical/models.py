@@ -158,6 +158,7 @@ class StructureZoneSet(BaseModel):
 
     demand_zones: list[StructureZone] = Field(default_factory=list)
     supply_zones: list[StructureZone] = Field(default_factory=list)
+    balance_zones: list[StructureZone] = Field(default_factory=list)
     invalidation_candidates: list[StructureZone] = Field(default_factory=list)
     invalidation_zone: StructureZone | None = None
     all_candidates: list[StructureZone] = Field(default_factory=list)
@@ -173,7 +174,20 @@ class StructureZoneConfig(BaseModel):
     recent_window_days: int = 60
     mid_window_days: int = 180
     volume_baseline_window: int = 20
+    reaction_lookahead_days: int = 5
     top_n_per_side: int = 5
+    core_zone_threshold: float = 2.0
+    invalidation_ma_distance_pct: float = 0.03
+    swing_window: int = 5
+    cluster_span_multiplier: float = 2.5
+    selection_max_distance_pct: float = 0.50
+    selection_min_recency_score: float = 3.0
+    overlap_min_ratio: float = 0.50
+    overlap_center_distance_atr_multiplier: float = 0.50
+    overlap_max_last_touch_gap_days: int = 21
+    balance_overlap_min_ratio: float = 0.30
+    balance_center_distance_atr_multiplier: float = 1.00
+    balance_max_last_touch_gap_days: int = 21
     score_weights: dict[str, float] = Field(
         default_factory=lambda: {
             "touch": 0.35,
@@ -182,6 +196,56 @@ class StructureZoneConfig(BaseModel):
             "confluence": 0.15,
         }
     )
+
+
+class StructureLevelView(BaseModel):
+    """출력용 구조 zone raw payload"""
+
+    lower_bound: float
+    upper_bound: float
+    mid_price: float
+    strength: str
+    reasons: list[str] = Field(default_factory=list)
+    touch_count: int
+    last_touch_date: str | None = None
+    total_score: float
+
+
+class InvalidationLevelView(BaseModel):
+    """출력용 구조 무효화 raw payload"""
+
+    label: str
+    lower_bound: float
+    upper_bound: float
+    reference: str | None = None
+    reasons: list[str] = Field(default_factory=list)
+
+
+class StructureLevelsPayload(BaseModel):
+    """구조 레벨 payload"""
+
+    demand_zones: list[StructureLevelView] = Field(default_factory=list)
+    supply_zones: list[StructureLevelView] = Field(default_factory=list)
+    balance_zones: list[StructureLevelView] = Field(default_factory=list)
+    invalidation: InvalidationLevelView | None = None
+
+
+class ExecutionLevelView(BaseModel):
+    """실행 레벨 payload"""
+
+    type: str
+    description: str
+    price: float
+    distance_pct: float
+
+
+class LevelPayload(BaseModel):
+    """구조/실행 레벨 합성 payload"""
+
+    structure_levels: StructureLevelsPayload
+    execution_levels: list[ExecutionLevelView] = Field(default_factory=list)
+    structure_summary: str
+    execution_summary: str
 
 
 class ZoneTestArtifact(BaseModel):

@@ -283,9 +283,27 @@ async def test_generate_integrated_analysis_calls_llm():
 @pytest.mark.asyncio
 async def test_format_structure_context_for_llm():
     structure_levels = {
-        "demand_zones": ["145.00~147.00", "140.00~142.00"],
-        "supply_zones": ["155.00~157.00"],
-        "invalidation": "145.00 하향 이탈",
+        "demand_zones": [
+            {
+                "lower_bound": 145.0,
+                "upper_bound": 147.0,
+                "strength": "core",
+                "reasons": ["반복 지지"],
+            },
+            {
+                "lower_bound": 140.0,
+                "upper_bound": 142.0,
+                "strength": "secondary",
+                "reasons": ["보조"],
+            },
+        ],
+        "supply_zones": [
+            {"lower_bound": 155.0, "upper_bound": 157.0, "strength": "core", "reasons": ["매물대"]},
+        ],
+        "invalidation": {
+            "label": "145.00~147.00 + 150일선 146.00 하향 이탈",
+            "reasons": ["core demand zone", "150일선 근접"],
+        },
     }
     execution_levels = [
         {
@@ -307,7 +325,8 @@ async def test_format_structure_context_for_llm():
     assert "구조 레벨" in text
     assert "수요 존: 145.00~147.00, 140.00~142.00" in text
     assert "공급 존: 155.00~157.00" in text
-    assert "무효화: 145.00 하향 이탈" in text
+    assert "밸런스 존: 없음" in text
+    assert "무효화: 145.00~147.00 + 150일선 146.00 하향 이탈" in text
     assert "실행 레벨" in text
     assert "$146.00" in text
     assert "피봇 S1" in text
@@ -348,9 +367,33 @@ async def test_generate_actionable_signal():
         targets={"cup_and_handle_target": 165.0},
     )
     structure_levels = {
-        "demand_zones": ["145.00~147.00", "140.00~142.00"],
-        "supply_zones": ["155.00~157.00", "160.00~162.00"],
-        "invalidation": "145.00 하향 이탈",
+        "demand_zones": [
+            {
+                "lower_bound": 145.0,
+                "upper_bound": 147.0,
+                "strength": "core",
+                "reasons": ["반복 지지"],
+            },
+            {
+                "lower_bound": 140.0,
+                "upper_bound": 142.0,
+                "strength": "secondary",
+                "reasons": ["보조"],
+            },
+        ],
+        "supply_zones": [
+            {"lower_bound": 155.0, "upper_bound": 157.0, "strength": "core", "reasons": ["공급"]},
+            {
+                "lower_bound": 160.0,
+                "upper_bound": 162.0,
+                "strength": "secondary",
+                "reasons": ["보조"],
+            },
+        ],
+        "invalidation": {
+            "label": "145.00~147.00 + 150일선 146.00 하향 이탈",
+            "reasons": ["core demand zone", "150일선 근접"],
+        },
     }
     execution_levels = [
         {
@@ -422,3 +465,6 @@ async def test_generate_actionable_signal():
         assert "구조 레벨" in captured_payload["structure_context"]
         assert "145.00~147.00" in captured_payload["structure_context"]
         assert "피봇 S1" in captured_payload["structure_context"]
+        assert captured_payload["structure_summary"]
+        assert captured_payload["execution_summary"]
+        assert "levels_text" not in captured_payload

@@ -58,21 +58,46 @@ def format_levels_for_llm(levels: PriceLevels) -> str:
     return "\n".join(lines)
 
 
+def _as_dict(item):
+    if item is None:
+        return None
+    return item if isinstance(item, dict) else item.model_dump()
+
+
+def _format_zone_range(zone: dict) -> str:
+    return f"{zone['lower_bound']:.2f}~{zone['upper_bound']:.2f}"
+
+
 def format_structure_context_for_llm(
-    structure_levels: dict | None,
-    execution_levels: list[dict] | None,
+    structure_levels,
+    execution_levels,
 ) -> str:
     """구조 zone과 실행 레벨을 LLM용 텍스트로 변환"""
     lines: list[str] = ["구조 레벨:"]
 
     if structure_levels:
-        demand_zones = structure_levels.get("demand_zones") or []
-        supply_zones = structure_levels.get("supply_zones") or []
-        invalidation = structure_levels.get("invalidation")
+        structure_dict = _as_dict(structure_levels)
+        demand_zones = structure_dict.get("demand_zones") or []
+        supply_zones = structure_dict.get("supply_zones") or []
+        balance_zones = structure_dict.get("balance_zones") or []
+        invalidation = _as_dict(structure_dict.get("invalidation"))
 
-        lines.append(f"- 수요 존: {', '.join(demand_zones) if demand_zones else '없음'}")
-        lines.append(f"- 공급 존: {', '.join(supply_zones) if supply_zones else '없음'}")
-        lines.append(f"- 무효화: {invalidation or '없음'}")
+        demand_text = (
+            ", ".join(_format_zone_range(zone) for zone in demand_zones) if demand_zones else "없음"
+        )
+        supply_text = (
+            ", ".join(_format_zone_range(zone) for zone in supply_zones) if supply_zones else "없음"
+        )
+        balance_text = (
+            ", ".join(_format_zone_range(zone) for zone in balance_zones)
+            if balance_zones
+            else "없음"
+        )
+
+        lines.append(f"- 수요 존: {demand_text}")
+        lines.append(f"- 공급 존: {supply_text}")
+        lines.append(f"- 밸런스 존: {balance_text}")
+        lines.append(f"- 무효화: {invalidation['label'] if invalidation else '없음'}")
     else:
         lines.append("- 구조 존 데이터 없음")
 
@@ -80,8 +105,9 @@ def format_structure_context_for_llm(
     lines.append("실행 레벨:")
     if execution_levels:
         for index, level in enumerate(execution_levels, start=1):
+            level_dict = _as_dict(level)
             lines.append(
-                f"{index}. ${level['price']:.2f} ({level['description']}, {level['distance_pct']:+.1f}%)"
+                f"{index}. ${level_dict['price']:.2f} ({level_dict['description']}, {level_dict['distance_pct']:+.1f}%)"
             )
     else:
         lines.append("- 실행 레벨 데이터 없음")
@@ -363,8 +389,10 @@ async def generate_actionable_signal(
     technical_summary: str,
     chart_patterns: dict[str, ChartPatternResult],
     price_levels: PriceLevels,
-    structure_levels: dict | None = None,
-    execution_levels: list[dict] | None = None,
+    structure_levels=None,
+    execution_levels=None,
+    structure_summary: str | None = None,
+    execution_summary: str | None = None,
     news_analysis: str | None = None,
     fundamental_summary: str | None = None,
     llm: BaseChatModel | None = None,
@@ -376,7 +404,6 @@ async def generate_actionable_signal(
         llm = get_llm_instance()
 
     patterns_text = format_patterns_for_llm(chart_patterns)
-    levels_text = format_levels_for_llm(price_levels)
     structure_context = format_structure_context_for_llm(structure_levels, execution_levels)
 
     prompt = ChatPromptTemplate.from_messages(
@@ -415,10 +442,11 @@ async def generate_actionable_signal(
 **차트 패턴**:
 {patterns_text}
 
-**가격 레벨**:
-{levels_text}
-
 **구조/실행 레벨**:
+{structure_summary}
+{execution_summary}
+
+**구조/실행 상세**:
 {structure_context}
 
 **뉴스**: {news_analysis}
@@ -436,8 +464,9 @@ async def generate_actionable_signal(
             "ticker": ticker,
             "technical_summary": technical_summary,
             "patterns_text": patterns_text,
-            "levels_text": levels_text,
             "structure_context": structure_context,
+            "structure_summary": structure_summary or "구조 레벨 요약 없음",
+            "execution_summary": execution_summary or "실행 레벨 요약 없음",
             "news_analysis": news_analysis or "없음",
             "fundamental_summary": fundamental_summary or "없음",
         }
