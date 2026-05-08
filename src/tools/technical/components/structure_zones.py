@@ -91,7 +91,7 @@ class StructureZoneDetector:
             supply_zones=supply_zones,
             balance_zones=balance_zones,
         )
-        selected_label, selected_zone = self._pick_primary_selected_zone(
+        selected_label, selected_zone, candidate_priority_trace = self._pick_primary_selected_zone(
             demand_zones=demand_zones,
             supply_zones=supply_zones,
             balance_zones=balance_zones,
@@ -104,6 +104,7 @@ class StructureZoneDetector:
             selected_label=selected_label,
             selected_zone=selected_zone,
             dropped_candidates=dropped_side_candidates,
+            candidate_priority_trace=candidate_priority_trace,
             no_clear_structure=no_clear_structure,
         )
 
@@ -203,8 +204,9 @@ class StructureZoneDetector:
         supply_zones: list[StructureZone],
         balance_zones: list[StructureZone],
         current_price: float,
-    ) -> tuple[str, StructureZone | None]:
+    ) -> tuple[str, StructureZone | None, list[dict[str, object]]]:
         candidates: list[tuple[float, str, StructureZone]] = []
+        priority_trace: list[dict[str, object]] = []
 
         if balance_zones:
             top_balance = self._select_best_zone(
@@ -215,16 +217,21 @@ class StructureZoneDetector:
             in_box = top_balance.lower_bound <= current_price <= top_balance.upper_bound
             label = "active_box" if in_box else "former_supply_box"
             boost = 0.5 if in_box else 0.0
-            candidates.append(
-                (
-                    self._selection_priority_score(
-                        top_balance,
-                        current_price=current_price,
-                        label_hint=label,
-                    )
-                    + boost,
-                    label,
+            priority_score = (
+                self._selection_priority_score(
                     top_balance,
+                    current_price=current_price,
+                    label_hint=label,
+                )
+                + boost
+            )
+            candidates.append((priority_score, label, top_balance))
+            priority_trace.append(
+                self._build_candidate_priority_entry(
+                    label=label,
+                    zone=top_balance,
+                    current_price=current_price,
+                    priority_score=priority_score,
                 )
             )
 
@@ -234,15 +241,18 @@ class StructureZoneDetector:
                 current_price=current_price,
                 label_hint="support_zone",
             )
-            candidates.append(
-                (
-                    self._selection_priority_score(
-                        top_demand,
-                        current_price=current_price,
-                        label_hint="support_zone",
-                    ),
-                    "support_zone",
-                    top_demand,
+            priority_score = self._selection_priority_score(
+                top_demand,
+                current_price=current_price,
+                label_hint="support_zone",
+            )
+            candidates.append((priority_score, "support_zone", top_demand))
+            priority_trace.append(
+                self._build_candidate_priority_entry(
+                    label="support_zone",
+                    zone=top_demand,
+                    current_price=current_price,
+                    priority_score=priority_score,
                 )
             )
 
@@ -254,15 +264,18 @@ class StructureZoneDetector:
                 current_price=current_price,
                 label_hint="resistance_zone",
             )
-            candidates.append(
-                (
-                    self._selection_priority_score(
-                        top_supply,
-                        current_price=current_price,
-                        label_hint="resistance_zone",
-                    ),
-                    "resistance_zone",
-                    top_supply,
+            priority_score = self._selection_priority_score(
+                top_supply,
+                current_price=current_price,
+                label_hint="resistance_zone",
+            )
+            candidates.append((priority_score, "resistance_zone", top_supply))
+            priority_trace.append(
+                self._build_candidate_priority_entry(
+                    label="resistance_zone",
+                    zone=top_supply,
+                    current_price=current_price,
+                    priority_score=priority_score,
                 )
             )
         elif former_supply:
@@ -271,15 +284,18 @@ class StructureZoneDetector:
                 current_price=current_price,
                 label_hint="former_supply_box",
             )
-            candidates.append(
-                (
-                    self._selection_priority_score(
-                        top_former,
-                        current_price=current_price,
-                        label_hint="former_supply_box",
-                    ),
-                    "former_supply_box",
-                    top_former,
+            priority_score = self._selection_priority_score(
+                top_former,
+                current_price=current_price,
+                label_hint="former_supply_box",
+            )
+            candidates.append((priority_score, "former_supply_box", top_former))
+            priority_trace.append(
+                self._build_candidate_priority_entry(
+                    label="former_supply_box",
+                    zone=top_former,
+                    current_price=current_price,
+                    priority_score=priority_score,
                 )
             )
 
@@ -293,8 +309,8 @@ class StructureZoneDetector:
                 reverse=True,
             )
             _score, selected_label, selected_zone = candidates[0]
-            return selected_label, selected_zone
-        return "no_clear_structure", None
+            return selected_label, selected_zone, priority_trace
+        return "no_clear_structure", None, priority_trace
 
     def _select_best_zone(
         self,
@@ -333,12 +349,35 @@ class StructureZoneDetector:
         label_bonus = 0.2 if label_hint == "active_box" else 0.0
         return zone.total_score + recency_bonus + label_bonus - proximity_penalty
 
+    def _build_candidate_priority_entry(
+        self,
+        *,
+        label: str,
+        zone: StructureZone,
+        current_price: float,
+        priority_score: float,
+    ) -> dict[str, object]:
+        distance_pct = abs(zone.mid_price - current_price) / max(current_price, 1.0)
+        return {
+            "label": label,
+            "zone_type": zone.zone_type,
+            "lower_bound": zone.lower_bound,
+            "upper_bound": zone.upper_bound,
+            "total_score": zone.total_score,
+            "priority_score": round(priority_score, 4),
+            "distance_pct": round(distance_pct, 4),
+            "episode_recent_score": zone.reason_context.get(
+                "episode_recent_score", zone.recency_score
+            ),
+        }
+
     def _build_selection_trace(
         self,
         *,
         selected_label: str,
         selected_zone: StructureZone | None,
         dropped_candidates: list[dict[str, object]],
+        candidate_priority_trace: list[dict[str, object]],
         no_clear_structure: bool,
     ) -> list[dict[str, object]]:
         trace: list[dict[str, object]] = []
@@ -364,6 +403,12 @@ class StructureZoneDetector:
             trace.append(
                 {
                     "dropped_candidates": dropped_candidates,
+                }
+            )
+        if candidate_priority_trace:
+            trace.append(
+                {
+                    "selection_priority_trace": candidate_priority_trace,
                 }
             )
         return trace

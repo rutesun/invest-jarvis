@@ -693,6 +693,7 @@ def test_detector_selection_trace_is_stable_and_structured():
         selected_label="support_zone",
         selected_zone=zone,
         dropped_candidates=[],
+        candidate_priority_trace=[],
         no_clear_structure=False,
     )
 
@@ -723,6 +724,7 @@ def test_detector_selection_trace_includes_dropped_candidate_reasons():
         selected_label="support_zone",
         selected_zone=None,
         dropped_candidates=[dropped],
+        candidate_priority_trace=[],
         no_clear_structure=False,
     )
 
@@ -848,7 +850,7 @@ def test_detector_primary_label_prefers_higher_score_over_fixed_order():
         strength="core",
     )
 
-    label, zone = detector._pick_primary_selected_zone(
+    label, zone, priority_trace = detector._pick_primary_selected_zone(
         demand_zones=[demand],
         supply_zones=[supply],
         balance_zones=[],
@@ -858,6 +860,8 @@ def test_detector_primary_label_prefers_higher_score_over_fixed_order():
     assert label == "resistance_zone"
     assert zone is not None
     assert zone.total_score == 9.0
+    assert priority_trace
+    assert any(item["label"] == "resistance_zone" for item in priority_trace)
 
 
 def test_select_best_zone_uses_proximity_and_episode_recency():
