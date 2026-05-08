@@ -111,19 +111,67 @@ def _pick_primary_label(
     resistance_zones: list[StructureLevelView],
     former_levels: list[StructureLevelView],
 ) -> str:
+    trace_label = _extract_selected_label_from_trace(zone_set.selection_trace)
+    if trace_label and _is_available_label(
+        trace_label=trace_label,
+        current_price=current_price,
+        active_box=active_box,
+        support_zones=support_zones,
+        resistance_zones=resistance_zones,
+        former_levels=former_levels,
+    ):
+        return trace_label
+
     if zone_set.no_clear_structure:
         return "no_clear_structure"
-    if active_box and _zone_contains_price(
-        active_box.lower_bound, active_box.upper_bound, current_price
-    ):
-        return "active_box"
+
+    scored_candidates: list[tuple[float, str]] = []
+    if active_box:
+        in_box = _zone_contains_price(active_box.lower_bound, active_box.upper_bound, current_price)
+        label = "active_box" if in_box else "former_supply_box"
+        boost = 0.5 if in_box else 0.0
+        scored_candidates.append((active_box.total_score + boost, label))
     if support_zones:
-        return "support_zone"
+        scored_candidates.append((support_zones[0].total_score, "support_zone"))
     if resistance_zones:
-        return "resistance_zone"
+        scored_candidates.append((resistance_zones[0].total_score, "resistance_zone"))
     if former_levels:
-        return "former_supply_box"
+        scored_candidates.append((former_levels[0].total_score, "former_supply_box"))
+    if scored_candidates:
+        scored_candidates.sort(key=lambda item: item[0], reverse=True)
+        return scored_candidates[0][1]
     return "no_clear_structure"
+
+
+def _extract_selected_label_from_trace(selection_trace: list[dict[str, object]]) -> str | None:
+    for item in selection_trace:
+        label = item.get("selected_label")
+        if isinstance(label, str):
+            return label
+    return None
+
+
+def _is_available_label(
+    *,
+    trace_label: str,
+    current_price: float,
+    active_box: StructureLevelView | None,
+    support_zones: list[StructureLevelView],
+    resistance_zones: list[StructureLevelView],
+    former_levels: list[StructureLevelView],
+) -> bool:
+    if trace_label == "active_box":
+        return bool(
+            active_box
+            and _zone_contains_price(active_box.lower_bound, active_box.upper_bound, current_price)
+        )
+    if trace_label == "support_zone":
+        return bool(support_zones)
+    if trace_label == "resistance_zone":
+        return bool(resistance_zones)
+    if trace_label in {"former_supply_box", "former_demand_box"}:
+        return bool(former_levels or active_box)
+    return trace_label == "no_clear_structure"
 
 
 def _build_headline_and_why(
@@ -153,6 +201,11 @@ def _build_headline_and_why(
         return (
             f"핵심 저항 존 {zone.lower_bound:.2f}~{zone.upper_bound:.2f}",
             "상단 매물대 반응이 남아 있어 돌파 확인이 핵심",
+        )
+    if summary_label in {"former_supply_box", "former_demand_box"}:
+        return (
+            "전환 레벨 중심 구조",
+            "과거 구조 레벨이 현재는 지지/저항 전환 구간으로 작동",
         )
     return "구조 혼합", "지지/저항 근거가 혼재해 보조 신호로 해석"
 

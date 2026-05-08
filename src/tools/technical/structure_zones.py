@@ -64,11 +64,14 @@ class StructureZoneDetector:
 
     def detect(self, df: pd.DataFrame, snapshot: IndicatorSnapshot) -> StructureZoneSet:
         candidates = self._build_candidates(df, snapshot)
-        sorted_demand_zones, sorted_supply_zones = self._build_sorted_side_candidates(
+        (
+            sorted_demand_zones,
+            sorted_supply_zones,
+        ) = self._build_sorted_side_candidates(
             candidates=candidates,
             current_price=snapshot.price,
         )
-        demand_zones, supply_zones = self._select_side_zones(
+        demand_zones, supply_zones, dropped_side_candidates = self._select_side_zones(
             sorted_demand_zones=sorted_demand_zones,
             sorted_supply_zones=sorted_supply_zones,
             current_price=snapshot.price,
@@ -99,10 +102,13 @@ class StructureZoneDetector:
             balance_zones=balance_zones,
             current_price=snapshot.price,
         )
+        if no_clear_structure:
+            selected_label = "no_clear_structure"
+            selected_zone = None
         selection_trace = self._build_selection_trace(
             selected_label=selected_label,
             selected_zone=selected_zone,
-            dropped_duplicates=[],
+            dropped_candidates=dropped_side_candidates,
             no_clear_structure=no_clear_structure,
         )
 
@@ -146,20 +152,20 @@ class StructureZoneDetector:
         sorted_demand_zones: list[StructureZone],
         sorted_supply_zones: list[StructureZone],
         current_price: float,
-    ) -> tuple[list[StructureZone], list[StructureZone]]:
-        demand_zones = self._select_with_guard(
+    ) -> tuple[list[StructureZone], list[StructureZone], list[dict[str, object]]]:
+        demand_zones, dropped_demand = self._select_with_guard_with_trace(
             sorted_demand_zones,
             current_price,
             zone_type="demand",
             max_count=self.config.top_n_per_side,
         )
-        supply_zones = self._select_with_guard(
+        supply_zones, dropped_supply = self._select_with_guard_with_trace(
             sorted_supply_zones,
             current_price,
             zone_type="supply",
             max_count=self.config.top_n_per_side,
         )
-        return demand_zones, supply_zones
+        return demand_zones, supply_zones, [*dropped_demand, *dropped_supply]
 
     def _build_candidates(
         self, df: pd.DataFrame, snapshot: IndicatorSnapshot
@@ -203,13 +209,39 @@ class StructureZoneDetector:
         balance_zones: list[StructureZone],
         current_price: float,
     ) -> tuple[str, StructureZone | None]:
+        candidates: list[tuple[float, str, StructureZone]] = []
+
         if balance_zones:
-            return "active_box", balance_zones[0]
+            top_balance = self._sort_zones(balance_zones, current_price)[0]
+            in_box = top_balance.lower_bound <= current_price <= top_balance.upper_bound
+            label = "active_box" if in_box else "former_supply_box"
+            boost = 0.5 if in_box else 0.0
+            candidates.append((top_balance.total_score + boost, label, top_balance))
+
         if demand_zones:
-            return "support_zone", demand_zones[0]
-        if supply_zones:
-            top_supply = self._sort_zones(supply_zones, current_price)[0]
-            return "resistance_zone", top_supply
+            top_demand = self._sort_zones(demand_zones, current_price)[0]
+            candidates.append((top_demand.total_score, "support_zone", top_demand))
+
+        active_supply = [zone for zone in supply_zones if zone.upper_bound >= current_price]
+        former_supply = [zone for zone in supply_zones if zone.upper_bound < current_price]
+        if active_supply:
+            top_supply = self._sort_zones(active_supply, current_price)[0]
+            candidates.append((top_supply.total_score, "resistance_zone", top_supply))
+        elif former_supply:
+            top_former = self._sort_zones(former_supply, current_price)[0]
+            candidates.append((top_former.total_score, "former_supply_box", top_former))
+
+        if candidates:
+            candidates.sort(
+                key=lambda item: (
+                    item[0],
+                    pd.Timestamp(item[2].last_touch_date).value if item[2].last_touch_date else 0,
+                    item[2].touch_count,
+                ),
+                reverse=True,
+            )
+            _score, selected_label, selected_zone = candidates[0]
+            return selected_label, selected_zone
         return "no_clear_structure", None
 
     def _build_selection_trace(
@@ -217,7 +249,7 @@ class StructureZoneDetector:
         *,
         selected_label: str,
         selected_zone: StructureZone | None,
-        dropped_duplicates: list[StructureZone],
+        dropped_candidates: list[dict[str, object]],
         no_clear_structure: bool,
     ) -> list[dict[str, object]]:
         trace: list[dict[str, object]] = []
@@ -239,18 +271,10 @@ class StructureZoneDetector:
                     "reason_context": selected_zone.reason_context,
                 }
             )
-        if dropped_duplicates:
+        if dropped_candidates:
             trace.append(
                 {
-                    "dropped_duplicates": [
-                        {
-                            "zone_type": zone.zone_type,
-                            "lower_bound": zone.lower_bound,
-                            "upper_bound": zone.upper_bound,
-                            "total_score": zone.total_score,
-                        }
-                        for zone in dropped_duplicates
-                    ]
+                    "dropped_candidates": dropped_candidates,
                 }
             )
         return trace
@@ -429,8 +453,23 @@ class StructureZoneDetector:
         zone_type: str,
         max_count: int,
     ) -> list[StructureZone]:
+        selected, _dropped = self._select_with_guard_with_trace(
+            sorted_zones=sorted_zones,
+            current_price=current_price,
+            zone_type=zone_type,
+            max_count=max_count,
+        )
+        return selected
+
+    def _select_with_guard_with_trace(
+        self,
+        sorted_zones: list[StructureZone],
+        current_price: float,
+        zone_type: str,
+        max_count: int,
+    ) -> tuple[list[StructureZone], list[dict[str, object]]]:
         if not sorted_zones:
-            return []
+            return [], []
 
         preferred = [
             zone
@@ -439,12 +478,30 @@ class StructureZoneDetector:
         ]
         non_preferred = [zone for zone in sorted_zones if zone not in preferred]
 
-        filtered_preferred = [
-            zone for zone in preferred if self._passes_selection_guard(zone, current_price)
-        ]
-        filtered_non_preferred = [
-            zone for zone in non_preferred if self._passes_selection_guard(zone, current_price)
-        ]
+        filtered_preferred: list[StructureZone] = []
+        filtered_non_preferred: list[StructureZone] = []
+        dropped: list[dict[str, object]] = []
+
+        for zone in preferred:
+            if self._passes_selection_guard(zone, current_price):
+                filtered_preferred.append(zone)
+                continue
+            dropped.append(
+                self._build_dropped_candidate_entry(
+                    zone=zone,
+                    reason_code="selection_guard_failed_preferred",
+                )
+            )
+        for zone in non_preferred:
+            if self._passes_selection_guard(zone, current_price):
+                filtered_non_preferred.append(zone)
+                continue
+            dropped.append(
+                self._build_dropped_candidate_entry(
+                    zone=zone,
+                    reason_code="selection_guard_failed_non_preferred",
+                )
+            )
 
         selected: list[StructureZone] = []
         for zone in [*filtered_preferred, *filtered_non_preferred]:
@@ -452,7 +509,7 @@ class StructureZoneDetector:
                 continue
             selected.append(zone)
             if len(selected) >= max_count:
-                return selected
+                return selected, dropped
 
         for zone in [*preferred, *non_preferred]:
             if zone in selected:
@@ -460,7 +517,21 @@ class StructureZoneDetector:
             selected.append(zone)
             if len(selected) >= max_count:
                 break
-        return selected
+        return selected, dropped
+
+    def _build_dropped_candidate_entry(
+        self,
+        *,
+        zone: StructureZone,
+        reason_code: str,
+    ) -> dict[str, object]:
+        return {
+            "zone_type": zone.zone_type,
+            "lower_bound": zone.lower_bound,
+            "upper_bound": zone.upper_bound,
+            "total_score": zone.total_score,
+            "reason_code": reason_code,
+        }
 
     def _is_preferred_side_zone(
         self,

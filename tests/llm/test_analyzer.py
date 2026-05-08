@@ -283,7 +283,7 @@ async def test_generate_integrated_analysis_calls_llm():
 @pytest.mark.asyncio
 async def test_format_structure_context_for_llm():
     structure_levels = {
-        "demand_zones": [
+        "support_zones": [
             {
                 "lower_bound": 145.0,
                 "upper_bound": 147.0,
@@ -297,9 +297,10 @@ async def test_format_structure_context_for_llm():
                 "reasons": ["보조"],
             },
         ],
-        "supply_zones": [
+        "resistance_zones": [
             {"lower_bound": 155.0, "upper_bound": 157.0, "strength": "core", "reasons": ["매물대"]},
         ],
+        "former_levels": [],
         "invalidation": {
             "label": "145.00~147.00 + 150일선 146.00 하향 이탈",
             "reasons": ["core demand zone", "150일선 근접"],
@@ -367,7 +368,7 @@ async def test_generate_actionable_signal():
         targets={"cup_and_handle_target": 165.0},
     )
     structure_levels = {
-        "demand_zones": [
+        "support_zones": [
             {
                 "lower_bound": 145.0,
                 "upper_bound": 147.0,
@@ -381,7 +382,7 @@ async def test_generate_actionable_signal():
                 "reasons": ["보조"],
             },
         ],
-        "supply_zones": [
+        "resistance_zones": [
             {"lower_bound": 155.0, "upper_bound": 157.0, "strength": "core", "reasons": ["공급"]},
             {
                 "lower_bound": 160.0,
@@ -390,6 +391,7 @@ async def test_generate_actionable_signal():
                 "reasons": ["보조"],
             },
         ],
+        "former_levels": [],
         "invalidation": {
             "label": "145.00~147.00 + 150일선 146.00 하향 이탈",
             "reasons": ["core demand zone", "150일선 근접"],

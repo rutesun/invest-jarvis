@@ -167,3 +167,49 @@ def test_compose_level_payload_dedupes_execution_levels_inside_structure_ranges(
     payload = compose_level_payload(zone_set, price_levels)
 
     assert [level.type for level in payload.execution_levels] == ["sma_50"]
+
+
+def test_compose_level_payload_prefers_trace_selected_label_for_consistency():
+    from src.tools.technical.level_composer import compose_level_payload
+
+    support = StructureZone(
+        zone_type="demand",
+        lower_bound=90.0,
+        upper_bound=95.0,
+        mid_price=92.5,
+        touch_count=2,
+        last_touch_date="2026-05-01",
+        touch_score=2.0,
+        recency_score=5.0,
+        volume_reaction_score=2.0,
+        confluence_score=0.0,
+        total_score=6.0,
+        strength="core",
+        reasons=["support"],
+    )
+    resistance = StructureZone(
+        zone_type="supply",
+        lower_bound=105.0,
+        upper_bound=110.0,
+        mid_price=107.5,
+        touch_count=4,
+        last_touch_date="2026-05-02",
+        touch_score=4.0,
+        recency_score=5.0,
+        volume_reaction_score=3.0,
+        confluence_score=0.0,
+        total_score=9.0,
+        strength="core",
+        reasons=["resistance"],
+    )
+    zone_set = StructureZoneSet(
+        demand_zones=[support],
+        supply_zones=[resistance],
+        selection_trace=[{"selected_label": "support_zone"}],
+        invalidation_candidates=[],
+        invalidation_zone=support,
+        all_candidates=[support, resistance],
+    )
+    payload = compose_level_payload(zone_set, PriceLevels(current_price=100.0))
+
+    assert payload.structure_levels.summary_label == "support_zone"

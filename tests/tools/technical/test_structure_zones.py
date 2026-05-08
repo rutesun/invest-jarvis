@@ -692,9 +692,84 @@ def test_detector_selection_trace_is_stable_and_structured():
     trace = detector._build_selection_trace(
         selected_label="support_zone",
         selected_zone=zone,
-        dropped_duplicates=[],
+        dropped_candidates=[],
         no_clear_structure=False,
     )
 
     assert trace[0]["selected_label"] == "support_zone"
     assert trace[1]["reason_codes"] == ["support_episode_recent"]
+
+
+def test_detector_selection_trace_includes_dropped_candidate_reasons():
+    detector = StructureZoneDetector()
+    dropped = detector._build_dropped_candidate_entry(
+        zone=StructureZone(
+            zone_type="supply",
+            lower_bound=150.0,
+            upper_bound=160.0,
+            mid_price=155.0,
+            touch_count=3,
+            last_touch_date="2026-01-01",
+            touch_score=3.0,
+            recency_score=1.0,
+            volume_reaction_score=1.0,
+            confluence_score=0.0,
+            total_score=2.0,
+            strength="secondary",
+        ),
+        reason_code="selection_guard_failed_non_preferred",
+    )
+    trace = detector._build_selection_trace(
+        selected_label="support_zone",
+        selected_zone=None,
+        dropped_candidates=[dropped],
+        no_clear_structure=False,
+    )
+
+    assert "dropped_candidates" in trace[1]
+    assert (
+        trace[1]["dropped_candidates"][0]["reason_code"] == "selection_guard_failed_non_preferred"
+    )
+
+
+def test_detector_primary_label_prefers_higher_score_over_fixed_order():
+    detector = StructureZoneDetector()
+    demand = StructureZone(
+        zone_type="demand",
+        lower_bound=95.0,
+        upper_bound=98.0,
+        mid_price=96.5,
+        touch_count=2,
+        last_touch_date="2026-05-01",
+        touch_score=2.0,
+        recency_score=5.0,
+        volume_reaction_score=2.0,
+        confluence_score=0.0,
+        total_score=6.0,
+        strength="core",
+    )
+    supply = StructureZone(
+        zone_type="supply",
+        lower_bound=105.0,
+        upper_bound=109.0,
+        mid_price=107.0,
+        touch_count=4,
+        last_touch_date="2026-05-02",
+        touch_score=4.0,
+        recency_score=5.0,
+        volume_reaction_score=3.0,
+        confluence_score=0.0,
+        total_score=9.0,
+        strength="core",
+    )
+
+    label, zone = detector._pick_primary_selected_zone(
+        demand_zones=[demand],
+        supply_zones=[supply],
+        balance_zones=[],
+        current_price=100.0,
+    )
+
+    assert label == "resistance_zone"
+    assert zone is not None
+    assert zone.total_score == 9.0

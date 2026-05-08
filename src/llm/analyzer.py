@@ -87,13 +87,22 @@ def format_structure_context_for_llm(
         resistance_zones = structure_dict.get("resistance_zones")
         former_levels = structure_dict.get("former_levels")
         active_box = structure_dict.get("active_box")
-        invalidation = _as_dict(structure_dict.get("invalidation"))
+        invalidation_value = structure_dict.get("invalidation")
+        invalidation = _as_dict(invalidation_value) if invalidation_value else None
 
-        if support_zones is None and resistance_zones is None:
-            # legacy fallback
-            support_zones = structure_dict.get("demand_zones") or []
-            resistance_zones = structure_dict.get("supply_zones") or []
-            former_levels = structure_dict.get("balance_zones") or []
+        if support_zones is None or resistance_zones is None:
+            lines.append("- presenter contract missing (support_zones/resistance_zones)")
+            lines.append("")
+            lines.append("실행 레벨:")
+            if execution_levels:
+                for index, level in enumerate(execution_levels, start=1):
+                    level_dict = _as_dict(level)
+                    lines.append(
+                        f"{index}. ${level_dict['price']:.2f} ({level_dict['description']}, {level_dict['distance_pct']:+.1f}%)"
+                    )
+            else:
+                lines.append("- 실행 레벨 데이터 없음")
+            return "\n".join(lines)
 
         support_text = (
             ", ".join(_format_zone_range(zone) for zone in support_zones)

@@ -746,7 +746,7 @@ def format_deep_dive_output(result: dict) -> str:
     if presented_structure:
         output += _format_presented_structure(presented_structure)
     elif structure_levels:
-        output += _format_structure_levels(structure_levels, snapshot.price)
+        output += "## 구조 레벨\n\n- presenter payload 누락\n\n"
     if execution_levels and not presented_structure:
         output += _format_execution_levels(execution_levels)
 
