@@ -270,3 +270,119 @@ def test_compose_level_payload_uses_trace_selected_support_bounds_for_top_zone()
     assert payload.structure_levels.summary_label == "support_zone"
     assert payload.structure_levels.support_zones[0].lower_bound == 6.9
     assert payload.structure_levels.support_zones[0].upper_bound == 7.8
+
+
+def test_compose_level_payload_uses_trace_selected_resistance_bounds_for_top_zone():
+    from src.tools.technical.level_composer import compose_level_payload
+
+    resistance_high_score = StructureZone(
+        zone_type="supply",
+        lower_bound=18.0,
+        upper_bound=19.0,
+        mid_price=18.5,
+        touch_count=11,
+        last_touch_date="2026-04-20",
+        touch_score=11.0,
+        recency_score=5.0,
+        volume_reaction_score=5.0,
+        confluence_score=0.0,
+        total_score=6.8,
+        strength="core",
+        reasons=["resistance-1"],
+    )
+    resistance_low_score = StructureZone(
+        zone_type="supply",
+        lower_bound=20.0,
+        upper_bound=21.0,
+        mid_price=20.5,
+        touch_count=7,
+        last_touch_date="2026-04-22",
+        touch_score=7.0,
+        recency_score=5.0,
+        volume_reaction_score=5.0,
+        confluence_score=0.0,
+        total_score=5.2,
+        strength="core",
+        reasons=["resistance-2"],
+    )
+    zone_set = StructureZoneSet(
+        demand_zones=[],
+        supply_zones=[resistance_low_score, resistance_high_score],
+        selection_trace=[
+            {"selected_label": "resistance_zone", "no_clear_structure": False},
+            {
+                "selected_label": "resistance_zone",
+                "zone_type": "supply",
+                "lower_bound": 20.0,
+                "upper_bound": 21.0,
+            },
+        ],
+        invalidation_candidates=[],
+        invalidation_zone=None,
+        all_candidates=[resistance_low_score, resistance_high_score],
+    )
+
+    payload = compose_level_payload(zone_set, PriceLevels(current_price=15.0))
+
+    assert payload.structure_levels.summary_label == "resistance_zone"
+    assert payload.structure_levels.resistance_zones[0].lower_bound == 20.0
+    assert payload.structure_levels.resistance_zones[0].upper_bound == 21.0
+
+
+def test_compose_level_payload_uses_trace_selected_active_box_bounds_for_top_zone():
+    from src.tools.technical.level_composer import compose_level_payload
+
+    active_box_trace_selected = StructureZone(
+        zone_type="balance",
+        lower_bound=99.0,
+        upper_bound=101.0,
+        mid_price=100.0,
+        touch_count=5,
+        last_touch_date="2026-04-18",
+        touch_score=5.0,
+        recency_score=5.0,
+        volume_reaction_score=5.0,
+        confluence_score=0.0,
+        total_score=4.8,
+        strength="core",
+        reasons=["balance-1"],
+    )
+    active_box_higher_score = StructureZone(
+        zone_type="balance",
+        lower_bound=104.0,
+        upper_bound=106.0,
+        mid_price=105.0,
+        touch_count=10,
+        last_touch_date="2026-04-22",
+        touch_score=10.0,
+        recency_score=5.0,
+        volume_reaction_score=5.0,
+        confluence_score=0.0,
+        total_score=7.2,
+        strength="core",
+        reasons=["balance-2"],
+    )
+    zone_set = StructureZoneSet(
+        demand_zones=[],
+        supply_zones=[],
+        balance_zones=[active_box_higher_score, active_box_trace_selected],
+        selection_trace=[
+            {"selected_label": "active_box", "no_clear_structure": False},
+            {
+                "selected_label": "active_box",
+                "zone_type": "balance",
+                "lower_bound": 99.0,
+                "upper_bound": 101.0,
+            },
+        ],
+        invalidation_candidates=[],
+        invalidation_zone=None,
+        all_candidates=[active_box_higher_score, active_box_trace_selected],
+    )
+
+    payload = compose_level_payload(zone_set, PriceLevels(current_price=100.0))
+
+    assert payload.structure_levels.summary_label == "active_box"
+    assert payload.structure_levels.active_box is not None
+    assert payload.structure_levels.active_box.lower_bound == 99.0
+    assert payload.structure_levels.active_box.upper_bound == 101.0
