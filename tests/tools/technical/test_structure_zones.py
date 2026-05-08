@@ -756,6 +756,67 @@ def test_detector_collects_touch_episodes_metadata():
     assert top_episode_entry["touch_episode_count"] >= 1
 
 
+def test_episode_touch_score_prefers_recent_dense_episodes():
+    detector = StructureZoneDetector()
+    old_dense = [
+        {
+            "start_date": "2024-01-01",
+            "end_date": "2024-01-20",
+            "touch_count": 10,
+            "recency_score": 1.0,
+            "episode_score": 7.3,
+        }
+    ]
+    recent_split = [
+        {
+            "start_date": "2026-03-01",
+            "end_date": "2026-03-05",
+            "touch_count": 4,
+            "recency_score": 5.0,
+            "episode_score": 4.3,
+        },
+        {
+            "start_date": "2026-04-01",
+            "end_date": "2026-04-07",
+            "touch_count": 4,
+            "recency_score": 5.0,
+            "episode_score": 4.3,
+        },
+    ]
+
+    old_metrics = detector._score_touch_from_episodes(old_dense, fallback_touch_count=10)
+    recent_metrics = detector._score_touch_from_episodes(recent_split, fallback_touch_count=8)
+
+    assert recent_metrics["touch_score"] > old_metrics["touch_score"]
+    assert recent_metrics["guard_recency"] > old_metrics["guard_recency"]
+
+
+def test_selection_guard_uses_episode_guard_recency_when_available():
+    detector = StructureZoneDetector(
+        StructureZoneConfig(
+            selection_min_recency_score=3.0,
+            selection_max_distance_pct=0.5,
+        )
+    )
+    zone = StructureZone(
+        zone_type="demand",
+        lower_bound=95.0,
+        upper_bound=99.0,
+        mid_price=97.0,
+        touch_count=5,
+        last_touch_date="2026-04-20",
+        touch_score=6.0,
+        recency_score=5.0,
+        volume_reaction_score=3.0,
+        confluence_score=0.0,
+        total_score=6.0,
+        strength="core",
+        reason_context={"episode_guard_recency": 1.0},
+    )
+
+    assert detector._passes_selection_guard(zone, current_price=100.0) is False
+
+
 def test_detector_primary_label_prefers_higher_score_over_fixed_order():
     detector = StructureZoneDetector()
     demand = StructureZone(

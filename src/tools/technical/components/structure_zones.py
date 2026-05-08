@@ -356,8 +356,6 @@ class StructureZoneDetector:
             cluster_candidates = [candidate for candidate in swings if candidate.price in cluster]
             touch_count = len(cluster_candidates)
             latest_touch = max(candidate.timestamp for candidate in cluster_candidates)
-            recency_score = self._score_recency(latest_touch, snapshot_date=swings[-1].timestamp)
-            touch_score = float(touch_count)
             volume_reaction_score = self._score_volume_reaction(
                 df=df,
                 cluster_candidates=cluster_candidates,
@@ -367,6 +365,12 @@ class StructureZoneDetector:
                 cluster_candidates,
                 snapshot_date=swings[-1].timestamp,
             )
+            touch_metrics = self._score_touch_from_episodes(
+                touch_episodes,
+                fallback_touch_count=touch_count,
+            )
+            touch_score = touch_metrics["touch_score"]
+            recency_score = touch_metrics["guard_recency"]
             confluence_score = self._score_confluence(cluster, snapshot)
             total_score = (
                 touch_score * self.config.score_weights["touch"]
@@ -399,17 +403,24 @@ class StructureZoneDetector:
                         "core" if total_score >= self.config.core_zone_threshold else "secondary"
                     ),
                     reasons=[
-                        f"{touch_count}회 터치",
+                        f"에피소드 {len(touch_episodes)}개 / 총 {touch_count}회 터치",
+                        f"최근성 점수 {recency_score:.2f}",
                         f"거래량 반응 {volume_reaction_score:.2f}",
                     ],
                     reason_codes=[
-                        f"{zone_type}_touch_count",
+                        f"{zone_type}_episode_strength",
                         f"{zone_type}_volume_reaction",
                     ],
                     reason_context={
                         "touch_count": touch_count,
                         "touch_episode_count": len(touch_episodes),
                         "touch_episodes": touch_episodes,
+                        "episode_touch_score": round(touch_score, 4),
+                        "episode_recent_score": round(touch_metrics["episode_recent_score"], 4),
+                        "episode_independent_count": int(
+                            touch_metrics["episode_independent_count"]
+                        ),
+                        "episode_guard_recency": round(touch_metrics["guard_recency"], 4),
                         "volume_reaction_score": round(volume_reaction_score, 4),
                         "recency_score": round(recency_score, 4),
                     },
@@ -530,8 +541,12 @@ class StructureZoneDetector:
 
     def _passes_selection_guard(self, zone: StructureZone, current_price: float) -> bool:
         distance_pct = abs(zone.mid_price - current_price) / max(current_price, 1.0)
+        guard_recency = zone.recency_score
+        episode_guard_recency = zone.reason_context.get("episode_guard_recency")
+        if isinstance(episode_guard_recency, (int, float)):
+            guard_recency = float(episode_guard_recency)
         return (
-            zone.recency_score >= self.config.selection_min_recency_score
+            guard_recency >= self.config.selection_min_recency_score
             and distance_pct <= self.config.selection_max_distance_pct
         )
 
@@ -642,6 +657,56 @@ class StructureZoneDetector:
             )
 
         return episodes
+
+    def _score_touch_from_episodes(
+        self,
+        episodes: list[dict[str, object]],
+        *,
+        fallback_touch_count: int,
+    ) -> dict[str, float]:
+        if not episodes:
+            return {
+                "touch_score": float(fallback_touch_count),
+                "episode_recent_score": 0.0,
+                "episode_independent_count": 0.0,
+                "guard_recency": 1.0,
+            }
+
+        episode_scores = [
+            float(item.get("episode_score", 0.0))
+            for item in episodes
+            if isinstance(item.get("episode_score"), (int, float))
+        ]
+        recency_scores = [
+            float(item.get("recency_score", 1.0))
+            for item in episodes
+            if isinstance(item.get("recency_score"), (int, float))
+        ]
+        if not episode_scores:
+            episode_scores = [float(fallback_touch_count)]
+        if not recency_scores:
+            recency_scores = [1.0]
+
+        strongest_episode_score = max(episode_scores)
+        episode_recent_score = max(
+            score * (recency / 5.0)
+            for score, recency in zip(episode_scores, recency_scores, strict=True)
+        )
+        episode_independent_count = len(episodes)
+        guard_recency = max(recency_scores)
+
+        touch_score = min(
+            12.0,
+            strongest_episode_score * 0.6
+            + episode_recent_score * 0.8
+            + max(0, episode_independent_count - 1) * 1.2,
+        )
+        return {
+            "touch_score": float(touch_score),
+            "episode_recent_score": float(episode_recent_score),
+            "episode_independent_count": float(episode_independent_count),
+            "guard_recency": float(guard_recency),
+        }
 
     def _collect_touch_episodes(
         self,
