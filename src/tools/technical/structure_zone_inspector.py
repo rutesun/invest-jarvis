@@ -255,9 +255,32 @@ def format_structure_zone_inspection(payload: Mapping[str, object], max_candidat
 
     lines.extend(["## 선택 추적", ""])
     selection_trace = payload.get("selection_trace") or []
+    priority_trace: list[dict[str, object]] = []
     if selection_trace:
         for item in selection_trace:
+            item_view = _as_dict(item)
+            priority_items = item_view.get("selection_priority_trace")
+            if isinstance(priority_items, list):
+                priority_trace = [_as_dict(entry) for entry in priority_items]
+                continue
             lines.append(f"- {item}")
+    else:
+        lines.append("- 없음")
+    lines.append("")
+
+    lines.extend(["## 선택 우선순위 점수", ""])
+    if priority_trace:
+        for entry in priority_trace:
+            lines.append(
+                "- "
+                f"{entry.get('label')} "
+                f"[{entry.get('zone_type')}] "
+                f"{float(entry.get('lower_bound', 0.0)):.2f}~{float(entry.get('upper_bound', 0.0)):.2f} "
+                f"| priority={float(entry.get('priority_score', 0.0)):.2f} "
+                f"| total={float(entry.get('total_score', 0.0)):.2f} "
+                f"| distance={float(entry.get('distance_pct', 0.0)):.2%} "
+                f"| episode_recent={float(entry.get('episode_recent_score', 0.0)):.2f}"
+            )
     else:
         lines.append("- 없음")
     lines.append("")

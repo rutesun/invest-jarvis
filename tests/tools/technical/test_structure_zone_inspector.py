@@ -70,6 +70,23 @@ def _sample_zone_set() -> StructureZoneSet:
     return StructureZoneSet(
         demand_zones=[demand],
         supply_zones=[supply],
+        selection_trace=[
+            {"selected_label": "support_zone", "no_clear_structure": False},
+            {
+                "selection_priority_trace": [
+                    {
+                        "label": "support_zone",
+                        "zone_type": "demand",
+                        "lower_bound": 200.0,
+                        "upper_bound": 205.0,
+                        "total_score": 13.0,
+                        "priority_score": 13.4,
+                        "distance_pct": 0.0357,
+                        "episode_recent_score": 4.5,
+                    }
+                ]
+            },
+        ],
         invalidation_candidates=[invalidation],
         invalidation_zone=invalidation,
         all_candidates=[demand, supply, invalidation],
@@ -255,6 +272,7 @@ def test_format_structure_zone_inspection_shows_selected_and_candidate_sections(
     assert "## 선택된 구조 레벨" in output
     assert "## 실행 레벨" in output
     assert "## 후보 점수" in output
+    assert "## 선택 우선순위 점수" in output
     assert "## 터치 에피소드" in output
     assert "200.00~205.00" in output
     assert "지지 존" in output
