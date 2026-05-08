@@ -5,12 +5,13 @@ from src.tools.technical.models import (
     IndicatorSnapshot,
     InvalidationLevelView,
     LevelPayload,
-    StructureLevelsPayload,
+    StructureLevelsPayloadV2,
     StructureLevelView,
     StructureZone,
     StructureZoneConfig,
     StructureZoneSet,
 )
+from src.tools.technical.structure_presentation import build_structure_presentation
 from src.tools.technical.structure_zone_inspector import (
     build_indicator_snapshot_from_ohlcv,
     build_structure_zone_inspect_payload,
@@ -76,67 +77,74 @@ def _sample_zone_set() -> StructureZoneSet:
 
 
 def _sample_level_payload() -> LevelPayload:
-    return LevelPayload(
-        structure_levels=StructureLevelsPayload(
-            demand_zones=[
-                StructureLevelView(
-                    lower_bound=200.0,
-                    upper_bound=205.0,
-                    mid_price=202.5,
-                    strength="core",
-                    reasons=["반복 지지"],
-                    touch_count=4,
-                    last_touch_date="2026-05-01",
-                    total_score=13.0,
-                )
-            ],
-            supply_zones=[
-                StructureLevelView(
-                    lower_bound=218.0,
-                    upper_bound=223.0,
-                    mid_price=220.5,
-                    strength="core",
-                    reasons=["반복 저항"],
-                    touch_count=3,
-                    last_touch_date="2026-05-03",
-                    total_score=11.0,
-                )
-            ],
-            balance_zones=[
-                StructureLevelView(
-                    lower_bound=208.0,
-                    upper_bound=212.0,
-                    mid_price=210.0,
-                    strength="core",
-                    reasons=["수요/공급 중첩"],
-                    touch_count=5,
-                    last_touch_date="2026-05-02",
-                    total_score=11.5,
-                )
-            ],
-            invalidation=InvalidationLevelView(
-                label="200.00~205.00 + 150일선 하향 이탈",
+    structure_levels = StructureLevelsPayloadV2(
+        summary_label="support_zone",
+        headline="핵심 지지 존 우위",
+        why="최근 지지 반응 우세",
+        active_box=None,
+        support_zones=[
+            StructureLevelView(
                 lower_bound=200.0,
                 upper_bound=205.0,
-                reference="반복 지지",
-                reasons=["반복 지지", "150일선 fallback"],
-            ),
-        ),
-        execution_levels=[
-            ExecutionLevelView(
-                type="pivot_s1",
-                description="피봇 S1",
-                price=206.0,
-                distance_pct=-2.0,
-            ),
-            ExecutionLevelView(
-                type="sma_50",
-                description="50일선",
-                price=201.0,
-                distance_pct=-4.4,
-            ),
+                mid_price=202.5,
+                strength="core",
+                reasons=["반복 지지"],
+                touch_count=4,
+                last_touch_date="2026-05-01",
+                total_score=13.0,
+            )
         ],
-        structure_summary="수요 존 1개, 공급 존 1개, 밸런스 존 1개, 무효화 기준 200.00~205.00 + 150일선 하향 이탈",
+        resistance_zones=[
+            StructureLevelView(
+                lower_bound=218.0,
+                upper_bound=223.0,
+                mid_price=220.5,
+                strength="core",
+                reasons=["반복 저항"],
+                touch_count=3,
+                last_touch_date="2026-05-03",
+                total_score=11.0,
+            )
+        ],
+        former_levels=[
+            StructureLevelView(
+                lower_bound=208.0,
+                upper_bound=212.0,
+                mid_price=210.0,
+                strength="core",
+                reasons=["수요/공급 중첩"],
+                touch_count=5,
+                last_touch_date="2026-05-02",
+                total_score=11.5,
+            )
+        ],
+        invalidation=InvalidationLevelView(
+            label="200.00~205.00 + 150일선 하향 이탈",
+            lower_bound=200.0,
+            upper_bound=205.0,
+            reference="반복 지지",
+            reasons=["반복 지지", "150일선 fallback"],
+        ),
+        patterns_reference=[],
+    )
+    execution_levels = [
+        ExecutionLevelView(
+            type="pivot_s1",
+            description="피봇 S1",
+            price=206.0,
+            distance_pct=-2.0,
+        ),
+        ExecutionLevelView(
+            type="sma_50",
+            description="50일선",
+            price=201.0,
+            distance_pct=-4.4,
+        ),
+    ]
+    return LevelPayload(
+        structure_levels=structure_levels,
+        execution_levels=execution_levels,
+        structure_summary="핵심 지지 존 우위 | 지지 1개, 저항 1개, 전환 1개",
         execution_summary="피봇 S1 $206.00 (-2.0%), 50일선 $201.00 (-4.4%)",
     )
 
@@ -155,6 +163,10 @@ def test_build_structure_zone_inspect_payload_includes_selected_and_score_breakd
         snapshot=snapshot,
         zone_set=_sample_zone_set(),
         level_payload=_sample_level_payload(),
+        presented_structure=build_structure_presentation(
+            _sample_level_payload().structure_levels,
+            _sample_level_payload().execution_levels,
+        ),
         csv_path="tests/fixtures/technical/structure_zones/ALAB.csv",
         config=StructureZoneConfig(top_n_per_side=5),
         source="fixture",
@@ -164,7 +176,7 @@ def test_build_structure_zone_inspect_payload_includes_selected_and_score_breakd
     assert payload["source"] == "fixture"
     assert payload["structure_summary"]
     assert payload["execution_summary"]
-    assert payload["structure_levels"]["demand_zones"][0]["lower_bound"] == 200.0
+    assert payload["structure_levels"]["support_zones"][0]["lower_bound"] == 200.0
     assert payload["execution_levels"][0]["type"] == "pivot_s1"
     assert payload["artifact"]["params"]["top_n_per_side"] == 5
     assert len(payload["artifact"]["candidates"]) == 3
@@ -207,6 +219,10 @@ def test_format_structure_zone_inspection_shows_selected_and_candidate_sections(
         snapshot=snapshot,
         zone_set=_sample_zone_set(),
         level_payload=_sample_level_payload(),
+        presented_structure=build_structure_presentation(
+            _sample_level_payload().structure_levels,
+            _sample_level_payload().execution_levels,
+        ),
         csv_path="tests/fixtures/technical/structure_zones/ALAB.csv",
         config=StructureZoneConfig(),
         source="fixture",
@@ -220,7 +236,7 @@ def test_format_structure_zone_inspection_shows_selected_and_candidate_sections(
     assert "## 실행 레벨" in output
     assert "## 후보 점수" in output
     assert "200.00~205.00" in output
-    assert "밸런스 존" in output
+    assert "지지 존" in output
     assert "피봇 S1" in output
     assert "touch=4.00" in output
     assert "volume=3.00" in output
@@ -232,6 +248,10 @@ def test_compare_structure_zone_inspect_payloads_builds_score_diff():
         snapshot=IndicatorSnapshot(price=210.0, change_pct=1.5, atr=4.0),
         zone_set=_sample_zone_set(),
         level_payload=_sample_level_payload(),
+        presented_structure=build_structure_presentation(
+            _sample_level_payload().structure_levels,
+            _sample_level_payload().execution_levels,
+        ),
         config=StructureZoneConfig(),
         source="fixture",
     )
@@ -245,13 +265,17 @@ def test_compare_structure_zone_inspect_payloads_builds_score_diff():
     changed_zone_set.all_candidates[0].total_score = 9.0
 
     changed_level_payload = _sample_level_payload()
-    changed_level_payload.structure_levels.demand_zones[0].total_score = 9.0
+    changed_level_payload.structure_levels.support_zones[0].total_score = 9.0
 
     current_payload = build_structure_zone_inspect_payload(
         symbol="ALAB",
         snapshot=IndicatorSnapshot(price=210.0, change_pct=1.5, atr=4.0),
         zone_set=changed_zone_set,
         level_payload=changed_level_payload,
+        presented_structure=build_structure_presentation(
+            changed_level_payload.structure_levels,
+            changed_level_payload.execution_levels,
+        ),
         config=StructureZoneConfig(),
         source="fixture",
     )
@@ -259,7 +283,7 @@ def test_compare_structure_zone_inspect_payloads_builds_score_diff():
     diff = compare_structure_zone_inspect_payloads(baseline_payload, current_payload)
 
     assert diff["symbol"] == "ALAB"
-    assert diff["selection_changes"]["demand_zones"][0]["changed"] is False
+    assert diff["selection_changes"]["support_zones"][0]["changed"] is False
     assert diff["score_changes"][0]["zone_type"] == "demand"
     assert diff["score_changes"][0]["total_delta"] == -4.0
     assert diff["score_changes"][0]["touch_delta"] == -2.0
@@ -272,6 +296,10 @@ def test_format_structure_zone_inspect_comparison_shows_selection_and_score_delt
         snapshot=IndicatorSnapshot(price=210.0, change_pct=1.5, atr=4.0),
         zone_set=_sample_zone_set(),
         level_payload=_sample_level_payload(),
+        presented_structure=build_structure_presentation(
+            _sample_level_payload().structure_levels,
+            _sample_level_payload().execution_levels,
+        ),
         config=StructureZoneConfig(),
         source="fixture",
     )
@@ -284,15 +312,19 @@ def test_format_structure_zone_inspect_comparison_shows_selection_and_score_delt
     changed_zone_set.all_candidates[1].upper_bound = 229.0
     changed_zone_set.all_candidates[1].total_score = 8.0
     changed_level_payload = _sample_level_payload()
-    changed_level_payload.structure_levels.supply_zones[0].lower_bound = 224.0
-    changed_level_payload.structure_levels.supply_zones[0].upper_bound = 229.0
-    changed_level_payload.structure_levels.supply_zones[0].total_score = 8.0
+    changed_level_payload.structure_levels.resistance_zones[0].lower_bound = 224.0
+    changed_level_payload.structure_levels.resistance_zones[0].upper_bound = 229.0
+    changed_level_payload.structure_levels.resistance_zones[0].total_score = 8.0
 
     current_payload = build_structure_zone_inspect_payload(
         symbol="ALAB",
         snapshot=IndicatorSnapshot(price=210.0, change_pct=1.5, atr=4.0),
         zone_set=changed_zone_set,
         level_payload=changed_level_payload,
+        presented_structure=build_structure_presentation(
+            changed_level_payload.structure_levels,
+            changed_level_payload.execution_levels,
+        ),
         config=StructureZoneConfig(),
         source="fixture",
     )

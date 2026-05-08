@@ -17,6 +17,7 @@ from src.tools.technical.components.chart_patterns import detect_chart_patterns
 from src.tools.technical.level_composer import compose_level_payload
 from src.tools.technical.price_levels import get_fibonacci_base_points, identify_key_levels
 from src.tools.technical.scorer import TechnicalScorer
+from src.tools.technical.structure_presentation import build_structure_presentation
 from src.tools.technical.structure_zone_inspector import (
     build_indicator_snapshot_from_ohlcv,
     build_structure_zone_inspect_payload,
@@ -114,12 +115,17 @@ async def _build_live_payload(query: str) -> dict:
         price_levels,
         atr=technical_data.snapshot.atr,
     )
+    presented_structure = build_structure_presentation(
+        level_payload.structure_levels,
+        level_payload.execution_levels,
+    )
 
     return build_structure_zone_inspect_payload(
         symbol=ticker,
         snapshot=technical_data.snapshot,
         zone_set=zone_set,
         level_payload=level_payload,
+        presented_structure=presented_structure,
         config=config,
         source="live",
     )
@@ -145,12 +151,17 @@ def _build_fixture_payload(symbol: str, csv_path: Path) -> dict:
         price_levels,
         atr=snapshot.atr,
     )
+    presented_structure = build_structure_presentation(
+        level_payload.structure_levels,
+        level_payload.execution_levels,
+    )
 
     return build_structure_zone_inspect_payload(
         symbol=symbol,
         snapshot=snapshot,
         zone_set=zone_set,
         level_payload=level_payload,
+        presented_structure=presented_structure,
         config=config,
         csv_path=str(csv_path),
         source="fixture",

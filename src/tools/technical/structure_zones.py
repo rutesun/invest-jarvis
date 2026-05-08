@@ -64,31 +64,14 @@ class StructureZoneDetector:
 
     def detect(self, df: pd.DataFrame, snapshot: IndicatorSnapshot) -> StructureZoneSet:
         candidates = self._build_candidates(df, snapshot)
-        demand_candidates = [zone for zone in candidates if zone.zone_type == "demand"]
-        broken_demand_as_supply = [
-            self._promote_broken_demand_to_supply(zone)
-            for zone in demand_candidates
-            if zone.lower_bound > snapshot.price
-        ]
-        sorted_demand_zones = self._sort_zones(demand_candidates, snapshot.price)
-        sorted_supply_zones = self._sort_zones(
-            [
-                *[zone for zone in candidates if zone.zone_type == "supply"],
-                *broken_demand_as_supply,
-            ],
-            snapshot.price,
+        sorted_demand_zones, sorted_supply_zones = self._build_sorted_side_candidates(
+            candidates=candidates,
+            current_price=snapshot.price,
         )
-        demand_zones = self._select_with_guard(
-            sorted_demand_zones,
-            snapshot.price,
-            zone_type="demand",
-            max_count=self.config.top_n_per_side,
-        )
-        supply_zones = self._select_with_guard(
-            sorted_supply_zones,
-            snapshot.price,
-            zone_type="supply",
-            max_count=self.config.top_n_per_side,
+        demand_zones, supply_zones = self._select_side_zones(
+            sorted_demand_zones=sorted_demand_zones,
+            sorted_supply_zones=sorted_supply_zones,
+            current_price=snapshot.price,
         )
         demand_zones, supply_zones, balance_zones = self._merge_overlapping_opposite_zones(
             demand_zones=demand_zones,
@@ -105,6 +88,23 @@ class StructureZoneDetector:
             demand_zones=invalidation_seed,
             snapshot=snapshot,
         )
+        no_clear_structure, no_clear_reasons = self._derive_no_clear_structure(
+            demand_zones=demand_zones,
+            supply_zones=supply_zones,
+            balance_zones=balance_zones,
+        )
+        selected_label, selected_zone = self._pick_primary_selected_zone(
+            demand_zones=demand_zones,
+            supply_zones=supply_zones,
+            balance_zones=balance_zones,
+            current_price=snapshot.price,
+        )
+        selection_trace = self._build_selection_trace(
+            selected_label=selected_label,
+            selected_zone=selected_zone,
+            dropped_duplicates=[],
+            no_clear_structure=no_clear_structure,
+        )
 
         return StructureZoneSet(
             demand_zones=demand_zones,
@@ -113,7 +113,53 @@ class StructureZoneDetector:
             invalidation_candidates=invalidation_candidates,
             invalidation_zone=invalidation_zone,
             all_candidates=candidates,
+            selection_trace=selection_trace,
+            no_clear_structure=no_clear_structure,
+            no_clear_structure_reason_codes=no_clear_reasons,
         )
+
+    def _build_sorted_side_candidates(
+        self,
+        *,
+        candidates: list[StructureZone],
+        current_price: float,
+    ) -> tuple[list[StructureZone], list[StructureZone]]:
+        demand_candidates = [zone for zone in candidates if zone.zone_type == "demand"]
+        broken_demand_as_supply = [
+            self._promote_broken_demand_to_supply(zone)
+            for zone in demand_candidates
+            if zone.lower_bound > current_price
+        ]
+        sorted_demand_zones = self._sort_zones(demand_candidates, current_price)
+        sorted_supply_zones = self._sort_zones(
+            [
+                *[zone for zone in candidates if zone.zone_type == "supply"],
+                *broken_demand_as_supply,
+            ],
+            current_price,
+        )
+        return sorted_demand_zones, sorted_supply_zones
+
+    def _select_side_zones(
+        self,
+        *,
+        sorted_demand_zones: list[StructureZone],
+        sorted_supply_zones: list[StructureZone],
+        current_price: float,
+    ) -> tuple[list[StructureZone], list[StructureZone]]:
+        demand_zones = self._select_with_guard(
+            sorted_demand_zones,
+            current_price,
+            zone_type="demand",
+            max_count=self.config.top_n_per_side,
+        )
+        supply_zones = self._select_with_guard(
+            sorted_supply_zones,
+            current_price,
+            zone_type="supply",
+            max_count=self.config.top_n_per_side,
+        )
+        return demand_zones, supply_zones
 
     def _build_candidates(
         self, df: pd.DataFrame, snapshot: IndicatorSnapshot
@@ -126,6 +172,88 @@ class StructureZoneDetector:
             *self._build_side_zones(recent, low_candidates, "demand", snapshot),
             *self._build_side_zones(recent, high_candidates, "supply", snapshot),
         ]
+
+    def _derive_no_clear_structure(
+        self,
+        *,
+        demand_zones: list[StructureZone],
+        supply_zones: list[StructureZone],
+        balance_zones: list[StructureZone],
+    ) -> tuple[bool, list[str]]:
+        selected = [*demand_zones, *supply_zones, *balance_zones]
+        reason_codes: list[str] = []
+        if not selected:
+            reason_codes.append("no_zone_selected")
+            return True, reason_codes
+
+        top_zone = max(selected, key=lambda zone: zone.total_score)
+        if top_zone.total_score < self.config.core_zone_threshold:
+            reason_codes.append("top_score_weak")
+
+        if all(zone.recency_score < self.config.selection_min_recency_score for zone in selected):
+            reason_codes.append("stale_signal")
+
+        return bool(reason_codes), reason_codes
+
+    def _pick_primary_selected_zone(
+        self,
+        *,
+        demand_zones: list[StructureZone],
+        supply_zones: list[StructureZone],
+        balance_zones: list[StructureZone],
+        current_price: float,
+    ) -> tuple[str, StructureZone | None]:
+        if balance_zones:
+            return "active_box", balance_zones[0]
+        if demand_zones:
+            return "support_zone", demand_zones[0]
+        if supply_zones:
+            top_supply = self._sort_zones(supply_zones, current_price)[0]
+            return "resistance_zone", top_supply
+        return "no_clear_structure", None
+
+    def _build_selection_trace(
+        self,
+        *,
+        selected_label: str,
+        selected_zone: StructureZone | None,
+        dropped_duplicates: list[StructureZone],
+        no_clear_structure: bool,
+    ) -> list[dict[str, object]]:
+        trace: list[dict[str, object]] = []
+        trace.append(
+            {
+                "selected_label": selected_label,
+                "no_clear_structure": no_clear_structure,
+            }
+        )
+        if selected_zone is not None:
+            trace.append(
+                {
+                    "selected_label": selected_label,
+                    "zone_type": selected_zone.zone_type,
+                    "lower_bound": selected_zone.lower_bound,
+                    "upper_bound": selected_zone.upper_bound,
+                    "total_score": selected_zone.total_score,
+                    "reason_codes": selected_zone.reason_codes,
+                    "reason_context": selected_zone.reason_context,
+                }
+            )
+        if dropped_duplicates:
+            trace.append(
+                {
+                    "dropped_duplicates": [
+                        {
+                            "zone_type": zone.zone_type,
+                            "lower_bound": zone.lower_bound,
+                            "upper_bound": zone.upper_bound,
+                            "total_score": zone.total_score,
+                        }
+                        for zone in dropped_duplicates
+                    ]
+                }
+            )
+        return trace
 
     def choose_invalidation_zone(
         self,
@@ -167,6 +295,11 @@ class StructureZoneDetector:
                 total_score=primary_zone.total_score,
                 strength=primary_zone.strength,
                 reasons=[*primary_zone.reasons, *related_ma_reasons],
+                reason_codes=[*primary_zone.reason_codes, "invalidation_from_primary_zone"],
+                reason_context={
+                    "primary_zone_type": primary_zone.zone_type,
+                    "related_ma_reason_count": len(related_ma_reasons),
+                },
             )
             candidates.insert(0, selected)
         elif ma_candidates:
@@ -264,6 +397,15 @@ class StructureZoneDetector:
                         f"{touch_count}회 터치",
                         f"거래량 반응 {volume_reaction_score:.2f}",
                     ],
+                    reason_codes=[
+                        f"{zone_type}_touch_count",
+                        f"{zone_type}_volume_reaction",
+                    ],
+                    reason_context={
+                        "touch_count": touch_count,
+                        "volume_reaction_score": round(volume_reaction_score, 4),
+                        "recency_score": round(recency_score, 4),
+                    },
                 )
             )
 
@@ -428,6 +570,8 @@ class StructureZoneDetector:
                     total_score=1.0,
                     strength="secondary",
                     reasons=[f"{label} fallback"],
+                    reason_codes=["invalidation_ma_fallback"],
+                    reason_context={"moving_average_label": label},
                 )
             )
         return candidates
@@ -452,6 +596,8 @@ class StructureZoneDetector:
             total_score=0.5,
             strength="secondary",
             reasons=["swing low fallback"],
+            reason_codes=["invalidation_swing_low_fallback"],
+            reason_context={"swing_low": snapshot.swing_low},
         )
 
     def _promote_broken_demand_to_supply(self, zone: StructureZone) -> StructureZone:
@@ -470,6 +616,8 @@ class StructureZoneDetector:
             total_score=zone.total_score,
             strength=zone.strength,
             reasons=reasons,
+            reason_codes=["former_support_as_resistance", *zone.reason_codes],
+            reason_context={"origin_zone_type": zone.zone_type},
         )
 
     def _is_promoted_supply_zone(self, zone: StructureZone) -> bool:
@@ -601,6 +749,15 @@ class StructureZoneDetector:
                 else "secondary"
             ),
             reasons=reasons,
+            reason_codes=[
+                "balance_overlap_merge",
+                *demand_zone.reason_codes[:1],
+                *supply_zone.reason_codes[:1],
+            ],
+            reason_context={
+                "overlap_ratio": round(overlap_ratio, 4),
+                "last_touch_gap_days": gap_days,
+            },
         )
 
     def _merge_balance_zones(
@@ -678,6 +835,8 @@ class StructureZoneDetector:
             total_score=max(zone.total_score for zone in group) + (len(group) - 1) * 0.25,
             strength="core" if any(zone.strength == "core" for zone in group) else "secondary",
             reasons=reasons,
+            reason_codes=["balance_group_merge"],
+            reason_context={"merged_count": len(group)},
         )
 
     def _zone_overlap_ratio(self, first: StructureZone, second: StructureZone) -> float:

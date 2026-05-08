@@ -424,9 +424,16 @@ def _format_structure_levels(structure_levels, current_price: float) -> str:
         return ""
 
     structure_dict = _to_payload_dict(structure_levels)
-    demand_zones = structure_dict.get("demand_zones") or []
-    supply_zones = structure_dict.get("supply_zones") or []
-    balance_zones = structure_dict.get("balance_zones") or []
+    demand_zones = structure_dict.get("demand_zones")
+    supply_zones = structure_dict.get("supply_zones")
+    balance_zones = structure_dict.get("balance_zones")
+    if demand_zones is None and supply_zones is None:
+        demand_zones = structure_dict.get("support_zones") or []
+        supply_zones = structure_dict.get("resistance_zones") or []
+        balance_zones = structure_dict.get("former_levels") or []
+    demand_zones = demand_zones or []
+    supply_zones = supply_zones or []
+    balance_zones = balance_zones or []
     active_supply, absorbed_supply = _split_supply_zones_by_price(supply_zones, current_price)
     invalidation = _to_payload_dict(structure_dict.get("invalidation"))
 
@@ -460,6 +467,19 @@ def _format_execution_levels(execution_levels) -> str:
         )
     lines.append("")
     return "\n".join(lines)
+
+
+def _format_presented_structure(presented_structure) -> str:
+    if not presented_structure:
+        return ""
+    payload = _to_payload_dict(presented_structure)
+    blocks = payload.get("cli_blocks") or []
+    if not blocks:
+        return ""
+    text = "\n".join(blocks)
+    if not text.endswith("\n"):
+        text += "\n"
+    return text
 
 
 def _format_raw_analysis_sections(result: dict) -> str:
@@ -710,6 +730,7 @@ def format_deep_dive_output(result: dict) -> str:
     decision_summary = result.get("decision_summary")
     factor_assessments = result.get("factor_assessments", [])
     scenarios = result.get("scenarios", [])
+    presented_structure = result.get("presented_structure")
     structure_levels = result.get("structure_levels")
     execution_levels = result.get("execution_levels")
 
@@ -722,9 +743,11 @@ def format_deep_dive_output(result: dict) -> str:
         output += _format_factor_section(factor_assessments) + "\n"
     if scenarios:
         output += _format_scenario_section(scenarios) + "\n"
-    if structure_levels:
+    if presented_structure:
+        output += _format_presented_structure(presented_structure)
+    elif structure_levels:
         output += _format_structure_levels(structure_levels, snapshot.price)
-    if execution_levels:
+    if execution_levels and not presented_structure:
         output += _format_execution_levels(execution_levels)
 
     output += "\n"

@@ -21,7 +21,7 @@ from src.tools.technical.models import (
     InvalidationLevelView,
     LevelPayload,
     StrategyResult,
-    StructureLevelsPayload,
+    StructureLevelsPayloadV2,
     StructureLevelView,
     TechnicalResult,
 )
@@ -134,8 +134,12 @@ async def test_deep_dive_pipeline_success(mock_technical_tool, mock_news_tool, m
         mock_zone_detector = mock_zone_detector_cls.return_value
         mock_zone_detector.detect.return_value = object()
         mock_compose_levels.return_value = LevelPayload(
-            structure_levels=StructureLevelsPayload(
-                demand_zones=[
+            structure_levels=StructureLevelsPayloadV2(
+                summary_label="support_zone",
+                headline="핵심 지지 존 우위",
+                why="최근 지지 반응 우세",
+                active_box=None,
+                support_zones=[
                     StructureLevelView(
                         lower_bound=170.0,
                         upper_bound=172.0,
@@ -147,7 +151,7 @@ async def test_deep_dive_pipeline_success(mock_technical_tool, mock_news_tool, m
                         total_score=10.0,
                     )
                 ],
-                supply_zones=[
+                resistance_zones=[
                     StructureLevelView(
                         lower_bound=180.0,
                         upper_bound=182.0,
@@ -159,6 +163,7 @@ async def test_deep_dive_pipeline_success(mock_technical_tool, mock_news_tool, m
                         total_score=8.0,
                     )
                 ],
+                former_levels=[],
                 invalidation=InvalidationLevelView(
                     label="170.00~172.00 하향 이탈",
                     lower_bound=170.0,
@@ -166,6 +171,7 @@ async def test_deep_dive_pipeline_success(mock_technical_tool, mock_news_tool, m
                     reference="반복 지지",
                     reasons=["반복 지지"],
                 ),
+                patterns_reference=[],
             ),
             execution_levels=[
                 ExecutionLevelView(
@@ -175,7 +181,7 @@ async def test_deep_dive_pipeline_success(mock_technical_tool, mock_news_tool, m
                     distance_pct=-3.6,
                 )
             ],
-            structure_summary="수요 존 1개, 공급 존 1개, 무효화 기준 170.00~172.00 하향 이탈",
+            structure_summary="핵심 지지 존 우위 | 지지 1개, 저항 1개",
             execution_summary="피봇 S1 $172.00 (-3.6%)",
         )
 
@@ -196,16 +202,13 @@ async def test_deep_dive_pipeline_success(mock_technical_tool, mock_news_tool, m
         assert result["actionable_signal"] is not None
         assert result["actionable_signal"].action == "매수"
         assert result["actionable_signal"].timing == "지금"
-        assert result["structure_levels"].demand_zones[0].lower_bound == 170.0
+        assert result["structure_levels"].support_zones[0].lower_bound == 170.0
         assert result["execution_levels"][0].description == "피봇 S1"
+        assert result["presented_structure"].headline == "핵심 지지 존 우위"
         assert result["decision_summary"].leader in {"technical", "혼합", "판단 보류"}
         assert result["factor_assessments"]
         assert result["scenarios"]
-        assert (
-            mock_signal.await_args.kwargs["structure_levels"].invalidation.label
-            == "170.00~172.00 하향 이탈"
-        )
-        assert mock_signal.await_args.kwargs["execution_levels"][0].type == "pivot_s1"
+        assert "170.00~172.00" in mock_signal.await_args.kwargs["structure_context"]
 
 
 @pytest.mark.asyncio

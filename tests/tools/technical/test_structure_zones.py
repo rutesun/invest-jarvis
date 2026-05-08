@@ -641,3 +641,60 @@ def test_choose_invalidation_zone_falls_back_to_recent_swing_low():
     assert selected is not None
     assert selected.lower_bound == 185.0
     assert "swing low" in " ".join(selected.reasons).lower()
+
+
+def test_detector_marks_no_clear_structure_when_selected_zone_is_weak():
+    detector = StructureZoneDetector()
+    weak_zone = StructureZone(
+        zone_type="demand",
+        lower_bound=98.0,
+        upper_bound=99.0,
+        mid_price=98.5,
+        touch_count=1,
+        last_touch_date="2025-01-01",
+        touch_score=1.0,
+        recency_score=1.0,
+        volume_reaction_score=0.2,
+        confluence_score=0.0,
+        total_score=1.0,
+        strength="secondary",
+    )
+
+    no_clear, reason_codes = detector._derive_no_clear_structure(
+        demand_zones=[weak_zone],
+        supply_zones=[],
+        balance_zones=[],
+    )
+
+    assert no_clear is True
+    assert "top_score_weak" in reason_codes
+
+
+def test_detector_selection_trace_is_stable_and_structured():
+    detector = StructureZoneDetector()
+    zone = StructureZone(
+        zone_type="demand",
+        lower_bound=18.0,
+        upper_bound=19.0,
+        mid_price=18.5,
+        touch_count=3,
+        last_touch_date="2026-05-01",
+        touch_score=4.0,
+        recency_score=4.0,
+        volume_reaction_score=3.0,
+        confluence_score=2.0,
+        total_score=13.0,
+        strength="core",
+        reason_codes=["support_episode_recent"],
+        reason_context={"touch_count": 3},
+    )
+
+    trace = detector._build_selection_trace(
+        selected_label="support_zone",
+        selected_zone=zone,
+        dropped_duplicates=[],
+        no_clear_structure=False,
+    )
+
+    assert trace[0]["selected_label"] == "support_zone"
+    assert trace[1]["reason_codes"] == ["support_episode_recent"]

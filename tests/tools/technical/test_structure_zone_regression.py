@@ -63,8 +63,8 @@ def _build_payload(symbol: str) -> tuple[Path, dict]:
 def test_structure_zone_regression_from_csv_fixture():
     _, payload = _build_payload("ALAB")
 
-    assert len(payload.structure_levels.demand_zones) <= 2
-    assert len(payload.structure_levels.supply_zones) <= 2
+    assert len(payload.structure_levels.support_zones) <= 2
+    assert len(payload.structure_levels.resistance_zones) <= 2
     assert len(payload.execution_levels) <= 3
     assert (
         payload.structure_levels.invalidation is None or payload.structure_levels.invalidation.label
@@ -123,6 +123,6 @@ def test_structure_zone_regression_writes_artifact(tmp_path: Path):
     assert saved["candidates"]
     assert saved["score_breakdown"]
     assert (
-        saved["selected_zones"][0]["structure_levels"]["demand_zones"]
-        == payload.structure_levels.model_dump()["demand_zones"]
+        saved["selected_zones"][0]["structure_levels"]["support_zones"]
+        == payload.structure_levels.model_dump()["support_zones"]
     )

@@ -72,32 +72,57 @@ def format_structure_context_for_llm(
     structure_levels,
     execution_levels,
 ) -> str:
-    """구조 zone과 실행 레벨을 LLM용 텍스트로 변환"""
+    """구조/실행 레벨을 LLM용 컨텍스트 문자열로 변환"""
+    if isinstance(structure_levels, str):
+        return structure_levels
+
+    structure_dict = _as_dict(structure_levels)
+    if structure_dict and "llm_context" in structure_dict:
+        return str(structure_dict["llm_context"])
+
     lines: list[str] = ["구조 레벨:"]
 
-    if structure_levels:
-        structure_dict = _as_dict(structure_levels)
-        demand_zones = structure_dict.get("demand_zones") or []
-        supply_zones = structure_dict.get("supply_zones") or []
-        balance_zones = structure_dict.get("balance_zones") or []
+    if structure_dict:
+        support_zones = structure_dict.get("support_zones")
+        resistance_zones = structure_dict.get("resistance_zones")
+        former_levels = structure_dict.get("former_levels")
+        active_box = structure_dict.get("active_box")
         invalidation = _as_dict(structure_dict.get("invalidation"))
 
-        demand_text = (
-            ", ".join(_format_zone_range(zone) for zone in demand_zones) if demand_zones else "없음"
-        )
-        supply_text = (
-            ", ".join(_format_zone_range(zone) for zone in supply_zones) if supply_zones else "없음"
-        )
-        balance_text = (
-            ", ".join(_format_zone_range(zone) for zone in balance_zones)
-            if balance_zones
+        if support_zones is None and resistance_zones is None:
+            # legacy fallback
+            support_zones = structure_dict.get("demand_zones") or []
+            resistance_zones = structure_dict.get("supply_zones") or []
+            former_levels = structure_dict.get("balance_zones") or []
+
+        support_text = (
+            ", ".join(_format_zone_range(zone) for zone in support_zones)
+            if support_zones
             else "없음"
         )
+        resistance_text = (
+            ", ".join(_format_zone_range(zone) for zone in resistance_zones)
+            if resistance_zones
+            else "없음"
+        )
+        former_text = (
+            ", ".join(_format_zone_range(zone) for zone in former_levels)
+            if former_levels
+            else "없음"
+        )
+        active_box_text = _format_zone_range(active_box) if active_box else "없음"
 
-        lines.append(f"- 수요 존: {demand_text}")
-        lines.append(f"- 공급 존: {supply_text}")
-        lines.append(f"- 밸런스 존: {balance_text}")
-        lines.append(f"- 무효화: {invalidation['label'] if invalidation else '없음'}")
+        if structure_dict.get("summary_label"):
+            lines.append(f"- summary_label: {structure_dict['summary_label']}")
+        if structure_dict.get("headline"):
+            lines.append(f"- headline: {structure_dict['headline']}")
+        if structure_dict.get("why"):
+            lines.append(f"- why: {structure_dict['why']}")
+        lines.append(f"- active_box: {active_box_text}")
+        lines.append(f"- support_zones: {support_text}")
+        lines.append(f"- resistance_zones: {resistance_text}")
+        lines.append(f"- former_levels: {former_text}")
+        lines.append(f"- invalidation: {invalidation['label'] if invalidation else '없음'}")
     else:
         lines.append("- 구조 존 데이터 없음")
 
@@ -389,6 +414,7 @@ async def generate_actionable_signal(
     technical_summary: str,
     chart_patterns: dict[str, ChartPatternResult],
     price_levels: PriceLevels,
+    structure_context: str | None = None,
     structure_levels=None,
     execution_levels=None,
     structure_summary: str | None = None,
@@ -404,7 +430,10 @@ async def generate_actionable_signal(
         llm = get_llm_instance()
 
     patterns_text = format_patterns_for_llm(chart_patterns)
-    structure_context = format_structure_context_for_llm(structure_levels, execution_levels)
+    structure_context_text = structure_context or format_structure_context_for_llm(
+        structure_levels,
+        execution_levels,
+    )
 
     prompt = ChatPromptTemplate.from_messages(
         [
@@ -464,7 +493,7 @@ async def generate_actionable_signal(
             "ticker": ticker,
             "technical_summary": technical_summary,
             "patterns_text": patterns_text,
-            "structure_context": structure_context,
+            "structure_context": structure_context_text,
             "structure_summary": structure_summary or "구조 레벨 요약 없음",
             "execution_summary": execution_summary or "실행 레벨 요약 없음",
             "news_analysis": news_analysis or "없음",

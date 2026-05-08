@@ -151,6 +151,8 @@ class StructureZone(BaseModel):
     total_score: float
     strength: str
     reasons: list[str] = Field(default_factory=list)
+    reason_codes: list[str] = Field(default_factory=list)
+    reason_context: dict[str, object] = Field(default_factory=dict)
 
 
 class StructureZoneSet(BaseModel):
@@ -162,6 +164,9 @@ class StructureZoneSet(BaseModel):
     invalidation_candidates: list[StructureZone] = Field(default_factory=list)
     invalidation_zone: StructureZone | None = None
     all_candidates: list[StructureZone] = Field(default_factory=list)
+    selection_trace: list[dict[str, object]] = Field(default_factory=list)
+    no_clear_structure: bool = False
+    no_clear_structure_reason_codes: list[str] = Field(default_factory=list)
 
 
 class StructureZoneConfig(BaseModel):
@@ -221,13 +226,30 @@ class InvalidationLevelView(BaseModel):
     reasons: list[str] = Field(default_factory=list)
 
 
-class StructureLevelsPayload(BaseModel):
-    """구조 레벨 payload"""
+class StructureLevelsPayloadV2(BaseModel):
+    """Composer translated payload (V2)."""
 
-    demand_zones: list[StructureLevelView] = Field(default_factory=list)
-    supply_zones: list[StructureLevelView] = Field(default_factory=list)
-    balance_zones: list[StructureLevelView] = Field(default_factory=list)
+    summary_label: str
+    headline: str
+    why: str
+    active_box: StructureLevelView | None = None
+    support_zones: list[StructureLevelView] = Field(default_factory=list)
+    resistance_zones: list[StructureLevelView] = Field(default_factory=list)
+    former_levels: list[StructureLevelView] = Field(default_factory=list)
     invalidation: InvalidationLevelView | None = None
+    patterns_reference: list[str] = Field(default_factory=list)
+
+
+class StructurePresentationPayload(BaseModel):
+    """Presenter output for CLI and LLM."""
+
+    top_judgment: str
+    headline: str
+    why: str
+    cli_blocks: list[str] = Field(default_factory=list)
+    llm_context: str
+    structure_summary: str = ""
+    execution_summary: str = ""
 
 
 class ExecutionLevelView(BaseModel):
@@ -242,7 +264,7 @@ class ExecutionLevelView(BaseModel):
 class LevelPayload(BaseModel):
     """구조/실행 레벨 합성 payload"""
 
-    structure_levels: StructureLevelsPayload
+    structure_levels: StructureLevelsPayloadV2
     execution_levels: list[ExecutionLevelView] = Field(default_factory=list)
     structure_summary: str
     execution_summary: str

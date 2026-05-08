@@ -26,6 +26,7 @@ from src.tools.technical.components.chart_patterns import detect_chart_patterns
 from src.tools.technical.level_composer import compose_level_payload
 from src.tools.technical.models import TechnicalResult
 from src.tools.technical.price_levels import get_fibonacci_base_points, identify_key_levels
+from src.tools.technical.structure_presentation import build_structure_presentation
 from src.tools.technical.structure_zones import StructureZoneDetector
 from src.tools.technical.tool import TechnicalAnalysisTool
 
@@ -65,6 +66,7 @@ class DeepDivePipeline:
         flow_tool: FlowTool | None = None,
         structure_zone_detector: StructureZoneDetector | None = None,
         level_payload_composer: Callable | None = None,
+        structure_presentation_adapter: Callable | None = None,
     ):
         self.technical_tool = technical_tool
         self.news_tool = news_tool
@@ -74,6 +76,9 @@ class DeepDivePipeline:
         self.flow_tool = flow_tool
         self.structure_zone_detector = structure_zone_detector or StructureZoneDetector()
         self.level_payload_composer = level_payload_composer or compose_level_payload
+        self.structure_presentation_adapter = (
+            structure_presentation_adapter or build_structure_presentation
+        )
 
     async def run(self, ticker: str) -> dict:
         """Run deep dive analysis for a ticker.
@@ -182,16 +187,21 @@ class DeepDivePipeline:
         )
         structure_levels = level_payload.structure_levels
         execution_levels = level_payload.execution_levels
+        presented_structure = self.structure_presentation_adapter(
+            structure_levels,
+            execution_levels,
+        )
 
         actionable_signal = await analyzer.generate_actionable_signal(
             ticker=ticker,
             technical_summary=f"{technical_summary.summary}\n\n{technical_summary.rationale}",
             chart_patterns=chart_patterns,
             price_levels=price_levels,
-            structure_levels=structure_levels,
-            execution_levels=execution_levels,
-            structure_summary=level_payload.structure_summary,
-            execution_summary=level_payload.execution_summary,
+            structure_context=presented_structure.llm_context,
+            structure_summary=presented_structure.structure_summary
+            or level_payload.structure_summary,
+            execution_summary=presented_structure.execution_summary
+            or level_payload.execution_summary,
             llm=self.llm,
         )
 
@@ -242,6 +252,7 @@ class DeepDivePipeline:
             "actionable_signal": actionable_signal,
             "structure_levels": structure_levels,
             "execution_levels": execution_levels,
+            "presented_structure": presented_structure,
             "chart": chart_result,
         }
 

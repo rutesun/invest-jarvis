@@ -7,6 +7,7 @@ import pandas as pd
 from src.tools.technical.models import (
     IndicatorSnapshot,
     LevelPayload,
+    StructurePresentationPayload,
     StructureZone,
     StructureZoneConfig,
     StructureZoneSet,
@@ -68,6 +69,7 @@ def build_structure_zone_test_artifact(
     symbol: str,
     zone_set: StructureZoneSet,
     level_payload: LevelPayload,
+    presented_structure: StructurePresentationPayload | None = None,
     config: StructureZoneConfig | None = None,
     csv_path: str = "",
 ) -> ZoneTestArtifact:
@@ -98,6 +100,9 @@ def build_structure_zone_test_artifact(
             {
                 "structure_levels": level_payload.structure_levels.model_dump(),
                 "execution_levels": [item.model_dump() for item in level_payload.execution_levels],
+                "presented_structure": (
+                    presented_structure.model_dump() if presented_structure else None
+                ),
             }
         ],
         score_breakdown=score_breakdown,
@@ -110,6 +115,7 @@ def build_structure_zone_inspect_payload(
     snapshot: IndicatorSnapshot,
     zone_set: StructureZoneSet,
     level_payload: LevelPayload,
+    presented_structure: StructurePresentationPayload | None = None,
     config: StructureZoneConfig | None = None,
     csv_path: str = "",
     source: str = "live",
@@ -118,6 +124,7 @@ def build_structure_zone_inspect_payload(
         symbol=symbol,
         zone_set=zone_set,
         level_payload=level_payload,
+        presented_structure=presented_structure,
         config=config,
         csv_path=csv_path,
     )
@@ -130,6 +137,10 @@ def build_structure_zone_inspect_payload(
         "execution_summary": level_payload.execution_summary,
         "structure_levels": level_payload.structure_levels.model_dump(),
         "execution_levels": [level.model_dump() for level in level_payload.execution_levels],
+        "presented_structure": presented_structure.model_dump() if presented_structure else None,
+        "selection_trace": zone_set.selection_trace,
+        "no_clear_structure": zone_set.no_clear_structure,
+        "no_clear_structure_reason_codes": zone_set.no_clear_structure_reason_codes,
         "artifact": artifact.model_dump(),
     }
 
@@ -140,6 +151,8 @@ def format_structure_zone_inspection(payload: Mapping[str, object], max_candidat
     csv_path = str(payload.get("csv_path") or "")
     snapshot = _as_dict(payload["snapshot"])
     structure_levels = _as_dict(payload["structure_levels"])
+    presented_raw = payload.get("presented_structure")
+    presented_structure = _as_dict(presented_raw) if presented_raw else None
     execution_levels = [_as_dict(level) for level in payload.get("execution_levels", [])]
     artifact = _as_dict(payload["artifact"])
     candidates = sorted(
@@ -168,30 +181,39 @@ def format_structure_zone_inspection(payload: Mapping[str, object], max_candidat
     lines.append("")
 
     lines.extend(["## 선택된 구조 레벨", ""])
-    lines.extend(
-        _format_zone_group(
-            "수요 존",
-            structure_levels.get("demand_zones", []),
-            current_price=float(snapshot["price"]),
-            zone_type="demand",
+    if presented_structure and presented_structure.get("cli_blocks"):
+        lines.extend(presented_structure["cli_blocks"])
+    else:
+        lines.extend(
+            _format_zone_group(
+                "지지 존",
+                structure_levels.get("support_zones", structure_levels.get("demand_zones", [])),
+                current_price=float(snapshot["price"]),
+                zone_type="support",
+            )
         )
-    )
-    lines.extend(
-        _format_zone_group(
-            "공급 존",
-            structure_levels.get("supply_zones", []),
-            current_price=float(snapshot["price"]),
-            zone_type="supply",
+        lines.extend(
+            _format_zone_group(
+                "저항 존",
+                structure_levels.get(
+                    "resistance_zones",
+                    structure_levels.get("supply_zones", []),
+                ),
+                current_price=float(snapshot["price"]),
+                zone_type="resistance",
+            )
         )
-    )
-    lines.extend(
-        _format_zone_group(
-            "밸런스 존",
-            structure_levels.get("balance_zones", []),
-            current_price=float(snapshot["price"]),
-            zone_type="balance",
+        former_levels = structure_levels.get(
+            "former_levels", structure_levels.get("balance_zones", [])
         )
-    )
+        lines.extend(
+            _format_zone_group(
+                "전환 레벨",
+                former_levels,
+                current_price=float(snapshot["price"]),
+                zone_type="former",
+            )
+        )
     invalidation = structure_levels.get("invalidation")
     lines.append("### 구조 무효화")
     lines.append("")
@@ -227,6 +249,15 @@ def format_structure_zone_inspection(payload: Mapping[str, object], max_candidat
             f"| confluence={candidate['confluence_score']:.2f}"
         )
     if not candidates:
+        lines.append("- 없음")
+    lines.append("")
+
+    lines.extend(["## 선택 추적", ""])
+    selection_trace = payload.get("selection_trace") or []
+    if selection_trace:
+        for item in selection_trace:
+            lines.append(f"- {item}")
+    else:
         lines.append("- 없음")
     lines.append("")
 
@@ -311,26 +342,34 @@ def compare_structure_zone_inspect_payloads(
         )
     )
 
+    baseline_levels = _as_dict(baseline_payload["structure_levels"])
+    current_levels = _as_dict(current_payload["structure_levels"])
     return {
         "symbol": str(current_payload["symbol"]),
         "baseline_source": str(baseline_payload.get("source") or ""),
         "current_source": str(current_payload.get("source") or ""),
         "selection_changes": {
-            "demand_zones": _compare_selected_lists(
-                _as_dict(baseline_payload["structure_levels"]).get("demand_zones", []),
-                _as_dict(current_payload["structure_levels"]).get("demand_zones", []),
+            "support_zones": _compare_selected_lists(
+                baseline_levels.get("support_zones", baseline_levels.get("demand_zones", [])),
+                current_levels.get("support_zones", current_levels.get("demand_zones", [])),
             ),
-            "supply_zones": _compare_selected_lists(
-                _as_dict(baseline_payload["structure_levels"]).get("supply_zones", []),
-                _as_dict(current_payload["structure_levels"]).get("supply_zones", []),
+            "resistance_zones": _compare_selected_lists(
+                baseline_levels.get(
+                    "resistance_zones",
+                    baseline_levels.get("supply_zones", []),
+                ),
+                current_levels.get(
+                    "resistance_zones",
+                    current_levels.get("supply_zones", []),
+                ),
             ),
-            "balance_zones": _compare_selected_lists(
-                _as_dict(baseline_payload["structure_levels"]).get("balance_zones", []),
-                _as_dict(current_payload["structure_levels"]).get("balance_zones", []),
+            "former_levels": _compare_selected_lists(
+                baseline_levels.get("former_levels", baseline_levels.get("balance_zones", [])),
+                current_levels.get("former_levels", current_levels.get("balance_zones", [])),
             ),
             "invalidation": _compare_single_level(
-                _as_dict(baseline_payload["structure_levels"]).get("invalidation"),
-                _as_dict(current_payload["structure_levels"]).get("invalidation"),
+                baseline_levels.get("invalidation"),
+                current_levels.get("invalidation"),
             ),
         },
         "score_changes": score_changes,
@@ -355,9 +394,9 @@ def format_structure_zone_inspect_comparison(
     )
 
     for title, key in (
-        ("수요 존", "demand_zones"),
-        ("공급 존", "supply_zones"),
-        ("밸런스 존", "balance_zones"),
+        ("지지 존", "support_zones"),
+        ("저항 존", "resistance_zones"),
+        ("전환 레벨", "former_levels"),
     ):
         lines.append(f"### {title}")
         lines.append("")
@@ -427,6 +466,8 @@ def _serialize_zone(zone: StructureZone) -> dict:
         "touch_count": zone.touch_count,
         "last_touch_date": zone.last_touch_date,
         "reasons": zone.reasons,
+        "reason_codes": zone.reason_codes,
+        "reason_context": zone.reason_context,
         "touch_score": zone.touch_score,
         "recency_score": zone.recency_score,
         "volume_reaction_score": zone.volume_reaction_score,

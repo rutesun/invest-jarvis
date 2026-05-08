@@ -323,10 +323,10 @@ async def test_format_structure_context_for_llm():
     text = format_structure_context_for_llm(structure_levels, execution_levels)
 
     assert "구조 레벨" in text
-    assert "수요 존: 145.00~147.00, 140.00~142.00" in text
-    assert "공급 존: 155.00~157.00" in text
-    assert "밸런스 존: 없음" in text
-    assert "무효화: 145.00~147.00 + 150일선 146.00 하향 이탈" in text
+    assert "support_zones: 145.00~147.00, 140.00~142.00" in text
+    assert "resistance_zones: 155.00~157.00" in text
+    assert "former_levels: 없음" in text
+    assert "invalidation: 145.00~147.00 + 150일선 146.00 하향 이탈" in text
     assert "실행 레벨" in text
     assert "$146.00" in text
     assert "피봇 S1" in text
