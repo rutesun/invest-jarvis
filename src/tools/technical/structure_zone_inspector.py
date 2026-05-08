@@ -249,6 +249,9 @@ def format_structure_zone_inspection(payload: Mapping[str, object], max_candidat
             f"| volume={candidate['volume_reaction_score']:.2f} "
             f"| confluence={candidate['confluence_score']:.2f}"
         )
+        confluence_detail = _format_candidate_confluence_detail(candidate)
+        if confluence_detail:
+            lines.append(f"  {confluence_detail}")
     if not candidates:
         lines.append("- 없음")
     lines.append("")
@@ -589,6 +592,53 @@ def _format_ma_summary(snapshot: Mapping[str, object]) -> str:
     if not parts:
         return "- **이동평균선**: N/A"
     return f"- **이동평균선**: {' / '.join(parts)}"
+
+
+def _format_candidate_confluence_detail(candidate: Mapping[str, object]) -> str | None:
+    reason_context = candidate.get("reason_context")
+    if not isinstance(reason_context, Mapping):
+        return None
+
+    components = reason_context.get("confluence_components")
+    source_items = reason_context.get("confluence_sources")
+    sources = (
+        [str(item) for item in source_items if isinstance(item, (str, int, float))]
+        if isinstance(source_items, list)
+        else []
+    )
+
+    details: list[str] = []
+    if isinstance(components, Mapping):
+        ma_overlaps = components.get("ma_overlaps")
+        if isinstance(ma_overlaps, Mapping):
+            for key, label in (("sma_150", "MA150"), ("sma_200", "MA200")):
+                item = ma_overlaps.get(key)
+                if isinstance(item, Mapping) and bool(item.get("overlap")):
+                    value = item.get("value")
+                    if isinstance(value, (int, float)):
+                        details.append(f"{label}({float(value):.2f})")
+                    else:
+                        details.append(label)
+
+        if bool(components.get("poc_overlap")):
+            poc_range = components.get("poc_range")
+            if isinstance(poc_range, Mapping):
+                lower = poc_range.get("lower")
+                upper = poc_range.get("upper")
+                if isinstance(lower, (int, float)) and isinstance(upper, (int, float)):
+                    details.append(f"POC({float(lower):.2f}~{float(upper):.2f})")
+                else:
+                    details.append("POC")
+
+        hvn_count = components.get("hvn_overlap_count")
+        if isinstance(hvn_count, (int, float)) and float(hvn_count) > 0:
+            details.append(f"HVNx{int(hvn_count)}")
+
+    if not details:
+        details = sources
+    if not details:
+        return None
+    return f"confluence 근거: {', '.join(details)}"
 
 
 def _as_dict(value: object) -> dict:

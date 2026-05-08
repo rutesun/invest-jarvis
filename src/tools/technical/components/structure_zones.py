@@ -510,7 +510,8 @@ class StructureZoneDetector:
             )
             touch_score = touch_metrics["touch_score"]
             recency_score = touch_metrics["guard_recency"]
-            confluence_score = self._score_confluence(cluster, snapshot, df)
+            confluence = self._calculate_confluence(cluster, snapshot, df)
+            confluence_score = float(confluence["score"])
             total_score = (
                 touch_score * self.config.score_weights["touch"]
                 + recency_score * self.config.score_weights["recency"]
@@ -545,10 +546,12 @@ class StructureZoneDetector:
                         f"에피소드 {len(touch_episodes)}개 / 총 {touch_count}회 터치",
                         f"최근성 점수 {recency_score:.2f}",
                         f"거래량 반응 {volume_reaction_score:.2f}",
+                        self._format_confluence_reason(confluence.get("sources", [])),
                     ],
                     reason_codes=[
                         f"{zone_type}_episode_strength",
                         f"{zone_type}_volume_reaction",
+                        f"{zone_type}_confluence",
                     ],
                     reason_context={
                         "touch_count": touch_count,
@@ -562,6 +565,8 @@ class StructureZoneDetector:
                         "episode_guard_recency": round(touch_metrics["guard_recency"], 4),
                         "volume_reaction_score": round(volume_reaction_score, 4),
                         "recency_score": round(recency_score, 4),
+                        "confluence_sources": confluence.get("sources", []),
+                        "confluence_components": confluence.get("components", {}),
                     },
                 )
             )
@@ -751,22 +756,66 @@ class StructureZoneDetector:
         snapshot: IndicatorSnapshot,
         df: pd.DataFrame,
     ) -> float:
+        return float(self._calculate_confluence(cluster, snapshot, df)["score"])
+
+    def _calculate_confluence(
+        self,
+        cluster: list[float],
+        snapshot: IndicatorSnapshot,
+        df: pd.DataFrame,
+    ) -> dict[str, object]:
         lower_bound = min(cluster)
         upper_bound = max(cluster)
         score = 0.0
+        ma_overlaps: dict[str, dict[str, float | bool | None]] = {}
         for moving_average in ("sma_150", "sma_200"):
             value = getattr(snapshot, moving_average, None)
-            if value and lower_bound <= value <= upper_bound:
+            overlaps = bool(value and lower_bound <= value <= upper_bound)
+            ma_overlaps[moving_average] = {
+                "value": float(value) if value is not None else None,
+                "overlap": overlaps,
+            }
+            if overlaps:
                 score += 0.5
 
         poc_range, hvn_ranges = self._build_volume_profile_ranges(df)
-        if poc_range and self._range_overlaps((lower_bound, upper_bound), poc_range):
+        zone_range = (lower_bound, upper_bound)
+        poc_overlap = bool(poc_range and self._range_overlaps(zone_range, poc_range))
+        hvn_overlap_ranges = [
+            hvn_range for hvn_range in hvn_ranges if self._range_overlaps(zone_range, hvn_range)
+        ]
+
+        if poc_overlap:
             score += 0.5
-        if any(
-            self._range_overlaps((lower_bound, upper_bound), hvn_range) for hvn_range in hvn_ranges
-        ):
+        if hvn_overlap_ranges:
             score += 0.5
-        return min(score, 2.0)
+
+        sources: list[str] = []
+        if ma_overlaps["sma_150"]["overlap"]:
+            sources.append("MA150")
+        if ma_overlaps["sma_200"]["overlap"]:
+            sources.append("MA200")
+        if poc_overlap:
+            sources.append("POC")
+        if hvn_overlap_ranges:
+            sources.append(f"HVNx{len(hvn_overlap_ranges)}")
+
+        return {
+            "score": min(score, 2.0),
+            "sources": sources,
+            "components": {
+                "ma_overlaps": ma_overlaps,
+                "poc_overlap": poc_overlap,
+                "poc_range": self._range_to_dict(poc_range),
+                "hvn_overlap_count": len(hvn_overlap_ranges),
+                "hvn_overlap_ranges": [self._range_to_dict(item) for item in hvn_overlap_ranges],
+            },
+        }
+
+    def _format_confluence_reason(self, sources: object) -> str:
+        if not isinstance(sources, list) or not sources:
+            return "정합 근거 없음"
+        return f"정합 근거 {', '.join(str(item) for item in sources)}"
 
     def _build_volume_profile_ranges(
         self,
@@ -806,6 +855,14 @@ class StructureZoneDetector:
         right: tuple[float, float],
     ) -> bool:
         return min(left[1], right[1]) >= max(left[0], right[0])
+
+    def _range_to_dict(
+        self,
+        value: tuple[float, float] | None,
+    ) -> dict[str, float] | None:
+        if value is None:
+            return None
+        return {"lower": float(value[0]), "upper": float(value[1])}
 
     def _build_touch_episodes(
         self,

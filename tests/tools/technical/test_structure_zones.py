@@ -105,6 +105,49 @@ def test_score_confluence_includes_volume_profile_overlap():
     assert overlap_score > no_overlap_score
 
 
+def test_calculate_confluence_returns_overlap_components():
+    detector = StructureZoneDetector()
+    dates = pd.date_range("2026-01-01", periods=12, freq="D")
+    df = pd.DataFrame(
+        {
+            "Open": [99, 100, 101, 102, 103, 102, 101, 100, 102, 103, 104, 105],
+            "High": [100, 101, 102, 103, 104, 103, 102, 101, 103, 104, 105, 106],
+            "Low": [98, 99, 100, 101, 102, 101, 100, 99, 101, 102, 103, 104],
+            "Close": [99, 100, 101, 102, 103, 102, 101, 100, 102, 103, 104, 105],
+            "Volume": [
+                100_000,
+                120_000,
+                140_000,
+                2_000_000,
+                180_000,
+                1_800_000,
+                150_000,
+                130_000,
+                1_600_000,
+                160_000,
+                150_000,
+                140_000,
+            ],
+        },
+        index=dates,
+    )
+    snapshot = IndicatorSnapshot(
+        price=105.0,
+        change_pct=0.0,
+        atr=2.0,
+        sma_150=102.0,
+        sma_200=140.0,
+    )
+
+    result = detector._calculate_confluence([101.5, 102.5], snapshot, df)
+
+    assert result["score"] > 0
+    assert "MA150" in result["sources"]
+    assert "POC" in result["sources"]
+    assert result["components"]["ma_overlaps"]["sma_150"]["overlap"] is True
+    assert result["components"]["poc_overlap"] is True
+
+
 def test_cluster_price_candidates_groups_nearby_swings():
     clusters = cluster_price_candidates([100.0, 101.0, 118.0], half_width=2.0)
 

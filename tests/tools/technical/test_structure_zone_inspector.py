@@ -36,6 +36,18 @@ def _sample_zone_set() -> StructureZoneSet:
         total_score=13.0,
         strength="core",
         reasons=["반복 지지", "거래량 반응 3.00"],
+        reason_context={
+            "confluence_sources": ["MA150", "POC", "HVNx1"],
+            "confluence_components": {
+                "ma_overlaps": {
+                    "sma_150": {"value": 202.0, "overlap": True},
+                    "sma_200": {"value": 180.0, "overlap": False},
+                },
+                "poc_overlap": True,
+                "poc_range": {"lower": 201.0, "upper": 204.0},
+                "hvn_overlap_count": 1,
+            },
+        },
     )
     supply = StructureZone(
         zone_type="supply",
@@ -51,6 +63,18 @@ def _sample_zone_set() -> StructureZoneSet:
         total_score=11.0,
         strength="core",
         reasons=["반복 저항", "거래량 반응 2.00"],
+        reason_context={
+            "confluence_sources": ["MA200"],
+            "confluence_components": {
+                "ma_overlaps": {
+                    "sma_150": {"value": 202.0, "overlap": False},
+                    "sma_200": {"value": 220.5, "overlap": True},
+                },
+                "poc_overlap": False,
+                "poc_range": None,
+                "hvn_overlap_count": 0,
+            },
+        },
     )
     invalidation = StructureZone(
         zone_type="invalidation",
@@ -279,6 +303,7 @@ def test_format_structure_zone_inspection_shows_selected_and_candidate_sections(
     assert "피봇 S1" in output
     assert "touch=4.00" in output
     assert "volume=3.00" in output
+    assert "confluence 근거: MA150(202.00), POC(201.00~204.00), HVNx1" in output
 
 
 def test_compare_structure_zone_inspect_payloads_builds_score_diff():
