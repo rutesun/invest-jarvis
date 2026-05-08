@@ -195,6 +195,8 @@ class StructureZoneConfig(BaseModel):
     balance_center_distance_atr_multiplier: float = 1.00
     balance_max_last_touch_gap_days: int = 21
     episode_max_gap_days: int = 10
+    volume_profile_bin_count: int = 50
+    volume_profile_top_k: int = 5
     score_weights: dict[str, float] = Field(
         default_factory=lambda: {
             "touch": 0.35,

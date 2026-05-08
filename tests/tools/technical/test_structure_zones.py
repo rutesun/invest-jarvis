@@ -71,6 +71,40 @@ def test_calculate_zone_half_width_respects_pct_floor_and_ceiling():
     assert width <= 5.0
 
 
+def test_score_confluence_includes_volume_profile_overlap():
+    detector = StructureZoneDetector()
+    dates = pd.date_range("2026-01-01", periods=12, freq="D")
+    df = pd.DataFrame(
+        {
+            "Open": [99, 100, 101, 102, 103, 102, 101, 100, 102, 103, 104, 105],
+            "High": [100, 101, 102, 103, 104, 103, 102, 101, 103, 104, 105, 106],
+            "Low": [98, 99, 100, 101, 102, 101, 100, 99, 101, 102, 103, 104],
+            "Close": [99, 100, 101, 102, 103, 102, 101, 100, 102, 103, 104, 105],
+            "Volume": [
+                100_000,
+                120_000,
+                140_000,
+                2_000_000,
+                180_000,
+                1_800_000,
+                150_000,
+                130_000,
+                1_600_000,
+                160_000,
+                150_000,
+                140_000,
+            ],
+        },
+        index=dates,
+    )
+    snapshot = IndicatorSnapshot(price=105.0, change_pct=0.0, atr=2.0)
+
+    no_overlap_score = detector._score_confluence([95.0, 96.0], snapshot, df)
+    overlap_score = detector._score_confluence([101.5, 102.5], snapshot, df)
+
+    assert overlap_score > no_overlap_score
+
+
 def test_cluster_price_candidates_groups_nearby_swings():
     clusters = cluster_price_candidates([100.0, 101.0, 118.0], half_width=2.0)
 

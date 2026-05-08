@@ -510,7 +510,7 @@ class StructureZoneDetector:
             )
             touch_score = touch_metrics["touch_score"]
             recency_score = touch_metrics["guard_recency"]
-            confluence_score = self._score_confluence(cluster, snapshot)
+            confluence_score = self._score_confluence(cluster, snapshot, df)
             total_score = (
                 touch_score * self.config.score_weights["touch"]
                 + recency_score * self.config.score_weights["recency"]
@@ -745,7 +745,12 @@ class StructureZoneDetector:
         recency_factor = max(0.2, self._score_recency(candidate.timestamp, df.index[-1]) / 5.0)
         return min(5.0, volume_multiple * (1 + reaction_strength * 5) * recency_factor)
 
-    def _score_confluence(self, cluster: list[float], snapshot: IndicatorSnapshot) -> float:
+    def _score_confluence(
+        self,
+        cluster: list[float],
+        snapshot: IndicatorSnapshot,
+        df: pd.DataFrame,
+    ) -> float:
         lower_bound = min(cluster)
         upper_bound = max(cluster)
         score = 0.0
@@ -753,7 +758,54 @@ class StructureZoneDetector:
             value = getattr(snapshot, moving_average, None)
             if value and lower_bound <= value <= upper_bound:
                 score += 0.5
-        return min(score, 1.0)
+
+        poc_range, hvn_ranges = self._build_volume_profile_ranges(df)
+        if poc_range and self._range_overlaps((lower_bound, upper_bound), poc_range):
+            score += 0.5
+        if any(
+            self._range_overlaps((lower_bound, upper_bound), hvn_range) for hvn_range in hvn_ranges
+        ):
+            score += 0.5
+        return min(score, 2.0)
+
+    def _build_volume_profile_ranges(
+        self,
+        df: pd.DataFrame,
+    ) -> tuple[tuple[float, float] | None, list[tuple[float, float]]]:
+        required_cols = {"High", "Low", "Close", "Volume"}
+        if df.empty or not required_cols.issubset(df.columns):
+            return None, []
+
+        typical_price = (df["High"] + df["Low"] + df["Close"]) / 3.0
+        min_price = float(typical_price.min())
+        max_price = float(typical_price.max())
+        if max_price <= min_price:
+            return None, []
+
+        bin_count = max(10, self.config.volume_profile_bin_count)
+        bins = pd.interval_range(start=min_price, end=max_price, periods=bin_count)
+        bucketed = pd.cut(typical_price, bins=bins, include_lowest=True)
+        volume_profile = (
+            df.groupby(bucketed, observed=False)["Volume"].sum().sort_values(ascending=False)
+        )
+        if volume_profile.empty:
+            return None, []
+
+        top_nodes = volume_profile.head(self.config.volume_profile_top_k)
+        ranges = [
+            (float(interval.left), float(interval.right))
+            for interval in top_nodes.index
+            if isinstance(interval, pd.Interval)
+        ]
+        poc_range = ranges[0] if ranges else None
+        return poc_range, ranges
+
+    def _range_overlaps(
+        self,
+        left: tuple[float, float],
+        right: tuple[float, float],
+    ) -> bool:
+        return min(left[1], right[1]) >= max(left[0], right[0])
 
     def _build_touch_episodes(
         self,
