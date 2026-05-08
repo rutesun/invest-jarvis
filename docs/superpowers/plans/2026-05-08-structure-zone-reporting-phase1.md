@@ -926,7 +926,7 @@ git commit -m "docs: record phase1 structure reporting boundary" -m "- 1차와 2
 - [ ] detector 반환 타입을 완전 `V2-native`로 전환하고 legacy `demand/supply/balance` 표현 제거
 - [ ] `PatternEngine`이 실제로 shared swing extractor 출력을 내부 로직에서 직접 사용하도록 리팩터링
 - [x] volume profile overlap 근거를 inspector 출력에 직접 표시
-- [ ] fixture 기반 파라미터 스윕 / compare report 자동화로 tuning loop 완성
+- [x] fixture 기반 파라미터 스윕 / compare report 자동화로 tuning loop 완성
 
 ### Type consistency
 - raw: `StructureZoneSet`
