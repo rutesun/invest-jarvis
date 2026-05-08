@@ -337,9 +337,9 @@ def compose_level_payload(
 
     trace_label, trace_selected_bounds = _extract_trace_selection(zone_set.selection_trace)
 
-    all_support_levels = [_to_structure_level(zone) for zone in zone_set.demand_zones]
-    raw_supply_levels = [_to_structure_level(zone) for zone in zone_set.supply_zones]
-    balance_levels = [_to_structure_level(zone) for zone in zone_set.balance_zones]
+    all_support_levels = [_to_structure_level(zone) for zone in zone_set.support_zones]
+    raw_supply_levels = [_to_structure_level(zone) for zone in zone_set.resistance_zones]
+    balance_levels = [_to_structure_level(zone) for zone in zone_set.former_levels]
     current_price = price_levels.current_price
 
     support_selected_bounds = trace_selected_bounds if trace_label == "support_zone" else None

@@ -109,9 +109,9 @@ class StructureZoneDetector:
         )
 
         return StructureZoneSet(
-            demand_zones=demand_zones,
-            supply_zones=supply_zones,
-            balance_zones=balance_zones,
+            support_zones=demand_zones,
+            resistance_zones=supply_zones,
+            former_levels=balance_zones,
             invalidation_candidates=invalidation_candidates,
             invalidation_zone=invalidation_zone,
             all_candidates=candidates,

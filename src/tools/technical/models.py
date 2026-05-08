@@ -1,7 +1,7 @@
 from datetime import datetime
 
 import pandas as pd
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class ComponentResult(BaseModel):
@@ -158,9 +158,9 @@ class StructureZone(BaseModel):
 class StructureZoneSet(BaseModel):
     """구조 zone 계산 결과 묶음"""
 
-    demand_zones: list[StructureZone] = Field(default_factory=list)
-    supply_zones: list[StructureZone] = Field(default_factory=list)
-    balance_zones: list[StructureZone] = Field(default_factory=list)
+    support_zones: list[StructureZone] = Field(default_factory=list)
+    resistance_zones: list[StructureZone] = Field(default_factory=list)
+    former_levels: list[StructureZone] = Field(default_factory=list)
     invalidation_candidates: list[StructureZone] = Field(default_factory=list)
     invalidation_zone: StructureZone | None = None
     all_candidates: list[StructureZone] = Field(default_factory=list)
@@ -168,6 +168,36 @@ class StructureZoneSet(BaseModel):
     touch_episodes: list[dict[str, object]] = Field(default_factory=list)
     no_clear_structure: bool = False
     no_clear_structure_reason_codes: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _upgrade_legacy_zone_keys(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+
+        upgraded = dict(data)
+        if "support_zones" not in upgraded and "demand_zones" in upgraded:
+            upgraded["support_zones"] = upgraded["demand_zones"]
+        if "resistance_zones" not in upgraded and "supply_zones" in upgraded:
+            upgraded["resistance_zones"] = upgraded["supply_zones"]
+        if "former_levels" not in upgraded and "balance_zones" in upgraded:
+            upgraded["former_levels"] = upgraded["balance_zones"]
+        return upgraded
+
+    @property
+    def demand_zones(self) -> list[StructureZone]:
+        """Legacy alias for support_zones."""
+        return self.support_zones
+
+    @property
+    def supply_zones(self) -> list[StructureZone]:
+        """Legacy alias for resistance_zones."""
+        return self.resistance_zones
+
+    @property
+    def balance_zones(self) -> list[StructureZone]:
+        """Legacy alias for former_levels."""
+        return self.former_levels
 
 
 class StructureZoneConfig(BaseModel):
