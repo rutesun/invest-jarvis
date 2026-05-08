@@ -909,6 +909,25 @@ git commit -m "docs: record phase1 structure reporting boundary" -m "- 1차와 2
 - 각 테스트 단계에 실제 파일 경로와 명령 포함
 - 각 코드 단계에 실제 클래스/함수 시그니처 포함
 
+---
+
+## Phase 2 Progress Update
+
+아래 체크리스트는 Phase 1 완료 이후 실제 진행된 Phase 2 구조 개선 작업을 반영한다.
+
+- [x] `components/structure_zones.py`로 구조 zone 구현을 분리하고 기존 `structure_zones.py`는 호환 wrapper로 유지
+- [x] shared `SwingExtractor`를 추가하고 zone engine이 공통 swing 입력층을 사용하도록 연결
+- [x] `PatternEngine` 경계를 추가하고 `deep_dive.py`가 직접 pattern 함수를 호출하지 않도록 정리
+- [x] `touch episode` 메타데이터를 `StructureZoneSet`/inspect payload에 추가
+- [x] raw touch count 중심 점수를 `episode` 기반 touch score로 전환
+- [x] primary zone 선택 시 `proximity + episode recency` 우선순위를 반영
+- [x] `selection_priority_trace`를 추가하고 inspector에서 읽기 쉬운 섹션으로 노출
+- [x] volume profile(`POC/HVN`) overlap을 confluence score 보조 근거로 반영
+- [ ] detector 반환 타입을 완전 `V2-native`로 전환하고 legacy `demand/supply/balance` 표현 제거
+- [ ] `PatternEngine`이 실제로 shared swing extractor 출력을 내부 로직에서 직접 사용하도록 리팩터링
+- [ ] volume profile overlap 근거를 inspector 출력에 직접 표시
+- [ ] fixture 기반 파라미터 스윕 / compare report 자동화로 tuning loop 완성
+
 ### Type consistency
 - raw: `StructureZoneSet`
 - translated: `StructureLevelsPayloadV2`
