@@ -380,7 +380,11 @@ def calculate_head_shoulders_confidence(head_prominence: float, shoulder_diff: f
     return min(confidence, 1.0)
 
 
-def test_support_resistance(df: pd.DataFrame, snapshot: IndicatorSnapshot) -> ChartPatternResult:
+def test_support_resistance(
+    df: pd.DataFrame,
+    snapshot: IndicatorSnapshot,
+    swings: SwingExtractorOutput | None = None,
+) -> ChartPatternResult:
     """현재가가 주요 레벨 근처(±2%)에 있는지 테스트"""
 
     current_price = snapshot.price
@@ -399,6 +403,10 @@ def test_support_resistance(df: pd.DataFrame, snapshot: IndicatorSnapshot) -> Ch
         levels.append(("resistance", snapshot.swing_high, "스윙 고점"))
     if snapshot.swing_low:
         levels.append(("support", snapshot.swing_low, "스윙 저점"))
+    if swings and swings.supply_candidates:
+        levels.append(("resistance", swings.supply_candidates[-1].price, "공유 스윙 고점"))
+    if swings and swings.demand_candidates:
+        levels.append(("support", swings.demand_candidates[-1].price, "공유 스윙 저점"))
 
     # Check ±2% proximity
     for level_type, level_price, level_name in levels:
@@ -1040,7 +1048,6 @@ def detect_chart_patterns(
     swings: SwingExtractorOutput | None = None,
 ) -> dict[str, ChartPatternResult]:
     """모든 차트 패턴 감지 통합 함수"""
-    _ = swings
 
     patterns = {
         "cup_and_handle": detect_cup_and_handle(df),
@@ -1054,6 +1061,10 @@ def detect_chart_patterns(
     }
 
     if snapshot:
-        patterns["support_resistance_test"] = test_support_resistance(df, snapshot)
+        patterns["support_resistance_test"] = test_support_resistance(
+            df,
+            snapshot,
+            swings=swings,
+        )
 
     return patterns
