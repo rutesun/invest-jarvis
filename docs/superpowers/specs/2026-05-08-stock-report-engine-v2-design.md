@@ -29,14 +29,13 @@
 
 이렇게 하면 기존 운영 경로를 깨지 않고 `V1 vs V2`를 날짜 기준으로 비교할 수 있다.
 
-### 2. DB는 단일 Postgres + pgvector로 시작한다
+### 2. 최종 구조는 `Postgres + 별도 Vector DB`다
 
-- 관계형 저장과 벡터 검색을 분리된 제품으로 나누지 않는다.
-- 별도 Vector DB(Pinecone, Qdrant 등)는 도입하지 않는다.
-- Phase 1~3 모두 같은 Postgres 인스턴스 안에서 진화한다.
+- Postgres는 원본/정제 데이터, 구조화 메타데이터, 리포트 실행 이력과 evidence trace를 저장한다.
+- Vector DB는 `knowledge_chunks`의 semantic index와 vector retrieval만 담당한다.
+- 다만 rollout은 단계적으로 간다. **Phase 1은 Postgres only**, **Phase 2부터 Vector DB를 붙인다.**
 
-이 선택의 핵심 이유는 `과하지 않게` 시작하기 위해서다. 현재 저장소에는 DB/ORM 계층이 없으므로,
-Phase 1에서는 `psycopg + raw SQL + SQL migration 파일` 조합이 가장 단순하다.
+즉 최종 아키텍처는 분리형이지만, 초기 rollout은 과하지 않게 시작한다.
 
 ### 3. `DB v1/v2` 대신 `Schema Phase 1/2/3`라는 용어를 쓴다
 
@@ -55,9 +54,9 @@ Phase 1에서는 `psycopg + raw SQL + SQL migration 파일` 조합이 가장 단
 
 ### 5. 구현 범위는 3단계로 자른다
 
-1. **Phase 1**: Telegram-only, DB-backed, recallable report
-2. **Phase 2**: PDF/report ingest + chunking + cross-source recall
-3. **Phase 3**: DB/Vector DB 기반 major news grounding
+1. **Phase 1**: Telegram-only, Postgres-backed, same-day report
+2. **Phase 2**: Vector DB 도입 + recall 시작 + PDF/report ingest
+3. **Phase 3**: ticker/theme major news grounding
 
 ## Overall Architecture
 
@@ -66,7 +65,7 @@ flowchart TD
   subgraph P1["Phase 1 - Telegram First"]
     A["Telegram CSV / fetched data"] --> B["normalize + classify + group"]
     B --> C["telegram_messages"]
-    B --> D["knowledge_chunks(source=telegram) + embedding"]
+    B --> D["knowledge_chunks(source=telegram)"]
   end
 
   subgraph P2["Phase 2 - PDF / Report"]
@@ -81,7 +80,7 @@ flowchart TD
   end
 
   R["report request(date, ticker, theme)"] --> S["structured SQL retrieval"]
-  R --> T["vector retrieval"]
+  R --> T["vector retrieval (Phase 2+)"]
   D --> S
   D --> T
   H --> S
@@ -99,19 +98,20 @@ flowchart TD
 
 ### Phase 1
 
-목표는 **Telegram 메시지를 DB-backed knowledge base로 전환해, recall 가능한 리포트를 만드는 것**이다.
+목표는 **Telegram 메시지를 Postgres-backed knowledge base로 전환해, 먼저 당일 리포트를 안정적으로 만드는 것**이다.
 
 - 입력: Telegram CSV / 기존 fetch 결과
-- 저장: Postgres + pgvector
-- 검색: SQL exact retrieval + vector retrieval
+- 저장: Postgres
+- recall: 없음
 - 출력: Markdown report
 - 운영: 기존 `daily_report`와 병행
 
 ### Phase 2
 
-목표는 **텔레그램의 짧은 시그널을 PDF 리포트로 보강할 수 있게 하는 것**이다.
+목표는 **Vector DB를 도입하고, recall을 시작한 뒤 텔레그램의 짧은 시그널을 PDF 리포트로 보강할 수 있게 하는 것**이다.
 
 - PDF 파싱은 [opendataloader-pdf](https://github.com/opendataloader-project/opendataloader-pdf)를 사용한다.
+- Phase 1에서 쌓인 Telegram chunk를 먼저 Vector DB로 backfill한다.
 - PDF는 `documents` + `knowledge_chunks(source_type='pdf')`로 들어간다.
 - OCR나 레이아웃 보정은 라이브러리 옵션 안에서만 조정하고, 별도 문서 파이프라인은 만들지 않는다.
 
@@ -129,8 +129,9 @@ flowchart TD
 `daily-v2`의 첫 번째 완성 기준은 아래와 같다.
 
 - Telegram 메시지를 구조화해서 DB에 넣는다.
+- `category_key`, `main_theme`, `sub_themes`를 canonical vocabulary 기준으로 관리한다.
 - `message_type`, `main_theme`, `sub_themes`, `ticker_tags`, `one_line`을 안정적으로 만든다.
-- exact + vector hybrid retrieval로 당일/과거 시그널을 묶는다.
+- 당일 Telegram signal만으로 `category -> theme -> ticker` 묶음을 만든다.
 - Jinja 없이 Markdown report를 생성한다.
 - 기존 `daily_report`와 같은 날짜로 compare 가능한 수준까지 만든다.
 
@@ -153,12 +154,13 @@ src/pipelines/stock_report/
   pipeline.py                # run_daily_v2(date, data_dir, provider, compare)
   models.py                  # typed contracts for normalized message, chunk, evidence, report
   db.py                      # psycopg connection helpers, SQL execution
+  taxonomy.py                # category/main_theme/sub_theme registry + alias resolution
   telegram_ingest.py         # CSV load -> telegram_messages upsert
   normalize.py               # clean text, url/media extraction, simhash/grouping keys
-  classify.py                # message_type/main_theme/sub_themes/ticker_tags/one_line
+  classify.py                # message_type/category/main_theme/sub_themes/ticker_tags/one_line
   chunking.py                # raw/grouped message -> knowledge_chunks
-  embed.py                   # build_embed_text + embedding write path
-  retrieval.py               # exact retrieval + vector retrieval + ranker
+  embed.py                   # Phase 2+: embed payload + vector sync
+  retrieval.py               # Phase 2+: hybrid retrieval
   synthesize.py              # LLM prompt assembly + response parsing
   render_markdown.py         # Python Markdown builder (no Jinja)
   compare.py                 # V1/V2 compare helpers
@@ -170,6 +172,9 @@ migrations/stock_report/
   001_phase1.sql
   002_phase2.sql
   003_phase3.sql
+
+config/
+  stock_report_vocabulary.yaml  # category/main_theme/sub_theme canonical registry
 ```
 
 ### Phase 1 Data Flow
@@ -182,11 +187,10 @@ flowchart LR
   D --> E["classify"]
   E --> F["chunking"]
   F --> G["knowledge_chunks"]
-  G --> H["embed"]
-  H --> I["hybrid retrieval"]
-  I --> J["evidence bundle"]
-  J --> K["synthesize"]
-  K --> L["render_markdown"]
+  G --> H["same-day aggregation"]
+  H --> I["category/theme/ticker bundles"]
+  I --> J["synthesize"]
+  J --> K["render_markdown"]
 ```
 
 ### Phase 1 Processing Rules
@@ -218,9 +222,9 @@ flowchart LR
 
 기본 정책:
 
-- `signal`, `data`: chunk 생성 + embedding 생성
+- `signal`, `data`: chunk 생성 + embed payload 생성
 - `opinion`: 저장은 하되 기본 report retrieval에서는 후순위
-- `admin`: 저장만 하고 chunk/embedding 생성 안 함
+- `admin`: 저장만 하고 chunk/embed payload 생성 안 함
 
 #### 4. `main_theme`는 1개, `sub_themes`는 최대 2개다
 
@@ -229,7 +233,38 @@ flowchart LR
 - 카운팅은 `main_theme`로만 한다
 - `sub_themes`는 테마 섹션의 "관련 테마"에만 반영한다
 
-#### 5. `one_line`은 retrieval과 최종 노출 모두에 쓰는 canonical sentence다
+#### 5. `category/main_theme/sub_themes`는 registry 기준으로 관리한다
+
+Phase 1에는 가벼운 taxonomy 관리가 반드시 들어간다. 이건 UI나 자동 병합 엔진이 아니라,
+**canonical key를 유지하기 위한 registry + alias mapping** 수준이면 충분하다.
+
+- `category_key`는 1개만 선택한다
+- `main_theme`는 반드시 `category_key` 아래 canonical theme 중 1개로 정규화한다
+- `sub_themes`는 최대 2개까지 허용하고, 직접 언급된 테마만 넣는다
+- 자유 생성 문자열은 그대로 저장하지 않고 `unclassified` 또는 nearest canonical key로 정규화한다
+- 정규화 실패 표현은 `vocab_candidates`에 적재한다
+
+예시 registry:
+
+```yaml
+categories:
+  - key: AI인프라
+    aliases: ["AI 인프라", "AI Infra"]
+    themes:
+      - key: AI 데이터센터 전력
+        aliases: ["데이터센터 전력", "AI 전력", "AI DC 전력"]
+      - key: 클라우드·SaaS
+        aliases: ["클라우드", "Cloud", "SaaS"]
+  - key: 반도체
+    aliases: ["반도체", "Semiconductor"]
+    themes:
+      - key: 파운드리
+        aliases: ["Foundry", "파운드리 사업"]
+      - key: HBM
+        aliases: ["HBM", "고대역폭메모리"]
+```
+
+#### 6. `one_line`은 retrieval과 최종 노출 모두에 쓰는 canonical sentence다
 
 형식 규칙은 아래로 고정한다.
 
@@ -296,7 +331,7 @@ CREATE TABLE forward_source_map (
 
 #### `knowledge_chunks`
 
-검색과 synthesis의 공통 단위다.
+검색과 synthesis의 공통 단위다. 실제 임베딩 벡터는 Phase 2부터 별도 Vector DB에 저장한다.
 
 ```sql
 CREATE TABLE knowledge_chunks (
@@ -306,17 +341,16 @@ CREATE TABLE knowledge_chunks (
     source_date DATE NOT NULL,
     channel_key TEXT,
     message_type TEXT NOT NULL,
+    category_key TEXT NOT NULL,
     main_theme TEXT,
     sub_themes JSONB NOT NULL DEFAULT '[]',
     ticker_tags JSONB NOT NULL DEFAULT '[]',
     theme_tags JSONB NOT NULL DEFAULT '[]',
     one_line TEXT NOT NULL,
     content_clean TEXT NOT NULL,
-    embed_text TEXT NOT NULL,
+    embed_payload TEXT NOT NULL,
     channel_weight DOUBLE PRECISION NOT NULL DEFAULT 1.0,
     priority_score DOUBLE PRECISION NOT NULL DEFAULT 0.0,
-    embedding_model TEXT,
-    embedding vector(1536),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 ```
@@ -324,10 +358,27 @@ CREATE TABLE knowledge_chunks (
 인덱스:
 
 - `btree(source_type, source_date)`
+- `btree(category_key, main_theme)`
 - `GIN(sub_themes)`
 - `GIN(ticker_tags)`
 - `GIN(theme_tags)`
-- `HNSW(embedding vector_cosine_ops)`
+
+#### `vocab_candidates`
+
+Phase 1부터 taxonomy drift를 관리한다.
+
+```sql
+CREATE TABLE vocab_candidates (
+    id BIGSERIAL PRIMARY KEY,
+    candidate_type TEXT NOT NULL,      -- category | theme
+    candidate_text TEXT NOT NULL,
+    inferred_parent TEXT,
+    sample_source_pk BIGINT,
+    occurrence_count INTEGER NOT NULL DEFAULT 1,
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+```
 
 #### `report_runs`
 
@@ -361,18 +412,19 @@ CREATE TABLE report_evidence (
 );
 ```
 
-### Phase 1 Embedding Strategy
+### Phase 1 Embed Payload Contract
 
-임베딩 모델은 `text-embedding-3-small`로 고정한다. Phase 1에서는 모델 비교 실험보다 일관된 vector space가 중요하다.
+Phase 1에서는 Vector DB에 실제로 넣지 않더라도, **Phase 2 backfill 시 그대로 쓸 canonical embed payload**를 미리 저장한다.
 
-텔레그램용 임베딩 입력은 아래 함수 하나로 통일한다.
+텔레그램용 embed payload는 아래 함수 하나로 통일한다.
 
 ```python
-def build_embed_text(
+def build_embed_payload(
     *,
     one_line: str,
     clean_text: str,
     channel_name: str,
+    category_key: str,
     main_theme: str | None,
     ticker_tags: list[str],
 ) -> str:
@@ -380,6 +432,7 @@ def build_embed_text(
     theme_text = main_theme or "-"
     return (
         f"채널: {channel_name}\n"
+        f"카테고리: {category_key}\n"
         f"메인테마: {theme_text}\n"
         f"티커: {ticker_text}\n"
         f"{one_line}\n"
@@ -387,80 +440,71 @@ def build_embed_text(
     )
 ```
 
-검색 쿼리 생성도 이 함수와 같은 구조를 써야 한다. 한쪽만 바뀌면 vector space가 어긋난다.
+Phase 2에서 임베딩을 시작할 때도 이 payload를 그대로 사용한다. 한쪽만 바뀌면 vector space가 어긋난다.
 
-### Phase 1 Retrieval Design
+### Phase 1 Daily Aggregation Design
 
-retrieval은 두 단계로 간다.
-
-#### 1. exact retrieval
-
-목적: high-precision evidence를 먼저 확보한다.
+Phase 1에서는 recall을 하지 않는다. 당일 `knowledge_chunks`만 읽어 `category -> theme -> ticker` bundle을 만든다.
 
 필터:
 
-- `source_date BETWEEN report_date - 14 AND report_date`
+- `source_date = report_date`
 - `message_type IN ('signal', 'data')`
-- `ticker_tags` exact overlap 또는 `main_theme/theme_tags` exact overlap
+- `processing_mode != 'skip'`
 
-점수:
+집계 규칙:
 
-- ticker exact match: `+2.0`
-- main_theme exact match: `+1.5`
-- sub_theme overlap: `+0.5`
-- recent 3-day bonus: `+0.5`
+- `category_key` 기준으로 category bucket 생성
+- `main_theme` 기준으로 theme bucket 생성
+- `ticker_tags` 기준으로 focus ticker 후보 생성
+- 같은 `content_hash` 또는 같은 synthetic group에서 온 chunk는 1개만 대표로 채택
+- 같은 채널이 같은 의미의 `one_line`을 반복하면 1개만 대표로 채택
+- `opinion`은 기본 섹션에는 넣지 않고 low-confidence note로만 보관
 
-#### 2. vector retrieval
+Phase 1에서는 정교한 점수화나 hard cap을 두지 않는다. 목적은 **많이 잘라내는 것**이 아니라
+**중복과 노이즈를 줄인 당일 canonical bundle**을 만드는 것이다.
 
-목적: exact tag로 안 잡히는 유사 표현을 회수한다.
+즉 Phase 1은 아래 3가지만 한다.
 
-- query text는 `one_line + theme + ticker` 기반으로 생성
-- cosine similarity threshold는 `0.68`
-- 같은 `content_hash` 또는 같은 `grouped_message_ids`는 하나만 남긴다
+1. `signal/data`만 본문 후보로 채택
+2. 중복 `one_line` 제거
+3. `category -> theme -> ticker` 단위로 당일 bundle 생성
 
-#### 3. final ranker
+### Phase 2 Recall Note
 
-최종 점수:
+Phase 2부터 retrieval은 두 갈래가 된다.
 
-```text
-final_score =
-  0.45 * exact_score +
-  0.35 * cosine_similarity +
-  0.10 * recency_score +
-  0.10 * channel_weight
-```
+- exact retrieval: Postgres
+- vector retrieval: Vector DB
 
-출력 제약:
-
-- theme당 top 8 evidence
-- ticker당 top 5 evidence
-- 같은 채널에서 최대 3개
-- `opinion` 타입은 상위 evidence가 부족할 때만 fallback으로 사용
+Vector DB는 `chunk_id`를 primary lookup key로 사용하고, semantic search 결과로 받은 `chunk_id`를 다시
+Postgres의 `knowledge_chunks`에 조회해서 최종 evidence를 조립한다.
 
 ### Phase 1 Synthesis Contract
 
-LLM은 raw message를 직접 읽지 않는다. `evidence bundle`만 읽는다.
+LLM은 raw message를 직접 읽지 않는다. `same-day bundle`만 읽는다.
 
 입력 단위:
 
+- `category_name`
 - `theme_name`
 - `ticker_name`
 - `today evidence one_line[]`
-- `prior evidence one_line[]`
 - `low_confidence notes[]`
 
 LLM 역할:
 
-- 팩트 수집이 아니라 서술 구조화
+- 팩트 수집이 아니라 당일 bundle 서술 구조화
 - 입력에 없는 수치/날짜/회사명을 추가하지 않음
-- 확실하지 않은 연결은 `추정`으로 표시
+- 당일 bundle에 없는 연결은 만들지 않음
 
 출력 구조:
 
 1. `Pulse`
-2. `Core Themes`
-3. `Focus Tickers`
-4. `Low Confidence / Excluded`
+2. `Category Summaries`
+3. `Core Themes`
+4. `Focus Tickers`
+5. `Low Confidence / Excluded`
 
 ### Phase 1 Markdown Rendering
 
@@ -510,7 +554,7 @@ uv run jarvis report validate 2026-04-16 --mode compare
 2. 짧은 intraday comments가 grouped synthetic chunk로 들어가는가
 3. `main_theme`는 1개만, `sub_themes`는 2개 이하인가
 4. `one_line`이 30자 제약을 지키는가
-5. exact + vector retrieval이 중복 없이 evidence를 고르는가
+5. Phase 1 same-day aggregation이 중복 없이 evidence를 고르는가
 6. Markdown 출력이 raw fact를 새로 지어내지 않는가
 
 ### Phase 1 Exit Criteria
@@ -519,16 +563,17 @@ uv run jarvis report validate 2026-04-16 --mode compare
 
 - `daily-v2`가 지정 날짜에서 안정적으로 실행된다.
 - report evidence trace가 DB에 남는다.
-- compare 결과상 V1 대비 "근거를 다시 찾을 수 있다"는 장점이 분명하다.
+- compare 결과상 V1 대비 "당일 근거를 구조적으로 추적할 수 있다"는 장점이 분명하다.
 - forward/opinion/noise 처리 정책이 fixture 기준으로 흔들리지 않는다.
 
 ## Phase 2 Preview
 
-Phase 2는 `documents`와 `knowledge_chunks(source_type='pdf')`를 추가한다.
+Phase 2는 Vector DB를 붙이고 recall을 시작한 뒤, `documents`와 `knowledge_chunks(source_type='pdf')`를 추가한다.
 
 - PDF parser는 [opendataloader-pdf](https://github.com/opendataloader-project/opendataloader-pdf) 고정
+- Phase 1 Telegram chunk를 Vector DB에 backfill
 - parser wrapper는 라이브러리 결과를 내부 `ParsedDocument` 모델로 정규화
-- 텔레그램과 PDF는 같은 `knowledge_chunks`를 공유
+- 텔레그램과 PDF는 같은 `knowledge_chunks`를 공유하고, Vector DB에서는 같은 `chunk_id` namespace를 사용
 
 ## Phase 3 Preview
 
