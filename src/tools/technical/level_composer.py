@@ -13,6 +13,7 @@ from src.tools.technical.price_levels import select_execution_levels
 
 _BALANCE_MAX_DISPLAY_COUNT = 3
 _BALANCE_MIN_DISTANCE_ATR_MULTIPLIER = 1.0
+_DISPLAY_ZONE_COUNT = 2
 
 
 def _to_structure_level(zone: StructureZone) -> StructureLevelView:
@@ -100,6 +101,68 @@ def _select_balance_for_display(
 
 def _zone_contains_price(lower_bound: float, upper_bound: float, price: float) -> bool:
     return lower_bound <= price <= upper_bound
+
+
+def _extract_trace_selection(
+    selection_trace: list[dict[str, object]],
+) -> tuple[str | None, tuple[float, float] | None]:
+    trace_label: str | None = None
+    selected_bounds: tuple[float, float] | None = None
+    for item in selection_trace:
+        label = item.get("selected_label")
+        if trace_label is None and isinstance(label, str):
+            trace_label = label
+        lower_bound = item.get("lower_bound")
+        upper_bound = item.get("upper_bound")
+        if isinstance(lower_bound, (int, float)) and isinstance(upper_bound, (int, float)):
+            selected_bounds = (float(lower_bound), float(upper_bound))
+            if isinstance(label, str):
+                trace_label = label
+            break
+    return trace_label, selected_bounds
+
+
+def _is_same_bounds(
+    level: StructureLevelView,
+    selected_bounds: tuple[float, float],
+    tolerance: float = 1e-6,
+) -> bool:
+    lower_bound, upper_bound = selected_bounds
+    return (
+        abs(level.lower_bound - lower_bound) <= tolerance
+        and abs(level.upper_bound - upper_bound) <= tolerance
+    )
+
+
+def _prioritize_with_selected(
+    levels: list[StructureLevelView],
+    selected_bounds: tuple[float, float] | None,
+    max_count: int,
+) -> list[StructureLevelView]:
+    if not levels:
+        return []
+
+    ordered = sorted(
+        levels,
+        key=lambda level: (
+            level.total_score,
+            level.touch_count,
+        ),
+        reverse=True,
+    )
+    if selected_bounds is None:
+        return ordered[:max_count]
+
+    selected = None
+    rest: list[StructureLevelView] = []
+    for level in ordered:
+        if selected is None and _is_same_bounds(level, selected_bounds):
+            selected = level
+            continue
+        rest.append(level)
+    if selected is None:
+        return ordered[:max_count]
+    return [selected, *rest][:max_count]
 
 
 def _pick_primary_label(
@@ -272,26 +335,57 @@ def compose_level_payload(
         for level in select_execution_levels(price_levels, max_count=3)
     ]
 
-    support_zones = [_to_structure_level(zone) for zone in zone_set.demand_zones[:2]]
-    raw_supply = [_to_structure_level(zone) for zone in zone_set.supply_zones[:2]]
-    balance_zones = _select_balance_for_display(zone_set.balance_zones, atr)
-    active_box = _to_structure_level(balance_zones[0]) if balance_zones else None
+    trace_label, trace_selected_bounds = _extract_trace_selection(zone_set.selection_trace)
+
+    all_support_levels = [_to_structure_level(zone) for zone in zone_set.demand_zones]
+    raw_supply_levels = [_to_structure_level(zone) for zone in zone_set.supply_zones]
+    balance_levels = [_to_structure_level(zone) for zone in zone_set.balance_zones]
     current_price = price_levels.current_price
 
-    resistance_zones = [zone for zone in raw_supply if zone.upper_bound >= current_price]
-    former_levels = [zone for zone in raw_supply if zone.upper_bound < current_price]
+    support_selected_bounds = trace_selected_bounds if trace_label == "support_zone" else None
+    support_zones = _prioritize_with_selected(
+        all_support_levels,
+        support_selected_bounds,
+        _DISPLAY_ZONE_COUNT,
+    )
+
+    resistance_source = [zone for zone in raw_supply_levels if zone.upper_bound >= current_price]
+    resistance_selected_bounds = trace_selected_bounds if trace_label == "resistance_zone" else None
+    resistance_zones = _prioritize_with_selected(
+        resistance_source,
+        resistance_selected_bounds,
+        _DISPLAY_ZONE_COUNT,
+    )
+
+    former_source = [zone for zone in raw_supply_levels if zone.upper_bound < current_price]
+    former_selected_bounds = (
+        trace_selected_bounds if trace_label in {"former_supply_box", "former_demand_box"} else None
+    )
+    former_levels = _prioritize_with_selected(
+        former_source,
+        former_selected_bounds,
+        _DISPLAY_ZONE_COUNT,
+    )
+
+    box_selected_bounds = (
+        trace_selected_bounds
+        if trace_label in {"active_box", "former_supply_box", "former_demand_box"}
+        else None
+    )
+    active_box = _prioritize_with_selected(balance_levels, box_selected_bounds, 1)
+    active_box_level = active_box[0] if active_box else None
 
     summary_label = _pick_primary_label(
         zone_set=zone_set,
         current_price=current_price,
-        active_box=active_box,
+        active_box=active_box_level,
         support_zones=support_zones,
         resistance_zones=resistance_zones,
         former_levels=former_levels,
     )
     headline, why = _build_headline_and_why(
         summary_label=summary_label,
-        active_box=active_box,
+        active_box=active_box_level,
         support_zones=support_zones,
         resistance_zones=resistance_zones,
         no_clear_reason_codes=zone_set.no_clear_structure_reason_codes,
@@ -301,7 +395,7 @@ def compose_level_payload(
         summary_label=summary_label,
         headline=headline,
         why=why,
-        active_box=active_box,
+        active_box=active_box_level,
         support_zones=support_zones,
         resistance_zones=resistance_zones,
         former_levels=former_levels,

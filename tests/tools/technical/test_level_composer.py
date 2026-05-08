@@ -213,3 +213,60 @@ def test_compose_level_payload_prefers_trace_selected_label_for_consistency():
     payload = compose_level_payload(zone_set, PriceLevels(current_price=100.0))
 
     assert payload.structure_levels.summary_label == "support_zone"
+
+
+def test_compose_level_payload_uses_trace_selected_support_bounds_for_top_zone():
+    from src.tools.technical.level_composer import compose_level_payload
+
+    support_low_score = StructureZone(
+        zone_type="demand",
+        lower_bound=7.5,
+        upper_bound=8.3,
+        mid_price=7.9,
+        touch_count=8,
+        last_touch_date="2026-03-09",
+        touch_score=8.0,
+        recency_score=5.0,
+        volume_reaction_score=5.0,
+        confluence_score=0.0,
+        total_score=5.3,
+        strength="core",
+        reasons=["support-1"],
+    )
+    support_high_score = StructureZone(
+        zone_type="demand",
+        lower_bound=6.9,
+        upper_bound=7.8,
+        mid_price=7.35,
+        touch_count=12,
+        last_touch_date="2026-04-09",
+        touch_score=12.0,
+        recency_score=5.0,
+        volume_reaction_score=5.0,
+        confluence_score=0.0,
+        total_score=6.7,
+        strength="core",
+        reasons=["support-2"],
+    )
+    zone_set = StructureZoneSet(
+        demand_zones=[support_low_score, support_high_score],
+        supply_zones=[],
+        selection_trace=[
+            {"selected_label": "support_zone", "no_clear_structure": False},
+            {
+                "selected_label": "support_zone",
+                "zone_type": "demand",
+                "lower_bound": 6.9,
+                "upper_bound": 7.8,
+            },
+        ],
+        invalidation_candidates=[],
+        invalidation_zone=support_high_score,
+        all_candidates=[support_low_score, support_high_score],
+    )
+
+    payload = compose_level_payload(zone_set, PriceLevels(current_price=15.0))
+
+    assert payload.structure_levels.summary_label == "support_zone"
+    assert payload.structure_levels.support_zones[0].lower_bound == 6.9
+    assert payload.structure_levels.support_zones[0].upper_bound == 7.8
