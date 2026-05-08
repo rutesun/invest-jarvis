@@ -58,6 +58,7 @@ class StructureZoneDetector:
 
     def detect(self, df: pd.DataFrame, snapshot: IndicatorSnapshot) -> StructureZoneSet:
         candidates = self._build_candidates(df, snapshot)
+        touch_episodes = self._collect_touch_episodes(candidates)
         (
             sorted_demand_zones,
             sorted_supply_zones,
@@ -114,6 +115,7 @@ class StructureZoneDetector:
             invalidation_zone=invalidation_zone,
             all_candidates=candidates,
             selection_trace=selection_trace,
+            touch_episodes=touch_episodes,
             no_clear_structure=no_clear_structure,
             no_clear_structure_reason_codes=no_clear_reasons,
         )
@@ -361,6 +363,10 @@ class StructureZoneDetector:
                 cluster_candidates=cluster_candidates,
                 side=zone_type,
             )
+            touch_episodes = self._build_touch_episodes(
+                cluster_candidates,
+                snapshot_date=swings[-1].timestamp,
+            )
             confluence_score = self._score_confluence(cluster, snapshot)
             total_score = (
                 touch_score * self.config.score_weights["touch"]
@@ -402,6 +408,8 @@ class StructureZoneDetector:
                     ],
                     reason_context={
                         "touch_count": touch_count,
+                        "touch_episode_count": len(touch_episodes),
+                        "touch_episodes": touch_episodes,
                         "volume_reaction_score": round(volume_reaction_score, 4),
                         "recency_score": round(recency_score, 4),
                     },
@@ -592,6 +600,69 @@ class StructureZoneDetector:
             if value and lower_bound <= value <= upper_bound:
                 score += 0.5
         return min(score, 1.0)
+
+    def _build_touch_episodes(
+        self,
+        cluster_candidates: list[SwingCandidate],
+        *,
+        snapshot_date: pd.Timestamp,
+    ) -> list[dict[str, object]]:
+        if not cluster_candidates:
+            return []
+
+        ordered = sorted(cluster_candidates, key=lambda candidate: candidate.timestamp)
+        grouped: list[list[SwingCandidate]] = [[ordered[0]]]
+
+        for candidate in ordered[1:]:
+            previous = grouped[-1][-1]
+            gap_days = (candidate.timestamp - previous.timestamp).days
+            if gap_days <= self.config.episode_max_gap_days:
+                grouped[-1].append(candidate)
+            else:
+                grouped.append([candidate])
+
+        episodes: list[dict[str, object]] = []
+        for episode_candidates in grouped:
+            start = episode_candidates[0].timestamp
+            end = episode_candidates[-1].timestamp
+            recency_score = self._score_recency(end, snapshot_date)
+            touch_count = len(episode_candidates)
+            episode_score = touch_count * 0.7 + recency_score * 0.3
+            episodes.append(
+                {
+                    "start_date": start.date().isoformat(),
+                    "end_date": end.date().isoformat(),
+                    "touch_count": touch_count,
+                    "recency_score": recency_score,
+                    "episode_score": round(episode_score, 4),
+                    "touch_dates": [
+                        item.timestamp.date().isoformat() for item in episode_candidates
+                    ],
+                }
+            )
+
+        return episodes
+
+    def _collect_touch_episodes(
+        self,
+        candidates: list[StructureZone],
+    ) -> list[dict[str, object]]:
+        collected: list[dict[str, object]] = []
+        for zone in candidates:
+            episodes = zone.reason_context.get("touch_episodes")
+            if not isinstance(episodes, list) or not episodes:
+                continue
+            collected.append(
+                {
+                    "zone_type": zone.zone_type,
+                    "lower_bound": zone.lower_bound,
+                    "upper_bound": zone.upper_bound,
+                    "total_score": zone.total_score,
+                    "touch_episode_count": len(episodes),
+                    "episodes": episodes,
+                }
+            )
+        return collected
 
     def _build_ma_invalidation_candidates(
         self,

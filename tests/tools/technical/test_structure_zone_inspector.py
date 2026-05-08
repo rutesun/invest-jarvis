@@ -73,6 +73,25 @@ def _sample_zone_set() -> StructureZoneSet:
         invalidation_candidates=[invalidation],
         invalidation_zone=invalidation,
         all_candidates=[demand, supply, invalidation],
+        touch_episodes=[
+            {
+                "zone_type": "demand",
+                "lower_bound": 200.0,
+                "upper_bound": 205.0,
+                "total_score": 13.0,
+                "touch_episode_count": 1,
+                "episodes": [
+                    {
+                        "start_date": "2026-04-21",
+                        "end_date": "2026-05-01",
+                        "touch_count": 4,
+                        "recency_score": 5.0,
+                        "episode_score": 4.3,
+                        "touch_dates": ["2026-04-21", "2026-04-25", "2026-04-29", "2026-05-01"],
+                    }
+                ],
+            }
+        ],
     )
 
 
@@ -181,6 +200,7 @@ def test_build_structure_zone_inspect_payload_includes_selected_and_score_breakd
     assert payload["artifact"]["params"]["top_n_per_side"] == 5
     assert len(payload["artifact"]["candidates"]) == 3
     assert payload["artifact"]["score_breakdown"][0]["total_score"] == 13.0
+    assert payload["touch_episodes"][0]["touch_episode_count"] == 1
 
 
 def test_build_indicator_snapshot_from_ohlcv_populates_minimum_levels():
@@ -235,6 +255,7 @@ def test_format_structure_zone_inspection_shows_selected_and_candidate_sections(
     assert "## 선택된 구조 레벨" in output
     assert "## 실행 레벨" in output
     assert "## 후보 점수" in output
+    assert "## 터치 에피소드" in output
     assert "200.00~205.00" in output
     assert "지지 존" in output
     assert "피봇 S1" in output

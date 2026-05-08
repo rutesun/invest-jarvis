@@ -165,6 +165,7 @@ class StructureZoneSet(BaseModel):
     invalidation_zone: StructureZone | None = None
     all_candidates: list[StructureZone] = Field(default_factory=list)
     selection_trace: list[dict[str, object]] = Field(default_factory=list)
+    touch_episodes: list[dict[str, object]] = Field(default_factory=list)
     no_clear_structure: bool = False
     no_clear_structure_reason_codes: list[str] = Field(default_factory=list)
 
@@ -193,6 +194,7 @@ class StructureZoneConfig(BaseModel):
     balance_overlap_min_ratio: float = 0.30
     balance_center_distance_atr_multiplier: float = 1.00
     balance_max_last_touch_gap_days: int = 21
+    episode_max_gap_days: int = 10
     score_weights: dict[str, float] = Field(
         default_factory=lambda: {
             "touch": 0.35,

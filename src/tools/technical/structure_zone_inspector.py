@@ -139,6 +139,7 @@ def build_structure_zone_inspect_payload(
         "execution_levels": [level.model_dump() for level in level_payload.execution_levels],
         "presented_structure": presented_structure.model_dump() if presented_structure else None,
         "selection_trace": zone_set.selection_trace,
+        "touch_episodes": zone_set.touch_episodes,
         "no_clear_structure": zone_set.no_clear_structure,
         "no_clear_structure_reason_codes": zone_set.no_clear_structure_reason_codes,
         "artifact": artifact.model_dump(),
@@ -257,6 +258,35 @@ def format_structure_zone_inspection(payload: Mapping[str, object], max_candidat
     if selection_trace:
         for item in selection_trace:
             lines.append(f"- {item}")
+    else:
+        lines.append("- 없음")
+    lines.append("")
+
+    lines.extend(["## 터치 에피소드", ""])
+    touch_episodes = payload.get("touch_episodes") or []
+    if touch_episodes:
+        for item in touch_episodes[:max_candidates]:
+            episode_view = _as_dict(item)
+            lines.append(
+                "- "
+                f"[{episode_view.get('zone_type')}] "
+                f"{episode_view.get('lower_bound', 0.0):.2f}~{episode_view.get('upper_bound', 0.0):.2f} "
+                f"| episodes={episode_view.get('touch_episode_count', 0)} "
+                f"| total={episode_view.get('total_score', 0.0):.2f}"
+            )
+            first_episode = (
+                episode_view.get("episodes", [])[0]
+                if isinstance(episode_view.get("episodes"), list) and episode_view.get("episodes")
+                else None
+            )
+            if first_episode:
+                first_episode_view = _as_dict(first_episode)
+                lines.append(
+                    "  "
+                    f"대표: {first_episode_view.get('start_date')}~{first_episode_view.get('end_date')} "
+                    f"touch={first_episode_view.get('touch_count')} "
+                    f"score={first_episode_view.get('episode_score')}"
+                )
     else:
         lines.append("- 없음")
     lines.append("")

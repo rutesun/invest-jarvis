@@ -732,6 +732,30 @@ def test_detector_selection_trace_includes_dropped_candidate_reasons():
     )
 
 
+def test_detector_collects_touch_episodes_metadata():
+    dates = pd.date_range("2026-01-01", periods=220, freq="D")
+    price_wave = [100.0 + ((index % 20) * 0.4) for index in range(220)]
+    df = pd.DataFrame(
+        {
+            "Open": price_wave,
+            "High": [price + 2.0 for price in price_wave],
+            "Low": [price - 2.0 for price in price_wave],
+            "Close": price_wave,
+            "Volume": [1_000_000 + index * 500 for index in range(220)],
+        },
+        index=dates,
+    )
+    snapshot = IndicatorSnapshot(price=price_wave[-1], change_pct=0.0, atr=2.0, sma_150=100.0)
+
+    zone_set = StructureZoneDetector().detect(df, snapshot)
+
+    assert isinstance(zone_set.touch_episodes, list)
+    assert zone_set.touch_episodes
+    top_episode_entry = zone_set.touch_episodes[0]
+    assert "episodes" in top_episode_entry
+    assert top_episode_entry["touch_episode_count"] >= 1
+
+
 def test_detector_primary_label_prefers_higher_score_over_fixed_order():
     detector = StructureZoneDetector()
     demand = StructureZone(
