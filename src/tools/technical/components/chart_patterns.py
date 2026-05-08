@@ -3,6 +3,7 @@
 import pandas as pd
 from scipy.signal import find_peaks
 
+from src.tools.technical.components.swing_extractor import SwingExtractorOutput
 from src.tools.technical.models import ChartPatternResult, IndicatorSnapshot
 
 
@@ -1034,9 +1035,12 @@ def detect_support_level_test(df: pd.DataFrame) -> ChartPatternResult:
 
 
 def detect_chart_patterns(
-    df: pd.DataFrame, snapshot: IndicatorSnapshot | None = None
+    df: pd.DataFrame,
+    snapshot: IndicatorSnapshot | None = None,
+    swings: SwingExtractorOutput | None = None,
 ) -> dict[str, ChartPatternResult]:
     """모든 차트 패턴 감지 통합 함수"""
+    _ = swings
 
     patterns = {
         "cup_and_handle": detect_cup_and_handle(df),

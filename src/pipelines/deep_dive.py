@@ -22,7 +22,7 @@ from src.tools.flow import FlowTool, InvestorFlow
 from src.tools.fundamental import FundamentalSnapshot, FundamentalTool
 from src.tools.news import NewsArticle, NewsTool
 from src.tools.technical.charting import render_technical_chart
-from src.tools.technical.components.chart_patterns import detect_chart_patterns
+from src.tools.technical.components.pattern_engine import PatternEngine
 from src.tools.technical.level_composer import compose_level_payload
 from src.tools.technical.models import TechnicalResult
 from src.tools.technical.price_levels import get_fibonacci_base_points, identify_key_levels
@@ -65,6 +65,7 @@ class DeepDivePipeline:
         disclosure_tool: DisclosureTool | None = None,
         flow_tool: FlowTool | None = None,
         structure_zone_detector: StructureZoneDetector | None = None,
+        pattern_engine: PatternEngine | None = None,
         level_payload_composer: Callable | None = None,
         structure_presentation_adapter: Callable | None = None,
     ):
@@ -75,6 +76,7 @@ class DeepDivePipeline:
         self.disclosure_tool = disclosure_tool
         self.flow_tool = flow_tool
         self.structure_zone_detector = structure_zone_detector or StructureZoneDetector()
+        self.pattern_engine = pattern_engine or PatternEngine()
         self.level_payload_composer = level_payload_composer or compose_level_payload
         self.structure_presentation_adapter = (
             structure_presentation_adapter or build_structure_presentation
@@ -171,7 +173,7 @@ class DeepDivePipeline:
         if df is None:
             raise ValueError("raw_dataframe required for pattern detection and charting")
 
-        chart_patterns = detect_chart_patterns(df, technical_data.snapshot)
+        chart_patterns = self.pattern_engine.detect(df, technical_data.snapshot)
         lookback_high, lookback_low = get_fibonacci_base_points(df, technical_data.snapshot)
         price_levels = identify_key_levels(
             snapshot=technical_data.snapshot,
