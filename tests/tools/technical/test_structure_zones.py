@@ -858,3 +858,45 @@ def test_detector_primary_label_prefers_higher_score_over_fixed_order():
     assert label == "resistance_zone"
     assert zone is not None
     assert zone.total_score == 9.0
+
+
+def test_select_best_zone_uses_proximity_and_episode_recency():
+    detector = StructureZoneDetector()
+    far_old = StructureZone(
+        zone_type="demand",
+        lower_bound=60.0,
+        upper_bound=70.0,
+        mid_price=65.0,
+        touch_count=9,
+        last_touch_date="2025-01-10",
+        touch_score=7.5,
+        recency_score=1.0,
+        volume_reaction_score=4.0,
+        confluence_score=0.0,
+        total_score=6.6,
+        strength="core",
+        reason_context={"episode_recent_score": 1.0},
+    )
+    near_recent = StructureZone(
+        zone_type="demand",
+        lower_bound=95.0,
+        upper_bound=99.0,
+        mid_price=97.0,
+        touch_count=6,
+        last_touch_date="2026-04-20",
+        touch_score=6.9,
+        recency_score=5.0,
+        volume_reaction_score=4.0,
+        confluence_score=0.0,
+        total_score=6.4,
+        strength="core",
+        reason_context={"episode_recent_score": 5.0},
+    )
+
+    selected = detector._select_best_zone(
+        [far_old, near_recent],
+        current_price=100.0,
+        label_hint="support_zone",
+    )
+
+    assert selected.mid_price == 97.0

@@ -207,24 +207,81 @@ class StructureZoneDetector:
         candidates: list[tuple[float, str, StructureZone]] = []
 
         if balance_zones:
-            top_balance = self._sort_zones(balance_zones, current_price)[0]
+            top_balance = self._select_best_zone(
+                balance_zones,
+                current_price=current_price,
+                label_hint="active_box",
+            )
             in_box = top_balance.lower_bound <= current_price <= top_balance.upper_bound
             label = "active_box" if in_box else "former_supply_box"
             boost = 0.5 if in_box else 0.0
-            candidates.append((top_balance.total_score + boost, label, top_balance))
+            candidates.append(
+                (
+                    self._selection_priority_score(
+                        top_balance,
+                        current_price=current_price,
+                        label_hint=label,
+                    )
+                    + boost,
+                    label,
+                    top_balance,
+                )
+            )
 
         if demand_zones:
-            top_demand = self._sort_zones(demand_zones, current_price)[0]
-            candidates.append((top_demand.total_score, "support_zone", top_demand))
+            top_demand = self._select_best_zone(
+                demand_zones,
+                current_price=current_price,
+                label_hint="support_zone",
+            )
+            candidates.append(
+                (
+                    self._selection_priority_score(
+                        top_demand,
+                        current_price=current_price,
+                        label_hint="support_zone",
+                    ),
+                    "support_zone",
+                    top_demand,
+                )
+            )
 
         active_supply = [zone for zone in supply_zones if zone.upper_bound >= current_price]
         former_supply = [zone for zone in supply_zones if zone.upper_bound < current_price]
         if active_supply:
-            top_supply = self._sort_zones(active_supply, current_price)[0]
-            candidates.append((top_supply.total_score, "resistance_zone", top_supply))
+            top_supply = self._select_best_zone(
+                active_supply,
+                current_price=current_price,
+                label_hint="resistance_zone",
+            )
+            candidates.append(
+                (
+                    self._selection_priority_score(
+                        top_supply,
+                        current_price=current_price,
+                        label_hint="resistance_zone",
+                    ),
+                    "resistance_zone",
+                    top_supply,
+                )
+            )
         elif former_supply:
-            top_former = self._sort_zones(former_supply, current_price)[0]
-            candidates.append((top_former.total_score, "former_supply_box", top_former))
+            top_former = self._select_best_zone(
+                former_supply,
+                current_price=current_price,
+                label_hint="former_supply_box",
+            )
+            candidates.append(
+                (
+                    self._selection_priority_score(
+                        top_former,
+                        current_price=current_price,
+                        label_hint="former_supply_box",
+                    ),
+                    "former_supply_box",
+                    top_former,
+                )
+            )
 
         if candidates:
             candidates.sort(
@@ -238,6 +295,43 @@ class StructureZoneDetector:
             _score, selected_label, selected_zone = candidates[0]
             return selected_label, selected_zone
         return "no_clear_structure", None
+
+    def _select_best_zone(
+        self,
+        zones: list[StructureZone],
+        *,
+        current_price: float,
+        label_hint: str,
+    ) -> StructureZone:
+        return max(
+            zones,
+            key=lambda zone: (
+                self._selection_priority_score(
+                    zone,
+                    current_price=current_price,
+                    label_hint=label_hint,
+                ),
+                pd.Timestamp(zone.last_touch_date).value if zone.last_touch_date else 0,
+                zone.touch_count,
+            ),
+        )
+
+    def _selection_priority_score(
+        self,
+        zone: StructureZone,
+        *,
+        current_price: float,
+        label_hint: str,
+    ) -> float:
+        distance_pct = abs(zone.mid_price - current_price) / max(current_price, 1.0)
+        episode_recent_score = zone.reason_context.get("episode_recent_score", zone.recency_score)
+        if not isinstance(episode_recent_score, (int, float)):
+            episode_recent_score = zone.recency_score
+
+        proximity_penalty = min(distance_pct * 0.6, 0.6)
+        recency_bonus = float(episode_recent_score) * 0.1
+        label_bonus = 0.2 if label_hint == "active_box" else 0.0
+        return zone.total_score + recency_bonus + label_bonus - proximity_penalty
 
     def _build_selection_trace(
         self,
