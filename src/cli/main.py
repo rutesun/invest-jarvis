@@ -1187,6 +1187,80 @@ def report_daily(
         raise typer.Exit(1) from None
 
 
+@report_app.command("daily-v2")
+def report_daily_v2(
+    date: str = typer.Argument(
+        None,
+        help="분석할 날짜 (YYYY-MM-DD). 미지정 시 전날.",
+    ),
+    data_dir: str = typer.Option("data", "--data-dir", "-d", help="데이터 디렉토리"),
+    provider: str = typer.Option("openai", "--provider", "-p", help="LLM provider"),
+    compare: bool = typer.Option(False, "--compare", help="비교 모드 실행"),
+):
+    """Stock Report Engine V2 (Phase 1) 실행."""
+    from datetime import datetime as dt
+    from datetime import timedelta
+
+    from src.pipelines.stock_report.pipeline import format_daily_v2_report, run_daily_v2
+
+    if date is None:
+        date = (dt.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+
+    console.print(f"[bold]Daily Report V2 생성 중... (날짜: {date})[/bold]\n")
+
+    try:
+        result = run_daily_v2(
+            date=date,
+            data_dir=data_dir,
+            provider=provider,
+            compare=compare,
+        )
+        output = format_daily_v2_report(result)
+        console.print(Markdown(output))
+
+        year_month = date[:7]
+        report_dir = Path(f"reports/{year_month}")
+        report_dir.mkdir(parents=True, exist_ok=True)
+        output_file = report_dir / f"daily_v2_{date}.md"
+        output_file.write_text(output, encoding="utf-8")
+        console.print(f"\n[green]✓ 리포트 저장: {output_file}[/green]")
+    except Exception as e:
+        console.print(f"[red]오류: {e}[/red]")
+        raise typer.Exit(1) from None
+
+
+@report_app.command("validate")
+def report_validate_v2(
+    date: str = typer.Argument(
+        ...,
+        help="검증할 날짜 (YYYY-MM-DD)",
+    ),
+    mode: str = typer.Option("compare", "--mode", help="검증 모드 (현재 compare만 지원)"),
+    data_dir: str = typer.Option("data", "--data-dir", "-d", help="데이터 디렉토리"),
+    provider: str = typer.Option("openai", "--provider", "-p", help="LLM provider"),
+):
+    """Stock Report Engine V2 검증 실행."""
+    from src.pipelines.stock_report.pipeline import format_daily_v2_report, run_validate_v2
+
+    if mode != "compare":
+        console.print("[red]오류: 현재 validate는 --mode compare만 지원합니다.[/red]")
+        raise typer.Exit(1) from None
+
+    console.print(f"[bold]Daily Report V2 검증 중... (날짜: {date}, 모드: {mode})[/bold]\n")
+
+    try:
+        result = run_validate_v2(
+            date=date,
+            data_dir=data_dir,
+            provider=provider,
+        )
+        output = format_daily_v2_report(result)
+        console.print(Markdown(output))
+    except Exception as e:
+        console.print(f"[red]오류: {e}[/red]")
+        raise typer.Exit(1) from None
+
+
 # --- Telegram 서브커맨드 ---
 
 telegram_app = typer.Typer(help="Telegram 채널 메시지 수집")
