@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
 
 import pandas as pd
 
+from src.tools.technical.components.swing_extractor import SwingCandidate, SwingExtractor
 from src.tools.technical.models import (
     IndicatorSnapshot,
     StructureZone,
@@ -51,16 +51,10 @@ def cluster_price_candidates(
     return clusters
 
 
-@dataclass
-class _SwingCandidate:
-    price: float
-    timestamp: pd.Timestamp
-    volume: float
-
-
 class StructureZoneDetector:
     def __init__(self, config: StructureZoneConfig | None = None):
         self.config = config or StructureZoneConfig()
+        self.swing_extractor = SwingExtractor(window=self.config.swing_window)
 
     def detect(self, df: pd.DataFrame, snapshot: IndicatorSnapshot) -> StructureZoneSet:
         candidates = self._build_candidates(df, snapshot)
@@ -171,12 +165,11 @@ class StructureZoneDetector:
         self, df: pd.DataFrame, snapshot: IndicatorSnapshot
     ) -> list[StructureZone]:
         recent = df.tail(self.config.lookback_days).copy()
-        low_candidates = self._extract_swing_candidates(recent, side="demand")
-        high_candidates = self._extract_swing_candidates(recent, side="supply")
+        swings = self.swing_extractor.extract(recent)
 
         return [
-            *self._build_side_zones(recent, low_candidates, "demand", snapshot),
-            *self._build_side_zones(recent, high_candidates, "supply", snapshot),
+            *self._build_side_zones(recent, swings.demand_candidates, "demand", snapshot),
+            *self._build_side_zones(recent, swings.supply_candidates, "supply", snapshot),
         ]
 
     def _derive_no_clear_structure(
@@ -340,28 +333,10 @@ class StructureZoneDetector:
             candidates.append(swing_low_candidate)
         return candidates, selected
 
-    def _extract_swing_candidates(self, df: pd.DataFrame, side: str) -> list[_SwingCandidate]:
-        value_col = "Low" if side == "demand" else "High"
-        window = self.config.swing_window
-        rolling = (
-            df[value_col].rolling(window=window, center=True, min_periods=window).min()
-            if side == "demand"
-            else df[value_col].rolling(window=window, center=True, min_periods=window).max()
-        )
-        swing_rows = df[df[value_col] == rolling]
-        return [
-            _SwingCandidate(
-                price=float(row[value_col]),
-                timestamp=pd.Timestamp(index),
-                volume=float(row.get("Volume", 0.0)),
-            )
-            for index, row in swing_rows.iterrows()
-        ]
-
     def _build_side_zones(
         self,
         df: pd.DataFrame,
-        swings: list[_SwingCandidate],
+        swings: list[SwingCandidate],
         zone_type: str,
         snapshot: IndicatorSnapshot,
     ) -> list[StructureZone]:
@@ -563,7 +538,7 @@ class StructureZoneDetector:
     def _score_volume_reaction(
         self,
         df: pd.DataFrame,
-        cluster_candidates: list[_SwingCandidate],
+        cluster_candidates: list[SwingCandidate],
         side: str,
     ) -> float:
         event_scores = [
@@ -574,7 +549,7 @@ class StructureZoneDetector:
     def _score_touch_event(
         self,
         df: pd.DataFrame,
-        candidate: _SwingCandidate,
+        candidate: SwingCandidate,
         side: str,
     ) -> float:
         if "Volume" not in df.columns:
