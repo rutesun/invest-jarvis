@@ -188,7 +188,7 @@ def format_structure_zone_inspection(payload: Mapping[str, object], max_candidat
         lines.extend(
             _format_zone_group(
                 "지지 존",
-                structure_levels.get("support_zones", structure_levels.get("demand_zones", [])),
+                structure_levels.get("support_zones", []),
                 current_price=float(snapshot["price"]),
                 zone_type="support",
             )
@@ -196,17 +196,12 @@ def format_structure_zone_inspection(payload: Mapping[str, object], max_candidat
         lines.extend(
             _format_zone_group(
                 "저항 존",
-                structure_levels.get(
-                    "resistance_zones",
-                    structure_levels.get("supply_zones", []),
-                ),
+                structure_levels.get("resistance_zones", []),
                 current_price=float(snapshot["price"]),
                 zone_type="resistance",
             )
         )
-        former_levels = structure_levels.get(
-            "former_levels", structure_levels.get("balance_zones", [])
-        )
+        former_levels = structure_levels.get("former_levels", [])
         lines.extend(
             _format_zone_group(
                 "전환 레벨",
@@ -406,22 +401,16 @@ def compare_structure_zone_inspect_payloads(
         "current_source": str(current_payload.get("source") or ""),
         "selection_changes": {
             "support_zones": _compare_selected_lists(
-                baseline_levels.get("support_zones", baseline_levels.get("demand_zones", [])),
-                current_levels.get("support_zones", current_levels.get("demand_zones", [])),
+                baseline_levels.get("support_zones", []),
+                current_levels.get("support_zones", []),
             ),
             "resistance_zones": _compare_selected_lists(
-                baseline_levels.get(
-                    "resistance_zones",
-                    baseline_levels.get("supply_zones", []),
-                ),
-                current_levels.get(
-                    "resistance_zones",
-                    current_levels.get("supply_zones", []),
-                ),
+                baseline_levels.get("resistance_zones", []),
+                current_levels.get("resistance_zones", []),
             ),
             "former_levels": _compare_selected_lists(
-                baseline_levels.get("former_levels", baseline_levels.get("balance_zones", [])),
-                current_levels.get("former_levels", current_levels.get("balance_zones", [])),
+                baseline_levels.get("former_levels", []),
+                current_levels.get("former_levels", []),
             ),
             "invalidation": _compare_single_level(
                 baseline_levels.get("invalidation"),
