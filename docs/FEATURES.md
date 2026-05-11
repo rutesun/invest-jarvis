@@ -66,6 +66,7 @@ LLM 없이 기술적 분석만 수행하는 빠른 진단 기능.
 | 기술적 | **KIS API (한국) / yfinance (미국)** → 8개 컴포넌트 | TechnicalSummaryOutput |
 | **패턴** | OHLC → 9개 차트 패턴 | ChartPatternResult |
 | **가격 레벨** | 6개 소스 (MA, Fib, Pivot, Swing, ATR, Pattern) | PriceLevels |
+| **구조 레벨** | 3년 가격 CSV/실시간 OHLC → 수요/공급 zone + 무효화 후보 | StructureZoneSet |
 | 펀더멘탈 | **KIS 재무 API 5종 (한국) / yfinance (미국)** | FundamentalSummaryOutput |
 | 뉴스 | yfinance 뉴스 | NewsAnalysisOutput |
 | 공시 | SEC EDGAR / OpenDART (선택) | - |
@@ -84,6 +85,8 @@ LLM 없이 기술적 분석만 수행하는 빠른 진단 기능.
 - 오래된 차트 패턴은 headline이 아니라 상세 이유에서 감점 근거로 설명
 - 한국 주식 재무 지표가 부족하면 밸류 판단을 유보하고 원시 지표는 `N/A`로 표시
 - 액션 시나리오는 `최근 지지/저항 + 50일선 + 150일선 + 무효화 레벨` 구조로 출력
+- 구조 레벨은 `수요 존 / 공급 존 / 무효화 기준`을 zone 중심으로 분리 출력
+- 실행 레벨은 pivot / MA / fib / ATR 중 가까운 line 위주로 3개만 노출
 
 **KIS 재무 조회 복원력:**
 - 한국 주식 재무 API 5종은 엔드포인트별 재시도(최대 3회) 적용
@@ -175,6 +178,20 @@ LLM 없이 기술적 분석만 수행하는 빠른 진단 기능.
 - 중복 제거: 현재가 ±5% 내 0.5% threshold, 그 외 1.0%
 - 정렬: 지지선 높은 순, 저항선 낮은 순 (가까운 것 우선)
 - 출력: 각각 상위 5개 + 패턴 타겟
+
+**구조 레벨 분석 (Structure Zone):**
+
+| 항목 | 규칙 |
+|------|------|
+| 입력 | 장기 OHLCV (기본 3년 fixture 또는 실시간 조회) |
+| 후보 추출 | swing high / low cluster |
+| zone 폭 | ATR 기반 폭, 최소/최대 % floor/ceiling 적용 |
+| 점수 | touch / recency / volume reaction / confluence 가중 합 |
+| 출력 | 수요 존 2개, 공급 존 2개, 무효화 기준 1개 |
+
+- 구조 레벨은 장기 구조 판단용 zone이다.
+- 실행 레벨은 단기 진입/확인/리스크 관리용 line이다.
+- `jarvis analyze`는 두 레이어를 모두 LLM 프롬프트와 CLI 출력에 전달한다.
 
 **Actionable Signal Output (Phase 2 확장):**
 

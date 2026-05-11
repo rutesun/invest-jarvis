@@ -170,6 +170,7 @@ class KISProvider(BaseProvider):
             "6mo": 180,
             "1y": 365,
             "2y": 730,
+            "3y": 1095,
         }
         days = period_days_map.get(period, 365)
 

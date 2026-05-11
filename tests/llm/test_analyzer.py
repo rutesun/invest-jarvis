@@ -4,6 +4,7 @@ import pytest
 
 from src.llm.analyzer import (
     analyze_news,
+    format_structure_context_for_llm,
     generate_actionable_signal,
     generate_fundamental_summary,
     generate_integrated_analysis,
@@ -280,6 +281,59 @@ async def test_generate_integrated_analysis_calls_llm():
 
 
 @pytest.mark.asyncio
+async def test_format_structure_context_for_llm():
+    structure_levels = {
+        "support_zones": [
+            {
+                "lower_bound": 145.0,
+                "upper_bound": 147.0,
+                "strength": "core",
+                "reasons": ["반복 지지"],
+            },
+            {
+                "lower_bound": 140.0,
+                "upper_bound": 142.0,
+                "strength": "secondary",
+                "reasons": ["보조"],
+            },
+        ],
+        "resistance_zones": [
+            {"lower_bound": 155.0, "upper_bound": 157.0, "strength": "core", "reasons": ["매물대"]},
+        ],
+        "former_levels": [],
+        "invalidation": {
+            "label": "145.00~147.00 + 150일선 146.00 하향 이탈",
+            "reasons": ["core demand zone", "150일선 근접"],
+        },
+    }
+    execution_levels = [
+        {
+            "type": "pivot_s1",
+            "description": "피봇 S1",
+            "price": 146.0,
+            "distance_pct": -2.7,
+        },
+        {
+            "type": "sma_50",
+            "description": "50일선",
+            "price": 145.0,
+            "distance_pct": -3.3,
+        },
+    ]
+
+    text = format_structure_context_for_llm(structure_levels, execution_levels)
+
+    assert "구조 레벨" in text
+    assert "support_zones: 145.00~147.00, 140.00~142.00" in text
+    assert "resistance_zones: 155.00~157.00" in text
+    assert "former_levels: 없음" in text
+    assert "invalidation: 145.00~147.00 + 150일선 146.00 하향 이탈" in text
+    assert "실행 레벨" in text
+    assert "$146.00" in text
+    assert "피봇 S1" in text
+
+
+@pytest.mark.asyncio
 async def test_generate_actionable_signal():
     """Test generate_actionable_signal with Phase 2 pattern and price inputs."""
     from src.tools.technical.models import ChartPatternResult, PriceLevel, PriceLevels
@@ -313,6 +367,50 @@ async def test_generate_actionable_signal():
         ],
         targets={"cup_and_handle_target": 165.0},
     )
+    structure_levels = {
+        "support_zones": [
+            {
+                "lower_bound": 145.0,
+                "upper_bound": 147.0,
+                "strength": "core",
+                "reasons": ["반복 지지"],
+            },
+            {
+                "lower_bound": 140.0,
+                "upper_bound": 142.0,
+                "strength": "secondary",
+                "reasons": ["보조"],
+            },
+        ],
+        "resistance_zones": [
+            {"lower_bound": 155.0, "upper_bound": 157.0, "strength": "core", "reasons": ["공급"]},
+            {
+                "lower_bound": 160.0,
+                "upper_bound": 162.0,
+                "strength": "secondary",
+                "reasons": ["보조"],
+            },
+        ],
+        "former_levels": [],
+        "invalidation": {
+            "label": "145.00~147.00 + 150일선 146.00 하향 이탈",
+            "reasons": ["core demand zone", "150일선 근접"],
+        },
+    }
+    execution_levels = [
+        {
+            "type": "pivot_s1",
+            "description": "피봇 S1",
+            "price": 146.0,
+            "distance_pct": -2.7,
+        },
+        {
+            "type": "sma_50",
+            "description": "50일선",
+            "price": 145.0,
+            "distance_pct": -3.3,
+        },
+    ]
 
     expected_output = ActionableSignalOutput(
         action="매수",
@@ -331,9 +429,15 @@ async def test_generate_actionable_signal():
     )
 
     # Use patch to intercept the actual chain.ainvoke call
+    captured_payload = {}
+
+    async def capture_ainvoke(payload):
+        captured_payload.update(payload)
+        return expected_output
+
     with patch("src.llm.analyzer.ChatPromptTemplate") as mock_prompt_cls:
         mock_chain = AsyncMock()
-        mock_chain.ainvoke = AsyncMock(return_value=expected_output)
+        mock_chain.ainvoke = AsyncMock(side_effect=capture_ainvoke)
         mock_prompt_instance = MagicMock()
         mock_prompt_instance.__or__ = MagicMock(return_value=mock_chain)
         mock_prompt_cls.from_messages.return_value = mock_prompt_instance
@@ -346,6 +450,8 @@ async def test_generate_actionable_signal():
             technical_summary="RSI 과매도 회복, 50일선 지지 확인",
             chart_patterns=chart_patterns,
             price_levels=price_levels,
+            structure_levels=structure_levels,
+            execution_levels=execution_levels,
             llm=mock_llm,
         )
 
@@ -358,3 +464,9 @@ async def test_generate_actionable_signal():
         assert result.entry_zone is not None
         assert result.key_levels is not None
         assert mock_chain.ainvoke.called
+        assert "구조 레벨" in captured_payload["structure_context"]
+        assert "145.00~147.00" in captured_payload["structure_context"]
+        assert "피봇 S1" in captured_payload["structure_context"]
+        assert captured_payload["structure_summary"]
+        assert captured_payload["execution_summary"]
+        assert "levels_text" not in captured_payload

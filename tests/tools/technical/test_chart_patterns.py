@@ -595,6 +595,73 @@ def test_support_resistance_test_near_level():
     assert "테스트 중" in result.description
 
 
+def test_support_resistance_test_uses_shared_swings():
+    """snapshot 레벨이 비어도 shared swings 레벨로 테스트 가능해야 한다."""
+    from src.tools.technical.components.chart_patterns import test_support_resistance
+    from src.tools.technical.components.swing_extractor import SwingCandidate, SwingExtractorOutput
+    from src.tools.technical.models import IndicatorSnapshot
+
+    index = pd.date_range(end=pd.Timestamp.now(), periods=30, freq="D")
+    df = pd.DataFrame({"Close": [200.0] * 30}, index=index)
+
+    snapshot = IndicatorSnapshot(
+        price=200.5,
+        change_pct=0.25,
+    )
+    swings = SwingExtractorOutput(
+        demand_candidates=[
+            SwingCandidate(
+                price=200.0,
+                timestamp=pd.Timestamp(index[-2]),
+                volume=1_200_000.0,
+            )
+        ],
+        supply_candidates=[],
+    )
+
+    result = test_support_resistance(df, snapshot, swings=swings)
+
+    assert result.detected is True
+    assert result.key_levels is not None
+    assert result.key_levels["name"] == "공유 스윙 저점"
+
+
+def test_detect_chart_patterns_support_resistance_uses_swings_when_passed():
+    from src.tools.technical.components.chart_patterns import detect_chart_patterns
+    from src.tools.technical.components.swing_extractor import SwingCandidate, SwingExtractorOutput
+    from src.tools.technical.models import IndicatorSnapshot
+
+    index = pd.date_range(end=pd.Timestamp.now(), periods=100, freq="D")
+    prices = [200.0] * 100
+    df = pd.DataFrame(
+        {
+            "Open": prices,
+            "High": [p * 1.01 for p in prices],
+            "Low": [p * 0.99 for p in prices],
+            "Close": prices,
+        },
+        index=index,
+    )
+    snapshot = IndicatorSnapshot(price=200.5, change_pct=0.0)
+    swings = SwingExtractorOutput(
+        demand_candidates=[
+            SwingCandidate(
+                price=200.0,
+                timestamp=pd.Timestamp(index[-5]),
+                volume=950_000.0,
+            )
+        ],
+        supply_candidates=[],
+    )
+
+    patterns = detect_chart_patterns(df, snapshot, swings=swings)
+    support_resistance = patterns["support_resistance_test"]
+
+    assert support_resistance.detected is True
+    assert support_resistance.key_levels is not None
+    assert support_resistance.key_levels["name"] == "공유 스윙 저점"
+
+
 def test_support_level_test_multiple_touches():
     """Support Level Test: 여러 저점이 같은 가격대"""
     from src.tools.technical.components.chart_patterns import detect_support_level_test

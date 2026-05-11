@@ -209,3 +209,23 @@ def identify_key_levels(
         resistance_levels=resistances[:5],
         targets=targets,
     )
+
+
+def select_execution_levels(levels: PriceLevels, max_count: int = 3) -> list[PriceLevel]:
+    """실행용 핵심 line을 현재가 근접도와 타입 우선순위로 선택"""
+    priority_order = {
+        "pivot": 0,
+        "sma": 1,
+        "atr": 2,
+        "fib": 3,
+        "pattern": 4,
+        "swing": 5,
+    }
+    all_levels = [*levels.support_levels, *levels.resistance_levels]
+    return sorted(
+        all_levels,
+        key=lambda level: (
+            abs(level.distance_pct),
+            priority_order.get(level.type.split("_")[0], 9),
+        ),
+    )[:max_count]

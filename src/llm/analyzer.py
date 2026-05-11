@@ -58,6 +58,97 @@ def format_levels_for_llm(levels: PriceLevels) -> str:
     return "\n".join(lines)
 
 
+def _as_dict(item):
+    if item is None:
+        return None
+    return item if isinstance(item, dict) else item.model_dump()
+
+
+def _format_zone_range(zone: dict) -> str:
+    return f"{zone['lower_bound']:.2f}~{zone['upper_bound']:.2f}"
+
+
+def format_structure_context_for_llm(
+    structure_levels,
+    execution_levels,
+) -> str:
+    """구조/실행 레벨을 LLM용 컨텍스트 문자열로 변환"""
+    if isinstance(structure_levels, str):
+        return structure_levels
+
+    structure_dict = _as_dict(structure_levels)
+    if structure_dict and "llm_context" in structure_dict:
+        return str(structure_dict["llm_context"])
+
+    lines: list[str] = ["구조 레벨:"]
+
+    if structure_dict:
+        support_zones = structure_dict.get("support_zones")
+        resistance_zones = structure_dict.get("resistance_zones")
+        former_levels = structure_dict.get("former_levels")
+        active_box = structure_dict.get("active_box")
+        invalidation_value = structure_dict.get("invalidation")
+        invalidation = _as_dict(invalidation_value) if invalidation_value else None
+
+        if support_zones is None or resistance_zones is None:
+            lines.append("- presenter contract missing (support_zones/resistance_zones)")
+            lines.append("")
+            lines.append("실행 레벨:")
+            if execution_levels:
+                for index, level in enumerate(execution_levels, start=1):
+                    level_dict = _as_dict(level)
+                    lines.append(
+                        f"{index}. ${level_dict['price']:.2f} ({level_dict['description']}, {level_dict['distance_pct']:+.1f}%)"
+                    )
+            else:
+                lines.append("- 실행 레벨 데이터 없음")
+            return "\n".join(lines)
+
+        support_text = (
+            ", ".join(_format_zone_range(zone) for zone in support_zones)
+            if support_zones
+            else "없음"
+        )
+        resistance_text = (
+            ", ".join(_format_zone_range(zone) for zone in resistance_zones)
+            if resistance_zones
+            else "없음"
+        )
+        former_text = (
+            ", ".join(_format_zone_range(zone) for zone in former_levels)
+            if former_levels
+            else "없음"
+        )
+        active_box_text = _format_zone_range(active_box) if active_box else "없음"
+
+        if structure_dict.get("summary_label"):
+            lines.append(f"- summary_label: {structure_dict['summary_label']}")
+        if structure_dict.get("headline"):
+            lines.append(f"- headline: {structure_dict['headline']}")
+        if structure_dict.get("why"):
+            lines.append(f"- why: {structure_dict['why']}")
+        lines.append(f"- active_box: {active_box_text}")
+        lines.append(f"- support_zones: {support_text}")
+        lines.append(f"- resistance_zones: {resistance_text}")
+        lines.append(f"- former_levels: {former_text}")
+        lines.append(f"- invalidation: {invalidation['label'] if invalidation else '없음'}")
+    else:
+        lines.append("- 구조 존 데이터 없음")
+
+    lines.append("")
+    lines.append("실행 레벨:")
+    if execution_levels:
+        for index, level in enumerate(execution_levels, start=1):
+            level_dict = _as_dict(level)
+            lines.append(
+                f"{index}. ${level_dict['price']:.2f} ({level_dict['description']}, {level_dict['distance_pct']:+.1f}%)"
+            )
+    else:
+        lines.append("- 실행 레벨 데이터 없음")
+
+    return "\n".join(lines)
+
+
 async def analyze_news(
     input_data: NewsAnalysisInput,
     llm: BaseChatModel,
@@ -332,6 +423,11 @@ async def generate_actionable_signal(
     technical_summary: str,
     chart_patterns: dict[str, ChartPatternResult],
     price_levels: PriceLevels,
+    structure_context: str | None = None,
+    structure_levels=None,
+    execution_levels=None,
+    structure_summary: str | None = None,
+    execution_summary: str | None = None,
     news_analysis: str | None = None,
     fundamental_summary: str | None = None,
     llm: BaseChatModel | None = None,
@@ -343,7 +439,10 @@ async def generate_actionable_signal(
         llm = get_llm_instance()
 
     patterns_text = format_patterns_for_llm(chart_patterns)
-    levels_text = format_levels_for_llm(price_levels)
+    structure_context_text = structure_context or format_structure_context_for_llm(
+        structure_levels,
+        execution_levels,
+    )
 
     prompt = ChatPromptTemplate.from_messages(
         [
@@ -381,8 +480,12 @@ async def generate_actionable_signal(
 **차트 패턴**:
 {patterns_text}
 
-**가격 레벨**:
-{levels_text}
+**구조/실행 레벨**:
+{structure_summary}
+{execution_summary}
+
+**구조/실행 상세**:
+{structure_context}
 
 **뉴스**: {news_analysis}
 **펀더멘탈**: {fundamental_summary}
@@ -399,7 +502,9 @@ async def generate_actionable_signal(
             "ticker": ticker,
             "technical_summary": technical_summary,
             "patterns_text": patterns_text,
-            "levels_text": levels_text,
+            "structure_context": structure_context_text,
+            "structure_summary": structure_summary or "구조 레벨 요약 없음",
+            "execution_summary": execution_summary or "실행 레벨 요약 없음",
             "news_analysis": news_analysis or "없음",
             "fundamental_summary": fundamental_summary or "없음",
         }

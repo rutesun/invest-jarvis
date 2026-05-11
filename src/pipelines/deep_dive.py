@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from collections.abc import Callable
 
 from langchain_core.language_models import BaseChatModel
 
@@ -21,9 +22,12 @@ from src.tools.flow import FlowTool, InvestorFlow
 from src.tools.fundamental import FundamentalSnapshot, FundamentalTool
 from src.tools.news import NewsArticle, NewsTool
 from src.tools.technical.charting import render_technical_chart
-from src.tools.technical.components.chart_patterns import detect_chart_patterns
+from src.tools.technical.components.pattern_engine import PatternEngine
+from src.tools.technical.level_composer import compose_level_payload
 from src.tools.technical.models import TechnicalResult
 from src.tools.technical.price_levels import get_fibonacci_base_points, identify_key_levels
+from src.tools.technical.structure_presentation import build_structure_presentation
+from src.tools.technical.structure_zones import StructureZoneDetector
 from src.tools.technical.tool import TechnicalAnalysisTool
 
 
@@ -60,6 +64,10 @@ class DeepDivePipeline:
         fundamental_tool: FundamentalTool | None = None,
         disclosure_tool: DisclosureTool | None = None,
         flow_tool: FlowTool | None = None,
+        structure_zone_detector: StructureZoneDetector | None = None,
+        pattern_engine: PatternEngine | None = None,
+        level_payload_composer: Callable | None = None,
+        structure_presentation_adapter: Callable | None = None,
     ):
         self.technical_tool = technical_tool
         self.news_tool = news_tool
@@ -67,6 +75,12 @@ class DeepDivePipeline:
         self.fundamental_tool = fundamental_tool
         self.disclosure_tool = disclosure_tool
         self.flow_tool = flow_tool
+        self.structure_zone_detector = structure_zone_detector or StructureZoneDetector()
+        self.pattern_engine = pattern_engine or PatternEngine()
+        self.level_payload_composer = level_payload_composer or compose_level_payload
+        self.structure_presentation_adapter = (
+            structure_presentation_adapter or build_structure_presentation
+        )
 
     async def run(self, ticker: str) -> dict:
         """Run deep dive analysis for a ticker.
@@ -88,7 +102,7 @@ class DeepDivePipeline:
                 - integrated_analysis: IntegratedAnalysisOutput | None (종합 인사이트)
                 - actionable_signal: ActionableSignalOutput | None (실행 가능한 투자 시그널)
         """
-        tech_result = await self.technical_tool.execute(ticker, period="2y")
+        tech_result = await self.technical_tool.execute(ticker, period="3y")
         if not tech_result.success:
             raise RuntimeError(f"Technical analysis failed: {tech_result.error}")
 
@@ -159,7 +173,7 @@ class DeepDivePipeline:
         if df is None:
             raise ValueError("raw_dataframe required for pattern detection and charting")
 
-        chart_patterns = detect_chart_patterns(df, technical_data.snapshot)
+        chart_patterns = self.pattern_engine.detect(df, technical_data.snapshot)
         lookback_high, lookback_low = get_fibonacci_base_points(df, technical_data.snapshot)
         price_levels = identify_key_levels(
             snapshot=technical_data.snapshot,
@@ -167,12 +181,29 @@ class DeepDivePipeline:
             lookback_high=lookback_high,
             lookback_low=lookback_low,
         )
+        zone_set = self.structure_zone_detector.detect(df, technical_data.snapshot)
+        level_payload = self.level_payload_composer(
+            zone_set,
+            price_levels,
+            atr=technical_data.snapshot.atr,
+        )
+        structure_levels = level_payload.structure_levels
+        execution_levels = level_payload.execution_levels
+        presented_structure = self.structure_presentation_adapter(
+            structure_levels,
+            execution_levels,
+        )
 
         actionable_signal = await analyzer.generate_actionable_signal(
             ticker=ticker,
             technical_summary=f"{technical_summary.summary}\n\n{technical_summary.rationale}",
             chart_patterns=chart_patterns,
             price_levels=price_levels,
+            structure_context=presented_structure.llm_context,
+            structure_summary=presented_structure.structure_summary
+            or level_payload.structure_summary,
+            execution_summary=presented_structure.execution_summary
+            or level_payload.execution_summary,
             llm=self.llm,
         )
 
@@ -213,6 +244,7 @@ class DeepDivePipeline:
             "decision_summary": decision_bundle.summary,
             "factor_assessments": decision_bundle.factor_assessments,
             "scenarios": decision_bundle.scenarios,
+            "chart_patterns": chart_patterns,
             "news": news_articles,
             "news_analysis": news_analysis,
             "fundamental": fundamental_data,
@@ -221,6 +253,9 @@ class DeepDivePipeline:
             "flow": flow_data,
             "integrated_analysis": integrated_analysis,
             "actionable_signal": actionable_signal,
+            "structure_levels": structure_levels,
+            "execution_levels": execution_levels,
+            "presented_structure": presented_structure,
             "chart": chart_result,
         }
 

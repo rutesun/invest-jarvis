@@ -1,7 +1,7 @@
 from datetime import datetime
 
 import pandas as pd
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class ComponentResult(BaseModel):
@@ -133,6 +133,187 @@ class PriceLevels(BaseModel):
     support_levels: list[PriceLevel] = Field(default_factory=list)
     resistance_levels: list[PriceLevel] = Field(default_factory=list)
     targets: dict[str, float] = Field(default_factory=dict)
+
+
+class StructureZone(BaseModel):
+    """구조적 수요/공급/무효화 zone"""
+
+    zone_type: str
+    lower_bound: float
+    upper_bound: float
+    mid_price: float
+    touch_count: int
+    last_touch_date: str | None = None
+    touch_score: float
+    recency_score: float
+    volume_reaction_score: float
+    confluence_score: float
+    total_score: float
+    strength: str
+    reasons: list[str] = Field(default_factory=list)
+    reason_codes: list[str] = Field(default_factory=list)
+    reason_context: dict[str, object] = Field(default_factory=dict)
+
+
+class StructureZoneSet(BaseModel):
+    """구조 zone 계산 결과 묶음"""
+
+    support_zones: list[StructureZone] = Field(default_factory=list)
+    resistance_zones: list[StructureZone] = Field(default_factory=list)
+    former_levels: list[StructureZone] = Field(default_factory=list)
+    invalidation_candidates: list[StructureZone] = Field(default_factory=list)
+    invalidation_zone: StructureZone | None = None
+    all_candidates: list[StructureZone] = Field(default_factory=list)
+    selection_trace: list[dict[str, object]] = Field(default_factory=list)
+    touch_episodes: list[dict[str, object]] = Field(default_factory=list)
+    no_clear_structure: bool = False
+    no_clear_structure_reason_codes: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _upgrade_legacy_zone_keys(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+
+        upgraded = dict(data)
+        if "support_zones" not in upgraded and "demand_zones" in upgraded:
+            upgraded["support_zones"] = upgraded["demand_zones"]
+        if "resistance_zones" not in upgraded and "supply_zones" in upgraded:
+            upgraded["resistance_zones"] = upgraded["supply_zones"]
+        if "former_levels" not in upgraded and "balance_zones" in upgraded:
+            upgraded["former_levels"] = upgraded["balance_zones"]
+        return upgraded
+
+    @property
+    def demand_zones(self) -> list[StructureZone]:
+        """Legacy alias for support_zones."""
+        return self.support_zones
+
+    @property
+    def supply_zones(self) -> list[StructureZone]:
+        """Legacy alias for resistance_zones."""
+        return self.resistance_zones
+
+    @property
+    def balance_zones(self) -> list[StructureZone]:
+        """Legacy alias for former_levels."""
+        return self.former_levels
+
+
+class StructureZoneConfig(BaseModel):
+    """구조 zone 계산 파라미터"""
+
+    lookback_days: int = 756
+    atr_width_multiplier: float = 0.8
+    min_zone_width_pct: float = 0.01
+    max_zone_width_pct: float = 0.05
+    recent_window_days: int = 60
+    mid_window_days: int = 180
+    volume_baseline_window: int = 20
+    reaction_lookahead_days: int = 5
+    top_n_per_side: int = 5
+    core_zone_threshold: float = 2.0
+    invalidation_ma_distance_pct: float = 0.03
+    swing_window: int = 5
+    cluster_span_multiplier: float = 2.5
+    selection_max_distance_pct: float = 0.50
+    selection_min_recency_score: float = 3.0
+    overlap_min_ratio: float = 0.50
+    overlap_center_distance_atr_multiplier: float = 0.50
+    overlap_max_last_touch_gap_days: int = 21
+    balance_overlap_min_ratio: float = 0.30
+    balance_center_distance_atr_multiplier: float = 1.00
+    balance_max_last_touch_gap_days: int = 21
+    episode_max_gap_days: int = 10
+    volume_profile_bin_count: int = 50
+    volume_profile_top_k: int = 5
+    score_weights: dict[str, float] = Field(
+        default_factory=lambda: {
+            "touch": 0.35,
+            "recency": 0.20,
+            "volume": 0.30,
+            "confluence": 0.15,
+        }
+    )
+
+
+class StructureLevelView(BaseModel):
+    """출력용 구조 zone raw payload"""
+
+    lower_bound: float
+    upper_bound: float
+    mid_price: float
+    strength: str
+    reasons: list[str] = Field(default_factory=list)
+    touch_count: int
+    last_touch_date: str | None = None
+    total_score: float
+
+
+class InvalidationLevelView(BaseModel):
+    """출력용 구조 무효화 raw payload"""
+
+    label: str
+    lower_bound: float
+    upper_bound: float
+    reference: str | None = None
+    reasons: list[str] = Field(default_factory=list)
+
+
+class StructureLevelsPayloadV2(BaseModel):
+    """Composer translated payload (V2)."""
+
+    summary_label: str
+    headline: str
+    why: str
+    active_box: StructureLevelView | None = None
+    support_zones: list[StructureLevelView] = Field(default_factory=list)
+    resistance_zones: list[StructureLevelView] = Field(default_factory=list)
+    former_levels: list[StructureLevelView] = Field(default_factory=list)
+    invalidation: InvalidationLevelView | None = None
+    patterns_reference: list[str] = Field(default_factory=list)
+
+
+class StructurePresentationPayload(BaseModel):
+    """Presenter output for CLI and LLM."""
+
+    top_judgment: str
+    headline: str
+    why: str
+    cli_blocks: list[str] = Field(default_factory=list)
+    llm_context: str
+    structure_summary: str = ""
+    execution_summary: str = ""
+
+
+class ExecutionLevelView(BaseModel):
+    """실행 레벨 payload"""
+
+    type: str
+    description: str
+    price: float
+    distance_pct: float
+
+
+class LevelPayload(BaseModel):
+    """구조/실행 레벨 합성 payload"""
+
+    structure_levels: StructureLevelsPayloadV2
+    execution_levels: list[ExecutionLevelView] = Field(default_factory=list)
+    structure_summary: str
+    execution_summary: str
+
+
+class ZoneTestArtifact(BaseModel):
+    """회귀 테스트용 structure zone 산출물"""
+
+    schema_version: str
+    symbol: str
+    csv_path: str
+    params: dict
+    candidates: list[dict]
+    selected_zones: list[dict]
+    score_breakdown: list[dict]
 
 
 class TechnicalResult(BaseModel):

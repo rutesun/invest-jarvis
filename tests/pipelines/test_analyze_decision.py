@@ -244,6 +244,16 @@ def test_event_assessment_keeps_directionless_disclosure_as_reference():
     assert assessment.bias == "neutral"
 
 
+def test_event_assessment_normalizes_sec_filename_to_readable_summary():
+    assessment = build_event_assessment(
+        news_titles=[],
+        disclosure_items=[{"form_type": "10-Q", "description": "alab-20260331.htm"}],
+    )
+
+    assert assessment.summary == "SEC 10-Q 공시"
+    assert "SEC 10-Q 공시" in assessment.evidence
+
+
 def test_flow_assessment_scores_supportive_flow_data():
     flow = InvestorFlow(
         code="033100",
@@ -502,6 +512,7 @@ def test_build_default_scenarios_expands_trigger_levels_with_ma50_ma150_and_inva
                 magnitude_score=2,
                 actionability_score=4,
                 total_score=7,
+                headline="기관 매수 우위",
                 summary="외인/기관 수급이 현재 흐름을 뒷받침함",
                 role_reason="한 축의 수급은 우호적이지만 일치도는 제한적임",
                 evidence=["기관 5일: 매수"],
@@ -514,6 +525,8 @@ def test_build_default_scenarios_expands_trigger_levels_with_ma50_ma150_and_inva
     assert any("최근 저항" in level for level in scenarios[0].trigger_price_levels)
     assert any("50일선" in level for level in scenarios[0].trigger_price_levels)
     assert any("150일선" in level for level in scenarios[0].trigger_price_levels)
+    assert "수급: 기관 매수 우위" in scenarios[0].confirming_factors
+    assert any("하향 이탈" in condition for condition in scenarios[1].invalidation_conditions)
     assert any("무효화 레벨" in condition for condition in scenarios[0].invalidation_conditions)
 
 

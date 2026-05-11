@@ -1,0 +1,416 @@
+from src.tools.technical.models import (
+    ExecutionLevelView,
+    InvalidationLevelView,
+    LevelPayload,
+    PriceLevels,
+    StructureLevelsPayloadV2,
+    StructureLevelView,
+    StructureZone,
+    StructureZoneSet,
+)
+from src.tools.technical.price_levels import select_execution_levels
+
+
+_BALANCE_MAX_DISPLAY_COUNT = 3
+_BALANCE_MIN_DISTANCE_ATR_MULTIPLIER = 1.0
+_DISPLAY_ZONE_COUNT = 2
+
+
+def _to_structure_level(zone: StructureZone) -> StructureLevelView:
+    reasons = zone.reasons or []
+    if zone.reason_codes and not reasons:
+        reasons = zone.reason_codes
+    return StructureLevelView(
+        lower_bound=zone.lower_bound,
+        upper_bound=zone.upper_bound,
+        mid_price=zone.mid_price,
+        strength=zone.strength,
+        reasons=reasons,
+        touch_count=zone.touch_count,
+        last_touch_date=zone.last_touch_date,
+        total_score=zone.total_score,
+    )
+
+
+def _format_zone_label(lower_bound: float, upper_bound: float) -> str:
+    return f"{lower_bound:.2f}~{upper_bound:.2f}"
+
+
+def _build_invalidation(zone: StructureZone | None) -> InvalidationLevelView | None:
+    if zone is None:
+        return None
+
+    label = f"{_format_zone_label(zone.lower_bound, zone.upper_bound)} 하향 이탈"
+    for reason in zone.reasons:
+        if "150일선" in reason or "200일선" in reason:
+            label = (
+                f"{_format_zone_label(zone.lower_bound, zone.upper_bound)} + "
+                f"{reason.split(' fallback')[0]} 하향 이탈"
+            )
+            break
+
+    reference = None
+    reasons = zone.reasons or zone.reason_codes
+    if reasons:
+        reference = reasons[0]
+
+    return InvalidationLevelView(
+        label=label,
+        lower_bound=zone.lower_bound,
+        upper_bound=zone.upper_bound,
+        reference=reference,
+        reasons=reasons,
+    )
+
+
+def _zone_width(zone: StructureZone) -> float:
+    return max(zone.upper_bound - zone.lower_bound, 1e-6)
+
+
+def _required_balance_distance(
+    left: StructureZone,
+    right: StructureZone,
+    atr: float | None,
+) -> float:
+    if atr and atr > 0:
+        return atr * _BALANCE_MIN_DISTANCE_ATR_MULTIPLIER
+    return min(_zone_width(left), _zone_width(right)) * 0.5
+
+
+def _select_balance_for_display(
+    zones: list[StructureZone],
+    atr: float | None,
+) -> list[StructureZone]:
+    if not zones:
+        return []
+
+    ordered = sorted(zones, key=lambda zone: zone.total_score, reverse=True)
+    selected: list[StructureZone] = []
+    for candidate in ordered:
+        if any(
+            abs(candidate.mid_price - chosen.mid_price)
+            < _required_balance_distance(candidate, chosen, atr)
+            for chosen in selected
+        ):
+            continue
+        selected.append(candidate)
+        if len(selected) >= _BALANCE_MAX_DISPLAY_COUNT:
+            break
+    return selected
+
+
+def _zone_contains_price(lower_bound: float, upper_bound: float, price: float) -> bool:
+    return lower_bound <= price <= upper_bound
+
+
+def _extract_trace_selection(
+    selection_trace: list[dict[str, object]],
+) -> tuple[str | None, tuple[float, float] | None]:
+    trace_label: str | None = None
+    selected_bounds: tuple[float, float] | None = None
+    for item in selection_trace:
+        label = item.get("selected_label")
+        if trace_label is None and isinstance(label, str):
+            trace_label = label
+        lower_bound = item.get("lower_bound")
+        upper_bound = item.get("upper_bound")
+        if isinstance(lower_bound, (int, float)) and isinstance(upper_bound, (int, float)):
+            selected_bounds = (float(lower_bound), float(upper_bound))
+            if isinstance(label, str):
+                trace_label = label
+            break
+    return trace_label, selected_bounds
+
+
+def _is_same_bounds(
+    level: StructureLevelView,
+    selected_bounds: tuple[float, float],
+    tolerance: float = 1e-6,
+) -> bool:
+    lower_bound, upper_bound = selected_bounds
+    return (
+        abs(level.lower_bound - lower_bound) <= tolerance
+        and abs(level.upper_bound - upper_bound) <= tolerance
+    )
+
+
+def _prioritize_with_selected(
+    levels: list[StructureLevelView],
+    selected_bounds: tuple[float, float] | None,
+    max_count: int,
+) -> list[StructureLevelView]:
+    if not levels:
+        return []
+
+    ordered = sorted(
+        levels,
+        key=lambda level: (
+            level.total_score,
+            level.touch_count,
+        ),
+        reverse=True,
+    )
+    if selected_bounds is None:
+        return ordered[:max_count]
+
+    selected = None
+    rest: list[StructureLevelView] = []
+    for level in ordered:
+        if selected is None and _is_same_bounds(level, selected_bounds):
+            selected = level
+            continue
+        rest.append(level)
+    if selected is None:
+        return ordered[:max_count]
+    return [selected, *rest][:max_count]
+
+
+def _pick_primary_label(
+    *,
+    zone_set: StructureZoneSet,
+    current_price: float,
+    active_box: StructureLevelView | None,
+    support_zones: list[StructureLevelView],
+    resistance_zones: list[StructureLevelView],
+    former_levels: list[StructureLevelView],
+) -> str:
+    trace_label = _extract_selected_label_from_trace(zone_set.selection_trace)
+    if trace_label and _is_available_label(
+        trace_label=trace_label,
+        current_price=current_price,
+        active_box=active_box,
+        support_zones=support_zones,
+        resistance_zones=resistance_zones,
+        former_levels=former_levels,
+    ):
+        return trace_label
+
+    if zone_set.no_clear_structure:
+        return "no_clear_structure"
+
+    scored_candidates: list[tuple[float, str]] = []
+    if active_box:
+        in_box = _zone_contains_price(active_box.lower_bound, active_box.upper_bound, current_price)
+        label = "active_box" if in_box else "former_supply_box"
+        boost = 0.5 if in_box else 0.0
+        scored_candidates.append((active_box.total_score + boost, label))
+    if support_zones:
+        scored_candidates.append((support_zones[0].total_score, "support_zone"))
+    if resistance_zones:
+        scored_candidates.append((resistance_zones[0].total_score, "resistance_zone"))
+    if former_levels:
+        scored_candidates.append((former_levels[0].total_score, "former_supply_box"))
+    if scored_candidates:
+        scored_candidates.sort(key=lambda item: item[0], reverse=True)
+        return scored_candidates[0][1]
+    return "no_clear_structure"
+
+
+def _extract_selected_label_from_trace(selection_trace: list[dict[str, object]]) -> str | None:
+    for item in selection_trace:
+        label = item.get("selected_label")
+        if isinstance(label, str):
+            return label
+    return None
+
+
+def _is_available_label(
+    *,
+    trace_label: str,
+    current_price: float,
+    active_box: StructureLevelView | None,
+    support_zones: list[StructureLevelView],
+    resistance_zones: list[StructureLevelView],
+    former_levels: list[StructureLevelView],
+) -> bool:
+    if trace_label == "active_box":
+        return bool(
+            active_box
+            and _zone_contains_price(active_box.lower_bound, active_box.upper_bound, current_price)
+        )
+    if trace_label == "support_zone":
+        return bool(support_zones)
+    if trace_label == "resistance_zone":
+        return bool(resistance_zones)
+    if trace_label in {"former_supply_box", "former_demand_box"}:
+        return bool(former_levels or active_box)
+    return trace_label == "no_clear_structure"
+
+
+def _build_headline_and_why(
+    *,
+    summary_label: str,
+    active_box: StructureLevelView | None,
+    support_zones: list[StructureLevelView],
+    resistance_zones: list[StructureLevelView],
+    no_clear_reason_codes: list[str],
+) -> tuple[str, str]:
+    if summary_label == "no_clear_structure":
+        reason = ", ".join(no_clear_reason_codes) if no_clear_reason_codes else "근거 점수 약함"
+        return "구조 해석 보류", f"최근 구조 신호가 약해 보류 ({reason})"
+    if summary_label == "active_box" and active_box:
+        return (
+            f"박스 중심 구조 {active_box.lower_bound:.2f}~{active_box.upper_bound:.2f}",
+            "현재 가격이 박스 내부에 있어 상·하단 반응 확인이 우선",
+        )
+    if summary_label == "support_zone" and support_zones:
+        zone = support_zones[0]
+        return (
+            f"핵심 지지 존 {zone.lower_bound:.2f}~{zone.upper_bound:.2f}",
+            "최근 지지 반응이 상대적으로 강해 하단 방어 확인이 핵심",
+        )
+    if summary_label == "resistance_zone" and resistance_zones:
+        zone = resistance_zones[0]
+        return (
+            f"핵심 저항 존 {zone.lower_bound:.2f}~{zone.upper_bound:.2f}",
+            "상단 매물대 반응이 남아 있어 돌파 확인이 핵심",
+        )
+    if summary_label in {"former_supply_box", "former_demand_box"}:
+        return (
+            "전환 레벨 중심 구조",
+            "과거 구조 레벨이 현재는 지지/저항 전환 구간으로 작동",
+        )
+    return "구조 혼합", "지지/저항 근거가 혼재해 보조 신호로 해석"
+
+
+def _is_execution_overlapping_structure(
+    *,
+    level_price: float,
+    zones: list[StructureLevelView],
+) -> bool:
+    return any(zone.lower_bound <= level_price <= zone.upper_bound for zone in zones)
+
+
+def _dedupe_execution_levels(
+    *,
+    execution_levels: list[ExecutionLevelView],
+    structure_levels: StructureLevelsPayloadV2,
+) -> list[ExecutionLevelView]:
+    structure_ranges: list[StructureLevelView] = [
+        *structure_levels.support_zones,
+        *structure_levels.resistance_zones,
+        *structure_levels.former_levels,
+    ]
+    if structure_levels.active_box:
+        structure_ranges.append(structure_levels.active_box)
+
+    deduped: list[ExecutionLevelView] = []
+    for level in execution_levels:
+        if _is_execution_overlapping_structure(level_price=level.price, zones=structure_ranges):
+            continue
+        deduped.append(level)
+    return deduped
+
+
+def _build_structure_summary(structure_levels: StructureLevelsPayloadV2) -> str:
+    invalidation = structure_levels.invalidation.label if structure_levels.invalidation else "없음"
+    return (
+        f"{structure_levels.headline} | 지지 {len(structure_levels.support_zones)}개, "
+        f"저항 {len(structure_levels.resistance_zones)}개, "
+        f"전환 {len(structure_levels.former_levels)}개, 무효화 {invalidation}"
+    )
+
+
+def _build_execution_summary(execution_levels: list[ExecutionLevelView]) -> str:
+    if not execution_levels:
+        return "실행 레벨 없음"
+    return ", ".join(
+        f"{level.description} ${level.price:.2f} ({level.distance_pct:+.1f}%)"
+        for level in execution_levels
+    )
+
+
+def compose_level_payload(
+    zone_set: StructureZoneSet,
+    price_levels: PriceLevels,
+    atr: float | None = None,
+) -> LevelPayload:
+    execution_levels = [
+        ExecutionLevelView(
+            type=level.type,
+            description=level.description,
+            price=level.price,
+            distance_pct=level.distance_pct,
+        )
+        for level in select_execution_levels(price_levels, max_count=3)
+    ]
+
+    trace_label, trace_selected_bounds = _extract_trace_selection(zone_set.selection_trace)
+
+    all_support_levels = [_to_structure_level(zone) for zone in zone_set.support_zones]
+    raw_supply_levels = [_to_structure_level(zone) for zone in zone_set.resistance_zones]
+    balance_levels = [_to_structure_level(zone) for zone in zone_set.former_levels]
+    current_price = price_levels.current_price
+
+    support_selected_bounds = trace_selected_bounds if trace_label == "support_zone" else None
+    support_zones = _prioritize_with_selected(
+        all_support_levels,
+        support_selected_bounds,
+        _DISPLAY_ZONE_COUNT,
+    )
+
+    resistance_source = [zone for zone in raw_supply_levels if zone.upper_bound >= current_price]
+    resistance_selected_bounds = trace_selected_bounds if trace_label == "resistance_zone" else None
+    resistance_zones = _prioritize_with_selected(
+        resistance_source,
+        resistance_selected_bounds,
+        _DISPLAY_ZONE_COUNT,
+    )
+
+    former_source = [zone for zone in raw_supply_levels if zone.upper_bound < current_price]
+    former_selected_bounds = (
+        trace_selected_bounds if trace_label in {"former_supply_box", "former_demand_box"} else None
+    )
+    former_levels = _prioritize_with_selected(
+        former_source,
+        former_selected_bounds,
+        _DISPLAY_ZONE_COUNT,
+    )
+
+    box_selected_bounds = (
+        trace_selected_bounds
+        if trace_label in {"active_box", "former_supply_box", "former_demand_box"}
+        else None
+    )
+    active_box = _prioritize_with_selected(balance_levels, box_selected_bounds, 1)
+    active_box_level = active_box[0] if active_box else None
+
+    summary_label = _pick_primary_label(
+        zone_set=zone_set,
+        current_price=current_price,
+        active_box=active_box_level,
+        support_zones=support_zones,
+        resistance_zones=resistance_zones,
+        former_levels=former_levels,
+    )
+    headline, why = _build_headline_and_why(
+        summary_label=summary_label,
+        active_box=active_box_level,
+        support_zones=support_zones,
+        resistance_zones=resistance_zones,
+        no_clear_reason_codes=zone_set.no_clear_structure_reason_codes,
+    )
+
+    structure_levels = StructureLevelsPayloadV2(
+        summary_label=summary_label,
+        headline=headline,
+        why=why,
+        active_box=active_box_level,
+        support_zones=support_zones,
+        resistance_zones=resistance_zones,
+        former_levels=former_levels,
+        invalidation=_build_invalidation(zone_set.invalidation_zone),
+        patterns_reference=[],
+    )
+
+    deduped_execution_levels = _dedupe_execution_levels(
+        execution_levels=execution_levels,
+        structure_levels=structure_levels,
+    )
+
+    return LevelPayload(
+        structure_levels=structure_levels,
+        execution_levels=deduped_execution_levels,
+        structure_summary=_build_structure_summary(structure_levels),
+        execution_summary=_build_execution_summary(deduped_execution_levels),
+    )

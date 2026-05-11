@@ -79,6 +79,9 @@ uv run pytest tests/tools/test_technical.py::test_trend_strategy
 - Fixture 활용: `conftest.py`에 공통 fixture
 - Mock 사용: 외부 API 호출은 mock
 
+### 구조 zone 회귀/튜닝
+- 구조 zone 전용 테스트 구조와 로컬 튜닝 루프는 [`docs/STRUCTURE_ZONE_TESTING.md`](STRUCTURE_ZONE_TESTING.md)를 기준으로 본다.
+
 ---
 
 ## 문서화 규칙

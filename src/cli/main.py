@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import re
 from pathlib import Path
 from typing import Literal
 
@@ -60,6 +61,7 @@ METRIC_DISPLAY_NAMES = {
     "quick_ratio": "당좌비율",
     "market_cap": "시가총액",
 }
+_SEC_DISCLOSURE_FILENAME_PATTERN = re.compile(r"^[A-Za-z0-9._-]+\.(htm|html|txt|xml)$")
 
 
 def _get_metric_display_name(metric_name: str) -> str:
@@ -116,6 +118,15 @@ def _format_metric_value(metric_name: str, value: float | None) -> str:
         formatted = f"{value:.2f}" if abs(value) < 10 else f"{value:.1f}"
         # Remove trailing zeros after decimal point
         return formatted.rstrip("0").rstrip(".") if "." in formatted else formatted
+
+
+def _format_disclosure_title(form_type: str, description: str) -> str:
+    text = (description or "").strip()
+    if not text:
+        return f"{form_type} 공시"
+    if _SEC_DISCLOSURE_FILENAME_PATTERN.match(text):
+        return f"SEC {form_type} 공시"
+    return text
 
 
 logger = logging.getLogger(__name__)
@@ -396,6 +407,139 @@ def _format_scenario_section(scenarios: list) -> str:
     return "\n".join(lines)
 
 
+def _format_pattern_section(chart_patterns: dict | None) -> str:
+    if not isinstance(chart_patterns, dict):
+        return ""
+
+    detected_items: list[dict] = []
+    for item in chart_patterns.values():
+        payload = _to_payload_dict(item)
+        if not isinstance(payload, dict):
+            continue
+        if not payload.get("detected"):
+            continue
+        detected_items.append(payload)
+
+    lines = ["## 패턴 분석", ""]
+    if not detected_items:
+        lines.append("- 감지된 유효 패턴 없음")
+        lines.append("")
+        return "\n".join(lines)
+
+    def _sort_key(item: dict) -> tuple[int, float]:
+        days_ago = item.get("days_ago")
+        if isinstance(days_ago, int):
+            return (days_ago, -(float(item.get("confidence") or 0.0)))
+        return (10**9, -(float(item.get("confidence") or 0.0)))
+
+    for item in sorted(detected_items, key=_sort_key):
+        pattern_name = str(item.get("pattern_name") or "패턴")
+        confidence = float(item.get("confidence") or 0.0)
+        days_ago = item.get("days_ago")
+        timing = (
+            "오늘 완성"
+            if days_ago == 0
+            else f"{days_ago}일 전 완성"
+            if isinstance(days_ago, int)
+            else "완성 시점 미확인"
+        )
+        description = str(item.get("description") or "").strip()
+        if description:
+            lines.append(
+                f"- **{pattern_name}**: {timing} | 신뢰도 {confidence * 100:.0f}% | {description}"
+            )
+        else:
+            lines.append(f"- **{pattern_name}**: {timing} | 신뢰도 {confidence * 100:.0f}%")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _to_payload_dict(item):
+    if item is None:
+        return None
+    return item if isinstance(item, dict) else item.model_dump()
+
+
+def _format_zone_bounds(zone) -> str:
+    zone_dict = _to_payload_dict(zone)
+    return f"{zone_dict['lower_bound']:.2f}~{zone_dict['upper_bound']:.2f}"
+
+
+def _split_supply_zones_by_price(supply_zones, current_price: float) -> tuple[list, list]:
+    active_supply = []
+    absorbed_supply = []
+    for zone in supply_zones:
+        zone_dict = _to_payload_dict(zone)
+        if zone_dict["upper_bound"] <= current_price:
+            absorbed_supply.append(zone)
+        else:
+            active_supply.append(zone)
+    return active_supply, absorbed_supply
+
+
+def _format_structure_levels(structure_levels, current_price: float) -> str:
+    if not structure_levels:
+        return ""
+
+    structure_dict = _to_payload_dict(structure_levels)
+    demand_zones = structure_dict.get("demand_zones")
+    supply_zones = structure_dict.get("supply_zones")
+    balance_zones = structure_dict.get("balance_zones")
+    if demand_zones is None and supply_zones is None:
+        demand_zones = structure_dict.get("support_zones") or []
+        supply_zones = structure_dict.get("resistance_zones") or []
+        balance_zones = structure_dict.get("former_levels") or []
+    demand_zones = demand_zones or []
+    supply_zones = supply_zones or []
+    balance_zones = balance_zones or []
+    active_supply, absorbed_supply = _split_supply_zones_by_price(supply_zones, current_price)
+    invalidation = _to_payload_dict(structure_dict.get("invalidation"))
+
+    lines = ["## 구조 레벨", ""]
+    lines.append(
+        f"- **수요 존**: {', '.join(_format_zone_bounds(zone) for zone in demand_zones) if demand_zones else '없음'}"
+    )
+    lines.append(
+        f"- **공급 존**: {', '.join(_format_zone_bounds(zone) for zone in active_supply) if active_supply else '없음'}"
+    )
+    lines.append(
+        f"- **흡수 공급 존**: {', '.join(_format_zone_bounds(zone) for zone in absorbed_supply) if absorbed_supply else '없음'}"
+    )
+    lines.append(
+        f"- **밸런스 존**: {', '.join(_format_zone_bounds(zone) for zone in balance_zones) if balance_zones else '없음'}"
+    )
+    lines.append(f"- **무효화 기준**: {invalidation['label'] if invalidation else '없음'}")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _format_execution_levels(execution_levels) -> str:
+    if not execution_levels:
+        return ""
+
+    lines = ["## 실행 레벨", ""]
+    for level in execution_levels:
+        level_dict = _to_payload_dict(level)
+        lines.append(
+            f"- **{level_dict['description']}**: ${level_dict['price']:.2f} ({level_dict['distance_pct']:+.1f}%)"
+        )
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _format_presented_structure(presented_structure) -> str:
+    if not presented_structure:
+        return ""
+    payload = _to_payload_dict(presented_structure)
+    blocks = payload.get("cli_blocks") or []
+    if not blocks:
+        return ""
+    text = "\n".join(blocks)
+    if not text.endswith("\n"):
+        text += "\n"
+    return text
+
+
 def _format_raw_analysis_sections(result: dict) -> str:
     technical = result["technical"]
     tech_summary = result["technical_summary"]
@@ -594,7 +738,8 @@ def _format_raw_analysis_sections(result: dict) -> str:
         output += "## 공시 분석\n\n"
         output += f"최근 3개월 주요 공시 {len(disclosure)}건:\n\n"
         for i, item in enumerate(disclosure, 1):
-            output += f"{i}. **[{item.form_type}] {item.description}** ({item.date})\n"
+            display_title = _format_disclosure_title(item.form_type, item.description)
+            output += f"{i}. **[{item.form_type}] {display_title}** ({item.date})\n"
             output += f"   → [공시 원문 보기]({item.url})\n\n"
 
     flow = result.get("flow")
@@ -644,6 +789,10 @@ def format_deep_dive_output(result: dict) -> str:
     decision_summary = result.get("decision_summary")
     factor_assessments = result.get("factor_assessments", [])
     scenarios = result.get("scenarios", [])
+    chart_patterns = result.get("chart_patterns")
+    presented_structure = result.get("presented_structure")
+    structure_levels = result.get("structure_levels")
+    execution_levels = result.get("execution_levels")
 
     output = f"# Deep Dive Analysis: {ticker}\n\n"
     output += f"## 가격: ${snapshot.price:.2f} ({snapshot.change_pct:+.2f}%)\n\n"
@@ -652,9 +801,17 @@ def format_deep_dive_output(result: dict) -> str:
         output += _format_top_summary(decision_summary)
     if factor_assessments:
         output += _format_factor_section(factor_assessments) + "\n"
+    output += _format_pattern_section(chart_patterns)
     if scenarios:
         output += _format_scenario_section(scenarios) + "\n"
+    if presented_structure:
+        output += _format_presented_structure(presented_structure)
+    elif structure_levels:
+        output += "## 구조 레벨\n\n- presenter payload 누락\n\n"
+    if execution_levels and not presented_structure:
+        output += _format_execution_levels(execution_levels)
 
+    output += "\n"
     output += _format_raw_analysis_sections(result)
     return output
 
