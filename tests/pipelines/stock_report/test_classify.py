@@ -3,7 +3,11 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 
 from src.pipelines.stock_report.classify import classify_messages
-from src.pipelines.stock_report.models import NormalizedMessage
+from src.pipelines.stock_report.models import (
+    NormalizedMessage,
+    SemanticExtractionDraft,
+    SemanticUnitDraft,
+)
 from src.pipelines.stock_report.taxonomy import load_taxonomy_registry
 
 
@@ -27,59 +31,152 @@ def _normalized_message(clean_text: str) -> NormalizedMessage:
     )
 
 
-def test_classify_assigns_category_theme_and_tickers():
+def test_classify_normalizes_llm_output_into_canonical_fields(monkeypatch):
     taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
-    row = _normalized_message("HBM 수요 증가로 NVDA 강세")
+    row = _normalized_message("NVIDIA·IREN, 최대 5GW AI 인프라 구축 전략적 파트너십 발표")
 
-    result = classify_messages([row], taxonomy=taxonomy)
+    async def _fake_extract_message_semantics(*, row, taxonomy, provider):
+        assert row.clean_text
+        assert provider == "openai"
+        return SemanticExtractionDraft(
+            structure_type="single_topic_deep",
+            units=[
+                SemanticUnitDraft(
+                    message_type="signal",
+                    category_key="AI infra",
+                    main_theme="데이터센터 전력",
+                    sub_themes=["AI 칩"],
+                    ticker_tags=["NVDA", "IREN"],
+                    canonical_summary="NVIDIA·IREN, 최대 5GW AI 인프라 파트너십 발표",
+                    supporting_facts=[
+                        "양사는 IREN 데이터센터 파이프라인 전반에 NVIDIA 인프라 배치를 추진",
+                        "스페인 Ingenostrum 인수로 IREN 전력 포트폴리오가 확대될 예정",
+                    ],
+                )
+            ],
+        )
+
+    monkeypatch.setattr(
+        "src.pipelines.stock_report.classify._extract_message_semantics",
+        _fake_extract_message_semantics,
+    )
+
+    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+
     assert len(result) == 1
-    assert result[0].category_key == "반도체"
-    assert result[0].main_theme == "메모리"
-    assert result[0].ticker_tags == ["NVDA"]
+    assert result[0].structure_type == "single_topic_deep"
+    assert result[0].unit_index == 0
+    assert result[0].category_key == "AI인프라"
+    assert result[0].main_theme == "AI 데이터센터 전력"
+    assert result[0].sub_themes == ["AI 반도체"]
+    assert result[0].ticker_tags == ["NVDA", "IREN"]
+    assert result[0].canonical_summary == "NVIDIA·IREN, 최대 5GW AI 인프라 파트너십 발표"
+    assert len(result[0].supporting_facts) == 2
 
 
-def test_classify_sets_canonical_summary():
+def test_classify_splits_multi_item_digest_into_multiple_report_units(monkeypatch):
     taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
-    row = _normalized_message("AI 데이터센터 전력 수요 급증으로 전력 장비주 강세 지속")
+    row = _normalized_message("신한 자동차 뉴스 digest")
 
-    result = classify_messages([row], taxonomy=taxonomy)
-    assert result[0].canonical_summary
+    async def _fake_extract_message_semantics(*, row, taxonomy, provider):
+        return SemanticExtractionDraft(
+            structure_type="multi_item_digest",
+            units=[
+                SemanticUnitDraft(
+                    message_type="signal",
+                    category_key="자동차",
+                    main_theme=None,
+                    sub_themes=[],
+                    ticker_tags=["현대차"],
+                    canonical_summary="현대차, 보스턴다이내믹스 상장 검토",
+                    supporting_facts=[],
+                ),
+                SemanticUnitDraft(
+                    message_type="data",
+                    category_key="자동차",
+                    main_theme=None,
+                    sub_themes=[],
+                    ticker_tags=["기아"],
+                    canonical_summary="기아 인도 EV 판매 900% 넘게 증가",
+                    supporting_facts=[],
+                ),
+            ],
+        )
 
-
-def test_classify_message_type_data_and_admin():
-    taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
-    data_row = _normalized_message("매출 1200 억, 영업이익 320 억, EPS 120, +4.2%")
-    admin_row = _normalized_message("채널 공지: 오늘 라이브 안내")
-
-    result = classify_messages([data_row, admin_row], taxonomy=taxonomy)
-    assert result[0].message_type == "data"
-    assert result[1].message_type == "admin"
-
-
-def test_classify_does_not_mark_research_summary_as_admin():
-    taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
-    research_row = _normalized_message(
-        "[✨ 리서치 요약] LG 목표주가 상향 리포트 요약 / 투자의견 매수 유지"
+    monkeypatch.setattr(
+        "src.pipelines.stock_report.classify._extract_message_semantics",
+        _fake_extract_message_semantics,
     )
 
-    result = classify_messages([research_row], taxonomy=taxonomy)
-    assert result[0].message_type == "opinion"
+    result = classify_messages([row], taxonomy=taxonomy, provider="anthropic")
+
+    assert len(result) == 2
+    assert [item.structure_type for item in result] == ["multi_item_digest", "multi_item_digest"]
+    assert [item.unit_index for item in result] == [0, 1]
+    assert [item.canonical_summary for item in result] == [
+        "현대차, 보스턴다이내믹스 상장 검토",
+        "기아 인도 EV 판매 900% 넘게 증가",
+    ]
 
 
-def test_classify_data_overrides_channel_boilerplate():
+def test_classify_uses_theme_category_when_llm_category_is_missing(monkeypatch):
     taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
-    data_with_channel = _normalized_message(
-        "[5월 7일, 전세계 반도체 밸류 체인 주가] ☀️채널: TSMC -1%, NVIDIA +2%, AMD -3%, "
-        "Intel -2%, Micron -1%"
+    row = _normalized_message("임상 결과 발표")
+
+    async def _fake_extract_message_semantics(*, row, taxonomy, provider):
+        return SemanticExtractionDraft(
+            structure_type="single_topic_deep",
+            units=[
+                SemanticUnitDraft(
+                    message_type="signal",
+                    category_key=None,
+                    main_theme="임상",
+                    sub_themes=["FDA"],
+                    ticker_tags=["알테오젠"],
+                    canonical_summary="알테오젠, 임상 데이터 발표로 신약개발 기대 부각",
+                    supporting_facts=[],
+                )
+            ],
+        )
+
+    monkeypatch.setattr(
+        "src.pipelines.stock_report.classify._extract_message_semantics",
+        _fake_extract_message_semantics,
     )
 
-    result = classify_messages([data_with_channel], taxonomy=taxonomy)
-    assert result[0].message_type == "data"
+    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+
+    assert len(result) == 1
+    assert result[0].category_key == "바이오/헬스케어"
+    assert result[0].main_theme == "신약개발"
+    assert result[0].sub_themes == []
 
 
-def test_classify_strong_event_keywords_as_signal():
+def test_classify_filters_blank_units_from_llm_output(monkeypatch):
     taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
-    event_row = _normalized_message("실적공시: 가이던스 상향 발표, AI 수주 확대")
+    row = _normalized_message("운영 공지")
 
-    result = classify_messages([event_row], taxonomy=taxonomy)
-    assert result[0].message_type == "signal"
+    async def _fake_extract_message_semantics(*, row, taxonomy, provider):
+        return SemanticExtractionDraft(
+            structure_type="notice",
+            units=[
+                SemanticUnitDraft(
+                    message_type="admin",
+                    category_key=None,
+                    main_theme=None,
+                    sub_themes=[],
+                    ticker_tags=[],
+                    canonical_summary="   ",
+                    supporting_facts=[],
+                )
+            ],
+        )
+
+    monkeypatch.setattr(
+        "src.pipelines.stock_report.classify._extract_message_semantics",
+        _fake_extract_message_semantics,
+    )
+
+    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+
+    assert result == []

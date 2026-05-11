@@ -27,6 +27,10 @@ class TaxonomyRegistry:
     def category_keys(self) -> set[str]:
         return {category.key for category in self.categories}
 
+    @property
+    def theme_keys(self) -> set[str]:
+        return {theme.key for category in self.categories for theme in category.themes}
+
 
 def load_taxonomy_registry(path: str | Path) -> TaxonomyRegistry:
     file_path = Path(path)
@@ -75,3 +79,11 @@ def build_match_dictionary(
                 theme_map[alias.lower()] = (category.key, theme.key)
 
     return category_map, theme_map
+
+
+def render_taxonomy_outline(registry: TaxonomyRegistry) -> str:
+    lines: list[str] = []
+    for category in registry.categories:
+        theme_text = ", ".join(theme.key for theme in category.themes) or "-"
+        lines.append(f"- {category.key}: {theme_text}")
+    return "\n".join(lines)

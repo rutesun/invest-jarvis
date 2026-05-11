@@ -124,8 +124,9 @@ def test_run_daily_v2_calls_migration_and_ingest(monkeypatch):
         events.append(f"persist:{len(normalized_messages)}")
         assert conn is fake_conn
 
-    def _fake_classify(normalized_messages, taxonomy):
+    def _fake_classify(normalized_messages, taxonomy, provider):
         events.append(f"classify:{len(normalized_messages)}")
+        assert provider == "openai"
         return [
             ClassifiedMessage(
                 telegram_message_id=101,
@@ -133,12 +134,15 @@ def test_run_daily_v2_calls_migration_and_ingest(monkeypatch):
                 channel_key="hana_us_stock",
                 source_channel_key="hana_us_stock",
                 processing_mode="full",
+                structure_type="single_topic_deep",
+                unit_index=0,
                 message_type="data",
                 category_key="반도체",
                 main_theme="메모리",
                 sub_themes=[],
                 ticker_tags=["NVDA"],
                 canonical_summary="NVDA +2.5%",
+                supporting_facts=[],
             )
         ]
 

@@ -29,7 +29,7 @@ uv run jarvis report daily-v2 2026-05-08 --preview-limit 50
 
 3. Classify 룰 튜닝
 - 대상: `src/pipelines/stock_report/classify.py`
-- 키: message_type 판정, ticker 추출 제외 토큰, canonical_summary 생성 규칙
+- 키: semantic extraction prompt, structure_type 판단, canonical_summary 품질, taxonomy normalization
 
 ## 4) 측정 지표
 
@@ -38,6 +38,7 @@ uv run jarvis report daily-v2 2026-05-08 --preview-limit 50
 - `normalized_rows`, `grouped_only_rows`, `skipped_rows`
 - `unclassified` 비율
 - canonical_summary 계약 위반 수(빈값, placeholder 요약)
+- structure_type 분포와 digest 분할 과/소 여부
 
 ## 5) 라운드 로그 (복붙 템플릿)
 

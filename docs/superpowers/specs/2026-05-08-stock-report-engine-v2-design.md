@@ -153,11 +153,13 @@ src/pipelines/stock_report/
   __init__.py
   pipeline.py                # run_daily_v2(date, data_dir, provider, compare)
   models.py                  # typed contracts for normalized message, chunk, evidence, report
+  config.py                  # stock_report LLM settings
   db.py                      # psycopg connection helpers, SQL execution
   taxonomy.py                # category/main_theme/sub_theme registry + alias resolution
   telegram_ingest.py         # CSV load -> telegram_messages upsert
   normalize.py               # clean text, url/media extraction, simhash/grouping keys
-  classify.py                # message_type/category/main_theme/sub_themes/ticker_tags/canonical_summary
+  prompts.py                 # semantic extraction prompt templates
+  classify.py                # LLM semantic extraction + taxonomy normalization + report unit flattening
   chunking.py                # raw/grouped message -> knowledge_chunks
   embed.py                   # Phase 2+: embed payload + vector sync
   retrieval.py               # Phase 2+: hybrid retrieval
@@ -271,6 +273,8 @@ categories:
 - LLM이 각 report unit마다 생성한다
 - retrieval과 synthesis의 기준 문장으로 사용한다
 - 최종 노출은 필요하면 렌더링 단계에서 더 짧은 `display_line`으로 줄인다
+- 긴 single-topic 메시지는 `canonical_summary 1개 + supporting_facts[]`로 보존한다
+- multi-item digest는 item마다 별도 `canonical_summary`를 만든다
 - `주어 + 행위/사실` 구조
 - "~에 관한", "~의 내용" 같은 메타 표현 금지
 - 수치가 있으면 반드시 포함

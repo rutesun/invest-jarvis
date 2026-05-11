@@ -85,7 +85,7 @@ def run_daily_v2(
             group_window_minutes=group_window,
         )
         persist_normalized_messages(conn, normalized)
-        classified = classify_messages(normalized, taxonomy=taxonomy)
+        classified = classify_messages(normalized, taxonomy=taxonomy, provider=provider)
 
     grouped_only_rows = sum(1 for row in normalized if row.processing_mode == "grouped_only")
     skipped_rows = sum(1 for row in normalized if row.processing_mode == "skip")

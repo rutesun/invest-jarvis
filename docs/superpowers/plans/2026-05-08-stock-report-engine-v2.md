@@ -17,11 +17,13 @@
 ### 새로 만드는 파일
 - `src/pipelines/stock_report/__init__.py`
 - `src/pipelines/stock_report/models.py`
+- `src/pipelines/stock_report/config.py`
 - `src/pipelines/stock_report/db.py`
 - `src/pipelines/stock_report/pipeline.py`
 - `src/pipelines/stock_report/taxonomy.py`
 - `src/pipelines/stock_report/telegram_ingest.py`
 - `src/pipelines/stock_report/normalize.py`
+- `src/pipelines/stock_report/prompts.py`
 - `src/pipelines/stock_report/classify.py`
 - `src/pipelines/stock_report/chunking.py`
 - `src/pipelines/stock_report/embed.py`
@@ -146,7 +148,7 @@ flowchart TD
 
 **Why:** `category_key`, `main_theme`, `sub_themes`, `ticker_tags`, `canonical_summary`는 이후 모든 집계와 retrieval의 기준이고, canonical vocabulary가 없으면 당일 집계부터 깨진다.
 
-**기대효과:** Telegram 메시지가 리포트용 canonical signal로 정규화된다.
+**기대효과:** Telegram 메시지가 LLM 기반 report unit으로 구조화되고, canonical key로 정규화된다.
 
 - [x] `message_type` 허용값을 `signal/opinion/data/admin`으로 고정한다
 - [x] `category_key`를 1개 canonical key로 정규화한다
@@ -154,6 +156,7 @@ flowchart TD
 - [x] `config/stock_report_vocabulary.yaml`에 category/theme alias mapping을 정의한다
 - [ ] 정규화 실패 표현을 `vocab_candidates`에 적재하는 규칙을 정의한다
 - [x] `canonical_summary` 필드 계약을 검증한다
+- [x] semantic extraction은 LLM structured output으로 수행한다
 - [x] forward 메시지는 현재 채널이 아니라 실질 출처 기준 메타를 우선 반영한다
 
 ### T07. chunk 생성과 embed payload write path를 만든다

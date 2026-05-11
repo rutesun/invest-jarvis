@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS knowledge_chunks (
     sub_themes JSONB NOT NULL DEFAULT '[]'::jsonb,
     ticker_tags JSONB NOT NULL DEFAULT '[]'::jsonb,
     theme_tags JSONB NOT NULL DEFAULT '[]'::jsonb,
-    canonical_summary TEXT NOT NULL,
+    one_line TEXT NOT NULL,
     content_clean TEXT NOT NULL,
     embed_payload TEXT NOT NULL,
     channel_weight DOUBLE PRECISION NOT NULL DEFAULT 1.0,
