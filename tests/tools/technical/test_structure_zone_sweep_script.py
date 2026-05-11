@@ -30,6 +30,18 @@ def test_parse_variant_spec_parses_name_and_overrides():
     }
 
 
+def test_parse_variant_spec_keeps_json_object_override_as_single_value():
+    module = _load_module()
+
+    parsed = module.parse_variant_spec(
+        'weights:score_weights={"touch":0.4,"recency":0.2},selection_max_distance_pct=0.35'
+    )
+
+    assert parsed.name == "weights"
+    assert parsed.overrides["score_weights"] == '{"touch":0.4,"recency":0.2}'
+    assert parsed.overrides["selection_max_distance_pct"] == "0.35"
+
+
 def test_build_config_with_overrides_coerces_value_types():
     module = _load_module()
 
@@ -44,6 +56,21 @@ def test_build_config_with_overrides_coerces_value_types():
     assert config.top_n_per_side == 3
     assert config.cluster_span_multiplier == 1.8
     assert config.selection_max_distance_pct == 0.35
+
+
+def test_build_config_with_overrides_merges_partial_score_weights():
+    module = _load_module()
+
+    config = module.build_config_with_overrides(
+        {
+            "score_weights": '{"touch":0.4}',
+        }
+    )
+
+    assert config.score_weights["touch"] == 0.4
+    assert config.score_weights["recency"] == 0.2
+    assert config.score_weights["volume"] == 0.3
+    assert config.score_weights["confluence"] == 0.15
 
 
 def test_summarize_diff_aggregates_selection_and_score_changes():

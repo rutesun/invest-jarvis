@@ -9,7 +9,7 @@ from typing import Any
 
 import pandas as pd
 
-from src.tools.technical.components.chart_patterns import detect_chart_patterns
+from src.tools.technical.components.pattern_engine import PatternEngine
 from src.tools.technical.level_composer import compose_level_payload
 from src.tools.technical.price_levels import get_fibonacci_base_points, identify_key_levels
 from src.tools.technical.structure_presentation import build_structure_presentation
@@ -81,7 +81,7 @@ def parse_variant_spec(spec: str) -> VariantSpec:
         raise ValueError(f"Invalid variant spec '{spec}' (empty overrides).")
 
     overrides: dict[str, Any] = {}
-    for raw_pair in raw_pairs.split(","):
+    for raw_pair in _split_override_pairs(raw_pairs):
         if "=" not in raw_pair:
             raise ValueError(f"Invalid override '{raw_pair}' in '{spec}'.")
         key, value = raw_pair.split("=", 1)
@@ -94,30 +94,77 @@ def parse_variant_spec(spec: str) -> VariantSpec:
     return VariantSpec(name=name, overrides=overrides)
 
 
+def _split_override_pairs(raw_pairs: str) -> list[str]:
+    pairs: list[str] = []
+    buffer: list[str] = []
+    depth = 0
+    quote_char: str | None = None
+    escaped = False
+
+    for char in raw_pairs:
+        if quote_char is not None:
+            buffer.append(char)
+            if escaped:
+                escaped = False
+                continue
+            if char == "\\":
+                escaped = True
+                continue
+            if char == quote_char:
+                quote_char = None
+            continue
+
+        if char in {'"', "'"}:
+            quote_char = char
+            buffer.append(char)
+            continue
+        if char in "{[(":
+            depth += 1
+            buffer.append(char)
+            continue
+        if char in "}])":
+            depth = max(0, depth - 1)
+            buffer.append(char)
+            continue
+        if char == "," and depth == 0:
+            pair = "".join(buffer).strip()
+            if pair:
+                pairs.append(pair)
+            buffer = []
+            continue
+        buffer.append(char)
+
+    tail = "".join(buffer).strip()
+    if tail:
+        pairs.append(tail)
+    return pairs
+
+
 def resolve_symbols(fixtures_dir: Path, explicit_symbols: list[str] | None) -> list[str]:
     if explicit_symbols:
         return explicit_symbols
     return sorted(path.stem for path in fixtures_dir.glob("*.csv"))
 
 
-def _coerce_value(raw_value: Any, default_value: Any) -> Any:
-    if isinstance(raw_value, bool):
-        lowered = str(default_value).lower()
+def _coerce_value(current_value: Any, override_value: Any) -> Any:
+    if isinstance(current_value, bool):
+        lowered = str(override_value).lower()
         if lowered in {"true", "1", "yes", "y", "on"}:
             return True
         if lowered in {"false", "0", "no", "n", "off"}:
             return False
-        raise ValueError(f"Invalid bool value '{default_value}'.")
-    if isinstance(raw_value, int) and not isinstance(raw_value, bool):
-        return int(default_value)
-    if isinstance(raw_value, float):
-        return float(default_value)
-    if isinstance(raw_value, dict):
-        loaded = json.loads(default_value)
+        raise ValueError(f"Invalid bool value '{override_value}'.")
+    if isinstance(current_value, int) and not isinstance(current_value, bool):
+        return int(override_value)
+    if isinstance(current_value, float):
+        return float(override_value)
+    if isinstance(current_value, dict):
+        loaded = json.loads(override_value)
         if not isinstance(loaded, dict):
             raise ValueError("dict field override must be JSON object.")
-        return loaded
-    return default_value
+        # Allow partial object override (e.g. score_weights only touch key).
+        return {**current_value, **loaded}
+    return override_value
 
 
 def build_config_with_overrides(overrides: dict[str, Any]) -> StructureZoneConfig:
@@ -141,7 +188,7 @@ def build_fixture_payload(symbol: str, csv_path: Path, config: StructureZoneConf
 
     detector = StructureZoneDetector(config)
     zone_set = detector.detect(df, snapshot)
-    chart_patterns = detect_chart_patterns(df, snapshot)
+    chart_patterns = PatternEngine(swing_window=config.swing_window).detect(df, snapshot)
     lookback_high, lookback_low = get_fibonacci_base_points(df, snapshot)
     price_levels = identify_key_levels(
         snapshot=snapshot,
