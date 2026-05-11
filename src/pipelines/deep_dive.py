@@ -244,6 +244,7 @@ class DeepDivePipeline:
             "decision_summary": decision_bundle.summary,
             "factor_assessments": decision_bundle.factor_assessments,
             "scenarios": decision_bundle.scenarios,
+            "chart_patterns": chart_patterns,
             "news": news_articles,
             "news_analysis": news_analysis,
             "fundamental": fundamental_data,

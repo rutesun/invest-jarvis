@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import re
 from pathlib import Path
 from typing import Literal
 
@@ -60,6 +61,7 @@ METRIC_DISPLAY_NAMES = {
     "quick_ratio": "당좌비율",
     "market_cap": "시가총액",
 }
+_SEC_DISCLOSURE_FILENAME_PATTERN = re.compile(r"^[A-Za-z0-9._-]+\.(htm|html|txt|xml)$")
 
 
 def _get_metric_display_name(metric_name: str) -> str:
@@ -116,6 +118,15 @@ def _format_metric_value(metric_name: str, value: float | None) -> str:
         formatted = f"{value:.2f}" if abs(value) < 10 else f"{value:.1f}"
         # Remove trailing zeros after decimal point
         return formatted.rstrip("0").rstrip(".") if "." in formatted else formatted
+
+
+def _format_disclosure_title(form_type: str, description: str) -> str:
+    text = (description or "").strip()
+    if not text:
+        return f"{form_type} 공시"
+    if _SEC_DISCLOSURE_FILENAME_PATTERN.match(text):
+        return f"SEC {form_type} 공시"
+    return text
 
 
 logger = logging.getLogger(__name__)
@@ -393,6 +404,53 @@ def _format_scenario_section(scenarios: list) -> str:
         lines.append(f"- **예상 경로**: {scenario.expected_path}")
         lines.append(f"- **대응**: {scenario.recommended_action}")
         lines.append("")
+    return "\n".join(lines)
+
+
+def _format_pattern_section(chart_patterns: dict | None) -> str:
+    if not isinstance(chart_patterns, dict):
+        return ""
+
+    detected_items: list[dict] = []
+    for item in chart_patterns.values():
+        payload = _to_payload_dict(item)
+        if not isinstance(payload, dict):
+            continue
+        if not payload.get("detected"):
+            continue
+        detected_items.append(payload)
+
+    lines = ["## 패턴 분석", ""]
+    if not detected_items:
+        lines.append("- 감지된 유효 패턴 없음")
+        lines.append("")
+        return "\n".join(lines)
+
+    def _sort_key(item: dict) -> tuple[int, float]:
+        days_ago = item.get("days_ago")
+        if isinstance(days_ago, int):
+            return (days_ago, -(float(item.get("confidence") or 0.0)))
+        return (10**9, -(float(item.get("confidence") or 0.0)))
+
+    for item in sorted(detected_items, key=_sort_key):
+        pattern_name = str(item.get("pattern_name") or "패턴")
+        confidence = float(item.get("confidence") or 0.0)
+        days_ago = item.get("days_ago")
+        timing = (
+            "오늘 완성"
+            if days_ago == 0
+            else f"{days_ago}일 전 완성"
+            if isinstance(days_ago, int)
+            else "완성 시점 미확인"
+        )
+        description = str(item.get("description") or "").strip()
+        if description:
+            lines.append(
+                f"- **{pattern_name}**: {timing} | 신뢰도 {confidence * 100:.0f}% | {description}"
+            )
+        else:
+            lines.append(f"- **{pattern_name}**: {timing} | 신뢰도 {confidence * 100:.0f}%")
+    lines.append("")
     return "\n".join(lines)
 
 
@@ -680,7 +738,8 @@ def _format_raw_analysis_sections(result: dict) -> str:
         output += "## 공시 분석\n\n"
         output += f"최근 3개월 주요 공시 {len(disclosure)}건:\n\n"
         for i, item in enumerate(disclosure, 1):
-            output += f"{i}. **[{item.form_type}] {item.description}** ({item.date})\n"
+            display_title = _format_disclosure_title(item.form_type, item.description)
+            output += f"{i}. **[{item.form_type}] {display_title}** ({item.date})\n"
             output += f"   → [공시 원문 보기]({item.url})\n\n"
 
     flow = result.get("flow")
@@ -730,6 +789,7 @@ def format_deep_dive_output(result: dict) -> str:
     decision_summary = result.get("decision_summary")
     factor_assessments = result.get("factor_assessments", [])
     scenarios = result.get("scenarios", [])
+    chart_patterns = result.get("chart_patterns")
     presented_structure = result.get("presented_structure")
     structure_levels = result.get("structure_levels")
     execution_levels = result.get("execution_levels")
@@ -741,6 +801,7 @@ def format_deep_dive_output(result: dict) -> str:
         output += _format_top_summary(decision_summary)
     if factor_assessments:
         output += _format_factor_section(factor_assessments) + "\n"
+    output += _format_pattern_section(chart_patterns)
     if scenarios:
         output += _format_scenario_section(scenarios) + "\n"
     if presented_structure:

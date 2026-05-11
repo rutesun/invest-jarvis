@@ -1,3 +1,4 @@
+import re
 from types import SimpleNamespace
 from typing import TypedDict
 
@@ -49,11 +50,18 @@ class FactorScoreEntry(TypedDict):
 
 _POSITIVE_EVENT_KEYWORDS = ("계약", "수주", "승인", "투자", "자사주", "자기주식")
 _NEGATIVE_EVENT_KEYWORDS = ("유상증자", "소송", "내부자매도", "횡령", "하향", "리콜")
+_SEC_FILENAME_PATTERN = re.compile(r"^[A-Za-z0-9._-]+\.(htm|html|txt|xml)$")
 _MIXED_CORE_PRIORITY = {
     "technical": 0,
     "flow": 1,
     "event": 2,
     "valuation": 3,
+}
+_FACTOR_LABELS = {
+    "technical": "가격",
+    "flow": "수급",
+    "event": "이벤트",
+    "valuation": "밸류에이션",
 }
 
 
@@ -139,6 +147,21 @@ def _valuation_headline(valuation: str, confidence: float) -> str:
     if valuation == "저평가":
         return "밸류 매력"
     return "고평가 부담"
+
+
+def _normalize_disclosure_evidence(form_type: str | None, description: str) -> str:
+    text = description.strip()
+    if not text:
+        return "공시 메타데이터 확인"
+    if _SEC_FILENAME_PATTERN.match(text):
+        return f"SEC {form_type} 공시" if form_type else "SEC 공시"
+    return text
+
+
+def _scenario_confirming_factor(assessment: FactorAssessment) -> str:
+    factor_label = _FACTOR_LABELS.get(assessment.factor_type, assessment.factor_type)
+    short_label = assessment.headline or _compact_summary(assessment.summary, limit=28)
+    return f"{factor_label}: {short_label}"
 
 
 def build_technical_assessment(
@@ -262,7 +285,13 @@ def build_event_assessment(
     else:
         reason = "유의미한 이벤트 부재"
 
-    disclosure_evidence = [item["description"] for item in usable_disclosures[:1]]
+    disclosure_evidence = [
+        _normalize_disclosure_evidence(
+            item.get("form_type") if isinstance(item.get("form_type"), str) else None,
+            item["description"],
+        )
+        for item in usable_disclosures[:1]
+    ]
     summary = (
         news_titles[0]
         if news_titles
@@ -552,8 +581,11 @@ def build_default_scenarios(
     )
 
     confirming_factors = [
-        assessment.summary for assessment in assessments if assessment.total_score >= 7
+        _scenario_confirming_factor(assessment)
+        for assessment in assessments
+        if assessment.total_score >= 7
     ]
+    confirming_factors = list(dict.fromkeys(confirming_factors))
     if not confirming_factors:
         confirming_factors = ["추가 확인 신호 부족"]
 
@@ -593,7 +625,7 @@ def build_default_scenarios(
             name="반대 시나리오",
             trigger_price_levels=trigger_levels,
             confirming_factors=["주도 팩터 약화"],
-            invalidation_conditions=[bearish_invalidation, support_description],
+            invalidation_conditions=[bearish_invalidation, f"{support_description} 하향 이탈"],
             expected_path="기존 판단 약화 또는 반전",
             recommended_action="기본 시나리오와 다른 흐름이 확인되면 대응을 재평가",
         ),

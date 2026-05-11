@@ -1,12 +1,17 @@
 from datetime import datetime
 
-from src.cli.main import _format_factor_section, _format_top_summary, format_deep_dive_output
+from src.cli.main import (
+    _format_disclosure_title,
+    _format_factor_section,
+    _format_top_summary,
+    format_deep_dive_output,
+)
 from src.pipelines.analyze_decision import (
     AnalyzeDecisionSummary,
     AnalyzeScenario,
     FactorAssessment,
 )
-from src.tools.technical.models import IndicatorSnapshot, TechnicalResult
+from src.tools.technical.models import ChartPatternResult, IndicatorSnapshot, TechnicalResult
 
 
 def test_format_deep_dive_output_shows_top_summary_and_factor_reasons():
@@ -70,6 +75,28 @@ def test_format_deep_dive_output_shows_top_summary_and_factor_reasons():
                 evidence=["반복 기사 2건"],
             ),
         ],
+        "chart_patterns": {
+            "double_bottom": ChartPatternResult(
+                pattern_name="Double Bottom",
+                detected=True,
+                confidence=0.82,
+                completed_date="2026-05-01",
+                days_ago=10,
+                current_price=91500.0,
+                breakout_level=92000.0,
+                support_level=89000.0,
+                description="이중 바닥 완성 후 넥라인 재확인",
+                key_levels={"target": 98000.0},
+            ),
+            "cup_handle": ChartPatternResult(
+                pattern_name="Cup & Handle",
+                detected=False,
+                confidence=0.0,
+                current_price=91500.0,
+                description="미완성",
+                key_levels={},
+            ),
+        },
         "scenarios": [
             AnalyzeScenario(
                 name="기본 시나리오",
@@ -110,11 +137,14 @@ def test_format_deep_dive_output_shows_top_summary_and_factor_reasons():
     assert "## 판단 요약" in output
     assert "## 구조 레벨" in output
     assert "## 실행 레벨" in output
+    assert "## 패턴 분석" in output
     assert "## 원시 데이터" in output
     assert output.index("## 판단 요약") < output.index("## 원시 데이터")
     assert "- **주도 팩터**: 혼합" in output
     assert "- **가격**: 신고가 돌파" in output
     assert "- **이벤트**: 반복 기대 기사" in output
+    assert "Double Bottom" in output
+    assert "10일 전 완성" in output
     assert "지지 존" in output
     assert "저항 존" in output
     assert "전환 레벨" in output
@@ -223,6 +253,11 @@ def test_format_deep_dive_output_marks_event_as_reference_with_reason():
 
     assert "참고" in output
     assert "기대감 반복 보도 위주라 현재 액션 설명력이 약함" in output
+
+
+def test_format_disclosure_title_normalizes_sec_primary_document_name():
+    title = _format_disclosure_title("10-Q", "alab-20260331.htm")
+    assert title == "SEC 10-Q 공시"
 
 
 def test_format_deep_dive_output_hides_integrated_recommendation_labels():

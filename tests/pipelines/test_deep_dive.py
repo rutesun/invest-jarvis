@@ -208,6 +208,7 @@ async def test_deep_dive_pipeline_success(mock_technical_tool, mock_news_tool, m
         assert result["decision_summary"].leader in {"technical", "혼합", "판단 보류"}
         assert result["factor_assessments"]
         assert result["scenarios"]
+        assert result["chart_patterns"]
         assert "170.00~172.00" in mock_signal.await_args.kwargs["structure_context"]
 
 
