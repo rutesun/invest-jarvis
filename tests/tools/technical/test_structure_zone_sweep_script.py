@@ -95,3 +95,52 @@ def test_summarize_diff_aggregates_selection_and_score_changes():
     assert summary["changed_slots"] == 3
     assert summary["invalidation_changed"] is True
     assert summary["max_total_delta"] == 1.1
+
+
+def test_evaluate_scorecard_marks_improved_for_strong_structure_and_stability():
+    module = _load_module()
+
+    scorecard = module.evaluate_scorecard(
+        summary={
+            "summary_label": "support_zone",
+            "invalidation": "100.00~105.00 하향 이탈",
+            "support_zone_1": "100.00~103.00",
+            "resistance_zone_1": "110.00~113.00",
+            "current_price": 110.0,
+            "top_candidates": [
+                {"confluence_sources": ["MA150", "POC"]},
+                {"confluence_sources": ["HVNx1"]},
+            ],
+        },
+        diff_summary={
+            "changed_slots": 1,
+            "invalidation_changed": False,
+            "max_total_delta": 0.8,
+        },
+    )
+
+    assert scorecard["total_score_100"] >= 75
+    assert scorecard["verdict"] == "개선"
+
+
+def test_evaluate_scorecard_marks_worse_for_no_clear_and_large_drift():
+    module = _load_module()
+
+    scorecard = module.evaluate_scorecard(
+        summary={
+            "summary_label": "no_clear_structure",
+            "invalidation": "-",
+            "support_zone_1": "-",
+            "resistance_zone_1": "-",
+            "current_price": 0.0,
+            "top_candidates": [],
+        },
+        diff_summary={
+            "changed_slots": 8,
+            "invalidation_changed": True,
+            "max_total_delta": 6.5,
+        },
+    )
+
+    assert scorecard["total_score_100"] < 65
+    assert scorecard["verdict"] == "악화"

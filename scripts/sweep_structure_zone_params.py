@@ -255,6 +255,7 @@ def _top_candidates(payload: dict, max_candidates: int) -> list[dict[str, Any]]:
 def summarize_payload(payload: dict, max_candidates: int) -> dict[str, Any]:
     structure_levels = payload.get("structure_levels", {})
     invalidation = structure_levels.get("invalidation")
+    snapshot = payload.get("snapshot", {})
     return {
         "summary_label": structure_levels.get("summary_label"),
         "headline": structure_levels.get("headline"),
@@ -262,6 +263,7 @@ def summarize_payload(payload: dict, max_candidates: int) -> dict[str, Any]:
         "resistance_zone_1": _first_zone_label(structure_levels.get("resistance_zones", [])),
         "former_level_1": _first_zone_label(structure_levels.get("former_levels", [])),
         "invalidation": invalidation.get("label") if isinstance(invalidation, dict) else "-",
+        "current_price": float(snapshot.get("price", 0.0)) if snapshot.get("price") else 0.0,
         "top_candidates": _top_candidates(payload, max_candidates=max_candidates),
     }
 
@@ -289,6 +291,125 @@ def summarize_diff(diff_payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _parse_bounds_label(label: str) -> tuple[float, float] | None:
+    if "~" not in label:
+        return None
+    left, right = label.split("~", 1)
+    try:
+        return float(left), float(right)
+    except ValueError:
+        return None
+
+
+def _zone_width_ratio_score(summary: dict[str, Any]) -> float:
+    current_price = float(summary.get("current_price") or 0.0)
+    if current_price <= 0:
+        return 6.0
+
+    width_ratios: list[float] = []
+    for key in ("support_zone_1", "resistance_zone_1"):
+        bounds = _parse_bounds_label(str(summary.get(key) or "-"))
+        if bounds is None:
+            continue
+        lower, upper = bounds
+        width_ratios.append(max(0.0, (upper - lower) / current_price))
+
+    if not width_ratios:
+        return 6.0
+
+    avg_ratio = sum(width_ratios) / len(width_ratios)
+    # 2% 이내면 만점(15), 12% 이상이면 0점.
+    score = 15.0 * max(0.0, 1.0 - max(0.0, avg_ratio - 0.02) / 0.10)
+    return round(score, 2)
+
+
+def evaluate_scorecard(
+    summary: dict[str, Any],
+    diff_summary: dict[str, Any],
+    *,
+    is_baseline: bool = False,
+) -> dict[str, Any]:
+    summary_label = str(summary.get("summary_label") or "")
+    invalidation_label = str(summary.get("invalidation") or "-")
+    top_candidates = summary.get("top_candidates", [])
+    confluence_coverage = 0.0
+    if isinstance(top_candidates, list) and top_candidates:
+        coverage_hits = 0
+        for item in top_candidates:
+            if not isinstance(item, dict):
+                continue
+            sources = item.get("confluence_sources")
+            if isinstance(sources, list) and sources:
+                coverage_hits += 1
+        confluence_coverage = coverage_hits / max(len(top_candidates), 1)
+
+    structure_clarity_score = (
+        20.0 if summary_label and summary_label != "no_clear_structure" else 5.0
+    )
+    invalidation_score = 10.0 if invalidation_label != "-" else 0.0
+    confluence_score = round(15.0 * confluence_coverage, 2)
+    width_ratio_score = _zone_width_ratio_score(summary)
+    structure_quality_score = round(
+        structure_clarity_score + invalidation_score + confluence_score + width_ratio_score,
+        2,
+    )
+
+    changed_slots = int(diff_summary.get("changed_slots", 0))
+    max_total_delta = float(diff_summary.get("max_total_delta", 0.0))
+    invalidation_changed = bool(diff_summary.get("invalidation_changed", False))
+
+    if changed_slots <= 2:
+        slot_stability_score = 20.0
+    elif changed_slots <= 4:
+        slot_stability_score = 14.0
+    elif changed_slots <= 6:
+        slot_stability_score = 8.0
+    else:
+        slot_stability_score = 3.0
+
+    invalidation_stability_score = 10.0 if not invalidation_changed else 3.0
+    if max_total_delta <= 1.0:
+        delta_sanity_score = 10.0
+    elif max_total_delta <= 2.0:
+        delta_sanity_score = 8.0
+    elif max_total_delta <= 3.0:
+        delta_sanity_score = 5.0
+    elif max_total_delta <= 5.0:
+        delta_sanity_score = 2.0
+    else:
+        delta_sanity_score = 0.0
+    stability_proxy_score = round(
+        slot_stability_score + invalidation_stability_score + delta_sanity_score,
+        2,
+    )
+
+    total_score = round(structure_quality_score + stability_proxy_score, 2)
+    if is_baseline:
+        verdict = "baseline"
+    elif total_score >= 75:
+        verdict = "개선"
+    elif total_score >= 65:
+        verdict = "보류"
+    else:
+        verdict = "악화"
+
+    return {
+        "structure_quality_score_60": structure_quality_score,
+        "stability_proxy_score_40": stability_proxy_score,
+        "total_score_100": total_score,
+        "verdict": verdict,
+        "breakdown": {
+            "structure_clarity_score_20": structure_clarity_score,
+            "invalidation_score_10": invalidation_score,
+            "confluence_score_15": confluence_score,
+            "width_ratio_score_15": width_ratio_score,
+            "slot_stability_score_20": slot_stability_score,
+            "invalidation_stability_score_10": invalidation_stability_score,
+            "delta_sanity_score_10": delta_sanity_score,
+        },
+    }
+
+
 def build_markdown_report(
     rows: list[dict[str, Any]],
     run_id: str,
@@ -296,21 +417,29 @@ def build_markdown_report(
     lines = [
         f"# Structure Zone Sweep Report ({run_id})",
         "",
-        "| symbol | variant | summary | support1 | resistance1 | former1 | invalidation_changed | changed_slots | max_total_delta |",
-        "|---|---|---|---|---|---|---:|---:|---:|",
+        "## 자동 판정 기준",
+        "- 구조 품질(60): 구조 명확성, 무효화 존재, confluence 근거, 존 폭 적절성",
+        "- 안정성 프록시(40): 슬롯 변화량, 무효화 변경 여부, 총점 변동폭",
+        "- 판정: 75+ 개선, 65~74 보류, 64 이하 악화",
+        "",
+        "| symbol | variant | verdict | total(100) | structure(60) | stability(40) | summary | support1 | resistance1 | changed_slots | max_total_delta |",
+        "|---|---|---|---:|---:|---:|---|---|---|---:|---:|",
     ]
     for row in rows:
+        scorecard = row["scorecard"]
         lines.append(
             "| "
             + " | ".join(
                 [
                     str(row["symbol"]),
                     str(row["variant"]),
+                    str(scorecard["verdict"]),
+                    f"{float(scorecard['total_score_100']):.1f}",
+                    f"{float(scorecard['structure_quality_score_60']):.1f}",
+                    f"{float(scorecard['stability_proxy_score_40']):.1f}",
                     str(row["summary"]["summary_label"] or "-"),
                     str(row["summary"]["support_zone_1"]),
                     str(row["summary"]["resistance_zone_1"]),
-                    str(row["summary"]["former_level_1"]),
-                    str(int(bool(row["diff"]["invalidation_changed"]))),
                     str(row["diff"]["changed_slots"]),
                     f"{float(row['diff']['max_total_delta']):.2f}",
                 ]
@@ -377,6 +506,15 @@ def main() -> None:
         report_payload["results"][symbol] = {
             "baseline": {
                 "summary": baseline_summary,
+                "scorecard": evaluate_scorecard(
+                    baseline_summary,
+                    {
+                        "changed_slots": 0,
+                        "invalidation_changed": False,
+                        "max_total_delta": 0.0,
+                    },
+                    is_baseline=True,
+                ),
                 "payload_path": str(baseline_json_path),
             },
             "variants": {},
@@ -392,6 +530,15 @@ def main() -> None:
                     "invalidation_changed": False,
                     "max_total_delta": 0.0,
                 },
+                "scorecard": evaluate_scorecard(
+                    baseline_summary,
+                    {
+                        "changed_slots": 0,
+                        "invalidation_changed": False,
+                        "max_total_delta": 0.0,
+                    },
+                    is_baseline=True,
+                ),
             }
         )
 
@@ -401,6 +548,7 @@ def main() -> None:
             variant_summary = summarize_payload(payload, max_candidates=args.max_candidates)
             diff = compare_structure_zone_inspect_payloads(baseline_payload, payload)
             diff_summary = summarize_diff(diff)
+            scorecard = evaluate_scorecard(variant_summary, diff_summary)
 
             variant_json_path = symbol_dir / f"{variant.name}.json"
             diff_json_path = symbol_dir / f"{variant.name}.diff.json"
@@ -417,6 +565,7 @@ def main() -> None:
                 "overrides": variant.overrides,
                 "summary": variant_summary,
                 "diff_summary": diff_summary,
+                "scorecard": scorecard,
                 "payload_path": str(variant_json_path),
                 "diff_path": str(diff_json_path),
             }
@@ -426,6 +575,7 @@ def main() -> None:
                     "variant": variant.name,
                     "summary": variant_summary,
                     "diff": diff_summary,
+                    "scorecard": scorecard,
                 }
             )
 
