@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -25,6 +26,13 @@ from src.tools.technical.structure_zones import StructureZoneConfig, StructureZo
 class VariantSpec:
     name: str
     overrides: dict[str, Any]
+
+
+def _positive_int(value: str) -> int:
+    parsed = int(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("value must be a positive integer.")
+    return parsed
 
 
 def parse_args() -> argparse.Namespace:
@@ -63,7 +71,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--max-candidates",
-        type=int,
+        type=_positive_int,
         default=3,
         help="Number of top candidates to include in summary.",
     )
@@ -92,6 +100,16 @@ def parse_variant_spec(spec: str) -> VariantSpec:
         overrides[key] = value
 
     return VariantSpec(name=name, overrides=overrides)
+
+
+_VARIANT_FILENAME_SAFE_CHARS = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+def to_variant_file_stem(name: str) -> str:
+    stem = _VARIANT_FILENAME_SAFE_CHARS.sub("-", name.strip()).strip("-.")
+    if not stem:
+        raise ValueError(f"Variant name '{name}' cannot be used as output filename.")
+    return stem
 
 
 def _split_override_pairs(raw_pairs: str) -> list[str]:
@@ -155,7 +173,17 @@ def _coerce_value(current_value: Any, override_value: Any) -> Any:
             return False
         raise ValueError(f"Invalid bool value '{override_value}'.")
     if isinstance(current_value, int) and not isinstance(current_value, bool):
-        return int(override_value)
+        text = str(override_value).strip()
+        try:
+            return int(text)
+        except ValueError as exc:
+            try:
+                parsed_float = float(text)
+            except ValueError:
+                raise ValueError(f"Invalid int value '{override_value}'.") from exc
+            if not parsed_float.is_integer():
+                raise ValueError(f"Invalid int value '{override_value}'.") from exc
+            return int(parsed_float)
     if isinstance(current_value, float):
         return float(override_value)
     if isinstance(current_value, dict):
@@ -221,7 +249,20 @@ def _first_zone_label(items: list[dict[str, Any]]) -> str:
     if not items:
         return "-"
     first = items[0]
-    return f"{float(first['lower_bound']):.2f}~{float(first['upper_bound']):.2f}"
+    lower = _try_float(first.get("lower_bound"))
+    upper = _try_float(first.get("upper_bound"))
+    if lower is None or upper is None:
+        return "-"
+    return f"{lower:.2f}~{upper:.2f}"
+
+
+def _try_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _top_candidates(payload: dict, max_candidates: int) -> list[dict[str, Any]]:
@@ -231,24 +272,25 @@ def _top_candidates(payload: dict, max_candidates: int) -> list[dict[str, Any]]:
         return []
     sorted_candidates = sorted(
         [item for item in candidates if isinstance(item, dict)],
-        key=lambda item: float(item.get("total_score", 0.0)),
+        key=lambda item: _try_float(item.get("total_score")) or 0.0,
         reverse=True,
     )
+    top_limit = max(0, max_candidates)
     return [
         {
             "zone_type": item.get("zone_type"),
             "bounds": (
-                f"{float(item.get('lower_bound', 0.0)):.2f}"
-                f"~{float(item.get('upper_bound', 0.0)):.2f}"
+                f"{(_try_float(item.get('lower_bound')) or 0.0):.2f}"
+                f"~{(_try_float(item.get('upper_bound')) or 0.0):.2f}"
             ),
-            "total_score": round(float(item.get("total_score", 0.0)), 4),
+            "total_score": round(_try_float(item.get("total_score")) or 0.0, 4),
             "confluence_sources": (
                 item.get("reason_context", {}).get("confluence_sources")
                 if isinstance(item.get("reason_context"), dict)
                 else []
             ),
         }
-        for item in sorted_candidates[:max_candidates]
+        for item in sorted_candidates[:top_limit]
     ]
 
 
@@ -263,7 +305,7 @@ def summarize_payload(payload: dict, max_candidates: int) -> dict[str, Any]:
         "resistance_zone_1": _first_zone_label(structure_levels.get("resistance_zones", [])),
         "former_level_1": _first_zone_label(structure_levels.get("former_levels", [])),
         "invalidation": invalidation.get("label") if isinstance(invalidation, dict) else "-",
-        "current_price": float(snapshot.get("price", 0.0)) if snapshot.get("price") else 0.0,
+        "current_price": _try_float(snapshot.get("price")) or 0.0,
         "top_candidates": _top_candidates(payload, max_candidates=max_candidates),
     }
 
@@ -279,14 +321,23 @@ def summarize_diff(diff_payload: dict[str, Any]) -> dict[str, Any]:
     if invalidation_changed:
         changed_slots += 1
 
-    matched = [item for item in score_changes if item.get("status") == "matched"]
+    churn_count = sum(
+        1
+        for item in score_changes
+        if isinstance(item, dict) and item.get("status") in {"added", "removed"}
+    )
     max_total_delta = max(
-        (abs(float(item.get("total_delta", 0.0))) for item in matched if item.get("total_delta")),
+        (
+            abs(parsed_delta)
+            for item in score_changes
+            if (parsed_delta := _try_float(item.get("total_delta"))) is not None
+        ),
         default=0.0,
     )
     return {
         "changed_slots": changed_slots,
         "invalidation_changed": invalidation_changed,
+        "churn_count": churn_count,
         "max_total_delta": round(max_total_delta, 4),
     }
 
@@ -304,7 +355,7 @@ def _parse_bounds_label(label: str) -> tuple[float, float] | None:
 def _zone_width_ratio_score(summary: dict[str, Any]) -> float:
     current_price = float(summary.get("current_price") or 0.0)
     if current_price <= 0:
-        return 6.0
+        return 0.0
 
     width_ratios: list[float] = []
     for key in ("support_zone_1", "resistance_zone_1"):
@@ -315,7 +366,7 @@ def _zone_width_ratio_score(summary: dict[str, Any]) -> float:
         width_ratios.append(max(0.0, (upper - lower) / current_price))
 
     if not width_ratios:
-        return 6.0
+        return 0.0
 
     avg_ratio = sum(width_ratios) / len(width_ratios)
     # 2% 이내면 만점(15), 12% 이상이면 0점.
@@ -328,6 +379,7 @@ def evaluate_scorecard(
     diff_summary: dict[str, Any],
     *,
     is_baseline: bool = False,
+    baseline_total_score_100: float | None = None,
 ) -> dict[str, Any]:
     summary_label = str(summary.get("summary_label") or "")
     invalidation_label = str(summary.get("invalidation") or "-")
@@ -355,14 +407,15 @@ def evaluate_scorecard(
     )
 
     changed_slots = int(diff_summary.get("changed_slots", 0))
+    churn_count = int(diff_summary.get("churn_count", 0))
     max_total_delta = float(diff_summary.get("max_total_delta", 0.0))
     invalidation_changed = bool(diff_summary.get("invalidation_changed", False))
-
-    if changed_slots <= 2:
+    effective_changed_slots = changed_slots + churn_count
+    if effective_changed_slots <= 2:
         slot_stability_score = 20.0
-    elif changed_slots <= 4:
+    elif effective_changed_slots <= 4:
         slot_stability_score = 14.0
-    elif changed_slots <= 6:
+    elif effective_changed_slots <= 6:
         slot_stability_score = 8.0
     else:
         slot_stability_score = 3.0
@@ -384,8 +437,20 @@ def evaluate_scorecard(
     )
 
     total_score = round(structure_quality_score + stability_proxy_score, 2)
+    baseline_delta_score = (
+        round(total_score - float(baseline_total_score_100), 2)
+        if baseline_total_score_100 is not None
+        else None
+    )
     if is_baseline:
         verdict = "baseline"
+    elif baseline_delta_score is not None:
+        if total_score >= 70 and baseline_delta_score >= 3.0:
+            verdict = "개선"
+        elif total_score < 60 or baseline_delta_score <= -3.0:
+            verdict = "악화"
+        else:
+            verdict = "보류"
     elif total_score >= 75:
         verdict = "개선"
     elif total_score >= 65:
@@ -397,6 +462,8 @@ def evaluate_scorecard(
         "structure_quality_score_60": structure_quality_score,
         "stability_proxy_score_40": stability_proxy_score,
         "total_score_100": total_score,
+        "baseline_total_score_100": baseline_total_score_100,
+        "baseline_delta_score": baseline_delta_score,
         "verdict": verdict,
         "breakdown": {
             "structure_clarity_score_20": structure_clarity_score,
@@ -406,8 +473,16 @@ def evaluate_scorecard(
             "slot_stability_score_20": slot_stability_score,
             "invalidation_stability_score_10": invalidation_stability_score,
             "delta_sanity_score_10": delta_sanity_score,
+            "effective_changed_slots": effective_changed_slots,
+            "changed_slots": changed_slots,
+            "churn_count": churn_count,
         },
     }
+
+
+def _escape_markdown_cell(value: Any) -> str:
+    text = str(value)
+    return text.replace("|", "\\|").replace("\n", "<br>")
 
 
 def build_markdown_report(
@@ -419,28 +494,34 @@ def build_markdown_report(
         "",
         "## 자동 판정 기준",
         "- 구조 품질(60): 구조 명확성, 무효화 존재, confluence 근거, 존 폭 적절성",
-        "- 안정성 프록시(40): 슬롯 변화량, 무효화 변경 여부, 총점 변동폭",
-        "- 판정: 75+ 개선, 65~74 보류, 64 이하 악화",
+        "- 안정성 프록시(40): 슬롯 변화량(+ added/removed churn), 무효화 변경 여부, 총점 변동폭",
+        "- 판정(variant): baseline 대비 +3점 이상 & total 70점 이상=개선, -3점 이하 또는 total 60 미만=악화, 그 외 보류",
         "",
-        "| symbol | variant | verdict | total(100) | structure(60) | stability(40) | summary | support1 | resistance1 | changed_slots | max_total_delta |",
-        "|---|---|---|---:|---:|---:|---|---|---|---:|---:|",
+        "| symbol | variant | verdict | total(100) | delta_vs_baseline | structure(60) | stability(40) | summary | support1 | resistance1 | changed_slots | churn_count | max_total_delta |",
+        "|---|---|---|---:|---:|---:|---:|---|---|---|---:|---:|---:|",
     ]
     for row in rows:
         scorecard = row["scorecard"]
+        baseline_delta_score = scorecard.get("baseline_delta_score")
+        baseline_delta_label = (
+            "-" if baseline_delta_score is None else f"{float(baseline_delta_score):+.1f}"
+        )
         lines.append(
             "| "
             + " | ".join(
                 [
-                    str(row["symbol"]),
-                    str(row["variant"]),
-                    str(scorecard["verdict"]),
+                    _escape_markdown_cell(row["symbol"]),
+                    _escape_markdown_cell(row["variant"]),
+                    _escape_markdown_cell(scorecard["verdict"]),
                     f"{float(scorecard['total_score_100']):.1f}",
+                    baseline_delta_label,
                     f"{float(scorecard['structure_quality_score_60']):.1f}",
                     f"{float(scorecard['stability_proxy_score_40']):.1f}",
-                    str(row["summary"]["summary_label"] or "-"),
-                    str(row["summary"]["support_zone_1"]),
-                    str(row["summary"]["resistance_zone_1"]),
+                    _escape_markdown_cell(row["summary"]["summary_label"] or "-"),
+                    _escape_markdown_cell(row["summary"]["support_zone_1"]),
+                    _escape_markdown_cell(row["summary"]["resistance_zone_1"]),
                     str(row["diff"]["changed_slots"]),
+                    str(row["diff"].get("churn_count", 0)),
                     f"{float(row['diff']['max_total_delta']):.2f}",
                 ]
             )
@@ -466,7 +547,10 @@ def main() -> None:
     variants = [VariantSpec(name="baseline", overrides={})]
     seen_names = {"baseline"}
     for raw_spec in args.variant:
-        parsed = parse_variant_spec(raw_spec)
+        try:
+            parsed = parse_variant_spec(raw_spec)
+        except ValueError as exc:
+            raise SystemExit(str(exc)) from exc
         if parsed.name in seen_names:
             raise SystemExit(f"Duplicate variant name: {parsed.name}")
         variants.append(parsed)
@@ -502,19 +586,22 @@ def main() -> None:
             json.dumps(baseline_payload, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
+        baseline_diff_summary = {
+            "changed_slots": 0,
+            "invalidation_changed": False,
+            "churn_count": 0,
+            "max_total_delta": 0.0,
+        }
+        baseline_scorecard = evaluate_scorecard(
+            baseline_summary,
+            baseline_diff_summary,
+            is_baseline=True,
+        )
 
         report_payload["results"][symbol] = {
             "baseline": {
                 "summary": baseline_summary,
-                "scorecard": evaluate_scorecard(
-                    baseline_summary,
-                    {
-                        "changed_slots": 0,
-                        "invalidation_changed": False,
-                        "max_total_delta": 0.0,
-                    },
-                    is_baseline=True,
-                ),
+                "scorecard": baseline_scorecard,
                 "payload_path": str(baseline_json_path),
             },
             "variants": {},
@@ -525,33 +612,37 @@ def main() -> None:
                 "symbol": symbol,
                 "variant": "baseline",
                 "summary": baseline_summary,
-                "diff": {
-                    "changed_slots": 0,
-                    "invalidation_changed": False,
-                    "max_total_delta": 0.0,
-                },
-                "scorecard": evaluate_scorecard(
-                    baseline_summary,
-                    {
-                        "changed_slots": 0,
-                        "invalidation_changed": False,
-                        "max_total_delta": 0.0,
-                    },
-                    is_baseline=True,
-                ),
+                "diff": baseline_diff_summary,
+                "scorecard": baseline_scorecard,
             }
         )
 
+        used_variant_stems: set[str] = set()
         for variant in variants[1:]:
-            config = build_config_with_overrides(variant.overrides)
+            try:
+                config = build_config_with_overrides(variant.overrides)
+            except ValueError as exc:
+                raise SystemExit(f"Invalid overrides for variant '{variant.name}': {exc}") from exc
             payload = build_fixture_payload(symbol=symbol, csv_path=csv_path, config=config)
             variant_summary = summarize_payload(payload, max_candidates=args.max_candidates)
             diff = compare_structure_zone_inspect_payloads(baseline_payload, payload)
             diff_summary = summarize_diff(diff)
-            scorecard = evaluate_scorecard(variant_summary, diff_summary)
+            scorecard = evaluate_scorecard(
+                variant_summary,
+                diff_summary,
+                baseline_total_score_100=baseline_scorecard["total_score_100"],
+            )
 
-            variant_json_path = symbol_dir / f"{variant.name}.json"
-            diff_json_path = symbol_dir / f"{variant.name}.diff.json"
+            variant_stem = to_variant_file_stem(variant.name)
+            original_stem = variant_stem
+            suffix = 2
+            while variant_stem in used_variant_stems:
+                variant_stem = f"{original_stem}-{suffix}"
+                suffix += 1
+            used_variant_stems.add(variant_stem)
+
+            variant_json_path = symbol_dir / f"{variant_stem}.json"
+            diff_json_path = symbol_dir / f"{variant_stem}.diff.json"
             variant_json_path.write_text(
                 json.dumps(payload, ensure_ascii=False, indent=2),
                 encoding="utf-8",
