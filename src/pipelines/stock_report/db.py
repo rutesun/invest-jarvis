@@ -7,6 +7,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from src.pipelines.stock_report.models import RawTelegramMessage
+
 
 MIGRATION_HISTORY_TABLE = "stock_report_migration_history"
 
@@ -97,3 +99,47 @@ def apply_migrations(conn: Any, migrations_dir: Path) -> list[str]:
             raise
 
     return applied_now
+
+
+def load_telegram_messages_by_date(conn: Any, source_date: str) -> list[RawTelegramMessage]:
+    query = """
+    SELECT
+        id,
+        source_date,
+        date_kst,
+        posted_at,
+        channel_key,
+        channel_name,
+        channel_message_id,
+        author,
+        raw_text,
+        media_info,
+        forward_from_channel_key,
+        forward_from_channel_name
+    FROM telegram_messages
+    WHERE source_date = %s
+    ORDER BY posted_at ASC, id ASC;
+    """
+    with conn.cursor() as cur:
+        cur.execute(query, (source_date,))
+        rows = cur.fetchall()
+
+    messages: list[RawTelegramMessage] = []
+    for row in rows:
+        messages.append(
+            RawTelegramMessage(
+                id=row[0],
+                source_date=row[1],
+                date_kst=row[2],
+                posted_at=row[3],
+                channel_key=row[4],
+                channel_name=row[5],
+                channel_message_id=row[6],
+                author=row[7],
+                raw_text=row[8],
+                media_info=row[9],
+                forward_from_channel_key=row[10],
+                forward_from_channel_name=row[11],
+            )
+        )
+    return messages

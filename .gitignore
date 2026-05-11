@@ -18,3 +18,4 @@ build/
 tests/pipelines/daily_report/fixtures/stage_outputs/
 anon.session
 .obsidian/
+.docker/postgres-data/

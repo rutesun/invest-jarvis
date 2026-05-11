@@ -1,0 +1,54 @@
+categories:
+  - key: "AI인프라"
+    aliases: ["AI 인프라", "AI infra", "AI"]
+    themes:
+      - key: "AI 데이터센터 전력"
+        aliases: ["데이터센터 전력", "AI 전력", "AI DC 전력"]
+      - key: "클라우드·SaaS"
+        aliases: ["클라우드", "cloud", "saas"]
+      - key: "AI 반도체"
+        aliases: ["AI 칩", "NPU", "GPU", "가속기"]
+
+  - key: "반도체"
+    aliases: ["Semiconductor", "semiconductor"]
+    themes:
+      - key: "파운드리"
+        aliases: ["foundry", "파운드리 사업"]
+      - key: "메모리"
+        aliases: ["DRAM", "NAND", "HBM", "고대역폭메모리"]
+      - key: "후공정"
+        aliases: ["패키징", "OSAT", "후공정"]
+
+  - key: "이차전지"
+    aliases: ["2차전지", "배터리", "전기차 배터리"]
+    themes:
+      - key: "양극재"
+        aliases: ["양극재", "cathode"]
+      - key: "전해질"
+        aliases: ["전해질", "electrolyte"]
+      - key: "리사이클"
+        aliases: ["recycle", "재활용"]
+
+  - key: "바이오/헬스케어"
+    aliases: ["바이오", "헬스케어", "제약"]
+    themes:
+      - key: "신약개발"
+        aliases: ["임상", "FDA", "파이프라인"]
+      - key: "의료기기"
+        aliases: ["의료기기", "진단기기"]
+
+  - key: "매크로/정책"
+    aliases: ["매크로", "정책", "금리", "환율"]
+    themes:
+      - key: "통화정책"
+        aliases: ["FOMC", "연준", "금리인하", "금리인상"]
+      - key: "환율/원자재"
+        aliases: ["달러", "원유", "WTI", "DXY"]
+
+  - key: "금융"
+    aliases: ["은행", "증권", "보험", "핀테크"]
+    themes:
+      - key: "은행/증권"
+        aliases: ["NIM", "브로커리지", "IB"]
+      - key: "핀테크"
+        aliases: ["간편결제", "payment", "PG"]

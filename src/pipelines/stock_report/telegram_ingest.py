@@ -102,6 +102,7 @@ def _build_row_payload(
 
     raw_text = row.get("content", "")
     media_info = _normalize_nullable_text(row.get("media_info"))
+    has_media = media_info is not None
 
     return (
         source_date,
@@ -112,6 +113,7 @@ def _build_row_payload(
         str(row["message_id"]),
         _normalize_nullable_text(row.get("author")),
         raw_text,
+        has_media,
         media_info,
         forward_from_raw,
         forward_key,
@@ -134,6 +136,7 @@ def upsert_telegram_messages(conn: Any, rows: list[tuple[Any, ...]]) -> int:
         channel_message_id,
         author,
         raw_text,
+        has_media,
         media_info,
         forward_from_raw,
         forward_from_channel_key,
@@ -141,7 +144,7 @@ def upsert_telegram_messages(conn: Any, rows: list[tuple[Any, ...]]) -> int:
         raw_row
     )
     VALUES (
-        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb
+        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb
     )
     ON CONFLICT (channel_key, channel_message_id) DO UPDATE
     SET
@@ -151,6 +154,7 @@ def upsert_telegram_messages(conn: Any, rows: list[tuple[Any, ...]]) -> int:
         channel_name = EXCLUDED.channel_name,
         author = EXCLUDED.author,
         raw_text = EXCLUDED.raw_text,
+        has_media = EXCLUDED.has_media,
         media_info = EXCLUDED.media_info,
         forward_from_raw = EXCLUDED.forward_from_raw,
         forward_from_channel_key = EXCLUDED.forward_from_channel_key,

@@ -1196,6 +1196,17 @@ def report_daily_v2(
     data_dir: str = typer.Option("data", "--data-dir", "-d", help="데이터 디렉토리"),
     provider: str = typer.Option("openai", "--provider", "-p", help="LLM provider"),
     compare: bool = typer.Option(False, "--compare", help="비교 모드 실행"),
+    config_path: str = typer.Option(
+        "config.yaml", "--config-path", help="stock report 설정 파일 경로"
+    ),
+    taxonomy_path: str = typer.Option(
+        "config/stock_report_vocabulary.yaml",
+        "--taxonomy-path",
+        help="taxonomy vocabulary 파일 경로",
+    ),
+    preview_limit: int = typer.Option(
+        12, "--preview-limit", help="canonical_summary 미리보기 개수"
+    ),
 ):
     """Stock Report Engine V2 (Phase 1) 실행."""
     from datetime import datetime as dt
@@ -1214,6 +1225,9 @@ def report_daily_v2(
             data_dir=data_dir,
             provider=provider,
             compare=compare,
+            config_path=config_path,
+            taxonomy_path=taxonomy_path,
+            preview_limit=preview_limit,
         )
         output = format_daily_v2_report(result)
         console.print(Markdown(output))
@@ -1238,6 +1252,17 @@ def report_validate_v2(
     mode: str = typer.Option("compare", "--mode", help="검증 모드 (현재 compare만 지원)"),
     data_dir: str = typer.Option("data", "--data-dir", "-d", help="데이터 디렉토리"),
     provider: str = typer.Option("openai", "--provider", "-p", help="LLM provider"),
+    config_path: str = typer.Option(
+        "config.yaml", "--config-path", help="stock report 설정 파일 경로"
+    ),
+    taxonomy_path: str = typer.Option(
+        "config/stock_report_vocabulary.yaml",
+        "--taxonomy-path",
+        help="taxonomy vocabulary 파일 경로",
+    ),
+    preview_limit: int = typer.Option(
+        12, "--preview-limit", help="canonical_summary 미리보기 개수"
+    ),
 ):
     """Stock Report Engine V2 검증 실행."""
     from src.pipelines.stock_report.pipeline import format_daily_v2_report, run_validate_v2
@@ -1253,6 +1278,9 @@ def report_validate_v2(
             date=date,
             data_dir=data_dir,
             provider=provider,
+            config_path=config_path,
+            taxonomy_path=taxonomy_path,
+            preview_limit=preview_limit,
         )
         output = format_daily_v2_report(result)
         console.print(Markdown(output))

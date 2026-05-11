@@ -130,7 +130,7 @@ flowchart TD
 
 - Telegram 메시지를 구조화해서 DB에 넣는다.
 - `category_key`, `main_theme`, `sub_themes`를 canonical vocabulary 기준으로 관리한다.
-- `message_type`, `main_theme`, `sub_themes`, `ticker_tags`, `one_line`을 안정적으로 만든다.
+- `message_type`, `main_theme`, `sub_themes`, `ticker_tags`, `canonical_summary`를 안정적으로 만든다.
 - 당일 Telegram signal만으로 `category -> theme -> ticker` 묶음을 만든다.
 - Jinja 없이 Markdown report를 생성한다.
 - 기존 `daily_report`와 같은 날짜로 compare 가능한 수준까지 만든다.
@@ -157,7 +157,7 @@ src/pipelines/stock_report/
   taxonomy.py                # category/main_theme/sub_theme registry + alias resolution
   telegram_ingest.py         # CSV load -> telegram_messages upsert
   normalize.py               # clean text, url/media extraction, simhash/grouping keys
-  classify.py                # message_type/category/main_theme/sub_themes/ticker_tags/one_line
+  classify.py                # message_type/category/main_theme/sub_themes/ticker_tags/canonical_summary
   chunking.py                # raw/grouped message -> knowledge_chunks
   embed.py                   # Phase 2+: embed payload + vector sync
   retrieval.py               # Phase 2+: hybrid retrieval
@@ -264,11 +264,13 @@ categories:
         aliases: ["HBM", "고대역폭메모리"]
 ```
 
-#### 6. `one_line`은 retrieval과 최종 노출 모두에 쓰는 canonical sentence다
+#### 6. `canonical_summary`는 report unit 기준의 canonical sentence다
 
 형식 규칙은 아래로 고정한다.
 
-- 30자 이내
+- LLM이 각 report unit마다 생성한다
+- retrieval과 synthesis의 기준 문장으로 사용한다
+- 최종 노출은 필요하면 렌더링 단계에서 더 짧은 `display_line`으로 줄인다
 - `주어 + 행위/사실` 구조
 - "~에 관한", "~의 내용" 같은 메타 표현 금지
 - 수치가 있으면 반드시 포함
@@ -346,7 +348,7 @@ CREATE TABLE knowledge_chunks (
     sub_themes JSONB NOT NULL DEFAULT '[]',
     ticker_tags JSONB NOT NULL DEFAULT '[]',
     theme_tags JSONB NOT NULL DEFAULT '[]',
-    one_line TEXT NOT NULL,
+    canonical_summary TEXT NOT NULL,
     content_clean TEXT NOT NULL,
     embed_payload TEXT NOT NULL,
     channel_weight DOUBLE PRECISION NOT NULL DEFAULT 1.0,
@@ -421,7 +423,7 @@ Phase 1에서는 Vector DB에 실제로 넣지 않더라도, **Phase 2 backfill 
 ```python
 def build_embed_payload(
     *,
-    one_line: str,
+    canonical_summary: str,
     clean_text: str,
     channel_name: str,
     category_key: str,
@@ -435,7 +437,7 @@ def build_embed_payload(
         f"카테고리: {category_key}\n"
         f"메인테마: {theme_text}\n"
         f"티커: {ticker_text}\n"
-        f"{one_line}\n"
+        f"{canonical_summary}\n"
         f"{clean_text}"
     )
 ```
@@ -458,7 +460,7 @@ Phase 1에서는 recall을 하지 않는다. 당일 `knowledge_chunks`만 읽어
 - `main_theme` 기준으로 theme bucket 생성
 - `ticker_tags` 기준으로 focus ticker 후보 생성
 - 같은 `content_hash` 또는 같은 synthetic group에서 온 chunk는 1개만 대표로 채택
-- 같은 채널이 같은 의미의 `one_line`을 반복하면 1개만 대표로 채택
+- 같은 채널이 같은 의미의 `canonical_summary`를 반복하면 1개만 대표로 채택
 - `opinion`은 기본 섹션에는 넣지 않고 low-confidence note로만 보관
 
 Phase 1에서는 정교한 점수화나 hard cap을 두지 않는다. 목적은 **많이 잘라내는 것**이 아니라
@@ -467,7 +469,7 @@ Phase 1에서는 정교한 점수화나 hard cap을 두지 않는다. 목적은 
 즉 Phase 1은 아래 3가지만 한다.
 
 1. `signal/data`만 본문 후보로 채택
-2. 중복 `one_line` 제거
+2. 중복 `canonical_summary` 제거
 3. `category -> theme -> ticker` 단위로 당일 bundle 생성
 
 ### Phase 2 Recall Note
@@ -489,7 +491,7 @@ LLM은 raw message를 직접 읽지 않는다. `same-day bundle`만 읽는다.
 - `category_name`
 - `theme_name`
 - `ticker_name`
-- `today evidence one_line[]`
+- `today evidence canonical_summary[]`
 - `low_confidence notes[]`
 
 LLM 역할:
@@ -553,7 +555,7 @@ uv run jarvis report validate 2026-04-16 --mode compare
 1. forward mapping이 원 채널 신뢰도로 반영되는가
 2. 짧은 intraday comments가 grouped synthetic chunk로 들어가는가
 3. `main_theme`는 1개만, `sub_themes`는 2개 이하인가
-4. `one_line`이 30자 제약을 지키는가
+4. `canonical_summary`가 비어 있지 않고 canonical contract를 지키는가
 5. Phase 1 same-day aggregation이 중복 없이 evidence를 고르는가
 6. Markdown 출력이 raw fact를 새로 지어내지 않는가
 

@@ -85,9 +85,9 @@ flowchart TD
 
 **기대효과:** `jarvis report daily-v2 DATE`로 새 엔진을 독립 실행할 수 있다.
 
-- [ ] `run_daily_v2(date, data_dir, provider, compare)` 시그니처를 고정한다
-- [ ] `@report_app.command("daily-v2")`를 추가한다
-- [ ] `@report_app.command("validate")`를 추가한다
+- [x] `run_daily_v2(date, data_dir, provider, compare)` 시그니처를 고정한다
+- [x] `@report_app.command("daily-v2")`를 추가한다
+- [x] `@report_app.command("validate")`를 추가한다
 
 ### T03. Phase 1 Postgres migration과 연결 계층을 만든다
 
@@ -101,10 +101,10 @@ flowchart TD
 
 **기대효과:** Telegram-first knowledge base의 최소 저장소가 준비된다.
 
-- [ ] `telegram_messages`, `forward_source_map`, `knowledge_chunks`, `report_runs`, `report_evidence` 테이블을 만든다
-- [ ] migration runner는 순서대로 SQL 파일을 실행하고 완료 이력을 남긴다
-- [ ] `knowledge_chunks`에는 `embed_payload`까지만 저장하고 벡터 컬럼은 넣지 않는다
-- [ ] ORM은 도입하지 않고 `psycopg` + raw SQL로 시작한다
+- [x] `telegram_messages`, `forward_source_map`, `knowledge_chunks`, `report_runs`, `report_evidence` 테이블을 만든다
+- [x] migration runner는 순서대로 SQL 파일을 실행하고 완료 이력을 남긴다
+- [x] `knowledge_chunks`에는 `embed_payload`까지만 저장하고 벡터 컬럼은 넣지 않는다
+- [x] ORM은 도입하지 않고 `psycopg` + raw SQL로 시작한다
 
 ### T04. Telegram raw ingest를 만든다
 
@@ -116,9 +116,9 @@ flowchart TD
 
 **기대효과:** 기존 CSV 출력물을 새 엔진이 안정적으로 재사용할 수 있다.
 
-- [ ] 기존 Telegram CSV 포맷을 읽어 `telegram_messages`에 upsert 한다
-- [ ] `(channel_key, channel_message_id)` 중복 적재를 막는다
-- [ ] `date_kst`, `forward_from_*`, `raw_text`를 누락 없이 저장한다
+- [x] 기존 Telegram CSV 포맷을 읽어 `telegram_messages`에 upsert 한다
+- [x] `(channel_key, channel_message_id)` 중복 적재를 막는다
+- [x] `date_kst`, `forward_from_*`, `raw_text`를 누락 없이 저장한다
 
 ### T05. normalize와 grouping 규칙을 구현한다
 
@@ -131,10 +131,10 @@ flowchart TD
 
 **기대효과:** noise는 줄고, 실제 의미 단위가 chunk로 남는다.
 
-- [ ] URL/미디어/clean text 추출 규칙을 고정한다
-- [ ] `processing_mode`를 `full/grouped_only/skip`로 나눈다
-- [ ] `hana_us_stock` 류의 짧은 시황은 30분 window로 grouping 한다
-- [ ] simhash 또는 동등한 해시로 중복/near-duplicate 판별 키를 만든다
+- [x] URL/미디어/clean text 추출 규칙을 고정한다
+- [x] `processing_mode`를 `full/grouped_only/skip`로 나눈다
+- [x] `hana_us_stock` 류의 짧은 시황은 30분 window로 grouping 한다
+- [x] simhash 또는 동등한 해시로 중복/near-duplicate 판별 키를 만든다
 
 ### T06. classify contract를 구현한다
 
@@ -144,17 +144,17 @@ flowchart TD
 - Create: `tests/pipelines/stock_report/test_classify.py`
 - Create: `config/stock_report_vocabulary.yaml`
 
-**Why:** `category_key`, `main_theme`, `sub_themes`, `ticker_tags`, `one_line`은 이후 모든 집계와 retrieval의 기준이고, canonical vocabulary가 없으면 당일 집계부터 깨진다.
+**Why:** `category_key`, `main_theme`, `sub_themes`, `ticker_tags`, `canonical_summary`는 이후 모든 집계와 retrieval의 기준이고, canonical vocabulary가 없으면 당일 집계부터 깨진다.
 
 **기대효과:** Telegram 메시지가 리포트용 canonical signal로 정규화된다.
 
-- [ ] `message_type` 허용값을 `signal/opinion/data/admin`으로 고정한다
-- [ ] `category_key`를 1개 canonical key로 정규화한다
-- [ ] `main_theme`는 1개, `sub_themes`는 최대 2개로 제한한다
-- [ ] `config/stock_report_vocabulary.yaml`에 category/theme alias mapping을 정의한다
+- [x] `message_type` 허용값을 `signal/opinion/data/admin`으로 고정한다
+- [x] `category_key`를 1개 canonical key로 정규화한다
+- [x] `main_theme`는 1개, `sub_themes`는 최대 2개로 제한한다
+- [x] `config/stock_report_vocabulary.yaml`에 category/theme alias mapping을 정의한다
 - [ ] 정규화 실패 표현을 `vocab_candidates`에 적재하는 규칙을 정의한다
-- [ ] `one_line` 30자 규칙을 검증한다
-- [ ] forward 메시지는 현재 채널이 아니라 실질 출처 기준 메타를 우선 반영한다
+- [x] `canonical_summary` 필드 계약을 검증한다
+- [x] forward 메시지는 현재 채널이 아니라 실질 출처 기준 메타를 우선 반영한다
 
 ### T07. chunk 생성과 embed payload write path를 만든다
 
