@@ -30,6 +30,83 @@ from src.pipelines.stock_report.taxonomy import (
 
 logger = logging.getLogger(__name__)
 MULTISPACE_PATTERN = __import__("re").compile(r"\s+")
+NUMERIC_PATTERN = __import__("re").compile(r"[0-9]|%|[+-][0-9]")
+SIGNAL_HINT_KEYWORDS = (
+    "상장",
+    "협약",
+    "체결",
+    "인증",
+    "승인",
+    "수주",
+    "인수",
+    "합병",
+    "출시",
+    "공시",
+    "가이던스",
+    "투자",
+    "파트너십",
+    "개발 성공",
+    "정책 발표",
+)
+DATA_HINT_KEYWORDS = (
+    "yoy",
+    "qoq",
+    "전년비",
+    "증가",
+    "감소",
+    "비중",
+    "판매",
+    "등록",
+    "점유율",
+    "매출",
+    "영업이익",
+    "eps",
+    "통계",
+    "지수",
+)
+OPINION_HINT_KEYWORDS = ("전망", "추정", "코멘트", "의견", "우려", "판단", "가능성")
+ADMIN_HINT_KEYWORDS = ("공지", "안내", "구독", "입장", "문의", "채널")
+EVENT_TYPE_ALIAS_MAP = {
+    "자본조달": "자본조달",
+    "전환사채": "자본조달",
+    "cb": "자본조달",
+    "convertible bond": "자본조달",
+    "capped call": "자본조달",
+    "수주/계약": "수주/계약",
+    "계약": "수주/계약",
+    "수주": "수주/계약",
+    "파트너십": "수주/계약",
+    "partnership": "수주/계약",
+    "실적": "실적",
+    "earnings": "실적",
+    "가이던스": "실적",
+    "정책": "정책",
+    "규제": "정책",
+    "policy": "정책",
+    "인증/승인": "인증/승인",
+    "인증": "인증/승인",
+    "승인": "인증/승인",
+    "approval": "인증/승인",
+    "certification": "인증/승인",
+    "m&a": "M&A",
+    "인수합병": "M&A",
+    "인수": "M&A",
+    "합병": "M&A",
+    "출시/제품": "출시/제품",
+    "출시": "출시/제품",
+    "제품": "출시/제품",
+    "price/margin": "가격/마진",
+    "가격/마진": "가격/마진",
+    "가격": "가격/마진",
+    "마진": "가격/마진",
+    "통계/지표": "통계/지표",
+    "통계": "통계/지표",
+    "지표": "통계/지표",
+    "해석/전망": "해석/전망",
+    "전망": "해석/전망",
+    "코멘트": "해석/전망",
+    "공지": "공지",
+}
 
 
 def _dedupe_preserve_order(values: list[str], *, limit: int | None = None) -> list[str]:
@@ -64,6 +141,15 @@ def _normalize_theme(
     return match
 
 
+def _normalize_event_type(value: str | None) -> str | None:
+    if not value:
+        return None
+    stripped = value.strip()
+    if not stripped:
+        return None
+    return EVENT_TYPE_ALIAS_MAP.get(stripped.lower(), stripped)
+
+
 def _fallback_canonical_summary(clean_text: str) -> str:
     if not clean_text:
         return ""
@@ -86,6 +172,7 @@ def _build_fallback_message(row: NormalizedMessage) -> ClassifiedMessage | None:
         structure_type="single_topic_deep",
         unit_index=0,
         message_type="signal",
+        event_type=None,
         category_key="unclassified",
         main_theme=None,
         sub_themes=[],
@@ -93,6 +180,46 @@ def _build_fallback_message(row: NormalizedMessage) -> ClassifiedMessage | None:
         canonical_summary=canonical_summary,
         supporting_facts=[],
     )
+
+
+def _normalize_message_type(
+    raw_message_type: str,
+    *,
+    canonical_summary: str,
+    supporting_facts: list[str],
+) -> str:
+    merged_text = f"{canonical_summary} {' '.join(supporting_facts)}".strip()
+    lowered = merged_text.lower()
+
+    if any(keyword in merged_text for keyword in ADMIN_HINT_KEYWORDS):
+        return "admin"
+    if raw_message_type == "admin":
+        return "admin"
+
+    if raw_message_type == "opinion":
+        return "opinion"
+    if any(keyword in merged_text for keyword in OPINION_HINT_KEYWORDS) and not any(
+        keyword in merged_text for keyword in SIGNAL_HINT_KEYWORDS
+    ):
+        return "opinion"
+
+    signal_score = sum(1 for keyword in SIGNAL_HINT_KEYWORDS if keyword in merged_text)
+    data_score = sum(1 for keyword in DATA_HINT_KEYWORDS if keyword in lowered)
+    has_numeric = bool(NUMERIC_PATTERN.search(merged_text))
+
+    if raw_message_type == "data":
+        if signal_score >= 2:
+            return "signal"
+        if signal_score >= 1 and data_score <= 2:
+            return "signal"
+        return "data"
+
+    if raw_message_type == "signal":
+        if signal_score == 0 and data_score >= 3 and has_numeric:
+            return "data"
+        return "signal"
+
+    return "signal"
 
 
 def _normalize_unit(
@@ -136,6 +263,7 @@ def _normalize_unit(
     sub_themes = _dedupe_preserve_order(sub_themes, limit=2)
     ticker_tags = _dedupe_preserve_order(raw_unit.ticker_tags, limit=5)
     supporting_facts = _dedupe_preserve_order(raw_unit.supporting_facts, limit=5)
+    event_type = _normalize_event_type(raw_unit.event_type)
 
     return ClassifiedMessage(
         telegram_message_id=row.telegram_message_id,
@@ -145,7 +273,12 @@ def _normalize_unit(
         processing_mode=row.processing_mode,
         structure_type=structure_type,
         unit_index=unit_index,
-        message_type=raw_unit.message_type,
+        message_type=_normalize_message_type(
+            raw_unit.message_type,
+            canonical_summary=canonical_summary,
+            supporting_facts=supporting_facts,
+        ),
+        event_type=event_type,
         category_key=category_key,
         main_theme=main_theme,
         sub_themes=sub_themes,
@@ -166,6 +299,7 @@ async def _extract_message_semantics(
     row: NormalizedMessage,
     taxonomy: TaxonomyRegistry,
     provider: str,
+    system_prompt: str,
 ) -> SemanticExtractionDraft:
     llm_config, llm = _get_llm_runtime(provider)
     taxonomy_outline = render_taxonomy_outline(taxonomy)
@@ -174,7 +308,7 @@ async def _extract_message_semantics(
         taxonomy_outline=taxonomy_outline,
     )
     messages = llm_config.build_messages(
-        SEMANTIC_EXTRACTION_SYSTEM_PROMPT,
+        system_prompt,
         user_prompt,
     )
     config = {
@@ -210,6 +344,7 @@ async def _classify_single_message(
     category_map: dict[str, str],
     theme_map: dict[str, tuple[str, str]],
     semaphore: asyncio.Semaphore,
+    system_prompt: str,
 ) -> list[ClassifiedMessage]:
     if row.processing_mode == "skip" or not row.clean_text.strip():
         return []
@@ -220,6 +355,7 @@ async def _classify_single_message(
                 row=row,
                 taxonomy=taxonomy,
                 provider=provider,
+                system_prompt=system_prompt,
             )
     except Exception as exc:
         logger.warning(
@@ -251,6 +387,7 @@ async def _classify_messages_async(
     *,
     taxonomy: TaxonomyRegistry,
     provider: str,
+    system_prompt: str,
 ) -> list[ClassifiedMessage]:
     category_map, theme_map = build_match_dictionary(taxonomy)
     semaphore = asyncio.Semaphore(SEMANTIC_EXTRACTION_MAX_CONCURRENCY)
@@ -262,6 +399,7 @@ async def _classify_messages_async(
             category_map=category_map,
             theme_map=theme_map,
             semaphore=semaphore,
+            system_prompt=system_prompt,
         )
         for row in normalized_messages
     ]
@@ -274,13 +412,16 @@ def classify_messages(
     *,
     taxonomy: TaxonomyRegistry,
     provider: str,
+    system_prompt: str | None = None,
 ) -> list[ClassifiedMessage]:
     if not normalized_messages:
         return []
+    resolved_system_prompt = system_prompt or SEMANTIC_EXTRACTION_SYSTEM_PROMPT
     return asyncio.run(
         _classify_messages_async(
             normalized_messages,
             taxonomy=taxonomy,
             provider=provider,
+            system_prompt=resolved_system_prompt,
         )
     )

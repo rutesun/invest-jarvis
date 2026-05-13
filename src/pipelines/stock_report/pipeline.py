@@ -96,8 +96,11 @@ def run_daily_v2(
         message_type_counts[row.message_type] = message_type_counts.get(row.message_type, 0) + 1
         category_counts[row.category_key] = category_counts.get(row.category_key, 0) + 1
         if row.canonical_summary != "-" and len(preview_canonical_summaries) < preview_limit:
+            preview_type = row.message_type
+            if row.event_type:
+                preview_type = f"{preview_type}/{row.event_type}"
             preview_canonical_summaries.append(
-                f"[{row.message_type}] ({row.category_key}) {row.canonical_summary}"
+                f"[{preview_type}] ({row.category_key}) {row.canonical_summary}"
             )
 
     return DailyV2RunResult(

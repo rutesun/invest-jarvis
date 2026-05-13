@@ -35,14 +35,16 @@ def test_classify_normalizes_llm_output_into_canonical_fields(monkeypatch):
     taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
     row = _normalized_message("NVIDIA·IREN, 최대 5GW AI 인프라 구축 전략적 파트너십 발표")
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider):
+    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
         assert row.clean_text
         assert provider == "openai"
+        assert system_prompt
         return SemanticExtractionDraft(
             structure_type="single_topic_deep",
             units=[
                 SemanticUnitDraft(
                     message_type="signal",
+                    event_type="파트너십",
                     category_key="AI infra",
                     main_theme="데이터센터 전력",
                     sub_themes=["AI 칩"],
@@ -69,6 +71,7 @@ def test_classify_normalizes_llm_output_into_canonical_fields(monkeypatch):
     assert result[0].category_key == "AI인프라"
     assert result[0].main_theme == "AI 데이터센터 전력"
     assert result[0].sub_themes == ["AI 반도체"]
+    assert result[0].event_type == "수주/계약"
     assert result[0].ticker_tags == ["NVDA", "IREN"]
     assert result[0].canonical_summary == "NVIDIA·IREN, 최대 5GW AI 인프라 파트너십 발표"
     assert len(result[0].supporting_facts) == 2
@@ -78,12 +81,14 @@ def test_classify_splits_multi_item_digest_into_multiple_report_units(monkeypatc
     taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
     row = _normalized_message("신한 자동차 뉴스 digest")
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider):
+    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+        assert system_prompt
         return SemanticExtractionDraft(
             structure_type="multi_item_digest",
             units=[
                 SemanticUnitDraft(
                     message_type="signal",
+                    event_type="상장",
                     category_key="자동차",
                     main_theme=None,
                     sub_themes=[],
@@ -93,6 +98,7 @@ def test_classify_splits_multi_item_digest_into_multiple_report_units(monkeypatc
                 ),
                 SemanticUnitDraft(
                     message_type="data",
+                    event_type="판매량",
                     category_key="자동차",
                     main_theme=None,
                     sub_themes=[],
@@ -113,6 +119,7 @@ def test_classify_splits_multi_item_digest_into_multiple_report_units(monkeypatc
     assert len(result) == 2
     assert [item.structure_type for item in result] == ["multi_item_digest", "multi_item_digest"]
     assert [item.unit_index for item in result] == [0, 1]
+    assert [item.event_type for item in result] == ["상장", "판매량"]
     assert [item.canonical_summary for item in result] == [
         "현대차, 보스턴다이내믹스 상장 검토",
         "기아 인도 EV 판매 900% 넘게 증가",
@@ -123,12 +130,14 @@ def test_classify_uses_theme_category_when_llm_category_is_missing(monkeypatch):
     taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
     row = _normalized_message("임상 결과 발표")
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider):
+    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+        assert system_prompt
         return SemanticExtractionDraft(
             structure_type="single_topic_deep",
             units=[
                 SemanticUnitDraft(
                     message_type="signal",
+                    event_type="approval",
                     category_key=None,
                     main_theme="임상",
                     sub_themes=["FDA"],
@@ -148,6 +157,7 @@ def test_classify_uses_theme_category_when_llm_category_is_missing(monkeypatch):
 
     assert len(result) == 1
     assert result[0].category_key == "바이오/헬스케어"
+    assert result[0].event_type == "인증/승인"
     assert result[0].main_theme == "신약개발"
     assert result[0].sub_themes == []
 
@@ -156,12 +166,14 @@ def test_classify_filters_blank_units_from_llm_output(monkeypatch):
     taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
     row = _normalized_message("운영 공지")
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider):
+    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+        assert system_prompt
         return SemanticExtractionDraft(
             structure_type="notice",
             units=[
                 SemanticUnitDraft(
                     message_type="admin",
+                    event_type="공지",
                     category_key=None,
                     main_theme=None,
                     sub_themes=[],
@@ -180,3 +192,36 @@ def test_classify_filters_blank_units_from_llm_output(monkeypatch):
     result = classify_messages([row], taxonomy=taxonomy, provider="openai")
 
     assert result == []
+
+
+def test_classify_normalizes_convertible_bond_event_type(monkeypatch):
+    taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
+    row = _normalized_message("IREN, 20억달러 전환선순위채권 발행 추진")
+
+    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+        assert system_prompt
+        return SemanticExtractionDraft(
+            structure_type="single_topic_deep",
+            units=[
+                SemanticUnitDraft(
+                    message_type="signal",
+                    event_type="capped call",
+                    category_key=None,
+                    main_theme=None,
+                    sub_themes=[],
+                    ticker_tags=["IREN"],
+                    canonical_summary="IREN, 20억달러 전환사채 발행으로 투자재원 확보 추진",
+                    supporting_facts=[],
+                )
+            ],
+        )
+
+    monkeypatch.setattr(
+        "src.pipelines.stock_report.classify._extract_message_semantics",
+        _fake_extract_message_semantics,
+    )
+
+    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+
+    assert len(result) == 1
+    assert result[0].event_type == "자본조달"

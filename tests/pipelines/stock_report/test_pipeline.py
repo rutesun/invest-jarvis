@@ -137,6 +137,7 @@ def test_run_daily_v2_calls_migration_and_ingest(monkeypatch):
                 structure_type="single_topic_deep",
                 unit_index=0,
                 message_type="data",
+                event_type="통계/지표",
                 category_key="반도체",
                 main_theme="메모리",
                 sub_themes=[],
@@ -194,7 +195,7 @@ def test_run_daily_v2_calls_migration_and_ingest(monkeypatch):
     assert result.skipped_rows == 0
     assert result.message_type_counts == {"data": 1}
     assert result.category_counts == {"반도체": 1}
-    assert result.preview_canonical_summaries == ["[data] (반도체) NVDA +2.5%"]
+    assert result.preview_canonical_summaries == ["[data/통계/지표] (반도체) NVDA +2.5%"]
     assert result.migrations_applied == ["001_phase1.sql"]
     assert events == [
         "resolve_dsn:None",

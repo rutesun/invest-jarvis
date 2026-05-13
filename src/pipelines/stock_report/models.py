@@ -57,6 +57,7 @@ class ClassifiedMessage:
     structure_type: StructureType
     unit_index: int
     message_type: MessageType
+    event_type: str | None
     category_key: str
     main_theme: str | None
     sub_themes: list[str]
@@ -67,6 +68,7 @@ class ClassifiedMessage:
 
 class SemanticUnitDraft(BaseModel):
     message_type: Literal["signal", "opinion", "data", "admin"]
+    event_type: str | None = None
     category_key: str | None = None
     main_theme: str | None = None
     sub_themes: list[str] = Field(default_factory=list)
@@ -74,7 +76,7 @@ class SemanticUnitDraft(BaseModel):
     canonical_summary: str
     supporting_facts: list[str] = Field(default_factory=list)
 
-    @field_validator("category_key", "main_theme", mode="before")
+    @field_validator("event_type", "category_key", "main_theme", mode="before")
     @classmethod
     def strip_optional_text(cls, value: str | None) -> str | None:
         if value is None:
