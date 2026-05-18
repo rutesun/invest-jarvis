@@ -154,7 +154,7 @@ flowchart TD
 - [x] `category_key`를 1개 canonical key로 정규화한다
 - [x] `main_theme`는 1개, `sub_themes`는 최대 2개로 제한한다
 - [x] `config/stock_report_vocabulary.yaml`에 category/theme alias mapping을 정의한다
-- [ ] 정규화 실패 표현을 `vocab_candidates`에 적재하는 규칙을 정의한다
+- [ ] `vocab_candidates` 수집/정제는 `T07` 이후 운영 루프로 분리한다
 - [x] `canonical_summary` 필드 계약을 검증한다
 - [x] semantic extraction은 LLM structured output으로 수행한다
 - [x] forward 메시지는 현재 채널이 아니라 실질 출처 기준 메타를 우선 반영한다
@@ -176,6 +176,16 @@ flowchart TD
 - [ ] `build_embed_payload()`를 한 함수로 고정한다
 - [ ] Phase 1에서는 payload만 저장하고 실제 임베딩/업서트는 하지 않는다
 
+#### T07 이후 운영 작업: 주간 taxonomy 정제 루프
+
+- [ ] 당일 리포트용 `daily runtime taxonomy overlay`를 만든다
+- [ ] canonical taxonomy에 매칭되지 않은 unit은 `provisional_category/provisional_theme`로 당일 집계에 반영한다
+- [ ] overlay 결과는 YAML에 즉시 쓰지 않고 `is_provisional=true` 메타로 추적한다
+- [ ] `vocab_candidates` 테이블(또는 동등 저장소)에 정규화 실패/변환 후보를 적재한다
+- [ ] 수집 시점은 classify 정규화 직후로 고정하고, `raw_value -> normalized_value`를 함께 저장한다
+- [ ] 주 1회 최근 7일 기준으로 후보를 집계해 `alias 추가/신규 theme/무시` 버킷 리포트를 만든다
+- [ ] 자동 반영은 하지 않고, 사람 리뷰 후 `config/stock_report_vocabulary.yaml`에 반영한다
+
 ### T08. Phase 1 same-day aggregation을 만든다
 
 **Files:**
@@ -189,6 +199,7 @@ flowchart TD
 - [ ] `source_date = report_date` 기준으로 당일 chunk만 읽는다
 - [ ] `category_key` 기준 category bucket 생성 규칙을 구현한다
 - [ ] `main_theme` 기준 theme bucket 생성 규칙을 구현한다
+- [ ] `category_key == unclassified`면 `provisional_category`를 display bucket으로 사용한다
 - [ ] `ticker_tags` 기준 focus ticker bucket 생성 규칙을 구현한다
 - [ ] hard cap 없이 same-day dedupe 규칙만 구현한다
 
