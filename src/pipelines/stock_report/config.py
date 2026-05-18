@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 
 from langchain_core.language_models import BaseChatModel
@@ -32,7 +33,14 @@ class SemanticExtractionLLMConfig:
 
 
 def get_semantic_extraction_llm_config(provider: str) -> SemanticExtractionLLMConfig:
-    return SemanticExtractionLLMConfig(provider=provider, temperature=0.1)
+    model: str | None = None
+    if provider == "openai":
+        model = (
+            os.getenv("STOCK_REPORT_OPENAI_MODEL") or os.getenv("OPENAI_MODEL") or "gpt-5.4-mini"
+        )
+    elif provider == "anthropic":
+        model = os.getenv("STOCK_REPORT_ANTHROPIC_MODEL") or os.getenv("ANTHROPIC_MODEL")
+    return SemanticExtractionLLMConfig(provider=provider, model=model, temperature=0.1)
 
 
 SEMANTIC_EXTRACTION_MAX_CONCURRENCY = 8

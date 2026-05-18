@@ -37,6 +37,8 @@ def test_system_prompt_requires_market_wrap_split_when_narratives_differ():
         in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
     )
     assert "event_type" in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
+    assert "supporting_facts" in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
+    assert "최소 1개 이상 반드시 포함" in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
 
 
 def test_user_prompt_mentions_market_wrap_multi_narrative_split():

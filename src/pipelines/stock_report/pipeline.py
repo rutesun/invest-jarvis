@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -7,15 +8,20 @@ from pathlib import Path
 import yaml
 
 from src.pipelines.stock_report.classify import classify_messages
+from src.pipelines.stock_report.config import get_semantic_extraction_llm_config
 from src.pipelines.stock_report.db import (
     apply_migrations,
     connect_db,
     load_telegram_messages_by_date,
+    persist_classified_chunks,
     resolve_db_dsn,
 )
 from src.pipelines.stock_report.normalize import normalize_messages, persist_normalized_messages
 from src.pipelines.stock_report.taxonomy import load_taxonomy_registry
 from src.pipelines.stock_report.telegram_ingest import TelegramIngestStats, ingest_telegram_raw_csvs
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -69,23 +75,48 @@ def run_daily_v2(
     migrations_path = Path(migrations_dir)
     short_channels, max_chars, group_window = _load_normalize_config(config_path)
     taxonomy = load_taxonomy_registry(taxonomy_path)
+    llm_config = get_semantic_extraction_llm_config(provider)
+    logger.info(
+        "daily-v2 started: date=%s provider=%s model=%s data_dir=%s",
+        date,
+        provider,
+        llm_config.model,
+        data_dir,
+    )
 
     with connect_db(resolved_dsn) as conn:
         migrations_applied = apply_migrations(conn, migrations_path)
+        logger.info("daily-v2 migrations applied: %s", migrations_applied or ["none"])
         ingest_stats: TelegramIngestStats = ingest_telegram_raw_csvs(
             conn=conn,
             date=date,
             data_dir=data_dir,
         )
+        logger.info(
+            "daily-v2 ingest completed: csv_files=%d parsed_rows=%d upserted_rows=%d",
+            ingest_stats.csv_files,
+            ingest_stats.parsed_rows,
+            ingest_stats.upserted_rows,
+        )
         raw_messages = load_telegram_messages_by_date(conn, date)
+        logger.info("daily-v2 loaded raw messages: count=%d", len(raw_messages))
         normalized = normalize_messages(
             raw_messages,
             short_comment_channels=short_channels,
             short_comment_max_chars=max_chars,
             group_window_minutes=group_window,
         )
+        logger.info("daily-v2 normalization completed: normalized_rows=%d", len(normalized))
         persist_normalized_messages(conn, normalized)
+        logger.info("daily-v2 normalized messages persisted")
         classified = classify_messages(normalized, taxonomy=taxonomy, provider=provider)
+        logger.info("daily-v2 classification completed: classified_units=%d", len(classified))
+        persist_classified_chunks(
+            conn,
+            normalized_messages=normalized,
+            classified_messages=classified,
+        )
+        logger.info("daily-v2 classified chunks persisted")
 
     grouped_only_rows = sum(1 for row in normalized if row.processing_mode == "grouped_only")
     skipped_rows = sum(1 for row in normalized if row.processing_mode == "skip")
@@ -102,6 +133,13 @@ def run_daily_v2(
             preview_canonical_summaries.append(
                 f"[{preview_type}] ({row.category_key}) {row.canonical_summary}"
             )
+    logger.info(
+        "daily-v2 summary: normalized_rows=%d grouped_only_rows=%d skipped_rows=%d classified_units=%d",
+        len(normalized),
+        grouped_only_rows,
+        skipped_rows,
+        len(classified),
+    )
 
     return DailyV2RunResult(
         date=date,

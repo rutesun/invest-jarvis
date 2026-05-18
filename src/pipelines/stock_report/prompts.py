@@ -34,6 +34,7 @@ SEMANTIC_EXTRACTION_SYSTEM_PROMPT = dedent(
     - `canonical_summary`는 20~60자 정도의 factual summary로 작성한다.
     - `canonical_summary`는 원문 첫 줄 복사나 prefix truncation이 아니어야 한다.
     - `supporting_facts`는 핵심 근거만 짧게 최대 5개까지 넣는다.
+    - 원문에 수치(%, 금액, 물량, 성장률)가 있다면 `supporting_facts`에 최소 1개 이상 반드시 포함한다.
     - `ticker_tags`는 회사명 또는 ticker를 최대 5개까지 넣는다.
     - category/theme는 제공된 taxonomy를 우선 사용하되, 확신이 없으면 null로 둔다.
     - 메시지에 없는 사실을 만들지 않는다.

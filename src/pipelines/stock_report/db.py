@@ -1,16 +1,22 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-from src.pipelines.stock_report.models import RawTelegramMessage
+from src.pipelines.stock_report.models import (
+    ClassifiedMessage,
+    NormalizedMessage,
+    RawTelegramMessage,
+)
 
 
 MIGRATION_HISTORY_TABLE = "stock_report_migration_history"
+KNOWLEDGE_CHUNK_SOURCE_TYPE = "telegram_unit_v2"
 
 
 def resolve_db_dsn(dsn: str | None = None) -> str:
@@ -143,3 +149,115 @@ def load_telegram_messages_by_date(conn: Any, source_date: str) -> list[RawTeleg
             )
         )
     return messages
+
+
+def _estimate_priority_score(message_type: str) -> float:
+    if message_type == "signal":
+        return 1.0
+    if message_type == "data":
+        return 0.8
+    if message_type == "opinion":
+        return 0.6
+    return 0.2
+
+
+def persist_classified_chunks(
+    conn: Any,
+    *,
+    normalized_messages: list[NormalizedMessage],
+    classified_messages: list[ClassifiedMessage],
+) -> None:
+    if not normalized_messages:
+        return
+
+    source_dates = sorted({row.source_date for row in normalized_messages})
+    with conn.cursor() as cur:
+        for source_date in source_dates:
+            cur.execute(
+                """
+                DELETE FROM knowledge_chunks
+                WHERE source_type = %s
+                  AND source_date = %s;
+                """,
+                (KNOWLEDGE_CHUNK_SOURCE_TYPE, source_date),
+            )
+
+    if not classified_messages:
+        conn.commit()
+        return
+
+    normalized_by_id = {row.telegram_message_id: row for row in normalized_messages}
+
+    query = """
+    INSERT INTO knowledge_chunks (
+        source_type,
+        source_pk,
+        source_date,
+        channel_key,
+        message_type,
+        event_type,
+        category_key,
+        main_theme,
+        sub_themes,
+        ticker_tags,
+        theme_tags,
+        canonical_summary,
+        supporting_facts,
+        content_clean,
+        embed_payload,
+        channel_weight,
+        priority_score
+    ) VALUES (
+        %s, %s, %s, %s, %s, %s, %s, %s,
+        %s::jsonb, %s::jsonb, %s::jsonb, %s,
+        %s::jsonb, %s, %s, %s, %s
+    );
+    """
+
+    params: list[tuple[Any, ...]] = []
+    for item in classified_messages:
+        normalized = normalized_by_id.get(item.telegram_message_id)
+        if normalized is None:
+            continue
+
+        theme_tags = []
+        if item.main_theme:
+            theme_tags.append(item.main_theme)
+        theme_tags.extend(item.sub_themes)
+
+        payload = {
+            "canonical_summary": item.canonical_summary,
+            "supporting_facts": item.supporting_facts,
+            "ticker_tags": item.ticker_tags,
+            "category_key": item.category_key,
+            "main_theme": item.main_theme,
+            "sub_themes": item.sub_themes,
+            "event_type": item.event_type,
+            "message_type": item.message_type,
+        }
+
+        params.append(
+            (
+                KNOWLEDGE_CHUNK_SOURCE_TYPE,
+                item.telegram_message_id,
+                item.source_date,
+                item.channel_key,
+                item.message_type,
+                item.event_type,
+                item.category_key,
+                item.main_theme,
+                json.dumps(item.sub_themes, ensure_ascii=False),
+                json.dumps(item.ticker_tags, ensure_ascii=False),
+                json.dumps(theme_tags, ensure_ascii=False),
+                item.canonical_summary,
+                json.dumps(item.supporting_facts, ensure_ascii=False),
+                normalized.clean_text,
+                json.dumps(payload, ensure_ascii=False),
+                1.0,
+                _estimate_priority_score(item.message_type),
+            )
+        )
+
+    with conn.cursor() as cur:
+        cur.executemany(query, params)
+    conn.commit()

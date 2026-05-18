@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import csv
+import logging
 import os
 import random
+import time
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
@@ -25,6 +27,9 @@ from src.pipelines.stock_report.telegram_ingest import (
     parse_channel_key,
     parse_timestamp,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 MessageSelector = tuple[str, str]
@@ -287,7 +292,21 @@ def run_prompt_tuning_round(
     system_prompt_path: str | None = None,
     max_raw_chars: int = 6000,
 ) -> PromptTuningRunResult:
+    started_at = time.perf_counter()
+    llm_config = get_semantic_extraction_llm_config(provider)
+    logger.info(
+        "prompt tuning started: date=%s provider=%s model=%s sample_size=%d per_channel=%d picks=%d",
+        date,
+        provider,
+        llm_config.model,
+        sample_size,
+        per_channel,
+        len(picked_messages or set()),
+    )
     raw_messages, csv_file_count = _load_raw_messages_from_csv(date=date, data_dir=data_dir)
+    logger.info(
+        "prompt tuning csv loaded: files=%d parsed_rows=%d", csv_file_count, len(raw_messages)
+    )
     short_channels, max_chars, group_window = _load_normalize_config(config_path)
     normalized_rows = normalize_messages(
         raw_messages,
@@ -295,6 +314,7 @@ def run_prompt_tuning_round(
         short_comment_max_chars=max_chars,
         group_window_minutes=group_window,
     )
+    logger.info("prompt tuning normalization completed: normalized_rows=%d", len(normalized_rows))
     sampled_rows = select_tuning_samples(
         normalized_rows,
         sample_size=sample_size,
@@ -304,8 +324,10 @@ def run_prompt_tuning_round(
         picked_messages=picked_messages,
         strict_picks=strict_picks,
     )
+    logger.info("prompt tuning sampling completed: sampled_rows=%d", len(sampled_rows))
 
     system_prompt, prompt_source = _resolve_system_prompt(system_prompt_path)
+    logger.info("prompt tuning prompt resolved: source=%s", prompt_source)
     taxonomy = load_taxonomy_registry(taxonomy_path)
     classified_rows = classify_messages(
         sampled_rows,
@@ -313,6 +335,7 @@ def run_prompt_tuning_round(
         provider=provider,
         system_prompt=system_prompt,
     )
+    logger.info("prompt tuning classification completed: classified_units=%d", len(classified_rows))
 
     structure_type_counts: dict[str, int] = {}
     message_type_counts: dict[str, int] = {}
@@ -330,7 +353,6 @@ def run_prompt_tuning_round(
         if row.clean_text.strip() and (include_grouped_only or row.processing_mode == "full")
     )
 
-    llm_config = get_semantic_extraction_llm_config(provider)
     result = PromptTuningRunResult(
         date=date,
         provider=provider,
@@ -352,6 +374,12 @@ def run_prompt_tuning_round(
         sampled_rows=sampled_rows,
         classified_rows=classified_rows,
         max_raw_chars=max_raw_chars,
+    )
+    logger.info(
+        "prompt tuning completed: sampled_rows=%d classified_units=%d elapsed=%.2fs",
+        result.sampled_rows,
+        result.classified_units,
+        time.perf_counter() - started_at,
     )
     return result
 

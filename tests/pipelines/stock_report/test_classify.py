@@ -225,3 +225,38 @@ def test_classify_normalizes_convertible_bond_event_type(monkeypatch):
 
     assert len(result) == 1
     assert result[0].event_type == "자본조달"
+
+
+def test_classify_appends_numeric_supporting_fact_when_missing(monkeypatch):
+    taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
+    row = _normalized_message("1분기 매출 1.63억, 영업이익 2200만, YoY 85% 증가")
+
+    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+        assert system_prompt
+        return SemanticExtractionDraft(
+            structure_type="single_topic_deep",
+            units=[
+                SemanticUnitDraft(
+                    message_type="signal",
+                    event_type="실적",
+                    category_key="AI인프라",
+                    main_theme=None,
+                    sub_themes=[],
+                    ticker_tags=["PLTR"],
+                    canonical_summary="실적 급증으로 가이던스 상향",
+                    supporting_facts=["수요가 빠르게 확대됨"],
+                )
+            ],
+        )
+
+    monkeypatch.setattr(
+        "src.pipelines.stock_report.classify._extract_message_semantics",
+        _fake_extract_message_semantics,
+    )
+
+    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+
+    assert len(result) == 1
+    assert any("핵심 수치:" in fact for fact in result[0].supporting_facts)
+    joined = " ".join(result[0].supporting_facts)
+    assert "1.63" in joined or "85%" in joined

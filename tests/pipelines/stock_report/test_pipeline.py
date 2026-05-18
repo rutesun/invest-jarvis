@@ -147,6 +147,11 @@ def test_run_daily_v2_calls_migration_and_ingest(monkeypatch):
             )
         ]
 
+    def _fake_persist_chunks(conn, *, normalized_messages, classified_messages):
+        events.append(f"persist_chunks:{len(classified_messages)}")
+        assert conn is fake_conn
+        assert len(normalized_messages) == 1
+
     monkeypatch.setattr("src.pipelines.stock_report.pipeline.resolve_db_dsn", _fake_resolve_db_dsn)
     monkeypatch.setattr("src.pipelines.stock_report.pipeline.connect_db", _fake_connect_db)
     monkeypatch.setattr(
@@ -175,6 +180,10 @@ def test_run_daily_v2_calls_migration_and_ingest(monkeypatch):
         _fake_persist,
     )
     monkeypatch.setattr("src.pipelines.stock_report.pipeline.classify_messages", _fake_classify)
+    monkeypatch.setattr(
+        "src.pipelines.stock_report.pipeline.persist_classified_chunks",
+        _fake_persist_chunks,
+    )
 
     result = run_daily_v2(
         date="2026-05-08",
@@ -207,6 +216,7 @@ def test_run_daily_v2_calls_migration_and_ingest(monkeypatch):
         "normalize:1",
         "persist:1",
         "classify:1",
+        "persist_chunks:1",
         "connect.exit",
     ]
 

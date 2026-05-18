@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from functools import lru_cache
 
 from src.pipelines.daily_report.llm_utils import invoke_llm_with_retry
@@ -31,6 +32,10 @@ from src.pipelines.stock_report.taxonomy import (
 logger = logging.getLogger(__name__)
 MULTISPACE_PATTERN = __import__("re").compile(r"\s+")
 NUMERIC_PATTERN = __import__("re").compile(r"[0-9]|%|[+-][0-9]")
+NUMERIC_TOKEN_PATTERN = __import__("re").compile(
+    r"[+-]?\d[\d,]*(?:\.\d+)?(?:%|bp|bps|x|배|억|조|만|천|원|달러|톤|대|주|명|개|MW|GW)?",
+    __import__("re").IGNORECASE,
+)
 SIGNAL_HINT_KEYWORDS = (
     "상장",
     "협약",
@@ -150,6 +155,45 @@ def _normalize_event_type(value: str | None) -> str | None:
     return EVENT_TYPE_ALIAS_MAP.get(stripped.lower(), stripped)
 
 
+def _extract_numeric_tokens(text: str) -> list[str]:
+    if not text:
+        return []
+
+    tokens: list[str] = []
+    seen: set[str] = set()
+    for match in NUMERIC_TOKEN_PATTERN.findall(text):
+        token = match.strip()
+        if not token:
+            continue
+        digits = "".join(ch for ch in token if ch.isdigit())
+        if len(digits) < 2 and "%" not in token:
+            continue
+        lowered = token.lower()
+        if lowered in seen:
+            continue
+        seen.add(lowered)
+        tokens.append(token)
+    return tokens
+
+
+def _ensure_numeric_supporting_fact(
+    *,
+    source_text: str,
+    supporting_facts: list[str],
+) -> list[str]:
+    source_tokens = _extract_numeric_tokens(source_text)
+    if not source_tokens:
+        return supporting_facts
+
+    for fact in supporting_facts:
+        if _extract_numeric_tokens(fact):
+            return supporting_facts
+
+    numeric_fact = f"핵심 수치: {', '.join(source_tokens[:3])}"
+    trimmed = supporting_facts[:4] if len(supporting_facts) >= 5 else supporting_facts
+    return _dedupe_preserve_order([*trimmed, numeric_fact], limit=5)
+
+
 def _fallback_canonical_summary(clean_text: str) -> str:
     if not clean_text:
         return ""
@@ -263,6 +307,10 @@ def _normalize_unit(
     sub_themes = _dedupe_preserve_order(sub_themes, limit=2)
     ticker_tags = _dedupe_preserve_order(raw_unit.ticker_tags, limit=5)
     supporting_facts = _dedupe_preserve_order(raw_unit.supporting_facts, limit=5)
+    supporting_facts = _ensure_numeric_supporting_fact(
+        source_text=row.clean_text,
+        supporting_facts=supporting_facts,
+    )
     event_type = _normalize_event_type(raw_unit.event_type)
 
     return ClassifiedMessage(
@@ -291,6 +339,12 @@ def _normalize_unit(
 @lru_cache(maxsize=4)
 def _get_llm_runtime(provider: str):
     llm_config = get_semantic_extraction_llm_config(provider)
+    logger.info(
+        "Semantic extraction runtime initialized: provider=%s model=%s temperature=%.2f",
+        provider,
+        llm_config.model,
+        llm_config.temperature,
+    )
     return llm_config, llm_config.create_llm()
 
 
@@ -389,7 +443,14 @@ async def _classify_messages_async(
     provider: str,
     system_prompt: str,
 ) -> list[ClassifiedMessage]:
+    started_at = time.perf_counter()
     category_map, theme_map = build_match_dictionary(taxonomy)
+    logger.info(
+        "Semantic extraction batch started: provider=%s messages=%d max_concurrency=%d",
+        provider,
+        len(normalized_messages),
+        SEMANTIC_EXTRACTION_MAX_CONCURRENCY,
+    )
     semaphore = asyncio.Semaphore(SEMANTIC_EXTRACTION_MAX_CONCURRENCY)
     tasks = [
         _classify_single_message(
@@ -404,7 +465,15 @@ async def _classify_messages_async(
         for row in normalized_messages
     ]
     results = await asyncio.gather(*tasks)
-    return [item for batch in results for item in batch]
+    flattened = [item for batch in results for item in batch]
+    logger.info(
+        "Semantic extraction batch completed: provider=%s messages=%d units=%d elapsed=%.2fs",
+        provider,
+        len(normalized_messages),
+        len(flattened),
+        time.perf_counter() - started_at,
+    )
+    return flattened
 
 
 def classify_messages(
