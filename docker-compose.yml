@@ -6,6 +6,9 @@ services:
       POSTGRES_USER: report
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
-      - ./.docker/postgres-data:/var/lib/postgresql/data
+      - stock_report_pgdata:/var/lib/postgresql/data
     ports:
       - "5432:5432"
+
+volumes:
+  stock_report_pgdata:
