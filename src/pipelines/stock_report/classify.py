@@ -23,6 +23,7 @@ from src.pipelines.stock_report.prompts import (
     build_semantic_extraction_user_prompt,
 )
 from src.pipelines.stock_report.taxonomy import (
+    CategoryNode,
     TaxonomyRegistry,
     build_match_dictionary,
     render_taxonomy_outline,
@@ -36,6 +37,13 @@ NUMERIC_TOKEN_PATTERN = __import__("re").compile(
     r"[+-]?\d[\d,]*(?:\.\d+)?(?:%|bp|bps|x|배|억|조|만|천|원|달러|톤|대|주|명|개|MW|GW)?",
     __import__("re").IGNORECASE,
 )
+STOCK_CODE_PATTERN = __import__("re").compile(r"\([0-9]{4,6}(?:\.[A-Z]{2})?\)")
+PHONE_PATTERN = __import__("re").compile(
+    r"(?:☎|tel|전화|문의|[0-9]{2,3}-[0-9]{3,4}-[0-9]{4})",
+    __import__("re").IGNORECASE,
+)
+URL_PATTERN = __import__("re").compile(r"https?://|www\\.", __import__("re").IGNORECASE)
+ASCII_WORD_PATTERN = __import__("re").compile(r"^[a-z0-9 _./+-]+$")
 SIGNAL_HINT_KEYWORDS = (
     "상장",
     "협약",
@@ -71,6 +79,34 @@ DATA_HINT_KEYWORDS = (
 )
 OPINION_HINT_KEYWORDS = ("전망", "추정", "코멘트", "의견", "우려", "판단", "가능성")
 ADMIN_HINT_KEYWORDS = ("공지", "안내", "구독", "입장", "문의", "채널")
+REPORT_DISCLOSURE_KEYWORDS = (
+    "조사분석자료",
+    "공표 승인",
+    "배포되는 자료",
+    "재배포",
+    "원문 확인",
+)
+REPORT_BYLINE_KEYWORDS = (
+    "기업분석부",
+    "리서치센터",
+    "애널리스트",
+)
+LEAD_TITLE_PREFIXES = (
+    "[",
+    "**[",
+    "★",
+    "☀",
+    "S&P",
+)
+LEAD_TITLE_KEYWORDS = (
+    "map",
+    "daily market digest",
+    "리서치 요약",
+    "퀀트 시그널",
+    "데일리 뉴스",
+    "증시 개장 전",
+)
+SUPPORTING_FACT_LIMIT = 20
 EVENT_TYPE_ALIAS_MAP = {
     "자본조달": "자본조달",
     "전환사채": "자본조달",
@@ -180,7 +216,11 @@ def _ensure_numeric_supporting_fact(
     *,
     source_text: str,
     supporting_facts: list[str],
+    structure_type: str,
 ) -> list[str]:
+    if structure_type != "single_topic_deep":
+        return supporting_facts
+
     source_tokens = _extract_numeric_tokens(source_text)
     if not source_tokens:
         return supporting_facts
@@ -190,8 +230,79 @@ def _ensure_numeric_supporting_fact(
             return supporting_facts
 
     numeric_fact = f"핵심 수치: {', '.join(source_tokens[:3])}"
-    trimmed = supporting_facts[:4] if len(supporting_facts) >= 5 else supporting_facts
-    return _dedupe_preserve_order([*trimmed, numeric_fact], limit=5)
+    trimmed = (
+        supporting_facts[: SUPPORTING_FACT_LIMIT - 1]
+        if len(supporting_facts) >= SUPPORTING_FACT_LIMIT
+        else supporting_facts
+    )
+    return _dedupe_preserve_order([*trimmed, numeric_fact], limit=SUPPORTING_FACT_LIMIT)
+
+
+def _extract_lead_comment(text: str) -> str | None:
+    lines: list[str] = []
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            if lines:
+                break
+            continue
+        if lines and (line.startswith("[") or line.startswith("* ") or line.startswith("- ")):
+            break
+        lines.append(line)
+        if len(lines) >= 2:
+            break
+
+    if not lines:
+        return None
+    lead_comment = " ".join(lines).strip()
+    if _looks_like_report_header_or_byline(lead_comment):
+        return None
+    return lead_comment or None
+
+
+def _looks_like_report_header_or_byline(text: str) -> bool:
+    if not text:
+        return False
+
+    normalized = text.strip()
+    lowered = normalized.lower()
+    if len(normalized) > 120:
+        return True
+    if URL_PATTERN.search(normalized):
+        return True
+    if any(lowered.startswith(prefix.lower()) for prefix in LEAD_TITLE_PREFIXES):
+        return True
+    if any(keyword in lowered for keyword in LEAD_TITLE_KEYWORDS):
+        return True
+    if ASCII_WORD_PATTERN.match(lowered):
+        return True
+    if PHONE_PATTERN.search(text):
+        return True
+    if STOCK_CODE_PATTERN.search(text):
+        return True
+    if any(keyword in text for keyword in REPORT_BYLINE_KEYWORDS):
+        return True
+    return text.startswith(("『", "「")) and text.endswith(("』", "」"))
+
+
+def _ensure_lead_numeric_supporting_fact(
+    *,
+    source_text: str,
+    supporting_facts: list[str],
+) -> list[str]:
+    lead_comment = _extract_lead_comment(source_text)
+    if not lead_comment or not _extract_numeric_tokens(lead_comment):
+        return supporting_facts
+
+    joined_facts = " ".join(supporting_facts)
+    if lead_comment in joined_facts:
+        return supporting_facts
+
+    lead_fact = f"작성자 코멘트: {lead_comment}"
+    return _dedupe_preserve_order(
+        [lead_fact, *supporting_facts],
+        limit=SUPPORTING_FACT_LIMIT,
+    )
 
 
 def _fallback_canonical_summary(clean_text: str) -> str:
@@ -219,11 +330,122 @@ def _build_fallback_message(row: NormalizedMessage) -> ClassifiedMessage | None:
         event_type=None,
         category_key="unclassified",
         main_theme=None,
+        provisional_category=None,
+        provisional_theme=None,
+        is_provisional=False,
         sub_themes=[],
         ticker_tags=[],
         canonical_summary=canonical_summary,
         supporting_facts=[],
     )
+
+
+def _build_overlay_text(*parts: str) -> str:
+    joined = " ".join(part.strip() for part in parts if part and part.strip())
+    return MULTISPACE_PATTERN.sub(" ", joined).lower()
+
+
+def _is_valid_overlay_alias(alias: str) -> bool:
+    stripped = alias.strip()
+    if not stripped:
+        return False
+    lowered = stripped.lower()
+    if ASCII_WORD_PATTERN.fullmatch(lowered):
+        return len(lowered.replace(" ", "")) >= 3
+    return len(stripped) >= 2
+
+
+def _score_overlay_alias(
+    *,
+    alias: str,
+    summary_text: str,
+    facts_text: str,
+    clean_text: str,
+    raw_text: str,
+) -> int:
+    if not _is_valid_overlay_alias(alias):
+        return 0
+    needle = alias.lower()
+    score = 0
+    if needle in summary_text:
+        score += 3
+    if needle in facts_text:
+        score += 2
+    if needle in raw_text:
+        score += 2
+    if needle in clean_text:
+        score += 1
+    return score
+
+
+def _match_category_overlay(
+    *,
+    taxonomy: TaxonomyRegistry,
+    summary_text: str,
+    facts_text: str,
+    clean_text: str,
+    raw_text: str,
+) -> str | None:
+    best_category: str | None = None
+    best_score = 0
+    for category in taxonomy.categories:
+        aliases = [category.key, *category.aliases]
+        score = sum(
+            _score_overlay_alias(
+                alias=alias,
+                summary_text=summary_text,
+                facts_text=facts_text,
+                clean_text=clean_text,
+                raw_text=raw_text,
+            )
+            for alias in aliases
+        )
+        if score > best_score:
+            best_category = category.key
+            best_score = score
+    if best_score < 3:
+        return None
+    return best_category
+
+
+def _match_theme_overlay(
+    *,
+    taxonomy: TaxonomyRegistry,
+    summary_text: str,
+    facts_text: str,
+    clean_text: str,
+    raw_text: str,
+    category_key: str | None,
+) -> tuple[str | None, str | None]:
+    categories: list[CategoryNode]
+    if category_key:
+        categories = [node for node in taxonomy.categories if node.key == category_key]
+    else:
+        categories = list(taxonomy.categories)
+
+    best_theme: str | None = None
+    best_category: str | None = category_key
+    best_score = 0
+    for category in categories:
+        for theme in category.themes:
+            aliases = [theme.key, *theme.aliases]
+            score = sum(
+                _score_overlay_alias(
+                    alias=alias,
+                    summary_text=summary_text,
+                    facts_text=facts_text,
+                    clean_text=clean_text,
+                    raw_text=raw_text,
+                )
+                for alias in aliases
+            )
+            if score > best_score:
+                best_theme = theme.key
+                best_category = category.key
+                best_score = score
+    if best_score < 3:
+        return category_key, None
+    return best_category, best_theme
 
 
 def _normalize_message_type(
@@ -235,9 +457,21 @@ def _normalize_message_type(
     merged_text = f"{canonical_summary} {' '.join(supporting_facts)}".strip()
     lowered = merged_text.lower()
 
-    if any(keyword in merged_text for keyword in ADMIN_HINT_KEYWORDS):
+    has_investment_content = any(
+        keyword in merged_text or keyword in lowered
+        for keyword in SIGNAL_HINT_KEYWORDS + DATA_HINT_KEYWORDS + OPINION_HINT_KEYWORDS
+    )
+    if any(keyword in merged_text for keyword in REPORT_DISCLOSURE_KEYWORDS):
+        has_investment_content = True
+
+    if (
+        any(keyword in merged_text for keyword in ADMIN_HINT_KEYWORDS)
+        and not has_investment_content
+    ):
         return "admin"
     if raw_message_type == "admin":
+        if has_investment_content:
+            return "opinion"
         return "admin"
 
     if raw_message_type == "opinion":
@@ -269,6 +503,7 @@ def _normalize_message_type(
 def _normalize_unit(
     *,
     row: NormalizedMessage,
+    taxonomy: TaxonomyRegistry,
     structure_type: str,
     unit_index: int,
     raw_unit: SemanticUnitDraft,
@@ -306,12 +541,54 @@ def _normalize_unit(
 
     sub_themes = _dedupe_preserve_order(sub_themes, limit=2)
     ticker_tags = _dedupe_preserve_order(raw_unit.ticker_tags, limit=5)
-    supporting_facts = _dedupe_preserve_order(raw_unit.supporting_facts, limit=5)
+    supporting_facts = _dedupe_preserve_order(
+        raw_unit.supporting_facts,
+        limit=SUPPORTING_FACT_LIMIT,
+    )
     supporting_facts = _ensure_numeric_supporting_fact(
         source_text=row.clean_text,
         supporting_facts=supporting_facts,
+        structure_type=structure_type,
+    )
+    supporting_facts = _ensure_lead_numeric_supporting_fact(
+        source_text=row.raw_text,
+        supporting_facts=supporting_facts,
     )
     event_type = _normalize_event_type(raw_unit.event_type)
+
+    provisional_category: str | None = None
+    provisional_theme: str | None = None
+    if category_key == "unclassified" or main_theme is None:
+        summary_text = _build_overlay_text(canonical_summary)
+        facts_text = _build_overlay_text(" ".join(supporting_facts))
+        clean_text = _build_overlay_text(row.clean_text)
+        raw_text = _build_overlay_text(
+            canonical_summary,
+            raw_unit.category_key or "",
+            raw_unit.main_theme or "",
+            " ".join(raw_unit.sub_themes),
+        )
+        if category_key == "unclassified":
+            provisional_category = _match_category_overlay(
+                taxonomy=taxonomy,
+                summary_text=summary_text,
+                facts_text=facts_text,
+                clean_text=clean_text,
+                raw_text=raw_text,
+            )
+        overlay_category = category_key if category_key != "unclassified" else provisional_category
+        overlay_theme_category, overlay_theme = _match_theme_overlay(
+            taxonomy=taxonomy,
+            summary_text=summary_text,
+            facts_text=facts_text,
+            clean_text=clean_text,
+            raw_text=raw_text,
+            category_key=overlay_category,
+        )
+        if main_theme is None:
+            provisional_theme = overlay_theme
+            if category_key == "unclassified" and provisional_category is None:
+                provisional_category = overlay_theme_category
 
     return ClassifiedMessage(
         telegram_message_id=row.telegram_message_id,
@@ -329,6 +606,9 @@ def _normalize_unit(
         event_type=event_type,
         category_key=category_key,
         main_theme=main_theme,
+        provisional_category=provisional_category,
+        provisional_theme=provisional_theme,
+        is_provisional=bool(provisional_category),
         sub_themes=sub_themes,
         ticker_tags=ticker_tags,
         canonical_summary=canonical_summary,
@@ -424,6 +704,7 @@ async def _classify_single_message(
     for unit_index, raw_unit in enumerate(extraction.units):
         normalized = _normalize_unit(
             row=row,
+            taxonomy=taxonomy,
             structure_type=extraction.structure_type,
             unit_index=unit_index,
             raw_unit=raw_unit,

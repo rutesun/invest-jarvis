@@ -244,7 +244,8 @@ Phase 1에는 가벼운 taxonomy 관리가 반드시 들어간다. 이건 UI나 
 - `main_theme`는 반드시 `category_key` 아래 canonical theme 중 1개로 정규화한다
 - `sub_themes`는 최대 2개까지 허용하고, 직접 언급된 테마만 넣는다
 - 자유 생성 문자열은 그대로 저장하지 않고 `unclassified` 또는 nearest canonical key로 정규화한다
-- 정규화 실패 표현은 `vocab_candidates`에 적재한다
+- 정규화 실패 표현은 당일 `daily runtime taxonomy overlay` 후보와 주간 `vocab_candidates` 후보로 남긴다
+- overlay는 당일 report display에만 사용하고, registry YAML에는 사람 승인 전까지 반영하지 않는다
 
 예시 registry:
 
@@ -371,20 +372,36 @@ CREATE TABLE knowledge_chunks (
 
 #### `vocab_candidates`
 
-Phase 1부터 taxonomy drift를 관리한다.
+Phase 1부터 taxonomy drift를 관리한다. `vocab_candidates`는 주간 승격 후보를 모으는 저장소이고,
+당일 리포트에는 별도의 runtime overlay가 먼저 적용될 수 있다.
 
 ```sql
 CREATE TABLE vocab_candidates (
     id BIGSERIAL PRIMARY KEY,
-    candidate_type TEXT NOT NULL,      -- category | theme
-    candidate_text TEXT NOT NULL,
-    inferred_parent TEXT,
-    sample_source_pk BIGINT,
-    occurrence_count INTEGER NOT NULL DEFAULT 1,
-    status TEXT NOT NULL DEFAULT 'pending',
+    source_date DATE NOT NULL,
+    knowledge_chunk_id BIGINT,
+    field_type TEXT NOT NULL,          -- category | main_theme | sub_theme
+    raw_value TEXT NOT NULL,
+    normalized_value TEXT,
+    status TEXT NOT NULL,              -- alias_matched | unclassified | dropped | provisional
+    message_type TEXT NOT NULL,
+    canonical_summary TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 ```
+
+#### Daily runtime taxonomy overlay
+
+당일 리포트에서는 주간 YAML 반영을 기다리지 않고, 같은 날 반복되는 `unclassified` report unit을
+임시 category/theme로 묶을 수 있다. overlay는 report display와 same-day aggregation에만 사용한다.
+
+원칙:
+
+- canonical taxonomy가 우선이다
+- canonical 매칭 실패 시에만 `provisional_category/provisional_theme`를 사용한다
+- overlay 값은 `is_provisional=true`로 추적한다
+- overlay는 YAML을 수정하지 않는다
+- 주간 리뷰에서 반복성과 품질이 확인된 값만 canonical taxonomy로 승격한다
 
 #### `report_runs`
 
@@ -462,6 +479,8 @@ Phase 1에서는 recall을 하지 않는다. 당일 `knowledge_chunks`만 읽어
 
 - `category_key` 기준으로 category bucket 생성
 - `main_theme` 기준으로 theme bucket 생성
+- `category_key = 'unclassified'`이고 overlay가 있으면 `provisional_category`를 display bucket으로 사용
+- `main_theme IS NULL`이고 overlay가 있으면 `provisional_theme`를 display theme으로 사용
 - `ticker_tags` 기준으로 focus ticker 후보 생성
 - 같은 `content_hash` 또는 같은 synthetic group에서 온 chunk는 1개만 대표로 채택
 - 같은 채널이 같은 의미의 `canonical_summary`를 반복하면 1개만 대표로 채택

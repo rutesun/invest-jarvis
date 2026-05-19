@@ -17,6 +17,8 @@ SEMANTIC_EXTRACTION_SYSTEM_PROMPT = dedent(
     - `market_wrap`이라도 서로 다른 핵심 내러티브가 2개 이상이면 unit을 분리한다.
       예: 반도체 랠리 / 유가 급등 / 한국 증시 반응은 각각 별도 unit 후보다.
     - 공지/채널 운영/홍보는 `notice`로 처리한다.
+    - 증권사 리포트의 공표 승인/배포 제한/저작권 문구는 하단 고지일 뿐이다.
+      본문이 기업 분석/실적 전망이면 하단 고지 때문에 `admin`으로 분류하지 않는다.
     - `message_type`는 아래 기준을 따른다.
       - `signal`: 기업 이벤트/실적/수주/인증/협약/정책 변화처럼 투자 판단에 직접 쓰이는 사건
       - `data`: 시장 통계/판매량/비중/증감률 등 정량 수치 나열 중심
@@ -33,7 +35,23 @@ SEMANTIC_EXTRACTION_SYSTEM_PROMPT = dedent(
     - `canonical_summary`는 report unit 기준의 한글 요약문이다.
     - `canonical_summary`는 20~60자 정도의 factual summary로 작성한다.
     - `canonical_summary`는 원문 첫 줄 복사나 prefix truncation이 아니어야 한다.
-    - `supporting_facts`는 핵심 근거만 짧게 최대 5개까지 넣는다.
+    - `supporting_facts`는 최종 리포트가 근거를 선별할 수 있도록 충분히 넓게 보존한다.
+    - `supporting_facts`는 중복을 제거하되, 원문에 있는 투자 논리와 핵심 수치를 빠뜨리지 않는다.
+    - `supporting_facts`는 원문에 근거가 있는 짧은 추출형 문장으로 작성한다.
+      원문보다 더 길게 확장하거나, 원문에 없는 시장 영향/수혜/리스크를 새로 추론하지 않는다.
+    - 각 `supporting_facts` 항목은 가능하면 80자 이내로 쓴다.
+    - 제목, 채널명, 날짜, 작성자명, 링크, 컴플라이언스/배포 고지는 투자 근거가 아니면 제외한다.
+    - 본문 앞부분의 작성자 코멘트/해석/추가 메모는 기사 본문보다 우선적으로 검토한다.
+      별도 수치, 주주 관점, 투자 포인트, 리스크 코멘트가 있으면 `supporting_facts`에 반드시 보존한다.
+    - `single_topic_deep`에서는 특히 아래 성격의 근거를 우선 보존한다.
+      아래 항목은 새 출력 필드가 아니라, `supporting_facts`에 문장형 근거로 녹여서 보존해야 하는 판단 기준이다.
+      - thesis: 이 뉴스가 왜 투자적으로 중요한지.
+        예: 단순 발전자산 인수가 아니라 북버지니아 데이터센터 전력 수요와 규제자산 성장 경로를 확보한다.
+      - risk: 이 투자 논리가 깨지는 조건.
+        예: FERC/PJM 가격 통제, 규제 승인 실패, break fee, 고객 요금 부담.
+      - regulatory_context: 숫자만 보면 안 보이는 제도/가격/규제 배경.
+        예: 허용 ROE와 규제자산 기반 요금 회수 구조가 유틸리티 실적에 영향을 준다.
+    - `supporting_facts`는 일반 메시지는 5~8개, 단건 심층 메시지는 필요하면 12~20개까지 허용한다.
     - 원문에 수치(%, 금액, 물량, 성장률)가 있다면 `supporting_facts`에 최소 1개 이상 반드시 포함한다.
     - `ticker_tags`는 회사명 또는 ticker를 최대 5개까지 넣는다.
     - category/theme는 제공된 taxonomy를 우선 사용하되, 확신이 없으면 null로 둔다.

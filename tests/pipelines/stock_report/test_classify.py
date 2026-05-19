@@ -11,7 +11,7 @@ from src.pipelines.stock_report.models import (
 from src.pipelines.stock_report.taxonomy import load_taxonomy_registry
 
 
-def _normalized_message(clean_text: str) -> NormalizedMessage:
+def _normalized_message(clean_text: str, *, raw_text: str | None = None) -> NormalizedMessage:
     return NormalizedMessage(
         telegram_message_id=1,
         source_date=date(2026, 5, 8),
@@ -21,7 +21,7 @@ def _normalized_message(clean_text: str) -> NormalizedMessage:
         source_channel_key="hana_us_stock",
         source_channel_name="hana_us_stock",
         channel_message_id="1",
-        raw_text=clean_text,
+        raw_text=raw_text or clean_text,
         clean_text=clean_text,
         urls=[],
         has_media=False,
@@ -260,3 +260,276 @@ def test_classify_appends_numeric_supporting_fact_when_missing(monkeypatch):
     assert any("핵심 수치:" in fact for fact in result[0].supporting_facts)
     joined = " ".join(result[0].supporting_facts)
     assert "1.63" in joined or "85%" in joined
+
+
+def test_classify_does_not_append_message_level_numeric_fact_to_market_wrap(monkeypatch):
+    taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
+    row = _normalized_message(
+        "S&P500 map\n\n반도체 중심 AI 하드웨어 하락\n\n소프트웨어는 순환매 상승"
+    )
+
+    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+        assert system_prompt
+        return SemanticExtractionDraft(
+            structure_type="market_wrap",
+            units=[
+                SemanticUnitDraft(
+                    message_type="opinion",
+                    event_type="해석/전망",
+                    category_key="AI인프라",
+                    main_theme=None,
+                    sub_themes=[],
+                    ticker_tags=[],
+                    canonical_summary="AI 하드웨어 약세와 소프트웨어 순환매",
+                    supporting_facts=["AI 하드웨어 관련주가 하락"],
+                )
+            ],
+        )
+
+    monkeypatch.setattr(
+        "src.pipelines.stock_report.classify._extract_message_semantics",
+        _fake_extract_message_semantics,
+    )
+
+    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+
+    assert len(result) == 1
+    joined = " ".join(result[0].supporting_facts)
+    assert "핵심 수치:" not in joined
+    assert "작성자 코멘트:" not in joined
+
+
+def test_classify_preserves_deep_supporting_facts_up_to_safety_limit(monkeypatch):
+    taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
+    row = _normalized_message("NEE가 Dominion을 인수해 데이터센터 전력 수요를 확보")
+    facts = [f"근거 {idx}" for idx in range(1, 26)]
+
+    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+        assert "thesis" in system_prompt
+        assert "regulatory_context" in system_prompt
+        return SemanticExtractionDraft(
+            structure_type="single_topic_deep",
+            units=[
+                SemanticUnitDraft(
+                    message_type="signal",
+                    event_type="M&A",
+                    category_key="AI인프라",
+                    main_theme=None,
+                    sub_themes=[],
+                    ticker_tags=["NEE", "D"],
+                    canonical_summary="넥스트에라가 도미니언 인수로 데이터센터 전력 수요를 확보",
+                    supporting_facts=facts,
+                )
+            ],
+        )
+
+    monkeypatch.setattr(
+        "src.pipelines.stock_report.classify._extract_message_semantics",
+        _fake_extract_message_semantics,
+    )
+
+    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+
+    assert len(result) == 1
+    assert len(result[0].supporting_facts) == 20
+    assert result[0].supporting_facts[0] == "근거 1"
+    assert result[0].supporting_facts[-1] == "근거 20"
+
+
+def test_classify_preserves_numeric_lead_comment(monkeypatch):
+    taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
+    row = _normalized_message(
+        "Cognizant, Astreya 인수로 AI 데이터센터 서비스 확장",
+        raw_text=(
+            "어제 20억 달러 규모 자사주매입 목표 상향 설정했네요\n\n"
+            "[Cognizant, Astreya 인수로 AI 데이터센터 서비스 확장]\n"
+            "- Cognizant는 Astreya를 6억달러에 인수"
+        ),
+    )
+
+    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+        assert "작성자 코멘트" in system_prompt
+        return SemanticExtractionDraft(
+            structure_type="single_topic_deep",
+            units=[
+                SemanticUnitDraft(
+                    message_type="signal",
+                    event_type="M&A",
+                    category_key="AI인프라",
+                    main_theme=None,
+                    sub_themes=[],
+                    ticker_tags=["Cognizant", "Astreya"],
+                    canonical_summary="Cognizant가 Astreya 인수로 AI 데이터센터 서비스를 확장",
+                    supporting_facts=[
+                        "Cognizant는 Astreya를 6억달러에 인수",
+                        "Astreya는 하이퍼스케일러 고객 기반을 보유",
+                    ],
+                )
+            ],
+        )
+
+    monkeypatch.setattr(
+        "src.pipelines.stock_report.classify._extract_message_semantics",
+        _fake_extract_message_semantics,
+    )
+
+    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+
+    assert len(result) == 1
+    assert result[0].supporting_facts[0] == (
+        "작성자 코멘트: 어제 20억 달러 규모 자사주매입 목표 상향 설정했네요"
+    )
+
+
+def test_classify_does_not_promote_report_title_or_byline_as_lead_comment(monkeypatch):
+    taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
+    row = _normalized_message(
+        "오리온, 해외 매출 회복과 원가 완화로 실적 개선 기대",
+        raw_text=(
+            "『오리온(271560.KS) – 전쟁 중에도 초코파이는 먹는다 』\n"
+            "기업분석부 조상훈 ☎02-3772-2578\n\n"
+            "▶ 매출 성장률 회복과 원가 부담 완화\n"
+            "- 지난 2년간 외형 성장 부진하며 주가도 약세\n"
+            "- 목표주가 160,000원 유지\n"
+            "위 내용은 조사분석자료 공표 승인이 이뤄진 내용입니다."
+        ),
+    )
+
+    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+        assert "하단 고지 때문에 `admin`으로 분류하지 않는다" in system_prompt
+        return SemanticExtractionDraft(
+            structure_type="single_topic_deep",
+            units=[
+                SemanticUnitDraft(
+                    message_type="admin",
+                    event_type="해석/전망",
+                    category_key="소비재/유통",
+                    main_theme=None,
+                    sub_themes=[],
+                    ticker_tags=["오리온", "271560.KS"],
+                    canonical_summary="오리온, 해외 매출 회복과 원가 완화로 실적 개선 기대",
+                    supporting_facts=[
+                        "4월 국가별 전년대비 매출증감률은 중국 +22.9%, 러시아 +21.6%",
+                        "목표주가 160,000원을 유지",
+                    ],
+                )
+            ],
+        )
+
+    monkeypatch.setattr(
+        "src.pipelines.stock_report.classify._extract_message_semantics",
+        _fake_extract_message_semantics,
+    )
+
+    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+
+    assert len(result) == 1
+    assert result[0].message_type == "opinion"
+    assert not any(fact.startswith("작성자 코멘트:") for fact in result[0].supporting_facts)
+
+
+def test_classify_assigns_provisional_overlay_for_unclassified(monkeypatch):
+    taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
+    row = _normalized_message("PCTC 운임 강세와 유류할증료 상승, BAF 회수 시차가 관건")
+
+    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+        assert system_prompt
+        return SemanticExtractionDraft(
+            structure_type="single_topic_deep",
+            units=[
+                SemanticUnitDraft(
+                    message_type="signal",
+                    event_type="해석/전망",
+                    category_key="misc",
+                    main_theme=None,
+                    sub_themes=[],
+                    ticker_tags=["현대글로비스"],
+                    canonical_summary="PCTC 수요는 견조하나 유가 상승분 전가 시차가 존재",
+                    supporting_facts=["BAF 반영은 통상 5~6개월 지연"],
+                )
+            ],
+        )
+
+    monkeypatch.setattr(
+        "src.pipelines.stock_report.classify._extract_message_semantics",
+        _fake_extract_message_semantics,
+    )
+
+    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+
+    assert len(result) == 1
+    assert result[0].category_key == "unclassified"
+    assert result[0].provisional_category == "운송/물류"
+    assert result[0].provisional_theme == "연료비/BAF"
+    assert result[0].is_provisional is True
+
+
+def test_classify_does_not_override_canonical_category_with_overlay(monkeypatch):
+    taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
+    row = _normalized_message("AI 데이터센터 투자 확대")
+
+    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+        assert system_prompt
+        return SemanticExtractionDraft(
+            structure_type="single_topic_deep",
+            units=[
+                SemanticUnitDraft(
+                    message_type="signal",
+                    event_type="투자",
+                    category_key="AI 인프라",
+                    main_theme=None,
+                    sub_themes=[],
+                    ticker_tags=["NVDA"],
+                    canonical_summary="하이퍼스케일러의 AI 데이터센터 전력 투자 확대",
+                    supporting_facts=["AI 전력 수요 지속 증가"],
+                )
+            ],
+        )
+
+    monkeypatch.setattr(
+        "src.pipelines.stock_report.classify._extract_message_semantics",
+        _fake_extract_message_semantics,
+    )
+
+    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+
+    assert len(result) == 1
+    assert result[0].category_key == "AI인프라"
+    assert result[0].provisional_category is None
+    assert result[0].provisional_theme == "AI 데이터센터 전력"
+    assert result[0].is_provisional is False
+
+
+def test_classify_overlay_ignores_short_english_alias_noise(monkeypatch):
+    taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
+    row = _normalized_message("AI 랠리 언급이 있었지만 구체 섹터 근거는 없는 일반 코멘트")
+
+    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+        assert system_prompt
+        return SemanticExtractionDraft(
+            structure_type="single_topic_deep",
+            units=[
+                SemanticUnitDraft(
+                    message_type="opinion",
+                    event_type="해석/전망",
+                    category_key="misc",
+                    main_theme=None,
+                    sub_themes=[],
+                    ticker_tags=[],
+                    canonical_summary="장중 변동성 확대에 대한 일반 코멘트",
+                    supporting_facts=["AI 랠리 과열 경계 문구 포함"],
+                )
+            ],
+        )
+
+    monkeypatch.setattr(
+        "src.pipelines.stock_report.classify._extract_message_semantics",
+        _fake_extract_message_semantics,
+    )
+
+    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+
+    assert len(result) == 1
+    assert result[0].category_key == "unclassified"
+    assert result[0].provisional_category is None
+    assert result[0].is_provisional is False

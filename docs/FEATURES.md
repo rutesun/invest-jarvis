@@ -357,6 +357,27 @@ TelegramMessage → MappedIssue → ShuffleResult → ThemeAnalysis/NewsItem →
 
 ---
 
+## 5-1. Stock Report V2 Pipeline (`jarvis report daily-v2`)
+
+텔레그램 CSV를 message 단위로 정규화하고 LLM semantic extraction 결과를 Postgres 기반 knowledge chunk로 적재하는 차세대 일일 리포트 엔진.
+
+**현재 범위:**
+- `gpt-5.4-mini` 기반 semantic extraction으로 report unit 생성
+- `category_key/main_theme/sub_themes/event_type/canonical_summary/supporting_facts` 구조화
+- 런타임 taxonomy overlay로 `provisional_category/provisional_theme` 보강
+- `knowledge_chunks` 적재 및 grouped-only chunk 생성
+- 날짜별 DB 적재 결과를 메시지 단위로 조회하는 `scripts/stock_report_show_chunks.py` 제공
+
+**저장소:**
+- 개발 환경은 로컬 Docker Postgres + pgvector 이미지 사용
+- `STOCK_REPORT_DB_DSN`이 있으면 DB 적재를 수행하고, 없으면 preview 중심으로 실행
+
+**제약:**
+- `supporting_facts`는 아직 flatten된 근거 리스트이며, 향후 typed evidence layer로 세분화 예정
+- `provisional_*` 값은 taxonomy 정제 전 당일 리포트 품질을 위한 임시 보강값
+
+---
+
 ## 6. Ticker Report (`jarvis report ticker`)
 
 지정 티커의 매크로 + 기술적 분석 스냅샷.

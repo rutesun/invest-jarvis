@@ -60,6 +60,9 @@ class ClassifiedMessage:
     event_type: str | None
     category_key: str
     main_theme: str | None
+    provisional_category: str | None
+    provisional_theme: str | None
+    is_provisional: bool
     sub_themes: list[str]
     ticker_tags: list[str]
     canonical_summary: str

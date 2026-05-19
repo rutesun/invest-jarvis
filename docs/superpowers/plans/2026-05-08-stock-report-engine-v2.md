@@ -170,17 +170,17 @@ flowchart TD
 
 **기대효과:** `knowledge_chunks`가 Telegram-first canonical corpus가 된다.
 
-- [ ] `signal`, `data` 타입은 chunk 생성 대상으로 포함한다
-- [ ] grouped message는 synthetic chunk 1개만 만든다
-- [ ] `knowledge_chunks`에 `category_key`를 포함한다
-- [ ] `build_embed_payload()`를 한 함수로 고정한다
-- [ ] Phase 1에서는 payload만 저장하고 실제 임베딩/업서트는 하지 않는다
+- [x] `signal`, `data` 타입은 chunk 생성 대상으로 포함한다
+- [x] grouped message는 synthetic chunk 1개만 만든다
+- [x] `knowledge_chunks`에 `category_key`를 포함한다
+- [x] `build_embed_payload()`를 한 함수로 고정한다
+- [x] Phase 1에서는 payload만 저장하고 실제 임베딩/업서트는 하지 않는다
 
 #### T07 이후 운영 작업: 주간 taxonomy 정제 루프
 
-- [ ] 당일 리포트용 `daily runtime taxonomy overlay`를 만든다
-- [ ] canonical taxonomy에 매칭되지 않은 unit은 `provisional_category/provisional_theme`로 당일 집계에 반영한다
-- [ ] overlay 결과는 YAML에 즉시 쓰지 않고 `is_provisional=true` 메타로 추적한다
+- [x] 당일 리포트용 `daily runtime taxonomy overlay`를 만든다
+- [x] canonical taxonomy에 매칭되지 않은 unit은 `provisional_category/provisional_theme`로 당일 집계에 반영한다
+- [x] overlay 결과는 YAML에 즉시 쓰지 않고 `is_provisional=true` 메타로 추적한다
 - [ ] `vocab_candidates` 테이블(또는 동등 저장소)에 정규화 실패/변환 후보를 적재한다
 - [ ] 수집 시점은 classify 정규화 직후로 고정하고, `raw_value -> normalized_value`를 함께 저장한다
 - [ ] 주 1회 최근 7일 기준으로 후보를 집계해 `alias 추가/신규 theme/무시` 버킷 리포트를 만든다

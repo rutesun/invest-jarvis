@@ -8,6 +8,10 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from src.pipelines.stock_report.chunking import (
+    KNOWLEDGE_CHUNK_SOURCE_TYPE,
+    build_chunk_drafts,
+)
 from src.pipelines.stock_report.models import (
     ClassifiedMessage,
     NormalizedMessage,
@@ -16,7 +20,6 @@ from src.pipelines.stock_report.models import (
 
 
 MIGRATION_HISTORY_TABLE = "stock_report_migration_history"
-KNOWLEDGE_CHUNK_SOURCE_TYPE = "telegram_unit_v2"
 
 
 def resolve_db_dsn(dsn: str | None = None) -> str:
@@ -151,16 +154,6 @@ def load_telegram_messages_by_date(conn: Any, source_date: str) -> list[RawTeleg
     return messages
 
 
-def _estimate_priority_score(message_type: str) -> float:
-    if message_type == "signal":
-        return 1.0
-    if message_type == "data":
-        return 0.8
-    if message_type == "opinion":
-        return 0.6
-    return 0.2
-
-
 def persist_classified_chunks(
     conn: Any,
     *,
@@ -182,11 +175,14 @@ def persist_classified_chunks(
                 (KNOWLEDGE_CHUNK_SOURCE_TYPE, source_date),
             )
 
-    if not classified_messages:
+    chunk_drafts = build_chunk_drafts(
+        normalized_messages=normalized_messages,
+        classified_messages=classified_messages,
+    )
+
+    if not chunk_drafts:
         conn.commit()
         return
-
-    normalized_by_id = {row.telegram_message_id: row for row in normalized_messages}
 
     query = """
     INSERT INTO knowledge_chunks (
@@ -198,6 +194,9 @@ def persist_classified_chunks(
         event_type,
         category_key,
         main_theme,
+        provisional_category,
+        provisional_theme,
+        is_provisional,
         sub_themes,
         ticker_tags,
         theme_tags,
@@ -208,53 +207,36 @@ def persist_classified_chunks(
         channel_weight,
         priority_score
     ) VALUES (
-        %s, %s, %s, %s, %s, %s, %s, %s,
+        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
         %s::jsonb, %s::jsonb, %s::jsonb, %s,
         %s::jsonb, %s, %s, %s, %s
     );
     """
 
     params: list[tuple[Any, ...]] = []
-    for item in classified_messages:
-        normalized = normalized_by_id.get(item.telegram_message_id)
-        if normalized is None:
-            continue
-
-        theme_tags = []
-        if item.main_theme:
-            theme_tags.append(item.main_theme)
-        theme_tags.extend(item.sub_themes)
-
-        payload = {
-            "canonical_summary": item.canonical_summary,
-            "supporting_facts": item.supporting_facts,
-            "ticker_tags": item.ticker_tags,
-            "category_key": item.category_key,
-            "main_theme": item.main_theme,
-            "sub_themes": item.sub_themes,
-            "event_type": item.event_type,
-            "message_type": item.message_type,
-        }
-
+    for draft in chunk_drafts:
         params.append(
             (
-                KNOWLEDGE_CHUNK_SOURCE_TYPE,
-                item.telegram_message_id,
-                item.source_date,
-                item.channel_key,
-                item.message_type,
-                item.event_type,
-                item.category_key,
-                item.main_theme,
-                json.dumps(item.sub_themes, ensure_ascii=False),
-                json.dumps(item.ticker_tags, ensure_ascii=False),
-                json.dumps(theme_tags, ensure_ascii=False),
-                item.canonical_summary,
-                json.dumps(item.supporting_facts, ensure_ascii=False),
-                normalized.clean_text,
-                json.dumps(payload, ensure_ascii=False),
-                1.0,
-                _estimate_priority_score(item.message_type),
+                draft.source_type,
+                draft.source_pk,
+                draft.source_date,
+                draft.channel_key,
+                draft.message_type,
+                draft.event_type,
+                draft.category_key,
+                draft.main_theme,
+                draft.provisional_category,
+                draft.provisional_theme,
+                draft.is_provisional,
+                json.dumps(draft.sub_themes, ensure_ascii=False),
+                json.dumps(draft.ticker_tags, ensure_ascii=False),
+                json.dumps(draft.theme_tags, ensure_ascii=False),
+                draft.canonical_summary,
+                json.dumps(draft.supporting_facts, ensure_ascii=False),
+                draft.content_clean,
+                draft.embed_payload,
+                draft.channel_weight,
+                draft.priority_score,
             )
         )
 

@@ -125,13 +125,19 @@ def run_daily_v2(
     preview_canonical_summaries: list[str] = []
     for row in classified:
         message_type_counts[row.message_type] = message_type_counts.get(row.message_type, 0) + 1
-        category_counts[row.category_key] = category_counts.get(row.category_key, 0) + 1
+        effective_category = row.category_key
+        if effective_category == "unclassified" and row.provisional_category:
+            effective_category = row.provisional_category
+        category_counts[effective_category] = category_counts.get(effective_category, 0) + 1
         if row.canonical_summary != "-" and len(preview_canonical_summaries) < preview_limit:
             preview_type = row.message_type
             if row.event_type:
                 preview_type = f"{preview_type}/{row.event_type}"
+            preview_category = row.category_key
+            if preview_category == "unclassified" and row.provisional_category:
+                preview_category = row.provisional_category
             preview_canonical_summaries.append(
-                f"[{preview_type}] ({row.category_key}) {row.canonical_summary}"
+                f"[{preview_type}] ({preview_category}) {row.canonical_summary}"
             )
     logger.info(
         "daily-v2 summary: normalized_rows=%d grouped_only_rows=%d skipped_rows=%d classified_units=%d",
