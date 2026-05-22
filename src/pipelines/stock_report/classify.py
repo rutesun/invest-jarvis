@@ -14,8 +14,11 @@ from src.pipelines.stock_report.config import (
 )
 from src.pipelines.stock_report.models import (
     ClassifiedMessage,
+    EvidenceItem,
     NormalizedMessage,
+    QAWarning,
     SemanticExtractionDraft,
+    SemanticExtractionLLMOutput,
     SemanticUnitDraft,
 )
 from src.pipelines.stock_report.prompts import (
@@ -34,10 +37,19 @@ logger = logging.getLogger(__name__)
 MULTISPACE_PATTERN = __import__("re").compile(r"\s+")
 NUMERIC_PATTERN = __import__("re").compile(r"[0-9]|%|[+-][0-9]")
 NUMERIC_TOKEN_PATTERN = __import__("re").compile(
-    r"[+-]?\d[\d,]*(?:\.\d+)?(?:%|bp|bps|x|배|억|조|만|천|원|달러|톤|대|주|명|개|MW|GW)?",
+    r"\$?[+-]?\d[\d,]*(?:\.\d+)?(?:\s?(?:퍼센트|%|bp|bps|x|배|억달러|조달러|억|조|만|천|원|달러|톤|대|주|명|개|MW|GW|B))?",
     __import__("re").IGNORECASE,
 )
-STOCK_CODE_PATTERN = __import__("re").compile(r"\([0-9]{4,6}(?:\.[A-Z]{2})?\)")
+INDEX_LABEL_PATTERN = __import__("re").compile(
+    r"\b(?:S&P|NASDAQ)\s?\d+\b", __import__("re").IGNORECASE
+)
+DATE_TOKEN_PATTERN = __import__("re").compile(
+    r"\b\d{4}-\d{1,2}-\d{1,2}\b|\b\d{1,2}월\s?\d{1,2}일\b|\b\d{1,2}:\d{2}\b"
+)
+STOCK_CODE_PATTERN = __import__("re").compile(
+    r"\([0-9]{4,6}(?:\.[A-Z]{2})?\)|\b[0-9]{6}(?:\.[A-Z]{2})?\b"
+)
+FULL_URL_PATTERN = __import__("re").compile(r"https?://\S+|www\.\S+", __import__("re").IGNORECASE)
 PHONE_PATTERN = __import__("re").compile(
     r"(?:☎|tel|전화|문의|[0-9]{2,3}-[0-9]{3,4}-[0-9]{4})",
     __import__("re").IGNORECASE,
@@ -86,27 +98,8 @@ REPORT_DISCLOSURE_KEYWORDS = (
     "재배포",
     "원문 확인",
 )
-REPORT_BYLINE_KEYWORDS = (
-    "기업분석부",
-    "리서치센터",
-    "애널리스트",
-)
-LEAD_TITLE_PREFIXES = (
-    "[",
-    "**[",
-    "★",
-    "☀",
-    "S&P",
-)
-LEAD_TITLE_KEYWORDS = (
-    "map",
-    "daily market digest",
-    "리서치 요약",
-    "퀀트 시그널",
-    "데일리 뉴스",
-    "증시 개장 전",
-)
 SUPPORTING_FACT_LIMIT = 20
+LONG_EVIDENCE_CHAR_LIMIT = 160
 EVENT_TYPE_ALIAS_MAP = {
     "자본조달": "자본조달",
     "전환사채": "자본조달",
@@ -195,16 +188,28 @@ def _extract_numeric_tokens(text: str) -> list[str]:
     if not text:
         return []
 
+    scrubbed = INDEX_LABEL_PATTERN.sub(" ", text)
+    scrubbed = DATE_TOKEN_PATTERN.sub(" ", scrubbed)
+    scrubbed = FULL_URL_PATTERN.sub(" ", scrubbed)
+    scrubbed = URL_PATTERN.sub(" ", scrubbed)
+    scrubbed = PHONE_PATTERN.sub(" ", scrubbed)
+    scrubbed = STOCK_CODE_PATTERN.sub(" ", scrubbed)
     tokens: list[str] = []
     seen: set[str] = set()
-    for match in NUMERIC_TOKEN_PATTERN.findall(text):
+    for match in NUMERIC_TOKEN_PATTERN.findall(scrubbed):
         token = match.strip()
         if not token:
             continue
         digits = "".join(ch for ch in token if ch.isdigit())
-        if len(digits) < 2 and "%" not in token:
-            continue
         lowered = token.lower()
+        if (
+            len(digits) < 2
+            and "%" not in token
+            and "퍼센트" not in token
+            and not lowered.startswith("$")
+            and not lowered.endswith("b")
+        ):
+            continue
         if lowered in seen:
             continue
         seen.add(lowered)
@@ -212,97 +217,130 @@ def _extract_numeric_tokens(text: str) -> list[str]:
     return tokens
 
 
-def _ensure_numeric_supporting_fact(
-    *,
-    source_text: str,
-    supporting_facts: list[str],
-    structure_type: str,
-) -> list[str]:
-    if structure_type != "single_topic_deep":
-        return supporting_facts
-
-    source_tokens = _extract_numeric_tokens(source_text)
-    if not source_tokens:
-        return supporting_facts
-
-    for fact in supporting_facts:
-        if _extract_numeric_tokens(fact):
-            return supporting_facts
-
-    numeric_fact = f"핵심 수치: {', '.join(source_tokens[:3])}"
-    trimmed = (
-        supporting_facts[: SUPPORTING_FACT_LIMIT - 1]
-        if len(supporting_facts) >= SUPPORTING_FACT_LIMIT
-        else supporting_facts
-    )
-    return _dedupe_preserve_order([*trimmed, numeric_fact], limit=SUPPORTING_FACT_LIMIT)
+def _normalize_numeric_token(token: str) -> str:
+    normalized = token.lower().replace(",", "").replace("퍼센트", "%")
+    normalized = normalized.replace(" ", "")
+    if normalized.startswith("$") and normalized.endswith("b"):
+        value = normalized[1:-1]
+        try:
+            return f"{float(value) * 10:g}억달러"
+        except ValueError:
+            return normalized
+    return normalized
 
 
-def _extract_lead_comment(text: str) -> str | None:
-    lines: list[str] = []
-    for raw_line in text.splitlines():
-        line = raw_line.strip()
-        if not line:
-            if lines:
-                break
+def _source_numeric_set(source_text: str) -> set[str]:
+    return {_normalize_numeric_token(token) for token in _extract_numeric_tokens(source_text)}
+
+
+def _append_warning(
+    warnings: list[QAWarning],
+    code: str,
+    detail: str | None = None,
+    evidence_index: int | None = None,
+) -> None:
+    warning = QAWarning(code=code, detail=detail, evidence_index=evidence_index)
+    if warning not in warnings:
+        warnings.append(warning)
+
+
+def _normalize_evidence_items(
+    raw_unit: SemanticUnitDraft,
+) -> tuple[list[EvidenceItem], list[QAWarning]]:
+    warnings: list[QAWarning] = []
+
+    source_items = raw_unit.evidence_items
+    if source_items:
+        items = list(source_items)
+        legacy_facts = _dedupe_preserve_order(
+            raw_unit.supporting_facts, limit=SUPPORTING_FACT_LIMIT
+        )
+        typed_texts = _dedupe_preserve_order(
+            [item.text for item in items], limit=SUPPORTING_FACT_LIMIT
+        )
+        if legacy_facts and legacy_facts != typed_texts:
+            _append_warning(
+                warnings,
+                "legacy_facts_diverged",
+                "Typed evidence won over materially different legacy supporting_facts.",
+            )
+    else:
+        items = [
+            EvidenceItem(kind="fact", text=fact)
+            for fact in _dedupe_preserve_order(
+                raw_unit.supporting_facts, limit=SUPPORTING_FACT_LIMIT
+            )
+        ]
+
+    normalized: list[EvidenceItem] = []
+    seen_texts: set[str] = set()
+    for item in items:
+        if item.raw_kind:
+            _append_warning(
+                warnings,
+                "unknown_evidence_kind",
+                f"Unknown evidence kind normalized to fact: {item.raw_kind}",
+            )
+        text = item.text.strip()
+        if not text:
+            _append_warning(warnings, "empty_evidence")
             continue
-        if lines and (line.startswith("[") or line.startswith("* ") or line.startswith("- ")):
+        if text in seen_texts:
+            continue
+        seen_texts.add(text)
+        normalized.append(EvidenceItem(kind=item.kind, text=text))
+        if len(normalized) >= SUPPORTING_FACT_LIMIT:
             break
-        lines.append(line)
-        if len(lines) >= 2:
-            break
 
-    if not lines:
-        return None
-    lead_comment = " ".join(lines).strip()
-    if _looks_like_report_header_or_byline(lead_comment):
-        return None
-    return lead_comment or None
+    if not normalized:
+        _append_warning(warnings, "empty_evidence")
+    return normalized, warnings
 
 
-def _looks_like_report_header_or_byline(text: str) -> bool:
-    if not text:
-        return False
-
-    normalized = text.strip()
-    lowered = normalized.lower()
-    if len(normalized) > 120:
-        return True
-    if URL_PATTERN.search(normalized):
-        return True
-    if any(lowered.startswith(prefix.lower()) for prefix in LEAD_TITLE_PREFIXES):
-        return True
-    if any(keyword in lowered for keyword in LEAD_TITLE_KEYWORDS):
-        return True
-    if ASCII_WORD_PATTERN.match(lowered):
-        return True
-    if PHONE_PATTERN.search(text):
-        return True
-    if STOCK_CODE_PATTERN.search(text):
-        return True
-    if any(keyword in text for keyword in REPORT_BYLINE_KEYWORDS):
-        return True
-    return text.startswith(("『", "「")) and text.endswith(("』", "」"))
-
-
-def _ensure_lead_numeric_supporting_fact(
+def _compute_evidence_quality_warnings(
     *,
-    source_text: str,
-    supporting_facts: list[str],
-) -> list[str]:
-    lead_comment = _extract_lead_comment(source_text)
-    if not lead_comment or not _extract_numeric_tokens(lead_comment):
-        return supporting_facts
+    row: NormalizedMessage,
+    raw_message_type: str,
+    normalized_message_type: str,
+    evidence_items: list[EvidenceItem],
+) -> list[QAWarning]:
+    warnings: list[QAWarning] = []
+    source_numbers = _source_numeric_set(f"{row.raw_text}\n{row.clean_text}")
+    has_metric = any(item.kind == "metric" for item in evidence_items)
 
-    joined_facts = " ".join(supporting_facts)
-    if lead_comment in joined_facts:
-        return supporting_facts
+    if source_numbers and not has_metric:
+        _append_warning(
+            warnings,
+            "missing_metric_candidate",
+            "Source contains numeric candidates but the unit has no metric evidence.",
+        )
 
-    lead_fact = f"작성자 코멘트: {lead_comment}"
-    return _dedupe_preserve_order(
-        [lead_fact, *supporting_facts],
-        limit=SUPPORTING_FACT_LIMIT,
-    )
+    for index, item in enumerate(evidence_items):
+        if len(item.text) > LONG_EVIDENCE_CHAR_LIMIT:
+            _append_warning(
+                warnings,
+                "long_evidence",
+                f"Evidence item exceeds {LONG_EVIDENCE_CHAR_LIMIT} characters.",
+                evidence_index=index,
+            )
+        for token in _extract_numeric_tokens(item.text):
+            normalized_token = _normalize_numeric_token(token)
+            if normalized_token not in source_numbers:
+                _append_warning(
+                    warnings,
+                    "unsupported_numeric",
+                    f"Evidence contains numeric token not found in source: {token}",
+                    evidence_index=index,
+                )
+
+    if raw_message_type == "admin" and normalized_message_type != "admin":
+        _append_warning(
+            warnings,
+            "admin_contradiction",
+            "Raw message_type=admin but unit contains investment content.",
+        )
+
+    return warnings
 
 
 def _fallback_canonical_summary(clean_text: str) -> str:
@@ -337,6 +375,8 @@ def _build_fallback_message(row: NormalizedMessage) -> ClassifiedMessage | None:
         ticker_tags=[],
         canonical_summary=canonical_summary,
         supporting_facts=[],
+        evidence_items=[],
+        qa_warnings=[QAWarning(code="llm_extraction_failed", detail="Semantic extraction failed.")],
     )
 
 
@@ -541,19 +581,8 @@ def _normalize_unit(
 
     sub_themes = _dedupe_preserve_order(sub_themes, limit=2)
     ticker_tags = _dedupe_preserve_order(raw_unit.ticker_tags, limit=5)
-    supporting_facts = _dedupe_preserve_order(
-        raw_unit.supporting_facts,
-        limit=SUPPORTING_FACT_LIMIT,
-    )
-    supporting_facts = _ensure_numeric_supporting_fact(
-        source_text=row.clean_text,
-        supporting_facts=supporting_facts,
-        structure_type=structure_type,
-    )
-    supporting_facts = _ensure_lead_numeric_supporting_fact(
-        source_text=row.raw_text,
-        supporting_facts=supporting_facts,
-    )
+    evidence_items, qa_warnings = _normalize_evidence_items(raw_unit)
+    supporting_facts = [item.text for item in evidence_items]
     event_type = _normalize_event_type(raw_unit.event_type)
 
     provisional_category: str | None = None
@@ -590,6 +619,20 @@ def _normalize_unit(
             if category_key == "unclassified" and provisional_category is None:
                 provisional_category = overlay_theme_category
 
+    message_type = _normalize_message_type(
+        raw_unit.message_type,
+        canonical_summary=canonical_summary,
+        supporting_facts=supporting_facts,
+    )
+    qa_warnings.extend(
+        _compute_evidence_quality_warnings(
+            row=row,
+            raw_message_type=raw_unit.message_type,
+            normalized_message_type=message_type,
+            evidence_items=evidence_items,
+        )
+    )
+
     return ClassifiedMessage(
         telegram_message_id=row.telegram_message_id,
         source_date=row.source_date,
@@ -598,11 +641,7 @@ def _normalize_unit(
         processing_mode=row.processing_mode,
         structure_type=structure_type,
         unit_index=unit_index,
-        message_type=_normalize_message_type(
-            raw_unit.message_type,
-            canonical_summary=canonical_summary,
-            supporting_facts=supporting_facts,
-        ),
+        message_type=message_type,
         event_type=event_type,
         category_key=category_key,
         main_theme=main_theme,
@@ -613,6 +652,9 @@ def _normalize_unit(
         ticker_tags=ticker_tags,
         canonical_summary=canonical_summary,
         supporting_facts=supporting_facts,
+        raw_message_type=raw_unit.message_type,
+        evidence_items=evidence_items,
+        qa_warnings=qa_warnings,
     )
 
 
@@ -660,13 +702,19 @@ async def _extract_message_semantics(
             "source_date": str(row.source_date),
         },
     }
-    return await invoke_llm_with_retry(
+    llm_output = await invoke_llm_with_retry(
         llm,
-        SemanticExtractionDraft,
+        SemanticExtractionLLMOutput,
         messages,
         config,
         max_retries=SEMANTIC_EXTRACTION_MAX_RETRIES,
         timeout_seconds=SEMANTIC_EXTRACTION_TIMEOUT_SECONDS,
+    )
+    return SemanticExtractionDraft(
+        structure_type=llm_output.structure_type,
+        units=[
+            SemanticUnitDraft(**unit.model_dump(exclude_none=False)) for unit in llm_output.units
+        ],
     )
 
 

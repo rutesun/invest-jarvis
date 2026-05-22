@@ -202,6 +202,8 @@ def persist_classified_chunks(
         theme_tags,
         canonical_summary,
         supporting_facts,
+        evidence_items,
+        qa_warnings,
         content_clean,
         embed_payload,
         channel_weight,
@@ -209,7 +211,7 @@ def persist_classified_chunks(
     ) VALUES (
         %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
         %s::jsonb, %s::jsonb, %s::jsonb, %s,
-        %s::jsonb, %s, %s, %s, %s
+        %s::jsonb, %s::jsonb, %s::jsonb, %s, %s, %s, %s
     );
     """
 
@@ -233,6 +235,14 @@ def persist_classified_chunks(
                 json.dumps(draft.theme_tags, ensure_ascii=False),
                 draft.canonical_summary,
                 json.dumps(draft.supporting_facts, ensure_ascii=False),
+                json.dumps(
+                    [item.model_dump() for item in draft.evidence_items],
+                    ensure_ascii=False,
+                ),
+                json.dumps(
+                    [warning.model_dump(exclude_none=True) for warning in draft.qa_warnings],
+                    ensure_ascii=False,
+                ),
                 draft.content_clean,
                 draft.embed_payload,
                 draft.channel_weight,

@@ -1,10 +1,14 @@
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from datetime import date
 
-from src.pipelines.stock_report.models import ClassifiedMessage, NormalizedMessage
+from src.pipelines.stock_report.models import (
+    ClassifiedMessage,
+    EvidenceItem,
+    NormalizedMessage,
+    QAWarning,
+)
 
 
 CHUNK_TARGET_MESSAGE_TYPES = {"signal", "data"}
@@ -29,6 +33,8 @@ class ChunkDraft:
     theme_tags: list[str]
     canonical_summary: str
     supporting_facts: list[str]
+    evidence_items: list[EvidenceItem]
+    qa_warnings: list[QAWarning]
     content_clean: str
     embed_payload: str
     channel_weight: float
@@ -122,7 +128,9 @@ def _build_grouped_only_chunk(
         ticker_tags=[],
         theme_tags=[],
         canonical_summary=canonical_summary,
-        supporting_facts=[f"grouped_message_ids={json.dumps(grouped_ids, ensure_ascii=False)}"],
+        supporting_facts=[],
+        evidence_items=[],
+        qa_warnings=[],
         content_clean=clean_text,
         embed_payload=payload,
         channel_weight=1.0,
@@ -189,6 +197,8 @@ def build_chunk_drafts(
                 theme_tags=theme_tags,
                 canonical_summary=item.canonical_summary,
                 supporting_facts=item.supporting_facts,
+                evidence_items=item.evidence_items,
+                qa_warnings=item.qa_warnings,
                 content_clean=normalized.clean_text,
                 embed_payload=payload,
                 channel_weight=1.0,

@@ -103,7 +103,9 @@ def test_build_chunk_drafts_creates_single_synthetic_chunk_for_grouped_only():
     assert draft.message_type == "data"
     assert draft.category_key == "unclassified"
     assert draft.content_clean == "반도체 강세\nHBM 수급 타이트"
-    assert draft.supporting_facts == ["grouped_message_ids=[10, 11]"]
+    assert draft.supporting_facts == []
+    assert draft.evidence_items == []
+    assert draft.qa_warnings == []
 
 
 def test_build_embed_payload_contract():

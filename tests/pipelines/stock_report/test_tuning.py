@@ -163,3 +163,83 @@ def test_run_prompt_tuning_round_uses_csv_samples_and_custom_prompt(tmp_path, mo
     assert "Stock Report V2 Prompt Tuning" in result.output_markdown
     assert "event_type: `수주/계약`" in result.output_markdown
     assert "요약-101" in result.output_markdown or "요약-102" in result.output_markdown
+
+
+def test_run_prompt_tuning_round_renders_typed_evidence_and_warning_counts(tmp_path, monkeypatch):
+    month_dir = tmp_path / "2026-05"
+    month_dir.mkdir(parents=True)
+    csv_file = month_dir / "2026-05-08-hana_us_stock.csv"
+    csv_file.write_text(
+        "\n".join(
+            [
+                "message_id,timestamp,channel_name,author,content,media_info,forward_from",
+                '101,2026-05-08T09:00:00+00:00,hana_us_stock,alpha,"Seagate 주가 8% 하락",,',
+            ]
+        ),
+        encoding="utf-8",
+    )
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(
+        "\n".join(
+            [
+                "stock_report:",
+                "  normalize:",
+                "    short_comment_channels: []",
+                "    short_comment_max_chars: 10",
+                "    group_window_minutes: 30",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    def _fake_classify(normalized_messages, *, taxonomy, provider, system_prompt=None):
+        from src.pipelines.stock_report.models import EvidenceItem, QAWarning
+
+        row = normalized_messages[0]
+        return [
+            ClassifiedMessage(
+                telegram_message_id=row.telegram_message_id,
+                source_date=row.source_date,
+                channel_key=row.channel_key,
+                source_channel_key=row.source_channel_key,
+                processing_mode=row.processing_mode,
+                structure_type="single_topic_deep",
+                unit_index=0,
+                message_type="signal",
+                event_type="해석/전망",
+                category_key="반도체",
+                main_theme=None,
+                provisional_category=None,
+                provisional_theme=None,
+                is_provisional=False,
+                sub_themes=[],
+                ticker_tags=["Seagate"],
+                canonical_summary="Seagate 주가 하락에도 가격 전망은 견조",
+                supporting_facts=["Seagate 주가는 8% 하락"],
+                evidence_items=[
+                    EvidenceItem(kind="metric", text="Seagate 주가는 8% 하락"),
+                    EvidenceItem(kind="market_context", text="가격 전망은 견조"),
+                ],
+                qa_warnings=[QAWarning(code="missing_metric_candidate", detail="test warning")],
+            )
+        ]
+
+    monkeypatch.setattr("src.pipelines.stock_report.tuning.classify_messages", _fake_classify)
+
+    result = run_prompt_tuning_round(
+        date="2026-05-08",
+        data_dir=str(tmp_path),
+        provider="openai",
+        config_path=str(config_file),
+        taxonomy_path="config/stock_report_vocabulary.yaml",
+        sample_size=1,
+        per_channel=0,
+        seed=3,
+        include_grouped_only=False,
+        max_raw_chars=200,
+    )
+
+    assert "- qa warning counts: `{'missing_metric_candidate': 1}`" in result.output_markdown
+    assert "- evidence_items.metric: `Seagate 주가는 8% 하락`" in result.output_markdown
+    assert "- evidence_items.market_context: `가격 전망은 견조`" in result.output_markdown
+    assert "- qa_warnings: `missing_metric_candidate: test warning`" in result.output_markdown

@@ -1,15 +1,73 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 ProcessingMode = str
 MessageType = str
 StructureType = str
+EvidenceKind = Literal[
+    "fact",
+    "metric",
+    "thesis",
+    "risk",
+    "market_context",
+    "author_comment",
+]
+ALLOWED_EVIDENCE_KINDS = {
+    "fact",
+    "metric",
+    "thesis",
+    "risk",
+    "market_context",
+    "author_comment",
+}
+
+
+class QAWarning(BaseModel):
+    code: str
+    detail: str | None = None
+    evidence_index: int | None = None
+
+    @field_validator("code", mode="before")
+    @classmethod
+    def strip_code(cls, value: str) -> str:
+        return str(value).strip()
+
+    @field_validator("detail", mode="before")
+    @classmethod
+    def strip_detail(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = str(value).strip()
+        return stripped or None
+
+
+class EvidenceItem(BaseModel):
+    kind: EvidenceKind
+    text: str
+    raw_kind: str | None = Field(default=None, exclude=True)
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_unknown_kind(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        kind = str(data.get("kind") or "fact").strip()
+        if kind not in ALLOWED_EVIDENCE_KINDS:
+            data = dict(data)
+            data["raw_kind"] = kind
+            data["kind"] = "fact"
+        return data
+
+    @field_validator("text", mode="before")
+    @classmethod
+    def strip_text(cls, value: str) -> str:
+        return str(value).strip()
 
 
 @dataclass(slots=True)
@@ -67,9 +125,12 @@ class ClassifiedMessage:
     ticker_tags: list[str]
     canonical_summary: str
     supporting_facts: list[str]
+    raw_message_type: str | None = None
+    evidence_items: list[EvidenceItem] = field(default_factory=list)
+    qa_warnings: list[QAWarning] = field(default_factory=list)
 
 
-class SemanticUnitDraft(BaseModel):
+class SemanticUnitLLMOutput(BaseModel):
     message_type: Literal["signal", "opinion", "data", "admin"]
     event_type: str | None = None
     category_key: str | None = None
@@ -77,7 +138,7 @@ class SemanticUnitDraft(BaseModel):
     sub_themes: list[str] = Field(default_factory=list)
     ticker_tags: list[str] = Field(default_factory=list)
     canonical_summary: str
-    supporting_facts: list[str] = Field(default_factory=list)
+    evidence_items: list[EvidenceItem] = Field(default_factory=list)
 
     @field_validator("event_type", "category_key", "main_theme", mode="before")
     @classmethod
@@ -87,7 +148,7 @@ class SemanticUnitDraft(BaseModel):
         stripped = value.strip()
         return stripped or None
 
-    @field_validator("sub_themes", "ticker_tags", "supporting_facts", mode="before")
+    @field_validator("sub_themes", "ticker_tags", mode="before")
     @classmethod
     def normalize_text_list(cls, value: list[str] | None) -> list[str]:
         if not value:
@@ -106,6 +167,25 @@ class SemanticUnitDraft(BaseModel):
     @classmethod
     def strip_canonical_summary(cls, value: str) -> str:
         return value.strip()
+
+
+class SemanticUnitDraft(SemanticUnitLLMOutput):
+    supporting_facts: list[str] = Field(default_factory=list)
+
+    @field_validator("supporting_facts", mode="before")
+    @classmethod
+    def normalize_supporting_facts(cls, value: list[str] | None) -> list[str]:
+        return cls.normalize_text_list(value)
+
+
+class SemanticExtractionLLMOutput(BaseModel):
+    structure_type: Literal[
+        "single_topic_deep",
+        "multi_item_digest",
+        "market_wrap",
+        "notice",
+    ]
+    units: list[SemanticUnitLLMOutput] = Field(default_factory=list)
 
 
 class SemanticExtractionDraft(BaseModel):

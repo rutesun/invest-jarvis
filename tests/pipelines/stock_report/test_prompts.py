@@ -37,10 +37,11 @@ def test_system_prompt_requires_market_wrap_split_when_narratives_differ():
         in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
     )
     assert "event_type" in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
-    assert "supporting_facts" in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
+    assert "evidence_items" in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
+    assert "supporting_facts" not in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
     assert "thesis" in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
     assert "risk" in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
-    assert "regulatory_context" in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
+    assert "market_context" in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
     assert "작성자 코멘트" in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
     assert "하단 고지 때문에 `admin`으로 분류하지 않는다" in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
     assert "원문보다 더 길게 확장" in SEMANTIC_EXTRACTION_SYSTEM_PROMPT

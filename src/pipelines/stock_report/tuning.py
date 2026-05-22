@@ -16,6 +16,7 @@ from src.pipelines.stock_report.classify import classify_messages
 from src.pipelines.stock_report.config import get_semantic_extraction_llm_config
 from src.pipelines.stock_report.models import (
     ClassifiedMessage,
+    EvidenceItem,
     NormalizedMessage,
     RawTelegramMessage,
 )
@@ -228,6 +229,7 @@ def _build_output_markdown(
         f"- structure_type counts: `{result.structure_type_counts}`",
         f"- message_type counts: `{result.message_type_counts}`",
         f"- category counts: `{result.category_counts}`",
+        f"- qa warning counts: `{_count_qa_warnings(classified_rows)}`",
         "",
         "## Sample Outputs",
     ]
@@ -270,10 +272,33 @@ def _build_output_markdown(
                 lines.append(f"  - sub_themes: `{', '.join(unit.sub_themes)}`")
             if unit.ticker_tags:
                 lines.append(f"  - ticker_tags: `{', '.join(unit.ticker_tags)}`")
+            for kind, evidence_texts in _group_evidence_by_kind(unit.evidence_items).items():
+                lines.append(f"  - evidence_items.{kind}: `{' | '.join(evidence_texts)}`")
             if unit.supporting_facts:
                 lines.append(f"  - supporting_facts: `{' | '.join(unit.supporting_facts)}`")
+            if unit.qa_warnings:
+                warning_text = " | ".join(
+                    (f"{warning.code}: {warning.detail}" if warning.detail else warning.code)
+                    for warning in unit.qa_warnings
+                )
+                lines.append(f"  - qa_warnings: `{warning_text}`")
 
     return "\n".join(lines)
+
+
+def _count_qa_warnings(classified_rows: list[ClassifiedMessage]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for unit in classified_rows:
+        for warning in unit.qa_warnings:
+            counts[warning.code] = counts.get(warning.code, 0) + 1
+    return counts
+
+
+def _group_evidence_by_kind(evidence_items: list[EvidenceItem]) -> dict[str, list[str]]:
+    grouped: dict[str, list[str]] = {}
+    for item in evidence_items:
+        grouped.setdefault(item.kind, []).append(item.text)
+    return grouped
 
 
 def run_prompt_tuning_round(

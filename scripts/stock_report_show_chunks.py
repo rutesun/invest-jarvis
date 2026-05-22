@@ -26,6 +26,8 @@ class ChunkRow:
     ticker_tags: list[str]
     canonical_summary: str
     supporting_facts: list[str]
+    evidence_items: list[dict[str, Any]]
+    qa_warnings: list[dict[str, Any]]
     provisional_category: str | None
     provisional_theme: str | None
     is_provisional: bool
@@ -51,6 +53,34 @@ def _parse_json_list(value: Any) -> list[str]:
         except json.JSONDecodeError:
             return [stripped]
     return [str(value)]
+
+
+def _parse_json_objects(value: Any) -> list[dict[str, Any]]:
+    if value is None:
+        return []
+    loaded: Any = value
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return []
+        try:
+            loaded = json.loads(stripped)
+        except json.JSONDecodeError:
+            return []
+    if not isinstance(loaded, list):
+        return []
+    return [item for item in loaded if isinstance(item, dict)]
+
+
+def _group_evidence_by_kind(evidence_items: list[dict[str, Any]]) -> dict[str, list[str]]:
+    grouped: dict[str, list[str]] = {}
+    for item in evidence_items:
+        kind = str(item.get("kind") or "fact")
+        text = str(item.get("text") or "").strip()
+        if not text:
+            continue
+        grouped.setdefault(kind, []).append(text)
+    return grouped
 
 
 def parse_args() -> argparse.Namespace:
@@ -108,6 +138,8 @@ def load_chunks(
         kc.ticker_tags,
         kc.canonical_summary,
         kc.supporting_facts,
+        kc.evidence_items,
+        kc.qa_warnings,
         kc.provisional_category,
         kc.provisional_theme,
         kc.is_provisional,
@@ -140,11 +172,13 @@ def load_chunks(
                 ticker_tags=_parse_json_list(row[10]),
                 canonical_summary=str(row[11]),
                 supporting_facts=_parse_json_list(row[12]),
-                provisional_category=row[13],
-                provisional_theme=row[14],
-                is_provisional=bool(row[15]),
-                content_clean=str(row[16] or ""),
-                raw_text=str(row[17] or ""),
+                evidence_items=_parse_json_objects(row[13]),
+                qa_warnings=_parse_json_objects(row[14]),
+                provisional_category=row[15],
+                provisional_theme=row[16],
+                is_provisional=bool(row[17]),
+                content_clean=str(row[18] or ""),
+                raw_text=str(row[19] or ""),
             )
         )
     return result
@@ -189,6 +223,18 @@ def render_grouped(chunks: list[ChunkRow]) -> str:
             sub = ", ".join(item.sub_themes) if item.sub_themes else "-"
             tickers = ", ".join(item.ticker_tags) if item.ticker_tags else "-"
             facts = " | ".join(item.supporting_facts[:3]) if item.supporting_facts else "-"
+            warnings = (
+                " | ".join(
+                    (
+                        f"{entry.get('code')}: {entry.get('detail')}"
+                        if entry.get("detail")
+                        else str(entry.get("code"))
+                    )
+                    for entry in item.qa_warnings
+                )
+                if item.qa_warnings
+                else "-"
+            )
             lines.append(f"- summary {idx}: {item.canonical_summary}")
             lines.append(
                 f"  - type: {item.message_type}"
@@ -203,7 +249,14 @@ def render_grouped(chunks: list[ChunkRow]) -> str:
                 f"is_provisional={item.is_provisional}"
             )
             lines.append(f"  - tickers: {tickers}")
+            grouped_evidence = _group_evidence_by_kind(item.evidence_items)
+            if grouped_evidence:
+                for kind, evidence_texts in grouped_evidence.items():
+                    lines.append(f"  - evidence_items.{kind}: {' | '.join(evidence_texts[:5])}")
+            else:
+                lines.append("  - evidence_items: -")
             lines.append(f"  - supporting_facts: {facts}")
+            lines.append(f"  - qa_warnings: {warnings}")
         lines.append("")
 
     return "\n".join(lines).rstrip() + "\n"
