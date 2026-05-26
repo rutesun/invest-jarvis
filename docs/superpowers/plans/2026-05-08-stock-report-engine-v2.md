@@ -196,12 +196,12 @@ flowchart TD
 
 **기대효과:** 당일 Telegram signal만으로 일관된 `category -> theme -> ticker` 섹션을 만들 수 있다.
 
-- [ ] `source_date = report_date` 기준으로 당일 chunk만 읽는다
-- [ ] `category_key` 기준 category bucket 생성 규칙을 구현한다
-- [ ] `main_theme` 기준 theme bucket 생성 규칙을 구현한다
-- [ ] `category_key == unclassified`면 `provisional_category`를 display bucket으로 사용한다
-- [ ] `ticker_tags` 기준 focus ticker bucket 생성 규칙을 구현한다
-- [ ] hard cap 없이 same-day dedupe 규칙만 구현한다
+- [x] `source_date = report_date` 기준으로 당일 chunk만 읽는다
+- [x] `category_key` 기준 category bucket 생성 규칙을 구현한다
+- [x] `main_theme` 기준 theme bucket 생성 규칙을 구현한다
+- [x] `category_key == unclassified`면 `provisional_category`를 display bucket으로 사용한다
+- [x] `ticker_tags` 기준 focus ticker bucket 생성 규칙을 구현한다
+- [x] hard cap 없이 same-day dedupe 규칙만 구현한다
 
 ### T09. synthesis A/B 실험과 Python Markdown renderer를 만든다
 

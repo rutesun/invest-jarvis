@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -155,6 +156,17 @@ def test_run_daily_v2_calls_migration_and_ingest(monkeypatch):
         assert conn is fake_conn
         assert len(normalized_messages) == 1
 
+    def _fake_load_same_day_bundle(conn, report_date):
+        events.append(f"load_bundle:{report_date}")
+        assert conn is fake_conn
+        return SimpleNamespace(
+            category_buckets=[
+                SimpleNamespace(theme_buckets=[object()]),
+            ],
+            focus_ticker_buckets=[object()],
+            low_confidence_chunks=[],
+        )
+
     monkeypatch.setattr("src.pipelines.stock_report.pipeline.resolve_db_dsn", _fake_resolve_db_dsn)
     monkeypatch.setattr("src.pipelines.stock_report.pipeline.connect_db", _fake_connect_db)
     monkeypatch.setattr(
@@ -187,6 +199,10 @@ def test_run_daily_v2_calls_migration_and_ingest(monkeypatch):
         "src.pipelines.stock_report.pipeline.persist_classified_chunks",
         _fake_persist_chunks,
     )
+    monkeypatch.setattr(
+        "src.pipelines.stock_report.pipeline.load_same_day_bundle",
+        _fake_load_same_day_bundle,
+    )
 
     result = run_daily_v2(
         date="2026-05-08",
@@ -207,6 +223,10 @@ def test_run_daily_v2_calls_migration_and_ingest(monkeypatch):
     assert result.skipped_rows == 0
     assert result.message_type_counts == {"data": 1}
     assert result.category_counts == {"반도체": 1}
+    assert result.category_bucket_count == 1
+    assert result.theme_bucket_count == 1
+    assert result.focus_ticker_count == 1
+    assert result.low_confidence_count == 0
     assert result.preview_canonical_summaries == ["[data/통계/지표] (반도체) NVDA +2.5%"]
     assert result.migrations_applied == ["001_phase1.sql"]
     assert events == [
@@ -220,6 +240,7 @@ def test_run_daily_v2_calls_migration_and_ingest(monkeypatch):
         "persist:1",
         "classify:1",
         "persist_chunks:1",
+        "load_bundle:2026-05-08",
         "connect.exit",
     ]
 

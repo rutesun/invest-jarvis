@@ -17,6 +17,7 @@ from src.pipelines.stock_report.db import (
     resolve_db_dsn,
 )
 from src.pipelines.stock_report.normalize import normalize_messages, persist_normalized_messages
+from src.pipelines.stock_report.retrieval import load_same_day_bundle
 from src.pipelines.stock_report.taxonomy import load_taxonomy_registry
 from src.pipelines.stock_report.telegram_ingest import TelegramIngestStats, ingest_telegram_raw_csvs
 
@@ -37,6 +38,10 @@ class DailyV2RunResult:
     skipped_rows: int
     message_type_counts: dict[str, int]
     category_counts: dict[str, int]
+    category_bucket_count: int
+    theme_bucket_count: int
+    focus_ticker_count: int
+    low_confidence_count: int
     preview_canonical_summaries: list[str]
     migrations_applied: list[str]
 
@@ -117,6 +122,14 @@ def run_daily_v2(
             classified_messages=classified,
         )
         logger.info("daily-v2 classified chunks persisted")
+        same_day_bundle = load_same_day_bundle(conn, date)
+        logger.info(
+            "daily-v2 same-day bundle built: categories=%d themes=%d focus_tickers=%d low_confidence=%d",
+            len(same_day_bundle.category_buckets),
+            sum(len(bucket.theme_buckets) for bucket in same_day_bundle.category_buckets),
+            len(same_day_bundle.focus_ticker_buckets),
+            len(same_day_bundle.low_confidence_chunks),
+        )
 
     grouped_only_rows = sum(1 for row in normalized if row.processing_mode == "grouped_only")
     skipped_rows = sum(1 for row in normalized if row.processing_mode == "skip")
@@ -159,6 +172,12 @@ def run_daily_v2(
         skipped_rows=skipped_rows,
         message_type_counts=message_type_counts,
         category_counts=category_counts,
+        category_bucket_count=len(same_day_bundle.category_buckets),
+        theme_bucket_count=sum(
+            len(bucket.theme_buckets) for bucket in same_day_bundle.category_buckets
+        ),
+        focus_ticker_count=len(same_day_bundle.focus_ticker_buckets),
+        low_confidence_count=len(same_day_bundle.low_confidence_chunks),
         preview_canonical_summaries=preview_canonical_summaries,
         migrations_applied=migrations_applied,
     )
@@ -202,6 +221,10 @@ def format_daily_v2_report(result: DailyV2RunResult) -> str:
         f"- skipped rows: `{result.skipped_rows}`",
         f"- message_type counts: `{result.message_type_counts}`",
         f"- category counts: `{result.category_counts}`",
+        f"- category buckets: `{result.category_bucket_count}`",
+        f"- theme buckets: `{result.theme_bucket_count}`",
+        f"- focus ticker buckets: `{result.focus_ticker_count}`",
+        f"- low confidence chunks: `{result.low_confidence_count}`",
     ]
 
     if result.migrations_applied:
