@@ -37,14 +37,17 @@ logger = logging.getLogger(__name__)
 MULTISPACE_PATTERN = __import__("re").compile(r"\s+")
 NUMERIC_PATTERN = __import__("re").compile(r"[0-9]|%|[+-][0-9]")
 NUMERIC_TOKEN_PATTERN = __import__("re").compile(
-    r"\$?[+-]?\d[\d,]*(?:\.\d+)?(?:\s?(?:퍼센트|%|bp|bps|x|배|억달러|조달러|억|조|만|천|원|달러|톤|대|주|명|개|MW|GW|B))?",
+    r"\$?[+-]?\d[\d,]*(?:\.\d+)?(?:\s?(?:퍼센트|%|%p|bp|bps|x|배|억달러|조달러|억|조|만|천|원|달러|톤|대|주|명|개|MW|GW|년|B))?",
     __import__("re").IGNORECASE,
 )
 INDEX_LABEL_PATTERN = __import__("re").compile(
     r"\b(?:S&P|NASDAQ)\s?\d+\b", __import__("re").IGNORECASE
 )
 DATE_TOKEN_PATTERN = __import__("re").compile(
-    r"\b\d{4}-\d{1,2}-\d{1,2}\b|\b\d{1,2}월\s?\d{1,2}일\b|\b\d{1,2}:\d{2}\b"
+    r"\b\d{4}-\d{1,2}-\d{1,2}\b|"
+    r"\b\d{2,4}년\s?\d{1,2}월\s?\d{1,2}일\b|"
+    r"\b\d{1,2}월\s?\d{1,2}일\b|"
+    r"\b\d{1,2}:\d{2}\b"
 )
 STOCK_CODE_PATTERN = __import__("re").compile(
     r"\([0-9]{4,6}(?:\.[A-Z]{2})?\)|\b[0-9]{6}(?:\.[A-Z]{2})?\b"
@@ -56,6 +59,18 @@ PHONE_PATTERN = __import__("re").compile(
 )
 URL_PATTERN = __import__("re").compile(r"https?://|www\\.", __import__("re").IGNORECASE)
 ASCII_WORD_PATTERN = __import__("re").compile(r"^[a-z0-9 _./+-]+$")
+YEAR_TOKEN_PATTERN = __import__("re").compile(r"^['’]?\d{2}년$|^\d{4}년$")
+PERCENT_TOKEN_PATTERN = __import__("re").compile(r"^[+-]?\d+(?:\.\d+)?%$")
+BASIS_POINT_TOKEN_PATTERN = __import__("re").compile(r"^[+-]?\d+(?:\.\d+)?(?:%p|bp|bps)$")
+SIGNED_PERCENT_TOKEN_PATTERN = __import__("re").compile(r"^[+-]\d+(?:\.\d+)?%$")
+SIGNED_BASIS_POINT_TOKEN_PATTERN = __import__("re").compile(r"^[+-]\d+(?:\.\d+)?(?:%p|bp|bps)$")
+DOLLAR_TOKEN_PATTERN = __import__("re").compile(r"^\$([+-]?\d+(?:\.\d+)?)$")
+DOLLAR_B_TOKEN_PATTERN = __import__("re").compile(r"^\$([+-]?\d+(?:\.\d+)?)b$")
+CURRENCY_TOKEN_PATTERN = __import__("re").compile(
+    r"^[+-]?\d+(?:\.\d+)?(?:억달러|조달러|억|조|만|천|원|달러|톤|대|주|명|개|mw|gw|배|x)$"
+)
+BULLET_LINE_PATTERN = __import__("re").compile(r"^(?:[-*•●▶]|(?:\d+[\).]))\s*")
+TOKEN_PATTERN = __import__("re").compile(r"[a-zA-Z가-힣][a-zA-Z가-힣0-9&/+.-]*")
 SIGNAL_HINT_KEYWORDS = (
     "상장",
     "협약",
@@ -98,6 +113,29 @@ REPORT_DISCLOSURE_KEYWORDS = (
     "재배포",
     "원문 확인",
 )
+DIGEST_SOURCE_KEYWORDS = (
+    "daily",
+    "digest",
+    "review",
+    "market wrap",
+    "us daily",
+    "특징주",
+    "예습",
+    "마켓레이더",
+    "시황",
+    "데일리",
+)
+TOPIC_STOPWORDS = {
+    "daily",
+    "digest",
+    "review",
+    "market",
+    "wrap",
+    "headline",
+    "요약",
+    "시장",
+    "시황",
+}
 SUPPORTING_FACT_LIMIT = 20
 LONG_EVIDENCE_CHAR_LIMIT = 160
 EVENT_TYPE_ALIAS_MAP = {
@@ -218,10 +256,31 @@ def _extract_numeric_tokens(text: str) -> list[str]:
 
 
 def _normalize_numeric_token(token: str) -> str:
-    normalized = token.lower().replace(",", "").replace("퍼센트", "%")
-    normalized = normalized.replace(" ", "")
-    if normalized.startswith("$") and normalized.endswith("b"):
-        value = normalized[1:-1]
+    normalized = (
+        token.lower().replace(",", "").replace("퍼센트", "%").replace("’", "'").replace(" ", "")
+    )
+    dollar_match = DOLLAR_TOKEN_PATTERN.fullmatch(normalized)
+    if dollar_match:
+        return f"{dollar_match.group(1)}달러"
+    if PERCENT_TOKEN_PATTERN.fullmatch(normalized):
+        return normalized
+    if BASIS_POINT_TOKEN_PATTERN.fullmatch(normalized):
+        suffix = "bp"
+        if normalized.endswith("%p"):
+            suffix = "%p"
+        elif normalized.endswith("bps"):
+            suffix = "bps"
+        magnitude = normalized[: -len(suffix)]
+        return f"{magnitude}{suffix}"
+    year_match = YEAR_TOKEN_PATTERN.fullmatch(normalized)
+    if year_match:
+        bare = normalized.replace("'", "").replace("년", "")
+        if len(bare) == 2:
+            return f"20{bare}년"
+        return f"{bare}년"
+    dollar_b_match = DOLLAR_B_TOKEN_PATTERN.fullmatch(normalized)
+    if dollar_b_match:
+        value = dollar_b_match.group(1)
         try:
             return f"{float(value) * 10:g}억달러"
         except ValueError:
@@ -229,8 +288,56 @@ def _normalize_numeric_token(token: str) -> str:
     return normalized
 
 
+def _is_meaningful_numeric_token(token: str) -> bool:
+    if not token:
+        return False
+    if YEAR_TOKEN_PATTERN.fullmatch(token):
+        return False
+    if token.isdigit():
+        return False
+    if CURRENCY_TOKEN_PATTERN.fullmatch(token):
+        return True
+    if "%" in token or "bp" in token or "%p" in token:
+        return True
+    return bool(DOLLAR_TOKEN_PATTERN.fullmatch(token) or DOLLAR_B_TOKEN_PATTERN.fullmatch(token))
+
+
 def _source_numeric_set(source_text: str) -> set[str]:
-    return {_normalize_numeric_token(token) for token in _extract_numeric_tokens(source_text)}
+    normalized_tokens: set[str] = set()
+    for token in _extract_numeric_tokens(source_text):
+        normalized = _normalize_numeric_token(token)
+        if not _is_meaningful_numeric_token(normalized):
+            continue
+        normalized_tokens.add(normalized)
+        if SIGNED_PERCENT_TOKEN_PATTERN.fullmatch(normalized) and _has_directional_word(
+            source_text,
+            token,
+        ):
+            normalized_tokens.add(normalized.lstrip("+-"))
+        if SIGNED_BASIS_POINT_TOKEN_PATTERN.fullmatch(normalized) and _has_directional_word(
+            source_text,
+            token,
+        ):
+            normalized_tokens.add(normalized.lstrip("+-"))
+    return normalized_tokens
+
+
+def _has_directional_word(text: str, token: str) -> bool:
+    if not token:
+        return False
+    position = text.find(token)
+    if position < 0:
+        position = text.find(token.replace("+", "").replace("-", ""))
+    if position < 0:
+        return False
+    window = text[max(0, position - 20) : position + len(token) + 20]
+    if token.startswith("-"):
+        return any(
+            word in window for word in ("하락", "하향", "감소", "축소", "악화", "내림", "조정")
+        )
+    if token.startswith("+"):
+        return any(word in window for word in ("상승", "상향", "증가", "확대", "개선", "오름"))
+    return False
 
 
 def _append_warning(
@@ -288,7 +395,17 @@ def _normalize_evidence_items(
         if text in seen_texts:
             continue
         seen_texts.add(text)
-        normalized.append(EvidenceItem(kind=item.kind, text=text))
+        kind = item.kind
+        if kind == "fact":
+            evidence_numbers = {
+                normalized_token
+                for token in _extract_numeric_tokens(text)
+                for normalized_token in [_normalize_numeric_token(token)]
+                if _is_meaningful_numeric_token(normalized_token)
+            }
+            if evidence_numbers:
+                kind = "metric"
+        normalized.append(EvidenceItem(kind=kind, text=text))
         if len(normalized) >= SUPPORTING_FACT_LIMIT:
             break
 
@@ -325,6 +442,8 @@ def _compute_evidence_quality_warnings(
             )
         for token in _extract_numeric_tokens(item.text):
             normalized_token = _normalize_numeric_token(token)
+            if not _is_meaningful_numeric_token(normalized_token):
+                continue
             if normalized_token not in source_numbers:
                 _append_warning(
                     warnings,
@@ -341,6 +460,143 @@ def _compute_evidence_quality_warnings(
         )
 
     return warnings
+
+
+def _count_source_blocks(text: str) -> int:
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if not lines:
+        return 0
+    bullet_count = sum(1 for line in lines if BULLET_LINE_PATTERN.match(line))
+    section_count = sum(
+        1 for line in lines if ":" in line and 1 <= len(line.split(":", 1)[0].strip()) <= 24
+    )
+    if bullet_count:
+        return bullet_count
+    if section_count:
+        return section_count
+    if len(lines) >= 5:
+        return len(lines) - 1
+    return 1
+
+
+def _looks_digest_like_message(
+    *,
+    source_text: str,
+    structure_type: str,
+    source_block_count: int,
+) -> bool:
+    lowered = source_text.lower()
+    has_keyword = any(keyword in lowered for keyword in DIGEST_SOURCE_KEYWORDS)
+    if has_keyword and source_block_count >= 3:
+        return True
+    return structure_type in {"multi_item_digest", "market_wrap"} and source_block_count >= 5
+
+
+def _unit_topic_signature(text: str) -> str | None:
+    for token in TOKEN_PATTERN.findall(text.lower()):
+        if len(token) < 2 or token.isdigit() or token in TOPIC_STOPWORDS:
+            continue
+        return token
+    return None
+
+
+def _unit_token_set(unit: ClassifiedMessage) -> set[str]:
+    merged = " ".join([unit.canonical_summary, *unit.supporting_facts, *unit.ticker_tags])
+    tokens = {
+        token
+        for token in TOKEN_PATTERN.findall(merged.lower())
+        if len(token) >= 2 and not token.isdigit() and token not in TOPIC_STOPWORDS
+    }
+    return tokens
+
+
+def _jaccard_similarity(first: set[str], second: set[str]) -> float:
+    if not first or not second:
+        return 0.0
+    intersection = len(first & second)
+    union = len(first | second)
+    if union == 0:
+        return 0.0
+    return intersection / union
+
+
+def _apply_digest_split_qa_warnings(
+    *,
+    row: NormalizedMessage,
+    structure_type: str,
+    units: list[ClassifiedMessage],
+) -> None:
+    if not units:
+        return
+
+    source_text = (row.clean_text or row.raw_text).strip()
+    source_block_count = _count_source_blocks(source_text)
+    if (
+        len(units) == 1
+        and source_block_count >= 4
+        and _looks_digest_like_message(
+            source_text=source_text,
+            structure_type=structure_type,
+            source_block_count=source_block_count,
+        )
+    ):
+        _append_warning(
+            units[0].qa_warnings,
+            "under_split_candidate",
+            f"Digest/wrap-like source has {source_block_count} blocks but only 1 unit.",
+        )
+
+    for unit in units:
+        ticker_count = len({ticker.lower() for ticker in unit.ticker_tags if ticker.strip()})
+        evidence_count = len(unit.evidence_items)
+        topic_signatures = {
+            signature
+            for signature in [_unit_topic_signature(unit.canonical_summary)]
+            if signature is not None
+        }
+        topic_signatures.update(
+            signature
+            for signature in (_unit_topic_signature(item.text) for item in unit.evidence_items)
+            if signature is not None
+        )
+        topic_count = len(topic_signatures)
+
+        if (ticker_count >= 5 and evidence_count >= 5 and topic_count >= 4) or (
+            ticker_count >= 4 and evidence_count >= 7 and topic_count >= 5
+        ):
+            _append_warning(
+                unit.qa_warnings,
+                "over_merged_unit_candidate",
+                f"Single unit appears broad: tickers={ticker_count}, evidence={evidence_count}, topics={topic_count}.",
+            )
+
+    for left_index, left in enumerate(units):
+        left_tickers = {ticker.lower() for ticker in left.ticker_tags if ticker.strip()}
+        left_tokens = _unit_token_set(left)
+        if not left_tickers or len(left_tokens) < 6:
+            continue
+        for right_index in range(left_index + 1, len(units)):
+            right = units[right_index]
+            right_tickers = {ticker.lower() for ticker in right.ticker_tags if ticker.strip()}
+            right_tokens = _unit_token_set(right)
+            if not right_tickers or len(right_tokens) < 6:
+                continue
+            overlap_tickers = left_tickers & right_tickers
+            if not overlap_tickers:
+                continue
+            ticker_overlap_ratio = len(overlap_tickers) / min(len(left_tickers), len(right_tickers))
+            text_overlap_ratio = _jaccard_similarity(left_tokens, right_tokens)
+            if ticker_overlap_ratio >= 0.6 and text_overlap_ratio >= 0.55:
+                detail = (
+                    f"High overlap with unit {right_index}: ticker_overlap={ticker_overlap_ratio:.2f}, "
+                    f"text_overlap={text_overlap_ratio:.2f}"
+                )
+                _append_warning(left.qa_warnings, "duplicate_unit_candidate", detail)
+                _append_warning(
+                    right.qa_warnings,
+                    "duplicate_unit_candidate",
+                    detail.replace(f"unit {right_index}", f"unit {left_index}"),
+                )
 
 
 def _fallback_canonical_summary(clean_text: str) -> str:
@@ -762,6 +1018,11 @@ async def _classify_single_message(
         if normalized is None:
             continue
         classified_units.append(normalized)
+    _apply_digest_split_qa_warnings(
+        row=row,
+        structure_type=extraction.structure_type,
+        units=classified_units,
+    )
     return classified_units
 
 

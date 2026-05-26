@@ -6,6 +6,7 @@ import os
 import random
 import time
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -34,6 +35,20 @@ logger = logging.getLogger(__name__)
 
 
 MessageSelector = tuple[str, str]
+IMPORTANT_QA_WARNING_CODES: tuple[str, ...] = (
+    "unsupported_numeric",
+    "missing_metric_candidate",
+    "under_split_candidate",
+    "over_merged_unit_candidate",
+    "duplicate_unit_candidate",
+    "empty_evidence",
+    "long_evidence",
+    "unknown_evidence_kind",
+    "legacy_facts_diverged",
+)
+MAX_QA_SAMPLES_PER_CODE = 3
+MAX_TAXONOMY_SAMPLES = 5
+MAX_COMPACT_TEXT_CHARS = 100
 
 
 @dataclass(slots=True)
@@ -213,6 +228,7 @@ def _build_output_markdown(
     classified_rows: list[ClassifiedMessage],
     max_raw_chars: int,
 ) -> str:
+    warning_counts = _count_qa_warnings(classified_rows)
     lines = [
         "# Stock Report V2 Prompt Tuning",
         "",
@@ -229,10 +245,21 @@ def _build_output_markdown(
         f"- structure_type counts: `{result.structure_type_counts}`",
         f"- message_type counts: `{result.message_type_counts}`",
         f"- category counts: `{result.category_counts}`",
-        f"- qa warning counts: `{_count_qa_warnings(classified_rows)}`",
         "",
-        "## Sample Outputs",
     ]
+    lines.extend(
+        _build_qa_review_section(
+            sampled_rows=sampled_rows,
+            classified_rows=classified_rows,
+            warning_counts=warning_counts,
+        )
+    )
+    lines.extend(
+        [
+            "",
+            "## Sample Outputs",
+        ]
+    )
 
     units_by_message_id: dict[int, list[ClassifiedMessage]] = defaultdict(list)
     for unit in classified_rows:
@@ -270,6 +297,12 @@ def _build_output_markdown(
                 lines.append(f"  - main_theme: `{unit.main_theme}`")
             if unit.sub_themes:
                 lines.append(f"  - sub_themes: `{', '.join(unit.sub_themes)}`")
+            lines.append(
+                "  - provisional: "
+                f"`category={unit.provisional_category or '-'}, "
+                f"theme={unit.provisional_theme or '-'}, "
+                f"is_provisional={unit.is_provisional}`"
+            )
             if unit.ticker_tags:
                 lines.append(f"  - ticker_tags: `{', '.join(unit.ticker_tags)}`")
             for kind, evidence_texts in _group_evidence_by_kind(unit.evidence_items).items():
@@ -291,7 +324,153 @@ def _count_qa_warnings(classified_rows: list[ClassifiedMessage]) -> dict[str, in
     for unit in classified_rows:
         for warning in unit.qa_warnings:
             counts[warning.code] = counts.get(warning.code, 0) + 1
-    return counts
+    return dict(sorted(counts.items()))
+
+
+def _build_qa_review_section(
+    *,
+    sampled_rows: list[NormalizedMessage],
+    classified_rows: list[ClassifiedMessage],
+    warning_counts: dict[str, int],
+) -> list[str]:
+    lines = [
+        "## QA Review",
+        f"- warning counts by code: `{warning_counts}`",
+    ]
+    if not classified_rows:
+        lines.append("- warning samples: `none`")
+        return lines
+
+    row_by_message_id = {row.telegram_message_id: row for row in sampled_rows}
+
+    for code in IMPORTANT_QA_WARNING_CODES:
+        if warning_counts.get(code, 0) <= 0:
+            continue
+        samples = _collect_warning_samples_for_code(
+            code=code,
+            classified_rows=classified_rows,
+            row_by_message_id=row_by_message_id,
+        )
+        lines.append("")
+        lines.append(f"### warning: {code}")
+        for unit, row, warning_detail in samples[:MAX_QA_SAMPLES_PER_CODE]:
+            lines.append(
+                f"- {_format_unit_compact(unit=unit, row=row)} "
+                f"warning={code}: {_compact_text(warning_detail)}"
+            )
+
+    unclassified_units = _collect_issue_units(
+        classified_rows=classified_rows,
+        row_by_message_id=row_by_message_id,
+        predicate=lambda unit: unit.category_key == "unclassified",
+    )
+    if unclassified_units:
+        lines.append("")
+        lines.append("### taxonomy-gap samples (category_key=unclassified)")
+        for unit, row in unclassified_units[:MAX_TAXONOMY_SAMPLES]:
+            lines.append(
+                f"- {_format_unit_compact(unit=unit, row=row)} "
+                f"warnings={_format_warning_summary(unit)}"
+            )
+
+    mismatch_units = _collect_issue_units(
+        classified_rows=classified_rows,
+        row_by_message_id=row_by_message_id,
+        predicate=lambda unit: (
+            unit.category_key != "unclassified"
+            and bool(unit.provisional_category or unit.provisional_theme)
+        ),
+    )
+    if mismatch_units:
+        lines.append("")
+        lines.append("### category/provisional mismatch samples")
+        for unit, row in mismatch_units[:MAX_TAXONOMY_SAMPLES]:
+            lines.append(
+                f"- {_format_unit_compact(unit=unit, row=row)} "
+                f"warnings={_format_warning_summary(unit)}"
+            )
+
+    return lines
+
+
+def _collect_warning_samples_for_code(
+    *,
+    code: str,
+    classified_rows: list[ClassifiedMessage],
+    row_by_message_id: dict[int, NormalizedMessage],
+) -> list[tuple[ClassifiedMessage, NormalizedMessage | None, str]]:
+    samples: list[tuple[ClassifiedMessage, NormalizedMessage | None, str]] = []
+    for unit in classified_rows:
+        for warning in unit.qa_warnings:
+            if warning.code != code:
+                continue
+            row = row_by_message_id.get(unit.telegram_message_id)
+            samples.append((unit, row, warning.detail or "-"))
+    samples.sort(key=lambda entry: _unit_sort_key(entry[0], entry[1]))
+    return samples
+
+
+def _collect_issue_units(
+    *,
+    classified_rows: list[ClassifiedMessage],
+    row_by_message_id: dict[int, NormalizedMessage],
+    predicate: Callable[[ClassifiedMessage], bool],
+) -> list[tuple[ClassifiedMessage, NormalizedMessage | None]]:
+    result: list[tuple[ClassifiedMessage, NormalizedMessage | None]] = []
+    for unit in classified_rows:
+        if not predicate(unit):
+            continue
+        row = row_by_message_id.get(unit.telegram_message_id)
+        result.append((unit, row))
+    result.sort(key=lambda entry: _unit_sort_key(entry[0], entry[1]))
+    return result
+
+
+def _unit_sort_key(
+    unit: ClassifiedMessage, row: NormalizedMessage | None
+) -> tuple[str, str, int, str]:
+    channel_key = row.channel_key if row else unit.channel_key
+    channel_message_id = row.channel_message_id if row else "-"
+    return (
+        channel_key,
+        channel_message_id,
+        unit.unit_index,
+        _compact_text(unit.canonical_summary),
+    )
+
+
+def _format_unit_compact(*, unit: ClassifiedMessage, row: NormalizedMessage | None) -> str:
+    channel_key = row.channel_key if row else unit.channel_key
+    channel_message_id = row.channel_message_id if row else "-"
+    return (
+        f"[{channel_key}#{channel_message_id}] "
+        f"unit={unit.unit_index} "
+        f"cat={unit.category_key} "
+        f"main={unit.main_theme or '-'} "
+        f"prov_cat={unit.provisional_category or '-'} "
+        f"prov_theme={unit.provisional_theme or '-'} "
+        f"is_prov={unit.is_provisional} "
+        f"summary={_compact_text(unit.canonical_summary)}"
+    )
+
+
+def _format_warning_summary(unit: ClassifiedMessage) -> str:
+    if not unit.qa_warnings:
+        return "-"
+    parts = [
+        (f"{warning.code}: {_compact_text(warning.detail)}" if warning.detail else warning.code)
+        for warning in unit.qa_warnings
+    ]
+    return " | ".join(parts)
+
+
+def _compact_text(text: str | None, *, max_chars: int = MAX_COMPACT_TEXT_CHARS) -> str:
+    normalized = " ".join((text or "").split())
+    if len(normalized) <= max_chars:
+        return normalized
+    if max_chars <= 3:
+        return normalized[:max_chars]
+    return f"{normalized[: max_chars - 3]}..."
 
 
 def _group_evidence_by_kind(evidence_items: list[EvidenceItem]) -> dict[str, list[str]]:

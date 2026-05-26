@@ -221,7 +221,55 @@ def test_run_prompt_tuning_round_renders_typed_evidence_and_warning_counts(tmp_p
                     EvidenceItem(kind="market_context", text="가격 전망은 견조"),
                 ],
                 qa_warnings=[QAWarning(code="missing_metric_candidate", detail="test warning")],
-            )
+            ),
+            ClassifiedMessage(
+                telegram_message_id=row.telegram_message_id,
+                source_date=row.source_date,
+                channel_key=row.channel_key,
+                source_channel_key=row.source_channel_key,
+                processing_mode=row.processing_mode,
+                structure_type="single_topic_deep",
+                unit_index=1,
+                message_type="signal",
+                event_type="해석/전망",
+                category_key="unclassified",
+                main_theme=None,
+                provisional_category="반도체",
+                provisional_theme="AI 반도체",
+                is_provisional=False,
+                sub_themes=[],
+                ticker_tags=["Seagate"],
+                canonical_summary="카테고리 매핑 실패, 임시 테마로 분류",
+                supporting_facts=[],
+                evidence_items=[
+                    EvidenceItem(kind="fact", text="카테고리 매핑 실패"),
+                ],
+                qa_warnings=[QAWarning(code="unsupported_numeric", detail="8% 출처 없음")],
+            ),
+            ClassifiedMessage(
+                telegram_message_id=row.telegram_message_id,
+                source_date=row.source_date,
+                channel_key=row.channel_key,
+                source_channel_key=row.source_channel_key,
+                processing_mode=row.processing_mode,
+                structure_type="single_topic_deep",
+                unit_index=2,
+                message_type="signal",
+                event_type="해석/전망",
+                category_key="반도체",
+                main_theme="메모리",
+                provisional_category=None,
+                provisional_theme="HBM",
+                is_provisional=False,
+                sub_themes=[],
+                ticker_tags=["Seagate"],
+                canonical_summary="정식 카테고리지만 임시 테마가 남아 있음",
+                supporting_facts=[],
+                evidence_items=[
+                    EvidenceItem(kind="fact", text="HBM 수급 기대"),
+                ],
+                qa_warnings=[QAWarning(code="duplicate_unit_candidate", detail="요약 중복 가능")],
+            ),
         ]
 
     monkeypatch.setattr("src.pipelines.stock_report.tuning.classify_messages", _fake_classify)
@@ -239,7 +287,19 @@ def test_run_prompt_tuning_round_renders_typed_evidence_and_warning_counts(tmp_p
         max_raw_chars=200,
     )
 
-    assert "- qa warning counts: `{'missing_metric_candidate': 1}`" in result.output_markdown
+    assert "## QA Review" in result.output_markdown
+    assert (
+        "- warning counts by code: "
+        "`{'duplicate_unit_candidate': 1, 'missing_metric_candidate': 1, 'unsupported_numeric': 1}`"
+    ) in result.output_markdown
+    assert "### warning: missing_metric_candidate" in result.output_markdown
+    assert "### warning: unsupported_numeric" in result.output_markdown
+    assert "### warning: duplicate_unit_candidate" in result.output_markdown
+    assert "### taxonomy-gap samples (category_key=unclassified)" in result.output_markdown
+    assert "### category/provisional mismatch samples" in result.output_markdown
+    assert "prov_theme=AI 반도체 is_prov=False" in result.output_markdown
+    assert "prov_theme=HBM is_prov=False" in result.output_markdown
+    assert "warning=unsupported_numeric: 8% 출처 없음" in result.output_markdown
     assert "- evidence_items.metric: `Seagate 주가는 8% 하락`" in result.output_markdown
     assert "- evidence_items.market_context: `가격 전망은 견조`" in result.output_markdown
     assert "- qa_warnings: `missing_metric_candidate: test warning`" in result.output_markdown

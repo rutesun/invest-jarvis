@@ -36,6 +36,10 @@ def test_system_prompt_requires_market_wrap_split_when_narratives_differ():
         "`category_key`는 이벤트 종류가 아니라 투자 내러티브/섹터"
         in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
     )
+    assert (
+        "원인(원자재/매크로)보다 실제 수혜/피해를 받는 타깃 섹터를 우선"
+        in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
+    )
     assert "event_type" in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
     assert "evidence_items" in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
     assert "supporting_facts" not in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
@@ -47,6 +51,8 @@ def test_system_prompt_requires_market_wrap_split_when_narratives_differ():
     assert "원문보다 더 길게 확장" in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
     assert "80자 이내" in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
     assert "최소 1개 이상 반드시 포함" in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
+    assert "부호(+/-)와 단위" in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
+    assert "`fact`보다 `metric`을 우선" in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
 
 
 def test_user_prompt_mentions_market_wrap_multi_narrative_split():
@@ -59,3 +65,18 @@ def test_user_prompt_mentions_market_wrap_multi_narrative_split():
     assert "주제가 다르면 unit을 나눈다" in prompt
     assert "내러티브/섹터" in prompt
     assert "event_type" in prompt
+
+
+def test_prompts_require_digest_headline_preservation_and_independent_block_split():
+    prompt = build_semantic_extraction_user_prompt(
+        _normalized_message(),
+        taxonomy_outline="- 반도체: 메모리\n- 매크로/정책: 환율/원자재",
+    )
+
+    assert (
+        "Daily/Digest/Review/특징주/예습/마켓레이더/US Daily" in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
+    )
+    assert "시장 전체 headline/내러티브를 별도 unit으로 보존" in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
+    assert "독립 bullet/section/company block은 각각 분리" in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
+    assert "시장 headline unit" in prompt
+    assert "bullet/section/company block" in prompt

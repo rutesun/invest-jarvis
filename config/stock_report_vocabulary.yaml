@@ -1,6 +1,6 @@
 categories:
   - key: "AI인프라"
-    aliases: ["AI 인프라", "AI infra", "AI", "AI 데이터센터", "AI 클라우드", "하이퍼스케일러"]
+    aliases: ["AI 인프라", "AI infra", "AI infrastructure", "AI", "AI 데이터센터", "AI 클라우드", "하이퍼스케일러", "광통신", "optical networking"]
     themes:
       - key: "AI 데이터센터 전력"
         aliases: ["데이터센터 전력", "AI 전력", "AI DC 전력", "하이퍼스케일러 전력", "전력 인프라"]
@@ -8,6 +8,8 @@ categories:
         aliases: ["클라우드", "cloud", "saas", "AI 클라우드", "GPU 클러스터"]
       - key: "AI 반도체"
         aliases: ["AI 칩", "NPU", "GPU", "가속기"]
+      - key: "광통신/네트워크"
+        aliases: ["광통신", "optical networking", "optical network", "광네트워크", "광트랜시버", "coherent optics", "cpo", "데이터센터 네트워크"]
 
   - key: "반도체"
     aliases: ["Semiconductor", "semiconductor"]
@@ -55,11 +57,43 @@ categories:
       - key: "자본조달/전환사채"
         aliases: ["자본조달", "전환사채", "전환선순위채권", "CB", "capped call"]
 
+  - key: "금융상품"
+    aliases: ["금융상품", "ETF", "ETN", "상장지수펀드", "현물 ETF", "펀드 출시", "ETF 출시", "ETF 등록", "ETF 상장"]
+    themes:
+      - key: "ETF/ETN"
+        aliases: ["ETF", "ETN", "현물 ETF", "레버리지 ETF", "인버스 ETF", "테마 ETF", "액티브 ETF"]
+
+  - key: "소프트웨어/SaaS"
+    aliases: ["소프트웨어", "software", "enterprise software", "SaaS", "application software", "앱 소프트웨어"]
+    themes:
+      - key: "엔터프라이즈 소프트웨어"
+        aliases: ["엔터프라이즈 소프트웨어", "소프트웨어", "business software", "CRM", "ERP", "워크플로우 소프트웨어"]
+      - key: "핀테크 소프트웨어"
+        aliases: ["핀테크 소프트웨어", "금융 소프트웨어", "재무 소프트웨어", "세무 소프트웨어", "Intuit", "퀵북스", "TurboTax"]
+
+  - key: "디스플레이/광학"
+    aliases: ["디스플레이", "display", "광학", "광학부품", "스마트글라스", "AR 글라스", "AI 글라스"]
+    themes:
+      - key: "AR/스마트글라스"
+        aliases: ["AR 글라스", "AI 글라스", "스마트글라스", "AR 안경", "XR 글라스"]
+      - key: "OLED/마이크로디스플레이"
+        aliases: ["OLED", "마이크로 OLED", "microdisplay", "실리콘 카바이드 OLED", "near-eye display"]
+
+  - key: "산업재/기계"
+    aliases: ["산업재", "기계", "machinery", "industrial", "산업장비", "설비투자", "농기계"]
+    themes:
+      - key: "농기계"
+        aliases: ["농기계", "agriculture machinery", "ag machinery", "농업기계", "트랙터", "콤바인", "Deere", "John Deere"]
+      - key: "건설기계/중장비"
+        aliases: ["건설기계", "중장비", "굴삭기", "로더", "크레인", "건설장비"]
+      - key: "공장자동화 장비"
+        aliases: ["FA 장비", "자동화 장비", "산업 자동화 장비", "생산설비", "공정장비"]
+
   - key: "암호화폐"
-    aliases: ["암호화폐", "가상자산", "디지털자산", "비트코인", "이더리움", "crypto"]
+    aliases: ["암호화폐", "가상자산", "디지털자산", "비트코인", "이더리움", "비트코인 현물 ETF", "이더리움 현물 ETF", "crypto"]
     themes:
       - key: "비트코인/이더리움"
-        aliases: ["BTC", "Bitcoin", "ETH", "Ethereum", "현물 ETF"]
+        aliases: ["BTC", "Bitcoin", "ETH", "Ethereum", "비트코인 현물 ETF", "이더리움 현물 ETF"]
       - key: "스테이블코인/결제"
         aliases: ["스테이블코인", "stablecoin", "USDT", "USDC", "온체인 결제"]
       - key: "거래소/규제"
@@ -90,7 +124,7 @@ categories:
         aliases: ["원료가 변동", "나프타 가격", "원가 변동성"]
 
   - key: "철강/소재"
-    aliases: ["철강", "철강금속", "금속", "소재", "steel", "metals"]
+    aliases: ["철강", "철강금속", "금속", "소재", "steel", "metals", "희토류", "핵심광물"]
     themes:
       - key: "철강 관세/무역"
         aliases: ["철강 관세", "수입 철강", "무역 규제", "통상 규제", "반덤핑"]
@@ -100,6 +134,8 @@ categories:
         aliases: ["철강 가격", "제품가 인상", "HRC", "열연", "스프레드 개선"]
       - key: "산업광물/특수소재"
         aliases: ["산업광물", "특수소재", "희소광물", "광물 매장량", "소재 인증"]
+      - key: "희토류/핵심광물"
+        aliases: ["희토류", "핵심광물", "core minerals", "critical minerals", "rare earth", "희토류 자석", "전략광물"]
 
   - key: "자동차"
     aliases: ["자동차", "완성차", "전기차", "EV", "모빌리티", "auto", "automotive"]
@@ -138,18 +174,38 @@ categories:
         aliases: ["해외사업 개선", "자회사 손익 개선", "해외 수익성 개선"]
 
   - key: "운송/물류"
-    aliases: ["운송", "물류", "해운", "항공", "항공화물", "shipping", "logistics"]
+    aliases: ["운송", "물류", "해운", "항공", "항공주", "여행", "travel", "항공화물", "shipping", "logistics"]
     themes:
       - key: "해운 운임/선복"
         aliases: ["컨테이너선", "선복", "용선", "해상운임", "운임 하락", "운임 상승"]
       - key: "자동차운반선/PCTC"
         aliases: ["PCTC", "자동차운반선", "완성차 물류", "자동차 물동량"]
-      - key: "항공 여객/화물"
-        aliases: ["항공 여객", "항공화물", "대형항공사", "유류할증료"]
+      - key: "항공/여행"
+        aliases: ["항공 여객", "항공화물", "대형항공사", "유류할증료", "항공주", "여행주", "여행 수요", "항공 여행", "LCC"]
       - key: "연료비/BAF"
         aliases: ["연료비", "BAF", "유가 상승", "벙커유", "비용 전가"]
       - key: "벌크/원자재 운송"
         aliases: ["벌크선", "건화물", "BDI", "원자재 운송"]
+
+  - key: "원전/전력인프라"
+    aliases: ["원전", "원자력", "nuclear", "SMR", "소형모듈원전", "전력인프라", "전력망"]
+    themes:
+      - key: "원전/SMR"
+        aliases: ["원전", "SMR", "소형모듈원전", "advanced reactor", "TerraPower", "X-energy", "NuScale"]
+      - key: "원전 밸류체인"
+        aliases: ["핵연료", "원전 기자재", "원전 EPC", "원전 건설", "원전 운영"]
+      - key: "송배전/그리드"
+        aliases: ["송전망", "배전망", "전력망 투자", "grid modernization", "변압기", "초고압"]
+
+  - key: "조선/LNG기자재"
+    aliases: ["조선", "조선기자재", "LNG 기자재", "shipbuilding", "LNG선", "선박 기자재", "LNG 보냉자재"]
+    themes:
+      - key: "LNG 화물창/보냉"
+        aliases: ["LNG 화물창", "LNG 보냉자재", "보냉재", "cargo hold insulation", "LNG insulation", "멤브레인", "한국카본"]
+      - key: "선박 수주/건조"
+        aliases: ["선박 수주", "신조선가", "조선소 수주잔고", "도크 가동률", "건조 슬롯"]
+      - key: "해양플랜트/특수선"
+        aliases: ["해양플랜트", "LNG-FSRU", "해군함정", "특수선", "해양 엔지니어링"]
 
   - key: "방산"
     aliases: ["방산", "방위산업", "국방", "무기체계", "defense"]

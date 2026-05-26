@@ -83,6 +83,48 @@ def _group_evidence_by_kind(evidence_items: list[dict[str, Any]]) -> dict[str, l
     return grouped
 
 
+def _count_warning_codes(chunks: list[ChunkRow]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for chunk in chunks:
+        for warning in chunk.qa_warnings:
+            code = str(warning.get("code") or "-")
+            counts[code] = counts.get(code, 0) + 1
+    return dict(sorted(counts.items()))
+
+
+def _taxonomy_issue_summary(chunks: list[ChunkRow]) -> tuple[str, str] | None:
+    unclassified_count = 0
+    provisional_fields_count = 0
+    mismatch_count = 0
+    samples: list[str] = []
+    for idx, chunk in enumerate(chunks, start=1):
+        has_provisional = bool(chunk.provisional_category or chunk.provisional_theme)
+        is_unclassified = chunk.category_key == "unclassified"
+        is_mismatch = chunk.category_key != "unclassified" and has_provisional
+        if is_unclassified:
+            unclassified_count += 1
+        if has_provisional:
+            provisional_fields_count += 1
+        if is_mismatch:
+            mismatch_count += 1
+        if not (is_unclassified or has_provisional):
+            continue
+        samples.append(
+            f"u{idx}(cat={chunk.category_key}, main={chunk.main_theme or '-'}, "
+            f"prov_cat={chunk.provisional_category or '-'}, "
+            f"prov_theme={chunk.provisional_theme or '-'}, "
+            f"is_provisional={chunk.is_provisional})"
+        )
+    if not samples:
+        return None
+    summary = (
+        "unclassified="
+        f"{unclassified_count}, provisional_fields={provisional_fields_count}, "
+        f"category_provisional_mismatch={mismatch_count}"
+    )
+    return summary, "; ".join(samples[:3])
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Show stock_report knowledge_chunks grouped by message(source_pk)."
@@ -217,6 +259,12 @@ def render_grouped(chunks: list[ChunkRow]) -> str:
             lines.append("- content_preview:")
             for line in preview_lines:
                 lines.append(f"  {line}")
+        lines.append(f"- message_qa.warning_counts: {_count_warning_codes(items)}")
+        taxonomy_summary = _taxonomy_issue_summary(items)
+        if taxonomy_summary:
+            taxonomy_counts, taxonomy_samples = taxonomy_summary
+            lines.append(f"- message_qa.taxonomy: {taxonomy_counts}")
+            lines.append(f"- message_qa.taxonomy_samples: {taxonomy_samples}")
         lines.append("")
 
         for idx, item in enumerate(items, start=1):

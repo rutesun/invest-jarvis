@@ -16,6 +16,8 @@ SEMANTIC_EXTRACTION_SYSTEM_PROMPT = dedent(
     - 장 마감 시황/섹터 wrap은 `market_wrap`으로 처리한다.
     - `market_wrap`이라도 서로 다른 핵심 내러티브가 2개 이상이면 unit을 분리한다.
       예: 반도체 랠리 / 유가 급등 / 한국 증시 반응은 각각 별도 unit 후보다.
+    - Daily/Digest/Review/특징주/예습/마켓레이더/US Daily 형태의 다중 아이템 메시지는
+      시장 전체 headline/내러티브를 별도 unit으로 보존하고, 독립 bullet/section/company block은 각각 분리한다.
     - 공지/채널 운영/홍보는 `notice`로 처리한다.
     - 증권사 리포트의 공표 승인/배포 제한/저작권 문구는 하단 고지일 뿐이다.
       본문이 기업 분석/실적 전망이면 하단 고지 때문에 `admin`으로 분류하지 않는다.
@@ -26,6 +28,9 @@ SEMANTIC_EXTRACTION_SYSTEM_PROMPT = dedent(
       - `admin`: 채널 운영 공지/구독/안내
     - `category_key`는 이벤트 종류가 아니라 투자 내러티브/섹터를 고른다.
       예: AI 인프라 기업의 전환사채 이슈는 `category_key=AI인프라`, `event_type=자본조달`.
+    - 원인(원자재/매크로)보다 실제 수혜/피해를 받는 타깃 섹터를 우선한다.
+      예: 유가 하락으로 항공주가 수혜면 `category_key=운송/물류`, `event_type=가격/마진`.
+      예: ETF 출시/등록 자체 뉴스면 `category_key=금융상품`, 기반 자산 테마는 근거/설명으로 남긴다.
     - 숫자가 있다고 항상 `data`로 두지 말고, 사건성이 강하면 `signal`을 우선한다.
 
     출력 규칙:
@@ -45,6 +50,8 @@ SEMANTIC_EXTRACTION_SYSTEM_PROMPT = dedent(
     - `market_context`: 숫자만 보면 안 보이는 시장/산업/가격/규제/계약 배경.
     - `author_comment`: 본문과 분리된 작성자 해석/추가 메모.
     - `evidence_items`는 중복을 제거하되, 원문에 있는 투자 논리와 핵심 수치를 빠뜨리지 않는다.
+    - 수치 근거는 원문의 부호(+/-)와 단위(%, %p, $, 억/조, 달러)를 가능한 그대로 보존한다.
+    - 원문에 명시적 수치가 있으면 해당 근거는 `fact`보다 `metric`을 우선 사용한다.
     - `evidence_items.text`는 원문에 근거가 있는 짧은 추출형 문장으로 작성한다.
       원문보다 더 길게 확장하거나, 원문에 없는 시장 영향/수혜/리스크를 새로 추론하지 않는다.
     - 각 `evidence_items.text` 항목은 가능하면 80자 이내로 쓴다.
@@ -91,6 +98,8 @@ def build_semantic_extraction_user_prompt(
         - `multi_item_digest`: 서로 독립적인 기사/회사/이벤트가 한 메시지에 나열된 경우
         - `market_wrap`: 하루 시황/섹터 흐름을 묶은 경우
         - `market_wrap`에서도 반도체 랠리, 유가/지정학, 국내 증시 반응처럼 주제가 다르면 unit을 나눈다
+        - Daily/Digest/Review/특징주/예습/마켓레이더/US Daily 다중 아이템 메시지는 시장 headline unit을 먼저 따로 두고,
+          남은 독립 bullet/section/company block을 각각 분리한다
         - `notice`: 운영 공지, 채널 안내, 구독 유도
         - 사건성 기사형 아이템(상장/수주/협약/인증/정책발표 등)은 기본적으로 `signal` 우선
         - `category_key`는 내러티브/섹터, `event_type`은 촉발 이벤트 축으로 분리한다
