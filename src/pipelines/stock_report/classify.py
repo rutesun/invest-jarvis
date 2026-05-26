@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 MULTISPACE_PATTERN = __import__("re").compile(r"\s+")
 NUMERIC_PATTERN = __import__("re").compile(r"[0-9]|%|[+-][0-9]")
 NUMERIC_TOKEN_PATTERN = __import__("re").compile(
-    r"\$?[+-]?\d[\d,]*(?:\.\d+)?(?:\s?(?:퍼센트|%|%p|bp|bps|x|배|억달러|조달러|억|조|만|천|원|달러|톤|대|주|명|개|MW|GW|년|B))?",
+    r"\$?[+-]?\d[\d,]*(?:\.\d+)?(?:\s?(?:퍼센트|%|%p|bp|bps|x|배|억달러|조달러|억|조|만|천|원|달러|톤|대|주|명|개월|개|MW|GW|년|B))?",
     __import__("re").IGNORECASE,
 )
 INDEX_LABEL_PATTERN = __import__("re").compile(
@@ -71,6 +71,31 @@ CURRENCY_TOKEN_PATTERN = __import__("re").compile(
 )
 BULLET_LINE_PATTERN = __import__("re").compile(r"^(?:[-*•●▶]|(?:\d+[\).]))\s*")
 TOKEN_PATTERN = __import__("re").compile(r"[a-zA-Z가-힣][a-zA-Z가-힣0-9&/+.-]*")
+NUMERIC_UNIT_SUFFIXES = (
+    "퍼센트",
+    "%",
+    "%p",
+    "bp",
+    "bps",
+    "x",
+    "배",
+    "억달러",
+    "조달러",
+    "억",
+    "조",
+    "만",
+    "천",
+    "원",
+    "달러",
+    "톤",
+    "대",
+    "주",
+    "명",
+    "개",
+    "mw",
+    "gw",
+    "b",
+)
 SIGNAL_HINT_KEYWORDS = (
     "상장",
     "협약",
@@ -136,6 +161,21 @@ TOPIC_STOPWORDS = {
     "시장",
     "시황",
 }
+OVER_MERGED_LIST_LIKE_KEYWORDS = (
+    "집계",
+    "일괄",
+    "리스트",
+    "일정",
+    "캘린더",
+    "공모청약",
+    "변경상장",
+    "추가상장",
+    "보호예수",
+    "주가",
+    "등락률",
+    "밸류체인",
+    "종목",
+)
 SUPPORTING_FACT_LIMIT = 20
 LONG_EVIDENCE_CHAR_LIMIT = 160
 EVENT_TYPE_ALIAS_MAP = {
@@ -223,6 +263,17 @@ def _normalize_event_type(value: str | None) -> str | None:
 
 
 def _extract_numeric_tokens(text: str) -> list[str]:
+    """원문 텍스트에서 숫자 후보 토큰을 추출한다.
+
+    필요한 이유:
+    - LLM 추출 결과를 QA할 때, 원문 기준의 결정적 숫자 기준선이 필요하다.
+    - 원문에는 날짜/URL/전화번호/종목코드처럼 숫자 모양 노이즈가 많아서
+      이를 먼저 제거하지 않으면 경고가 과다 발생한다.
+
+    목적:
+    - metric 검증 가치가 있는 숫자 후보를 중복 없이 수집한다.
+    - 여기서는 후보를 넓게 잡고, 실제 유의미성 판단은 후속 필터에 위임한다.
+    """
     if not text:
         return []
 
@@ -246,6 +297,7 @@ def _extract_numeric_tokens(text: str) -> list[str]:
             and "퍼센트" not in token
             and not lowered.startswith("$")
             and not lowered.endswith("b")
+            and not _has_numeric_unit_suffix(lowered)
         ):
             continue
         if lowered in seen:
@@ -253,6 +305,10 @@ def _extract_numeric_tokens(text: str) -> list[str]:
         seen.add(lowered)
         tokens.append(token)
     return tokens
+
+
+def _has_numeric_unit_suffix(token: str) -> bool:
+    return any(token.endswith(suffix) for suffix in NUMERIC_UNIT_SUFFIXES)
 
 
 def _normalize_numeric_token(token: str) -> str:
@@ -307,6 +363,70 @@ def _source_numeric_set(source_text: str) -> set[str]:
     for token in _extract_numeric_tokens(source_text):
         normalized = _normalize_numeric_token(token)
         if not _is_meaningful_numeric_token(normalized):
+            continue
+        normalized_tokens.add(normalized)
+        if SIGNED_PERCENT_TOKEN_PATTERN.fullmatch(normalized) and _has_directional_word(
+            source_text,
+            token,
+        ):
+            normalized_tokens.add(normalized.lstrip("+-"))
+        if SIGNED_BASIS_POINT_TOKEN_PATTERN.fullmatch(normalized) and _has_directional_word(
+            source_text,
+            token,
+        ):
+            normalized_tokens.add(normalized.lstrip("+-"))
+    return normalized_tokens
+
+
+def _is_temporal_numeric_candidate(source_text: str, token: str, normalized_token: str) -> bool:
+    """투자 metric으로 보면 안 되는 일정/시간성 숫자를 탐지한다.
+
+    필요한 이유:
+    - "30일", "12차", "3주 후" 같은 값은 대개 운영 일정이다.
+    - 이를 metric으로 취급하면 `missing_metric_candidate`와 fact->metric 승격이
+      불필요하게 많이 발생한다.
+
+    목적:
+    - 숫자 토큰 주변 문맥에서 시간/일정 표현을 감지해 metric 후보에서 제외한다.
+    """
+    if normalized_token.endswith("개"):
+        position = source_text.find(token)
+        if position < 0:
+            position = source_text.find(token.replace("+", "").replace("-", ""))
+        if position >= 0:
+            trailing = source_text[position + len(token) : position + len(token) + 1]
+            if trailing in {"년", "월", "일", "시", "분", "초", "차", "회", "기"}:
+                return True
+
+    if normalized_token.endswith("주"):
+        position = source_text.find(token)
+        if position < 0:
+            position = source_text.find(token.replace("+", "").replace("-", ""))
+        if position >= 0:
+            trailing = source_text[position + len(token) : position + len(token) + 6].lstrip()
+            if trailing.startswith(("후", "뒤", "내", "간", "동안", "째")):
+                return True
+
+    return False
+
+
+def _metric_candidate_set(source_text: str) -> set[str]:
+    """metric처럼 취급할 숫자 토큰의 정규화 집합을 만든다.
+
+    필요한 이유:
+    - 다음 두 로직이 같은 숫자 기준을 써야 QA 일관성이 유지된다.
+      1) evidence `fact -> metric` 승격
+      2) `missing_metric_candidate` 경고 판단
+
+    목적:
+    - 정규화 + 시간성 노이즈 제거를 거친 유의미 숫자 집합을 반환한다.
+    """
+    normalized_tokens: set[str] = set()
+    for token in _extract_numeric_tokens(source_text):
+        normalized = _normalize_numeric_token(token)
+        if not _is_meaningful_numeric_token(normalized):
+            continue
+        if _is_temporal_numeric_candidate(source_text, token, normalized):
             continue
         normalized_tokens.add(normalized)
         if SIGNED_PERCENT_TOKEN_PATTERN.fullmatch(normalized) and _has_directional_word(
@@ -397,12 +517,7 @@ def _normalize_evidence_items(
         seen_texts.add(text)
         kind = item.kind
         if kind == "fact":
-            evidence_numbers = {
-                normalized_token
-                for token in _extract_numeric_tokens(text)
-                for normalized_token in [_normalize_numeric_token(token)]
-                if _is_meaningful_numeric_token(normalized_token)
-            }
+            evidence_numbers = _metric_candidate_set(text)
             if evidence_numbers:
                 kind = "metric"
         normalized.append(EvidenceItem(kind=kind, text=text))
@@ -417,19 +532,38 @@ def _normalize_evidence_items(
 def _compute_evidence_quality_warnings(
     *,
     row: NormalizedMessage,
+    structure_type: str,
     raw_message_type: str,
     normalized_message_type: str,
+    canonical_summary: str,
+    ticker_tags: list[str],
     evidence_items: list[EvidenceItem],
 ) -> list[QAWarning]:
+    """evidence 품질 관련 결정적 QA 경고를 계산한다.
+
+    필요한 이유:
+    - LLM 추출 품질은 메시지 타입마다 흔들릴 수 있으므로
+      실행 간 일관된 DB 모니터링용 가드레일이 필요하다.
+
+    목적:
+    - 숫자 근거 지원 여부, evidence 길이, admin/content 충돌을 검증한다.
+    - 구조 타입별 숫자 범위를 달리 적용해 오탐을 줄인다.
+    """
     warnings: list[QAWarning] = []
     source_numbers = _source_numeric_set(f"{row.raw_text}\n{row.clean_text}")
+    local_numbers = _metric_candidate_set(
+        "\n".join([canonical_summary, *[item.text for item in evidence_items], *ticker_tags])
+    )
+    # single_topic_deep는 보통 단일 논지를 다루므로 원문 전체 숫자 범위를 사용한다.
+    # digest/wrap는 무관한 숫자가 섞이기 쉬워 unit 로컬 텍스트로 범위를 제한한다.
+    candidate_numbers = source_numbers if structure_type == "single_topic_deep" else local_numbers
     has_metric = any(item.kind == "metric" for item in evidence_items)
 
-    if source_numbers and not has_metric:
+    if candidate_numbers and not has_metric:
         _append_warning(
             warnings,
             "missing_metric_candidate",
-            "Source contains numeric candidates but the unit has no metric evidence.",
+            "Metric numeric candidates exist but the unit has no metric evidence.",
         )
 
     for index, item in enumerate(evidence_items):
@@ -485,6 +619,12 @@ def _looks_digest_like_message(
     structure_type: str,
     source_block_count: int,
 ) -> bool:
+    """원문이 digest/wrap 형태인지 추정하는 휴리스틱이다.
+
+    필요한 이유:
+    - under-split 경고는 원문 포맷이 실제로 digest에 가까울 때만 의미가 있다.
+    - LLM의 structure_type만 보면 원문 포맷 신호를 놓칠 수 있다.
+    """
     lowered = source_text.lower()
     has_keyword = any(keyword in lowered for keyword in DIGEST_SOURCE_KEYWORDS)
     if has_keyword and source_block_count >= 3:
@@ -510,6 +650,57 @@ def _unit_token_set(unit: ClassifiedMessage) -> set[str]:
     return tokens
 
 
+def _bool_text(value: bool) -> str:
+    return "true" if value else "false"
+
+
+def _list_like_signals(text: str) -> list[str]:
+    lowered = text.lower()
+    return [keyword for keyword in OVER_MERGED_LIST_LIKE_KEYWORDS if keyword.lower() in lowered]
+
+
+def _format_over_merged_detail(
+    *,
+    source_text: str,
+    structure_type: str,
+    source_block_count: int,
+    digest_like: bool,
+    unit: ClassifiedMessage,
+    ticker_count: int,
+    evidence_count: int,
+    topic_count: int,
+) -> str:
+    """`over_merged_unit_candidate`를 위한 사람이 읽기 쉬운 진단 문자열을 만든다.
+
+    필요한 이유:
+    - over-merged는 자동 분할이 아니라 경고로 유지하는 전략이다.
+    - 운영자가 원문 재탐색 없이도 split_needed / broad_list / extraction_noise를
+      빠르게 라벨링할 수 있어야 한다.
+    """
+    unit_text = "\n".join(
+        [
+            source_text,
+            unit.canonical_summary,
+            *[item.text for item in unit.evidence_items],
+            *unit.ticker_tags,
+        ]
+    )
+    list_signals = _list_like_signals(unit_text)
+    sample_tickers = [ticker.strip() for ticker in unit.ticker_tags if ticker.strip()][:5]
+    return (
+        "Single unit appears broad: "
+        f"structure={structure_type}, "
+        f"source_blocks={source_block_count}, "
+        f"digest_like={_bool_text(digest_like)}, "
+        f"list_like={_bool_text(bool(list_signals))}, "
+        f"tickers={ticker_count}, "
+        f"evidence={evidence_count}, "
+        f"topics={topic_count}, "
+        f"sample_tickers={','.join(sample_tickers) if sample_tickers else '-'}, "
+        f"list_signals={','.join(list_signals) if list_signals else '-'}."
+    )
+
+
 def _jaccard_similarity(first: set[str], second: set[str]) -> float:
     if not first or not second:
         return 0.0
@@ -526,20 +717,28 @@ def _apply_digest_split_qa_warnings(
     structure_type: str,
     units: list[ClassifiedMessage],
 ) -> None:
+    """unit 정규화 이후 구조적 QA 경고를 부착한다.
+
+    필요한 이유:
+    - LLM은 under-split(여러 블록을 1 unit으로 축약) 또는
+      over-merge(여러 주제/티커를 1 unit에 과도 결합) 오류를 낼 수 있다.
+    - 이 단계에서는 unit을 변경하지 않고 경고만 남겨 운영 루프가 판단하게 한다.
+
+    목적:
+    - 결정적 휴리스틱으로 `under_split_candidate`,
+      `over_merged_unit_candidate`, `duplicate_unit_candidate`를 발생시킨다.
+    """
     if not units:
         return
 
     source_text = (row.clean_text or row.raw_text).strip()
     source_block_count = _count_source_blocks(source_text)
-    if (
-        len(units) == 1
-        and source_block_count >= 4
-        and _looks_digest_like_message(
-            source_text=source_text,
-            structure_type=structure_type,
-            source_block_count=source_block_count,
-        )
-    ):
+    digest_like = _looks_digest_like_message(
+        source_text=source_text,
+        structure_type=structure_type,
+        source_block_count=source_block_count,
+    )
+    if len(units) == 1 and source_block_count >= 4 and digest_like:
         _append_warning(
             units[0].qa_warnings,
             "under_split_candidate",
@@ -567,7 +766,16 @@ def _apply_digest_split_qa_warnings(
             _append_warning(
                 unit.qa_warnings,
                 "over_merged_unit_candidate",
-                f"Single unit appears broad: tickers={ticker_count}, evidence={evidence_count}, topics={topic_count}.",
+                _format_over_merged_detail(
+                    source_text=source_text,
+                    structure_type=structure_type,
+                    source_block_count=source_block_count,
+                    digest_like=digest_like,
+                    unit=unit,
+                    ticker_count=ticker_count,
+                    evidence_count=evidence_count,
+                    topic_count=topic_count,
+                ),
             )
 
     for left_index, left in enumerate(units):
@@ -806,6 +1014,17 @@ def _normalize_unit(
     category_map: dict[str, str],
     theme_map: dict[str, tuple[str, str]],
 ) -> ClassifiedMessage | None:
+    """LLM semantic unit 1개를 파이프라인 표준 레코드로 정규화한다.
+
+    필요한 이유:
+    - LLM 출력은 의미는 풍부하지만 저장/조회 관점의 엄격한 스키마와 다를 수 있다.
+    - downstream 저장/리포팅은 정규화된 category/theme/message_type과
+      결정적 QA 메타데이터를 기대한다.
+
+    목적:
+    - taxonomy 키 정규화, evidence/event/message_type 정규화,
+      provisional overlay 매칭, QA 경고 계산을 한 지점에서 수행한다.
+    """
     canonical_summary = raw_unit.canonical_summary.strip()
     if not canonical_summary:
         return None
@@ -883,8 +1102,11 @@ def _normalize_unit(
     qa_warnings.extend(
         _compute_evidence_quality_warnings(
             row=row,
+            structure_type=structure_type,
             raw_message_type=raw_unit.message_type,
             normalized_message_type=message_type,
+            canonical_summary=canonical_summary,
+            ticker_tags=ticker_tags,
             evidence_items=evidence_items,
         )
     )
@@ -984,6 +1206,12 @@ async def _classify_single_message(
     semaphore: asyncio.Semaphore,
     system_prompt: str,
 ) -> list[ClassifiedMessage]:
+    """메시지 1건에 대해 semantic 추출 + 정규화를 수행하고 실패 시 안전 복구한다.
+
+    필요한 이유:
+    - 배치 분류는 개별 메시지 LLM 실패에 견고해야 한다.
+    - 단일 메시지 오류가 일일 배치 전체 실패로 번지면 안 된다.
+    """
     if row.processing_mode == "skip" or not row.clean_text.strip():
         return []
 
@@ -1033,6 +1261,12 @@ async def _classify_messages_async(
     provider: str,
     system_prompt: str,
 ) -> list[ClassifiedMessage]:
+    """메시지 배치를 동시 분류하고 메시지별 unit 결과를 평탄화한다.
+
+    필요한 이유:
+    - 일일 실행은 메시지 수가 많아 안정적인 제한 동시성이 필요하다.
+    - 실행 시간/로그/처리량 제어를 한 곳에서 관리해야 운영이 쉽다.
+    """
     started_at = time.perf_counter()
     category_map, theme_map = build_match_dictionary(taxonomy)
     logger.info(
@@ -1073,6 +1307,11 @@ def classify_messages(
     provider: str,
     system_prompt: str | None = None,
 ) -> list[ClassifiedMessage]:
+    """pipeline/CLI가 사용하는 동기 엔트리포인트다.
+
+    목적:
+    - 외부 호출부는 단순하게 유지하고, 실제 분류 작업은 async 구현에 위임한다.
+    """
     if not normalized_messages:
         return []
     resolved_system_prompt = system_prompt or SEMANTIC_EXTRACTION_SYSTEM_PROMPT

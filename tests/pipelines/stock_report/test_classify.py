@@ -157,7 +157,7 @@ def test_classify_converts_legacy_supporting_facts_to_fact_evidence(monkeypatch)
     assert len(result) == 1
     assert result[0].supporting_facts == ["최대 5GW 규모 AI 인프라 배치를 지원할 계획"]
     assert result[0].evidence_items == [
-        EvidenceItem(kind="fact", text="최대 5GW 규모 AI 인프라 배치를 지원할 계획")
+        EvidenceItem(kind="metric", text="최대 5GW 규모 AI 인프라 배치를 지원할 계획")
     ]
 
 
@@ -457,6 +457,307 @@ def test_classify_numeric_qa_ignores_date_range_and_schedule_dates(monkeypatch):
     warning_codes = [warning.code for warning in result[0].qa_warnings]
     assert "unsupported_numeric" not in warning_codes
     assert "missing_metric_candidate" not in warning_codes
+
+
+def test_classify_missing_metric_candidate_uses_unit_local_text_for_schedule(monkeypatch):
+    taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
+    row = _normalized_message(
+        "DB손보, 미국 보험사 포테그라 인수 30일 마무리",
+        raw_text="- 엔비디아 가이던스 +13.4% 상향\n- DB손보, 미국 보험사 포테그라 인수 30일 마무리",
+    )
+
+    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+        return SemanticExtractionDraft(
+            structure_type="multi_item_digest",
+            units=[
+                SemanticUnitDraft(
+                    message_type="signal",
+                    event_type="M&A",
+                    category_key=None,
+                    main_theme=None,
+                    sub_themes=[],
+                    ticker_tags=["DB손보"],
+                    canonical_summary="DB손보, 미국 보험사 포테그라 인수 30일 마무리",
+                    evidence_items=[
+                        EvidenceItem(kind="fact", text="인수 절차는 30일 내 마무리 예정")
+                    ],
+                )
+            ],
+        )
+
+    monkeypatch.setattr(
+        "src.pipelines.stock_report.classify._extract_message_semantics",
+        _fake_extract_message_semantics,
+    )
+
+    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+
+    warning_codes = [warning.code for warning in result[0].qa_warnings]
+    assert "missing_metric_candidate" not in warning_codes
+
+
+def test_classify_schedule_fact_numeric_stays_fact(monkeypatch):
+    taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
+    row = _normalized_message("BAF 반영은 통상 12개월 지연")
+
+    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+        return SemanticExtractionDraft(
+            structure_type="single_topic_deep",
+            units=[
+                SemanticUnitDraft(
+                    message_type="opinion",
+                    event_type="해석/전망",
+                    category_key="운송/물류",
+                    main_theme=None,
+                    sub_themes=[],
+                    ticker_tags=["현대글로비스"],
+                    canonical_summary="BAF 반영 시차가 존재",
+                    evidence_items=[EvidenceItem(kind="fact", text="BAF 반영은 통상 12개월 지연")],
+                )
+            ],
+        )
+
+    monkeypatch.setattr(
+        "src.pipelines.stock_report.classify._extract_message_semantics",
+        _fake_extract_message_semantics,
+    )
+
+    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+
+    assert result[0].evidence_items == [
+        EvidenceItem(kind="fact", text="BAF 반영은 통상 12개월 지연")
+    ]
+    assert "missing_metric_candidate" not in [warning.code for warning in result[0].qa_warnings]
+
+
+def test_classify_missing_metric_candidate_real_metric_in_local_text_warns(monkeypatch):
+    taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
+    row = _normalized_message("미 법무부, 6710억 원 과징금 검토")
+
+    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+        return SemanticExtractionDraft(
+            structure_type="single_topic_deep",
+            units=[
+                SemanticUnitDraft(
+                    message_type="signal",
+                    event_type="정책",
+                    category_key=None,
+                    main_theme=None,
+                    sub_themes=[],
+                    ticker_tags=["GOOGL"],
+                    canonical_summary="미 법무부, 6710억 원 과징금 검토",
+                    evidence_items=[EvidenceItem(kind="fact", text="반독점 조사 강도를 높일 계획")],
+                )
+            ],
+        )
+
+    monkeypatch.setattr(
+        "src.pipelines.stock_report.classify._extract_message_semantics",
+        _fake_extract_message_semantics,
+    )
+
+    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+
+    assert "missing_metric_candidate" in [warning.code for warning in result[0].qa_warnings]
+
+
+def test_classify_ordinal_schedule_number_does_not_warn_missing_metric_candidate(monkeypatch):
+    taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
+    row = _normalized_message("스페이스X 12차 비행 성공")
+
+    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+        return SemanticExtractionDraft(
+            structure_type="single_topic_deep",
+            units=[
+                SemanticUnitDraft(
+                    message_type="signal",
+                    event_type="출시/제품",
+                    category_key="AI인프라",
+                    main_theme=None,
+                    sub_themes=[],
+                    ticker_tags=["TSLA"],
+                    canonical_summary="스페이스X 12차 비행 성공",
+                    evidence_items=[
+                        EvidenceItem(kind="fact", text="12차 시험 비행이 성공적으로 완료")
+                    ],
+                )
+            ],
+        )
+
+    monkeypatch.setattr(
+        "src.pipelines.stock_report.classify._extract_message_semantics",
+        _fake_extract_message_semantics,
+    )
+
+    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+
+    warning_codes = [warning.code for warning in result[0].qa_warnings]
+    assert "missing_metric_candidate" not in warning_codes
+
+
+def test_classify_missing_metric_uses_unit_local_numbers_not_whole_digest(monkeypatch):
+    taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
+    row = _normalized_message(
+        "Daily Digest\n"
+        "1) 공정위가 밀가루 담합에 6710억 원 과징금을 부과\n"
+        "2) Xreal 차세대 스마트 안경은 2026년 말 출시 예정"
+    )
+
+    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+        return SemanticExtractionDraft(
+            structure_type="multi_item_digest",
+            units=[
+                SemanticUnitDraft(
+                    message_type="signal",
+                    event_type="출시/제품",
+                    category_key="디스플레이/광학",
+                    main_theme=None,
+                    sub_themes=[],
+                    ticker_tags=["Xreal"],
+                    canonical_summary="Xreal 차세대 스마트 안경은 2026년 말 출시 예정",
+                    evidence_items=[
+                        EvidenceItem(kind="fact", text="차세대 제품은 2026년 말 출시 예정")
+                    ],
+                )
+            ],
+        )
+
+    monkeypatch.setattr(
+        "src.pipelines.stock_report.classify._extract_message_semantics",
+        _fake_extract_message_semantics,
+    )
+
+    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+
+    assert "missing_metric_candidate" not in [warning.code for warning in result[0].qa_warnings]
+    assert result[0].evidence_items == [
+        EvidenceItem(kind="fact", text="차세대 제품은 2026년 말 출시 예정")
+    ]
+
+
+def test_classify_missing_metric_warns_for_real_metric_in_unit_summary(monkeypatch):
+    taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
+    row = _normalized_message("공정위가 밀가루 담합에 6710억 원 과징금을 부과")
+
+    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+        return SemanticExtractionDraft(
+            structure_type="single_topic_deep",
+            units=[
+                SemanticUnitDraft(
+                    message_type="signal",
+                    event_type="정책",
+                    category_key="소비재/유통",
+                    main_theme=None,
+                    sub_themes=[],
+                    ticker_tags=[],
+                    canonical_summary="공정위가 밀가루 담합에 6710억 원 과징금을 부과",
+                    evidence_items=[EvidenceItem(kind="fact", text="공정위가 밀가루 담합을 적발")],
+                )
+            ],
+        )
+
+    monkeypatch.setattr(
+        "src.pipelines.stock_report.classify._extract_message_semantics",
+        _fake_extract_message_semantics,
+    )
+
+    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+
+    assert "missing_metric_candidate" in [warning.code for warning in result[0].qa_warnings]
+
+
+def test_classify_temporal_numeric_facts_are_not_promoted_to_metric(monkeypatch):
+    taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
+    row = _normalized_message(
+        "DB손보 포테그라 인수 30일 마무리. 스페이스X 12차 비행 성공. "
+        "ECB는 2026년 3분기까지 가이드라인 이행 지시."
+    )
+
+    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+        return SemanticExtractionDraft(
+            structure_type="multi_item_digest",
+            units=[
+                SemanticUnitDraft(
+                    message_type="signal",
+                    event_type="M&A",
+                    category_key="금융",
+                    main_theme=None,
+                    sub_themes=[],
+                    ticker_tags=["DB손보"],
+                    canonical_summary="DB손보 포테그라 인수 30일 마무리",
+                    evidence_items=[EvidenceItem(kind="fact", text="포테그라 인수는 30일 마무리")],
+                ),
+                SemanticUnitDraft(
+                    message_type="signal",
+                    event_type="수주/계약",
+                    category_key="우주/항공",
+                    main_theme=None,
+                    sub_themes=[],
+                    ticker_tags=["스페이스X"],
+                    canonical_summary="스페이스X 12차 비행 성공",
+                    evidence_items=[EvidenceItem(kind="fact", text="12차 비행에서 재진입 성공")],
+                ),
+                SemanticUnitDraft(
+                    message_type="signal",
+                    event_type="정책",
+                    category_key="금융",
+                    main_theme=None,
+                    sub_themes=[],
+                    ticker_tags=["ECB"],
+                    canonical_summary="ECB는 2026년 3분기까지 AI 감사 가이드라인 이행 지시",
+                    evidence_items=[
+                        EvidenceItem(kind="fact", text="2026년 3분기까지 이행하도록 지시")
+                    ],
+                ),
+            ],
+        )
+
+    monkeypatch.setattr(
+        "src.pipelines.stock_report.classify._extract_message_semantics",
+        _fake_extract_message_semantics,
+    )
+
+    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+
+    for unit in result:
+        assert "missing_metric_candidate" not in [warning.code for warning in unit.qa_warnings]
+        assert [item.kind for item in unit.evidence_items] == ["fact"]
+
+
+def test_classify_promotes_single_digit_leverage_fact_to_metric(monkeypatch):
+    taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
+    row = _normalized_message("삼성전자·SK하이닉스 2배 레버리지 ETF 출시")
+
+    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+        return SemanticExtractionDraft(
+            structure_type="single_topic_deep",
+            units=[
+                SemanticUnitDraft(
+                    message_type="signal",
+                    event_type="출시/제품",
+                    category_key="금융상품",
+                    main_theme=None,
+                    sub_themes=[],
+                    ticker_tags=[],
+                    canonical_summary="삼성전자·SK하이닉스 2배 레버리지 ETF 출시",
+                    evidence_items=[
+                        EvidenceItem(kind="fact", text="삼성전자·SK하이닉스 2배 레버리지 ETF 출시")
+                    ],
+                )
+            ],
+        )
+
+    monkeypatch.setattr(
+        "src.pipelines.stock_report.classify._extract_message_semantics",
+        _fake_extract_message_semantics,
+    )
+
+    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+
+    assert result[0].evidence_items == [
+        EvidenceItem(kind="metric", text="삼성전자·SK하이닉스 2배 레버리지 ETF 출시")
+    ]
+    assert "missing_metric_candidate" not in [warning.code for warning in result[0].qa_warnings]
 
 
 def test_classify_promotes_meaningful_numeric_fact_to_metric(monkeypatch):
@@ -829,7 +1130,14 @@ def test_classify_does_not_double_count_identical_raw_and_clean_blocks_for_under
 
 def test_classify_warns_over_merged_unit_candidate(monkeypatch):
     taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
-    row = _normalized_message("US Daily digest")
+    row = _normalized_message(
+        "전세계 반도체 밸류체인 주요 종목 주가를 일괄 집계했다\n"
+        "- NVDA 주가 등락률\n"
+        "- MU 주가 등락률\n"
+        "- ARM 주가 등락률\n"
+        "- ASML 주가 등락률\n"
+        "- TSLA 주가 등락률"
+    )
 
     async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
         return SemanticExtractionDraft(
@@ -862,7 +1170,19 @@ def test_classify_warns_over_merged_unit_candidate(monkeypatch):
 
     result = classify_messages([row], taxonomy=taxonomy, provider="openai")
 
-    assert "over_merged_unit_candidate" in [warning.code for warning in result[0].qa_warnings]
+    warning = next(
+        warning for warning in result[0].qa_warnings if warning.code == "over_merged_unit_candidate"
+    )
+    assert "structure=multi_item_digest" in warning.detail
+    assert "source_blocks=5" in warning.detail
+    assert "digest_like=true" in warning.detail
+    assert "list_like=true" in warning.detail
+    assert "tickers=5" in warning.detail
+    assert "evidence=6" in warning.detail
+    assert "sample_tickers=NVDA,MU,ARM,ASML,TSLA" in warning.detail
+    assert "list_signals=" in warning.detail
+    assert "주가" in warning.detail
+    assert "밸류체인" in warning.detail
 
 
 def test_classify_warns_duplicate_unit_candidate_when_units_overlap_heavily(monkeypatch):
