@@ -531,6 +531,34 @@ LLM 역할:
 4. `Focus Tickers`
 5. `Low Confidence / Excluded`
 
+#### T09 A/B 실험 구조
+
+T09는 하나의 고정 synthesis만 구현하지 않고, 같은 T08 `same-day bundle`을 두 경로로 흘려 비교한다.
+
+| 경로 | 역할 | 외부 검색 | 산출물 |
+| --- | --- | --- | --- |
+| `T09-A` 기본 경로 | Telegram 기반 당일 bundle만으로 리포트 생성 | 없음 | `daily_v2_DATE.md` |
+| `T09-B` Google 경로 | Gemini Google Search Grounding으로 최신성/외부 검증 보강 | 있음 | `daily_v2_DATE.google.md` |
+
+`T09-A`는 Phase 1의 기본 경로다. 동일한 입력에 대해 재현 가능한 리포트를 만들고,
+`report_runs`, `report_evidence`와 자연스럽게 연결되는 것을 우선한다.
+
+`T09-B`는 실험 경로다. Google Search Grounding 결과를 synthesis 보조 근거로 쓰되,
+아래 경계를 지킨다.
+
+- T08 bundle에 없는 핵심 주장을 새로 만들지 않는다.
+- 검색 citation은 리포트 하단에 렌더링하되, 가능한 경우 theme/ticker evidence bundle과 연결할 수 있는 구조로 보존한다.
+- Google 결과는 Phase 3의 `news_items` 적재, `knowledge_chunks(source_type='news')`, major news ranker를 대체하지 않는다.
+- 실험 결과가 좋을 때만 T22의 citation/rendering 또는 Phase 3 news grounding 설계에 흡수한다.
+
+평가 기준:
+
+- Telegram-only 결과 대비 누락된 핵심 맥락을 보강했는가
+- 입력 근거에 없는 회사명/수치/날짜를 만들어내지 않았는가
+- citation URL과 리포트 문장이 실제로 대응되는가
+- DB evidence trace가 깨지지 않는가
+- 실행 시간과 비용이 일일 운영에 감당 가능한가
+
 ### Phase 1 Markdown Rendering
 
 렌더러는 아래처럼 section 메서드 기반으로 구현한다.
