@@ -167,6 +167,24 @@ def test_run_daily_v2_calls_migration_and_ingest(monkeypatch):
             low_confidence_chunks=[],
         )
 
+    def _fake_synthesize_same_day_bundle(bundle):
+        events.append("synthesize_bundle")
+        return SimpleNamespace(
+            report_date=date(2026, 5, 8),
+            evidence_refs=[object()],
+        )
+
+    def _fake_render_stock_report_markdown(artifact):
+        events.append("render_report")
+        return "# rendered report"
+
+    def _fake_persist_report_artifact(conn, **kwargs):
+        events.append(f"persist_report:{kwargs['provider']}")
+        assert conn is fake_conn
+        assert kwargs["output_markdown"] == "# rendered report"
+        assert len(kwargs["evidence_refs"]) == 1
+        return 777
+
     monkeypatch.setattr("src.pipelines.stock_report.pipeline.resolve_db_dsn", _fake_resolve_db_dsn)
     monkeypatch.setattr("src.pipelines.stock_report.pipeline.connect_db", _fake_connect_db)
     monkeypatch.setattr(
@@ -203,6 +221,18 @@ def test_run_daily_v2_calls_migration_and_ingest(monkeypatch):
         "src.pipelines.stock_report.pipeline.load_same_day_bundle",
         _fake_load_same_day_bundle,
     )
+    monkeypatch.setattr(
+        "src.pipelines.stock_report.pipeline.synthesize_same_day_bundle",
+        _fake_synthesize_same_day_bundle,
+    )
+    monkeypatch.setattr(
+        "src.pipelines.stock_report.pipeline.render_stock_report_markdown",
+        _fake_render_stock_report_markdown,
+    )
+    monkeypatch.setattr(
+        "src.pipelines.stock_report.pipeline.persist_report_artifact",
+        _fake_persist_report_artifact,
+    )
 
     result = run_daily_v2(
         date="2026-05-08",
@@ -227,6 +257,8 @@ def test_run_daily_v2_calls_migration_and_ingest(monkeypatch):
     assert result.theme_bucket_count == 1
     assert result.focus_ticker_count == 1
     assert result.low_confidence_count == 0
+    assert result.report_run_id == 777
+    assert result.output_markdown == "# rendered report"
     assert result.preview_canonical_summaries == ["[data/통계/지표] (반도체) NVDA +2.5%"]
     assert result.migrations_applied == ["001_phase1.sql"]
     assert events == [
@@ -241,6 +273,9 @@ def test_run_daily_v2_calls_migration_and_ingest(monkeypatch):
         "classify:1",
         "persist_chunks:1",
         "load_bundle:2026-05-08",
+        "synthesize_bundle",
+        "render_report",
+        "persist_report:openai",
         "connect.exit",
     ]
 

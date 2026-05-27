@@ -11,6 +11,7 @@ from src.pipelines.stock_report.models import (
     NormalizedMessage,
     QAWarning,
 )
+from src.pipelines.stock_report.synthesize import ReportEvidenceRef
 
 
 class FakeCursor:
@@ -28,6 +29,9 @@ class FakeCursor:
 
     def executemany(self, query: str, params: list[tuple[Any, ...]]) -> None:
         self.conn.executemany_calls.append((query, params))
+
+    def fetchone(self) -> tuple[int]:
+        return (123,)
 
 
 class FakeConnection:
@@ -103,4 +107,78 @@ def test_persist_classified_chunks_serializes_typed_evidence_and_warnings() -> N
     assert json.loads(payload[15]) == ["Seagate 주가는 8% 하락"]
     assert json.loads(payload[16]) == [{"kind": "metric", "text": "Seagate 주가는 8% 하락"}]
     assert json.loads(payload[17]) == [{"code": "missing_metric_candidate", "detail": "test"}]
+    assert conn.commits == 1
+
+
+def test_persist_classified_chunks_preserves_report_runs_when_replacing_chunks() -> None:
+    conn = FakeConnection()
+    normalized = _normalized()
+    classified = ClassifiedMessage(
+        telegram_message_id=1,
+        source_date=date(2026, 5, 8),
+        channel_key="hana_us_stock",
+        source_channel_key="hana_us_stock",
+        processing_mode="full",
+        structure_type="single_topic_deep",
+        unit_index=0,
+        message_type="signal",
+        event_type=None,
+        category_key="반도체",
+        main_theme=None,
+        provisional_category=None,
+        provisional_theme=None,
+        is_provisional=False,
+        sub_themes=[],
+        ticker_tags=[],
+        canonical_summary="Seagate 주가 하락",
+        supporting_facts=[],
+    )
+
+    persist_classified_chunks(
+        conn,
+        normalized_messages=[normalized],
+        classified_messages=[classified],
+    )
+
+    executed_sql = [query for query, _params in conn.executed]
+    assert not any("DELETE FROM report_runs" in query for query in executed_sql)
+    assert any("DELETE FROM knowledge_chunks" in query for query in executed_sql)
+
+
+def test_persist_report_artifact_writes_run_and_evidence() -> None:
+    from src.pipelines.stock_report.db import persist_report_artifact
+
+    conn = FakeConnection()
+    report_run_id = persist_report_artifact(
+        conn,
+        report_date=date(2026, 5, 26),
+        provider="openai",
+        output_markdown="# report",
+        evidence_refs=[
+            ReportEvidenceRef(
+                section_key="category_summaries",
+                item_key="반도체",
+                knowledge_chunk_id=10,
+                rank_score=1.0,
+                knowledge_chunk_snapshot={
+                    "id": 10,
+                    "canonical_summary": "Seagate 주가 하락",
+                },
+            )
+        ],
+    )
+
+    assert report_run_id == 123
+    assert not any("DELETE FROM report_runs" in query for query, _params in conn.executed)
+    run_query, run_params = conn.executed[0]
+    assert "INSERT INTO report_runs" in run_query
+    assert run_params == (date(2026, 5, 26), "v2", "openai", "success", "# report")
+    evidence_query, evidence_params = conn.executemany_calls[0]
+    assert "INSERT INTO report_evidence" in evidence_query
+    assert "knowledge_chunk_snapshot" in evidence_query
+    assert evidence_params[0][:5] == (123, "category_summaries", "반도체", 10, 1.0)
+    assert json.loads(evidence_params[0][5]) == {
+        "id": 10,
+        "canonical_summary": "Seagate 주가 하락",
+    }
     assert conn.commits == 1

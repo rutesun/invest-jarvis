@@ -14,10 +14,13 @@ from src.pipelines.stock_report.db import (
     connect_db,
     load_telegram_messages_by_date,
     persist_classified_chunks,
+    persist_report_artifact,
     resolve_db_dsn,
 )
 from src.pipelines.stock_report.normalize import normalize_messages, persist_normalized_messages
+from src.pipelines.stock_report.render_markdown import render_stock_report_markdown
 from src.pipelines.stock_report.retrieval import load_same_day_bundle
+from src.pipelines.stock_report.synthesize import synthesize_same_day_bundle
 from src.pipelines.stock_report.taxonomy import load_taxonomy_registry
 from src.pipelines.stock_report.telegram_ingest import TelegramIngestStats, ingest_telegram_raw_csvs
 
@@ -42,6 +45,8 @@ class DailyV2RunResult:
     theme_bucket_count: int
     focus_ticker_count: int
     low_confidence_count: int
+    report_run_id: int | None
+    output_markdown: str
     preview_canonical_summaries: list[str]
     migrations_applied: list[str]
 
@@ -123,8 +128,18 @@ def run_daily_v2(
         )
         logger.info("daily-v2 classified chunks persisted")
         same_day_bundle = load_same_day_bundle(conn, date)
+        report_artifact = synthesize_same_day_bundle(same_day_bundle)
+        output_markdown = render_stock_report_markdown(report_artifact)
+        report_run_id = persist_report_artifact(
+            conn,
+            report_date=report_artifact.report_date,
+            provider=provider,
+            output_markdown=output_markdown,
+            evidence_refs=report_artifact.evidence_refs,
+        )
         logger.info(
-            "daily-v2 same-day bundle built: categories=%d themes=%d focus_tickers=%d low_confidence=%d",
+            "daily-v2 report artifact persisted: report_run_id=%s categories=%d themes=%d focus_tickers=%d low_confidence=%d",
+            report_run_id,
             len(same_day_bundle.category_buckets),
             sum(len(bucket.theme_buckets) for bucket in same_day_bundle.category_buckets),
             len(same_day_bundle.focus_ticker_buckets),
@@ -178,6 +193,8 @@ def run_daily_v2(
         ),
         focus_ticker_count=len(same_day_bundle.focus_ticker_buckets),
         low_confidence_count=len(same_day_bundle.low_confidence_chunks),
+        report_run_id=report_run_id,
+        output_markdown=output_markdown,
         preview_canonical_summaries=preview_canonical_summaries,
         migrations_applied=migrations_applied,
     )
@@ -207,6 +224,9 @@ def run_validate_v2(
 
 
 def format_daily_v2_report(result: DailyV2RunResult) -> str:
+    if result.output_markdown:
+        return result.output_markdown
+
     lines = [
         "# Daily Report V2 (Scaffold)",
         "",

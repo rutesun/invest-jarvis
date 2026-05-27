@@ -216,15 +216,16 @@ flowchart TD
 
 **기대효과:** evidence trace가 있는 기본 리포트와 Google-grounded 실험 리포트를 같은 T08 bundle로 비교할 수 있다.
 
-- [ ] `T09-A` 기본 경로: synthesis 입력은 당일 `category/theme/ticker` bundle만 받게 하고 prior evidence는 받지 않게 한다
-- [ ] `T09-A` 기본 경로: 출력 섹션을 `Pulse / Category Summaries / Core Themes / Focus Tickers / Low Confidence`로 고정한다
+- [x] `T09-A` 기본 경로: synthesis 입력은 당일 `category/theme/ticker` bundle만 받게 하고 prior evidence는 받지 않게 한다
+- [x] `T09-A` 기본 경로: 출력 섹션을 `Pulse / Category Summaries / Core Themes / Focus Tickers / Low Confidence`로 고정한다
 - [ ] `T09-B` Google 경로: 동일한 T08 bundle을 Gemini Google Search Grounding이 켜진 synthesis adapter에 넣는다
 - [ ] `T09-B` Google 경로: 검색 citation을 Markdown 하단에 렌더링하되, theme/ticker evidence bundle과 연결 가능한 구조로 보존한다
 - [ ] `T09-B` Google 경로: Google 결과는 Phase 3의 `news_items`/Vector DB corpus를 대체하지 않는 실험 경로로 표시한다
 - [ ] `T09-C` compare 경로: 같은 날짜에 `daily_v2_DATE.md`와 `daily_v2_DATE.google.md`를 나란히 생성한다
 - [ ] `T09-D` 평가 기준: 누락 보강, 환각 감소, citation 유효성, DB trace, 비용/시간을 비교한다
-- [ ] Jinja 없이 builder 메서드 기반으로 Markdown을 렌더링한다
-- [ ] `report_runs`, `report_evidence`를 함께 기록한다
+- [x] Jinja 없이 builder 메서드 기반으로 Markdown을 렌더링한다
+- [x] `report_runs`, `report_evidence`를 함께 기록한다
+- [x] chunk 재생성 후에도 과거 run의 evidence trace가 남도록 `report_evidence`에 chunk snapshot을 저장한다
 
 ### T10. compare validator와 acceptance 테스트를 만든다
 

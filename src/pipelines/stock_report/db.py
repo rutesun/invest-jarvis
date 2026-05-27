@@ -17,6 +17,7 @@ from src.pipelines.stock_report.models import (
     NormalizedMessage,
     RawTelegramMessage,
 )
+from src.pipelines.stock_report.synthesize import ReportEvidenceRef
 
 
 MIGRATION_HISTORY_TABLE = "stock_report_migration_history"
@@ -253,3 +254,57 @@ def persist_classified_chunks(
     with conn.cursor() as cur:
         cur.executemany(query, params)
     conn.commit()
+
+
+def persist_report_artifact(
+    conn: Any,
+    *,
+    report_date: Any,
+    provider: str,
+    output_markdown: str,
+    evidence_refs: list[ReportEvidenceRef],
+    pipeline_version: str = "v2",
+    status: str = "success",
+) -> int:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO report_runs (
+                report_date,
+                pipeline_version,
+                provider,
+                status,
+                output_markdown
+            ) VALUES (%s, %s, %s, %s, %s)
+            RETURNING id;
+            """,
+            (report_date, pipeline_version, provider, status, output_markdown),
+        )
+        report_run_id = cur.fetchone()[0]
+
+        if evidence_refs:
+            cur.executemany(
+                """
+                INSERT INTO report_evidence (
+                    report_run_id,
+                    section_key,
+                    item_key,
+                    knowledge_chunk_id,
+                    rank_score,
+                    knowledge_chunk_snapshot
+                ) VALUES (%s, %s, %s, %s, %s, %s::jsonb);
+                """,
+                [
+                    (
+                        report_run_id,
+                        ref.section_key,
+                        ref.item_key,
+                        ref.knowledge_chunk_id,
+                        ref.rank_score,
+                        json.dumps(ref.knowledge_chunk_snapshot, ensure_ascii=False),
+                    )
+                    for ref in evidence_refs
+                ],
+            )
+    conn.commit()
+    return report_run_id
