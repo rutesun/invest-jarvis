@@ -1174,10 +1174,15 @@ async def _extract_message_semantics(
             f"channel:{row.channel_key}",
         ],
         "metadata": {
+            "stage": "semantic_extraction",
             "telegram_message_id": row.telegram_message_id,
             "provider": provider,
+            "model": llm_config.model,
             "channel_key": row.channel_key,
+            "channel_message_id": row.channel_message_id,
             "source_date": str(row.source_date),
+            "processing_mode": row.processing_mode,
+            "content_chars": len(row.clean_text or ""),
         },
     }
     llm_output = await invoke_llm_with_retry(

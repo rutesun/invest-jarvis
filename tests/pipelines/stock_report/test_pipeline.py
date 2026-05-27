@@ -11,7 +11,7 @@ from src.pipelines.stock_report.models import (
     NormalizedMessage,
     RawTelegramMessage,
 )
-from src.pipelines.stock_report.pipeline import run_daily_v2
+from src.pipelines.stock_report.pipeline import _validate_date, run_daily_v2
 from src.pipelines.stock_report.telegram_ingest import (
     TelegramIngestStats,
     discover_csv_files,
@@ -167,8 +167,8 @@ def test_run_daily_v2_calls_migration_and_ingest(monkeypatch):
             low_confidence_chunks=[],
         )
 
-    def _fake_synthesize_same_day_bundle(bundle):
-        events.append("synthesize_bundle")
+    def _fake_synthesize_same_day_bundle(bundle, *, provider):
+        events.append(f"synthesize_bundle:{provider}")
         return SimpleNamespace(
             report_date=date(2026, 5, 8),
             evidence_refs=[object()],
@@ -199,26 +199,23 @@ def test_run_daily_v2_calls_migration_and_ingest(monkeypatch):
         "src.pipelines.stock_report.pipeline.apply_migrations",
         _fake_apply_migrations,
     )
+    monkeypatch.setattr("src.pipelines.stock_report.pipeline._stage_ingest", _fake_ingest)
     monkeypatch.setattr(
-        "src.pipelines.stock_report.pipeline.ingest_telegram_raw_csvs",
-        _fake_ingest,
-    )
-    monkeypatch.setattr(
-        "src.pipelines.stock_report.pipeline.load_telegram_messages_by_date",
+        "src.pipelines.stock_report.pipeline._stage_load_raw_messages",
         _fake_load_messages,
     )
-    monkeypatch.setattr("src.pipelines.stock_report.pipeline.normalize_messages", _fake_normalize)
+    monkeypatch.setattr("src.pipelines.stock_report.pipeline._stage_normalize", _fake_normalize)
     monkeypatch.setattr(
-        "src.pipelines.stock_report.pipeline.persist_normalized_messages",
+        "src.pipelines.stock_report.pipeline._stage_persist_normalized",
         _fake_persist,
     )
-    monkeypatch.setattr("src.pipelines.stock_report.pipeline.classify_messages", _fake_classify)
+    monkeypatch.setattr("src.pipelines.stock_report.pipeline._stage_classify", _fake_classify)
     monkeypatch.setattr(
-        "src.pipelines.stock_report.pipeline.persist_classified_chunks",
+        "src.pipelines.stock_report.pipeline._stage_persist_chunks",
         _fake_persist_chunks,
     )
     monkeypatch.setattr(
-        "src.pipelines.stock_report.pipeline.load_same_day_bundle",
+        "src.pipelines.stock_report.pipeline._stage_load_same_day_bundle",
         _fake_load_same_day_bundle,
     )
     monkeypatch.setattr(
@@ -226,11 +223,11 @@ def test_run_daily_v2_calls_migration_and_ingest(monkeypatch):
         _fake_synthesize_same_day_bundle,
     )
     monkeypatch.setattr(
-        "src.pipelines.stock_report.pipeline.render_stock_report_markdown",
+        "src.pipelines.stock_report.pipeline._stage_render_markdown",
         _fake_render_stock_report_markdown,
     )
     monkeypatch.setattr(
-        "src.pipelines.stock_report.pipeline.persist_report_artifact",
+        "src.pipelines.stock_report.pipeline._stage_persist_report",
         _fake_persist_report_artifact,
     )
 
@@ -273,13 +270,17 @@ def test_run_daily_v2_calls_migration_and_ingest(monkeypatch):
         "classify:1",
         "persist_chunks:1",
         "load_bundle:2026-05-08",
-        "synthesize_bundle",
+        "synthesize_bundle:openai",
         "render_report",
         "persist_report:openai",
         "connect.exit",
     ]
 
 
-def test_run_daily_v2_raises_on_invalid_date():
+def test_validate_date_normalizes_slash_separator():
+    assert _validate_date("2026/05/08") == "2026-05-08"
+
+
+def test_validate_date_raises_on_invalid_date():
     with pytest.raises(ValueError):
-        run_daily_v2(date="2026/05/08")
+        _validate_date("2026/13/08")

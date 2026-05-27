@@ -6,9 +6,13 @@ from datetime import datetime
 from pathlib import Path
 
 import yaml
+from langsmith import get_current_run_tree, traceable
 
 from src.pipelines.stock_report.classify import classify_messages
-from src.pipelines.stock_report.config import get_semantic_extraction_llm_config
+from src.pipelines.stock_report.config import (
+    get_report_synthesis_llm_config,
+    get_semantic_extraction_llm_config,
+)
 from src.pipelines.stock_report.db import (
     apply_migrations,
     connect_db,
@@ -52,8 +56,9 @@ class DailyV2RunResult:
 
 
 def _validate_date(date: str) -> str:
-    datetime.strptime(date, "%Y-%m-%d")
-    return date
+    normalized = date.strip().replace("/", "-")
+    datetime.strptime(normalized, "%Y-%m-%d")
+    return normalized
 
 
 def _load_normalize_config(config_path: str = "config.yaml") -> tuple[set[str], int, int]:
@@ -69,6 +74,72 @@ def _load_normalize_config(config_path: str = "config.yaml") -> tuple[set[str], 
     return channels, max_chars, window
 
 
+@traceable(name="Stock Report Daily V2 - Ingest")
+def _stage_ingest(conn, date: str, data_dir: str) -> TelegramIngestStats:
+    return ingest_telegram_raw_csvs(conn=conn, date=date, data_dir=data_dir)
+
+
+@traceable(name="Stock Report Daily V2 - Normalize")
+def _stage_normalize(raw_messages, *, short_channels: set[str], max_chars: int, group_window: int):
+    return normalize_messages(
+        raw_messages,
+        short_comment_channels=short_channels,
+        short_comment_max_chars=max_chars,
+        group_window_minutes=group_window,
+    )
+
+
+@traceable(name="Stock Report Daily V2 - Classify")
+def _stage_classify(normalized, *, taxonomy, provider: str):
+    return classify_messages(normalized, taxonomy=taxonomy, provider=provider)
+
+
+@traceable(name="Stock Report Daily V2 - Persist Chunks")
+def _stage_persist_chunks(conn, *, normalized_messages, classified_messages) -> None:
+    persist_classified_chunks(
+        conn,
+        normalized_messages=normalized_messages,
+        classified_messages=classified_messages,
+    )
+
+
+@traceable(name="Stock Report Daily V2 - Load Same Day Bundle")
+def _stage_load_same_day_bundle(conn, date: str):
+    return load_same_day_bundle(conn, date)
+
+
+@traceable(name="Stock Report Daily V2 - Local Evidence Synthesis")
+def _stage_local_evidence_synthesis(bundle, *, provider: str):
+    return synthesize_same_day_bundle(bundle, provider=provider)
+
+
+@traceable(name="Stock Report Daily V2 - Render Markdown")
+def _stage_render_markdown(report_artifact):
+    return render_stock_report_markdown(report_artifact)
+
+
+@traceable(name="Stock Report Daily V2 - Persist Report")
+def _stage_persist_report(conn, *, report_date, provider: str, output_markdown: str, evidence_refs):
+    return persist_report_artifact(
+        conn,
+        report_date=report_date,
+        provider=provider,
+        output_markdown=output_markdown,
+        evidence_refs=evidence_refs,
+    )
+
+
+@traceable(name="Stock Report Daily V2 - Load Messages")
+def _stage_load_raw_messages(conn, date: str):
+    return load_telegram_messages_by_date(conn, date)
+
+
+@traceable(name="Stock Report Daily V2 - Persist Normalized")
+def _stage_persist_normalized(conn, normalized) -> None:
+    persist_normalized_messages(conn, normalized)
+
+
+@traceable(name="Stock Report Daily V2")
 def run_daily_v2(
     date: str,
     data_dir: str = "data",
@@ -80,57 +151,58 @@ def run_daily_v2(
     taxonomy_path: str = "config/stock_report_vocabulary.yaml",
     preview_limit: int = 12,
 ) -> DailyV2RunResult:
-    _validate_date(date)
+    date = _validate_date(date)
+    run_tree = get_current_run_tree()
+    if run_tree:
+        run_tree.name = f"Stock Report Daily V2 - {date}"
     resolved_dsn = resolve_db_dsn(dsn)
     migrations_path = Path(migrations_dir)
     short_channels, max_chars, group_window = _load_normalize_config(config_path)
     taxonomy = load_taxonomy_registry(taxonomy_path)
-    llm_config = get_semantic_extraction_llm_config(provider)
+    semantic_llm_config = get_semantic_extraction_llm_config(provider)
+    synthesis_llm_config = get_report_synthesis_llm_config(provider)
     logger.info(
-        "daily-v2 started: date=%s provider=%s model=%s data_dir=%s",
+        "daily-v2 started: date=%s provider=%s semantic_model=%s synthesis_model=%s data_dir=%s",
         date,
         provider,
-        llm_config.model,
+        semantic_llm_config.model,
+        synthesis_llm_config.model,
         data_dir,
     )
 
     with connect_db(resolved_dsn) as conn:
         migrations_applied = apply_migrations(conn, migrations_path)
         logger.info("daily-v2 migrations applied: %s", migrations_applied or ["none"])
-        ingest_stats: TelegramIngestStats = ingest_telegram_raw_csvs(
-            conn=conn,
-            date=date,
-            data_dir=data_dir,
-        )
+        ingest_stats: TelegramIngestStats = _stage_ingest(conn, date, data_dir)
         logger.info(
             "daily-v2 ingest completed: csv_files=%d parsed_rows=%d upserted_rows=%d",
             ingest_stats.csv_files,
             ingest_stats.parsed_rows,
             ingest_stats.upserted_rows,
         )
-        raw_messages = load_telegram_messages_by_date(conn, date)
+        raw_messages = _stage_load_raw_messages(conn, date)
         logger.info("daily-v2 loaded raw messages: count=%d", len(raw_messages))
-        normalized = normalize_messages(
+        normalized = _stage_normalize(
             raw_messages,
-            short_comment_channels=short_channels,
-            short_comment_max_chars=max_chars,
-            group_window_minutes=group_window,
+            short_channels=short_channels,
+            max_chars=max_chars,
+            group_window=group_window,
         )
         logger.info("daily-v2 normalization completed: normalized_rows=%d", len(normalized))
-        persist_normalized_messages(conn, normalized)
+        _stage_persist_normalized(conn, normalized)
         logger.info("daily-v2 normalized messages persisted")
-        classified = classify_messages(normalized, taxonomy=taxonomy, provider=provider)
+        classified = _stage_classify(normalized, taxonomy=taxonomy, provider=provider)
         logger.info("daily-v2 classification completed: classified_units=%d", len(classified))
-        persist_classified_chunks(
+        _stage_persist_chunks(
             conn,
             normalized_messages=normalized,
             classified_messages=classified,
         )
         logger.info("daily-v2 classified chunks persisted")
-        same_day_bundle = load_same_day_bundle(conn, date)
-        report_artifact = synthesize_same_day_bundle(same_day_bundle)
-        output_markdown = render_stock_report_markdown(report_artifact)
-        report_run_id = persist_report_artifact(
+        same_day_bundle = _stage_load_same_day_bundle(conn, date)
+        report_artifact = _stage_local_evidence_synthesis(same_day_bundle, provider=provider)
+        output_markdown = _stage_render_markdown(report_artifact)
+        report_run_id = _stage_persist_report(
             conn,
             report_date=report_artifact.report_date,
             provider=provider,

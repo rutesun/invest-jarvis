@@ -32,6 +32,9 @@ class SemanticExtractionLLMConfig:
         ]
 
 
+StockReportLLMConfig = SemanticExtractionLLMConfig
+
+
 def get_semantic_extraction_llm_config(provider: str) -> SemanticExtractionLLMConfig:
     model: str | None = None
     if provider == "openai":
@@ -41,6 +44,24 @@ def get_semantic_extraction_llm_config(provider: str) -> SemanticExtractionLLMCo
     elif provider == "anthropic":
         model = os.getenv("STOCK_REPORT_ANTHROPIC_MODEL") or os.getenv("ANTHROPIC_MODEL")
     return SemanticExtractionLLMConfig(provider=provider, model=model, temperature=0.1)
+
+
+def get_report_synthesis_llm_config(provider: str) -> StockReportLLMConfig:
+    model: str | None = None
+    if provider == "openai":
+        model = (
+            os.getenv("STOCK_REPORT_SYNTHESIS_OPENAI_MODEL")
+            or os.getenv("STOCK_REPORT_OPENAI_MODEL")
+            or os.getenv("OPENAI_MODEL")
+            or "gpt-5.4"
+        )
+    elif provider == "anthropic":
+        model = (
+            os.getenv("STOCK_REPORT_SYNTHESIS_ANTHROPIC_MODEL")
+            or os.getenv("STOCK_REPORT_ANTHROPIC_MODEL")
+            or os.getenv("ANTHROPIC_MODEL")
+        )
+    return StockReportLLMConfig(provider=provider, model=model, temperature=0.1)
 
 
 SEMANTIC_EXTRACTION_MAX_CONCURRENCY = 8

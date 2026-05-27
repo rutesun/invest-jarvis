@@ -54,8 +54,11 @@ def _chunk(
         id=chunk_id,
         source_type="telegram_unit_v2",
         source_pk=source_pk or chunk_id,
+        source_message_db_id=source_pk or chunk_id,
         source_date=source_date,
         channel_key=channel_key,
+        channel_name=channel_key,
+        channel_message_id=str(source_pk or chunk_id),
         message_type="signal",
         event_type="해석/전망",
         category_key=category_key,
@@ -83,6 +86,8 @@ def test_load_same_day_chunks_filters_report_date_and_source_type() -> None:
             100,
             date(2026, 5, 26),
             "kwusa",
+            "키움 미국주식",
+            "51014",
             "signal",
             "실적",
             "AI인프라",
@@ -107,12 +112,16 @@ def test_load_same_day_chunks_filters_report_date_and_source_type() -> None:
 
     assert len(chunks) == 1
     assert chunks[0].id == 10
+    assert chunks[0].source_message_db_id == 100
     assert chunks[0].display_category == "AI인프라"
     assert chunks[0].display_theme == "AI 데이터센터"
+    assert chunks[0].channel_name == "키움 미국주식"
+    assert chunks[0].channel_message_id == "51014"
     query, params = conn.cursor_obj.executed[0]
-    assert "WHERE source_date = %s" in query
-    assert "source_type = %s" in query
-    assert "message_type = ANY" in query
+    assert "LEFT JOIN telegram_messages tm ON tm.id = kc.source_pk" in query
+    assert "WHERE kc.source_date = %s" in query
+    assert "kc.source_type = %s" in query
+    assert "kc.message_type = ANY" in query
     assert params == ("2026-05-26", "telegram_unit_v2", ["signal", "data"])
 
 

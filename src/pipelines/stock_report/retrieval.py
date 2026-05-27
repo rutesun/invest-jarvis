@@ -13,8 +13,11 @@ class SameDayChunk:
     id: int
     source_type: str
     source_pk: int | None
+    source_message_db_id: int | None
     source_date: date
     channel_key: str | None
+    channel_name: str | None
+    channel_message_id: str | None
     message_type: str
     event_type: str | None
     category_key: str
@@ -198,32 +201,35 @@ def load_same_day_chunks(
 ) -> list[SameDayChunk]:
     query = """
     SELECT
-        id,
-        source_type,
-        source_pk,
-        source_date,
-        channel_key,
-        message_type,
-        event_type,
-        category_key,
-        main_theme,
-        provisional_category,
-        provisional_theme,
-        is_provisional,
-        sub_themes,
-        ticker_tags,
-        theme_tags,
-        canonical_summary,
-        supporting_facts,
-        evidence_items,
-        qa_warnings,
-        content_clean,
-        priority_score
-    FROM knowledge_chunks
-    WHERE source_date = %s
-      AND source_type = %s
-      AND message_type = ANY(%s)
-    ORDER BY priority_score DESC, id ASC;
+        kc.id,
+        kc.source_type,
+        kc.source_pk,
+        kc.source_date,
+        kc.channel_key,
+        tm.channel_name,
+        tm.channel_message_id,
+        kc.message_type,
+        kc.event_type,
+        kc.category_key,
+        kc.main_theme,
+        kc.provisional_category,
+        kc.provisional_theme,
+        kc.is_provisional,
+        kc.sub_themes,
+        kc.ticker_tags,
+        kc.theme_tags,
+        kc.canonical_summary,
+        kc.supporting_facts,
+        kc.evidence_items,
+        kc.qa_warnings,
+        kc.content_clean,
+        kc.priority_score
+    FROM knowledge_chunks kc
+    LEFT JOIN telegram_messages tm ON tm.id = kc.source_pk
+    WHERE kc.source_date = %s
+      AND kc.source_type = %s
+      AND kc.message_type = ANY(%s)
+    ORDER BY kc.priority_score DESC, kc.id ASC;
     """
     with conn.cursor() as cur:
         cur.execute(query, (report_date, source_type, ["signal", "data"]))
@@ -234,24 +240,27 @@ def load_same_day_chunks(
             id=row[0],
             source_type=row[1],
             source_pk=row[2],
+            source_message_db_id=row[2],
             source_date=row[3],
             channel_key=row[4],
-            message_type=row[5],
-            event_type=row[6],
-            category_key=row[7],
-            main_theme=row[8],
-            provisional_category=row[9],
-            provisional_theme=row[10],
-            is_provisional=row[11],
-            sub_themes=_as_list(row[12]),
-            ticker_tags=_as_list(row[13]),
-            theme_tags=_as_list(row[14]),
-            canonical_summary=row[15],
-            supporting_facts=_as_list(row[16]),
-            evidence_items=_as_list(row[17]),
-            qa_warnings=_as_list(row[18]),
-            content_clean=row[19],
-            priority_score=float(row[20] or 0.0),
+            channel_name=row[5],
+            channel_message_id=row[6],
+            message_type=row[7],
+            event_type=row[8],
+            category_key=row[9],
+            main_theme=row[10],
+            provisional_category=row[11],
+            provisional_theme=row[12],
+            is_provisional=row[13],
+            sub_themes=_as_list(row[14]),
+            ticker_tags=_as_list(row[15]),
+            theme_tags=_as_list(row[16]),
+            canonical_summary=row[17],
+            supporting_facts=_as_list(row[18]),
+            evidence_items=_as_list(row[19]),
+            qa_warnings=_as_list(row[20]),
+            content_clean=row[21],
+            priority_score=float(row[22] or 0.0),
         )
         for row in rows
     ]

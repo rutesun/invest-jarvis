@@ -1,82 +1,101 @@
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import date
 
-from src.pipelines.stock_report.models import NormalizedMessage
-from src.pipelines.stock_report.prompts import (
-    SEMANTIC_EXTRACTION_SYSTEM_PROMPT,
-    build_semantic_extraction_user_prompt,
-)
+from src.pipelines.stock_report.prompts import build_report_synthesis_user_prompt
+from src.pipelines.stock_report.retrieval import SameDayBundle, SameDayChunk, TickerBucket
 
 
-def _normalized_message() -> NormalizedMessage:
-    return NormalizedMessage(
-        telegram_message_id=1,
-        source_date=date(2026, 5, 8),
-        date_kst=date(2026, 5, 8),
-        posted_at=datetime(2026, 5, 8, 9, 0, tzinfo=UTC),
-        channel_key="ked_epic_ai",
-        source_channel_key="ked_epic_ai",
-        source_channel_name="ked_epic_ai",
-        channel_message_id="1",
-        raw_text="반도체 랠리와 유가 급등, 국내 증시 반응을 함께 다룬 시황",
-        clean_text="반도체 랠리와 유가 급등, 국내 증시 반응을 함께 다룬 시황",
-        urls=[],
-        has_media=False,
-        content_hash="hash",
-        processing_mode="full",
-        grouped_message_ids=[],
+def _chunk(chunk_id: int) -> SameDayChunk:
+    return SameDayChunk(
+        id=chunk_id,
+        source_type="telegram_unit_v2",
+        source_pk=chunk_id,
+        source_message_db_id=chunk_id,
+        source_date=date(2026, 5, 26),
+        channel_key="kwusa",
+        channel_name="키움 미국주식",
+        channel_message_id="58373",
+        message_type="signal",
+        event_type="실적",
+        category_key="반도체",
+        main_theme="HBM",
+        provisional_category=None,
+        provisional_theme=None,
+        is_provisional=False,
+        sub_themes=[],
+        ticker_tags=["NVDA"],
+        theme_tags=["HBM"],
+        canonical_summary="HBM 공급 부족이 이어진다",
+        supporting_facts=["HBM 수요 증가"],
+        evidence_items=[{"kind": "metric", "text": "HBM 가격 +20%"}],
+        qa_warnings=[],
+        content_clean="원문",
+        priority_score=1.0,
     )
 
 
-def test_system_prompt_requires_market_wrap_split_when_narratives_differ():
-    assert "market_wrap" in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
-    assert "서로 다른 핵심 내러티브가 2개 이상이면 unit을 분리" in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
-    assert (
-        "`category_key`는 이벤트 종류가 아니라 투자 내러티브/섹터"
-        in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
-    )
-    assert (
-        "원인(원자재/매크로)보다 실제 수혜/피해를 받는 타깃 섹터를 우선"
-        in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
-    )
-    assert "event_type" in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
-    assert "evidence_items" in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
-    assert "supporting_facts" not in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
-    assert "thesis" in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
-    assert "risk" in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
-    assert "market_context" in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
-    assert "작성자 코멘트" in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
-    assert "하단 고지 때문에 `admin`으로 분류하지 않는다" in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
-    assert "원문보다 더 길게 확장" in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
-    assert "80자 이내" in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
-    assert "최소 1개 이상 반드시 포함" in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
-    assert "부호(+/-)와 단위" in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
-    assert "`fact`보다 `metric`을 우선" in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
-
-
-def test_user_prompt_mentions_market_wrap_multi_narrative_split():
-    prompt = build_semantic_extraction_user_prompt(
-        _normalized_message(),
-        taxonomy_outline="- 반도체: 메모리\n- 매크로/정책: 환율/원자재",
+def test_report_synthesis_prompt_documents_card_priority_and_theme_rules() -> None:
+    prompt = build_report_synthesis_user_prompt(
+        SameDayBundle(
+            report_date=date(2026, 5, 26),
+            chunks=[_chunk(1)],
+            category_buckets=[],
+            focus_ticker_buckets=[],
+            low_confidence_chunks=[],
+        )
     )
 
-    assert "market_wrap" in prompt
-    assert "주제가 다르면 unit을 나눈다" in prompt
-    assert "내러티브/섹터" in prompt
-    assert "event_type" in prompt
+    assert "카드는 자르지 말고" in prompt
+    assert "priority_score" in prompt
+    assert "pulse는 가능하면 서로 다른 category/theme" in prompt
+    assert "Core Themes" in prompt
+    assert "상위 카테고리 반복 요약이 아니라" in prompt
+    assert "thesis" in prompt
+    assert "watch_points" in prompt
+    assert "related_categories" in prompt
+    assert "최소 2개 이상의 category" in prompt
+    assert "investment_case" in prompt
+    assert "catalysts" in prompt
+    assert "risks_or_watch_points" in prompt
+    assert "related_themes" in prompt
+    assert '"chunk_id": 1' in prompt
+    assert '"source": "키움 미국주식#58373"' in prompt
 
 
-def test_prompts_require_digest_headline_preservation_and_independent_block_split():
-    prompt = build_semantic_extraction_user_prompt(
-        _normalized_message(),
-        taxonomy_outline="- 반도체: 메모리\n- 매크로/정책: 환율/원자재",
+def test_report_synthesis_prompt_includes_richer_focus_ticker_packet() -> None:
+    chunk = _chunk(1)
+    chunk.evidence_items.extend(
+        [
+            {"kind": "metric", "text": "AI 서버 매출 +38%"},
+            {"kind": "metric", "text": "데이터센터 매출 +57%"},
+            {"kind": "thesis", "text": "AI 투자 사이클이 실적 가시성을 높인다"},
+            {"kind": "risk", "text": "빅테크 CAPEX 둔화 시 수요가 약해질 수 있다"},
+        ]
+    )
+    chunk.supporting_facts.extend(
+        [
+            "HBM 공급 부족",
+            "고부가 제품 믹스 개선",
+            "다년 공급 계약",
+            "메모리 가격 상승",
+        ]
     )
 
-    assert (
-        "Daily/Digest/Review/특징주/예습/마켓레이더/US Daily" in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
+    prompt = build_report_synthesis_user_prompt(
+        SameDayBundle(
+            report_date=date(2026, 5, 26),
+            chunks=[chunk],
+            category_buckets=[],
+            focus_ticker_buckets=[TickerBucket(ticker="NVDA", chunks=[chunk])],
+            low_confidence_chunks=[],
+        )
     )
-    assert "시장 전체 headline/내러티브를 별도 unit으로 보존" in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
-    assert "독립 bullet/section/company block은 각각 분리" in SEMANTIC_EXTRACTION_SYSTEM_PROMPT
-    assert "시장 headline unit" in prompt
-    assert "bullet/section/company block" in prompt
+
+    assert '"focus_ticker_packet"' in prompt
+    assert '"ticker": "NVDA"' in prompt
+    assert '"detail_level": "deep"' in prompt
+    assert "데이터센터 매출 +57%" in prompt
+    assert "AI 투자 사이클이 실적 가시성을 높인다" in prompt
+    assert "빅테크 CAPEX 둔화 시 수요가 약해질 수 있다" in prompt
+    assert "다년 공급 계약" in prompt
