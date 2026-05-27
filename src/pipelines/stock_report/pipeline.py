@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import hashlib
 import logging
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import yaml
 from langsmith import get_current_run_tree, traceable
@@ -74,6 +76,85 @@ def _load_normalize_config(config_path: str = "config.yaml") -> tuple[set[str], 
     return channels, max_chars, window
 
 
+def _sha256_text(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _summarize_markdown_for_trace(markdown: str) -> dict[str, Any]:
+    return {
+        "type": "str",
+        "chars": len(markdown),
+        "sha256": _sha256_text(markdown),
+    }
+
+
+def _summarize_evidence_refs_for_trace(evidence_refs) -> dict[str, Any]:
+    refs = list(evidence_refs or [])
+    section_counts: dict[str, int] = {}
+    chunk_ids: list[int] = []
+    sources: list[str] = []
+    for ref in refs:
+        section = getattr(ref, "section_key", "unknown")
+        section_counts[section] = section_counts.get(section, 0) + 1
+        chunk_id = getattr(ref, "knowledge_chunk_id", None)
+        if chunk_id is not None and len(chunk_ids) < 50:
+            chunk_ids.append(chunk_id)
+        snapshot = getattr(ref, "knowledge_chunk_snapshot", {}) or {}
+        channel = snapshot.get("channel_name") or snapshot.get("channel_key")
+        message_id = snapshot.get("channel_message_id")
+        if channel and message_id and len(sources) < 50:
+            source = f"{channel}#{message_id}"
+            if source not in sources:
+                sources.append(source)
+    return {
+        "type": "evidence_refs",
+        "count": len(refs),
+        "section_counts": section_counts,
+        "sample_chunk_ids": chunk_ids,
+        "sample_sources": sources,
+    }
+
+
+def _summarize_report_artifact_for_trace(report_artifact) -> dict[str, Any]:
+    report_date = getattr(report_artifact, "report_date", None)
+    if hasattr(report_date, "isoformat"):
+        report_date = report_date.isoformat()
+    return {
+        "type": "StockReportArtifact",
+        "report_date": report_date,
+        "pulse_count": len(getattr(report_artifact, "pulse", []) or []),
+        "category_summary_count": len(getattr(report_artifact, "category_summaries", []) or []),
+        "core_theme_count": len(getattr(report_artifact, "core_themes", []) or []),
+        "focus_ticker_count": len(getattr(report_artifact, "focus_tickers", []) or []),
+        "low_confidence_count": len(getattr(report_artifact, "low_confidence_notes", []) or []),
+        "evidence_ref_count": len(getattr(report_artifact, "evidence_refs", []) or []),
+    }
+
+
+def _trace_final_report_inputs(inputs: dict[str, Any]) -> dict[str, Any]:
+    sanitized: dict[str, Any] = {}
+    for key, value in inputs.items():
+        if key == "conn":
+            sanitized[key] = "<redacted:connection>"
+        elif key == "report_artifact":
+            sanitized[key] = _summarize_report_artifact_for_trace(value)
+        elif key == "output_markdown" and isinstance(value, str):
+            sanitized[key] = _summarize_markdown_for_trace(value)
+        elif key == "evidence_refs":
+            sanitized[key] = _summarize_evidence_refs_for_trace(value)
+        elif hasattr(value, "isoformat"):
+            sanitized[key] = value.isoformat()
+        else:
+            sanitized[key] = value
+    return sanitized
+
+
+def _trace_final_report_outputs(output: Any) -> Any:
+    if isinstance(output, str):
+        return _summarize_markdown_for_trace(output)
+    return output
+
+
 @traceable(name="Stock Report Daily V2 - Ingest")
 def _stage_ingest(conn, date: str, data_dir: str) -> TelegramIngestStats:
     return ingest_telegram_raw_csvs(conn=conn, date=date, data_dir=data_dir)
@@ -113,12 +194,19 @@ def _stage_local_evidence_synthesis(bundle, *, provider: str):
     return synthesize_same_day_bundle(bundle, provider=provider)
 
 
-@traceable(name="Stock Report Daily V2 - Render Markdown")
+@traceable(
+    name="Stock Report Daily V2 - Render Markdown",
+    process_inputs=_trace_final_report_inputs,
+    process_outputs=_trace_final_report_outputs,
+)
 def _stage_render_markdown(report_artifact):
     return render_stock_report_markdown(report_artifact)
 
 
-@traceable(name="Stock Report Daily V2 - Persist Report")
+@traceable(
+    name="Stock Report Daily V2 - Persist Report",
+    process_inputs=_trace_final_report_inputs,
+)
 def _stage_persist_report(conn, *, report_date, provider: str, output_markdown: str, evidence_refs):
     return persist_report_artifact(
         conn,

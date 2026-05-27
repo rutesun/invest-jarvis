@@ -11,7 +11,17 @@ from src.pipelines.stock_report.models import (
     NormalizedMessage,
     RawTelegramMessage,
 )
-from src.pipelines.stock_report.pipeline import _validate_date, run_daily_v2
+from src.pipelines.stock_report.pipeline import (
+    _trace_final_report_inputs,
+    _trace_final_report_outputs,
+    _validate_date,
+    run_daily_v2,
+)
+from src.pipelines.stock_report.synthesize import (
+    ReportEvidenceRef,
+    ReportSectionItem,
+    StockReportArtifact,
+)
 from src.pipelines.stock_report.telegram_ingest import (
     TelegramIngestStats,
     discover_csv_files,
@@ -46,6 +56,63 @@ def test_discover_csv_files_loads_matching_day_files(tmp_path: Path):
 def test_parse_channel_key_extracts_key_from_filename():
     csv_path = Path("2026-05-08-kiwoom_semibat.csv")
     assert parse_channel_key("2026-05-08", csv_path) == "kiwoom_semibat"
+
+
+def test_trace_final_report_inputs_summarizes_report_payloads_without_content():
+    artifact = StockReportArtifact(
+        report_date=date(2026, 5, 8),
+        pulse=[ReportSectionItem(key="pulse-1", title="SECRET TITLE", body="SECRET BODY")],
+        category_summaries=[],
+        core_themes=[],
+        focus_tickers=[],
+        low_confidence_notes=["SECRET LOW CONFIDENCE"],
+        evidence_refs=[
+            ReportEvidenceRef(
+                section_key="pulse",
+                item_key="pulse-1",
+                knowledge_chunk_id=123,
+                rank_score=1.0,
+                knowledge_chunk_snapshot={
+                    "channel_name": "하나증권",
+                    "channel_message_id": "9609",
+                    "evidence_items": [{"text": "SECRET EVIDENCE"}],
+                },
+            )
+        ],
+    )
+    markdown = "# Report\n\nSECRET REPORT BODY"
+
+    payload = _trace_final_report_inputs(
+        {
+            "conn": object(),
+            "report_artifact": artifact,
+            "output_markdown": markdown,
+            "evidence_refs": artifact.evidence_refs,
+        }
+    )
+
+    payload_text = repr(payload)
+    assert "SECRET TITLE" not in payload_text
+    assert "SECRET BODY" not in payload_text
+    assert "SECRET LOW CONFIDENCE" not in payload_text
+    assert "SECRET EVIDENCE" not in payload_text
+    assert "SECRET REPORT BODY" not in payload_text
+    assert payload["conn"] == "<redacted:connection>"
+    assert payload["report_artifact"]["type"] == "StockReportArtifact"
+    assert payload["report_artifact"]["pulse_count"] == 1
+    assert payload["output_markdown"]["chars"] == len(markdown)
+    assert payload["evidence_refs"]["count"] == 1
+
+
+def test_trace_final_report_outputs_summarizes_markdown_without_content():
+    markdown = "# Report\n\nSECRET REPORT BODY"
+
+    payload = _trace_final_report_outputs(markdown)
+
+    assert "SECRET REPORT BODY" not in repr(payload)
+    assert payload["type"] == "str"
+    assert payload["chars"] == len(markdown)
+    assert "sha256" in payload
 
 
 def test_run_daily_v2_calls_migration_and_ingest(monkeypatch):
