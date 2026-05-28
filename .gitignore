@@ -4,8 +4,11 @@ __pycache__/
 .DS_Store
 .venv/
 venv/
+data
 data/
+test_data/
 reports/
+chunk_report-*.md
 charts/
 *.egg-info/
 dist/
@@ -14,7 +17,9 @@ build/
 .coverage
 .worktrees/
 .claude/worktrees/
-.claude/settings.local.jsonanon.session
+.claude/settings.local.json
 tests/pipelines/daily_report/fixtures/stage_outputs/
 anon.session
+anon.session-journal
 .obsidian/
+.docker/postgres-data/

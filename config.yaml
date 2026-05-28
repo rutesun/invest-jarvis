@@ -38,3 +38,12 @@ telegram:
     - id: "shsmallcap"
       timezone: "Asia/Seoul"
   output_dir: "data"
+
+stock_report:
+  normalize:
+    short_comment_max_chars: 100
+    group_window_minutes: 30
+    short_comment_channels:
+      - "hana_us_stock"
+      - "kwusa"
+      - "kiwoom_semibat"

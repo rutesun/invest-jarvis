@@ -37,6 +37,26 @@ uv run jarvis analyze AAPL
 uv run jarvis report
 ```
 
+## Stock Report V2 DB (개발 환경)
+
+`daily-v2`는 Postgres DSN이 필요하다. 개발 중에는 `docker-compose.yml`의 Postgres를 사용하고,
+안정화 후에는 클라우드 Postgres DSN으로 교체하면 된다.
+
+```bash
+# 1) 환경 변수 준비
+cp .env.example .env
+# DB_PASSWORD, STOCK_REPORT_DB_DSN 설정
+
+# 2) Postgres 실행
+docker compose up -d postgres
+
+# 3) 마이그레이션 적용
+uv run python scripts/stock_report_migrate.py
+
+# 4) V2 실행
+uv run jarvis report daily-v2 2026-05-08
+```
+
 **개발 문서**:
 - 설치 및 설정: [@docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
 - 아키텍처: [@docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
@@ -48,4 +68,3 @@ uv run jarvis report
 MIT
 
 ---
-

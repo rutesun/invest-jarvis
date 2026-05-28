@@ -1344,6 +1344,60 @@ def report_daily(
         raise typer.Exit(1) from None
 
 
+@report_app.command("daily-v2")
+def report_daily_v2(
+    date: str = typer.Argument(
+        None,
+        help="분석할 날짜 (YYYY-MM-DD). 미지정 시 전날.",
+    ),
+    data_dir: str = typer.Option("data", "--data-dir", "-d", help="데이터 디렉토리"),
+    provider: str = typer.Option("openai", "--provider", "-p", help="LLM provider"),
+    config_path: str = typer.Option(
+        "config.yaml", "--config-path", help="stock report 설정 파일 경로"
+    ),
+    taxonomy_path: str = typer.Option(
+        "config/stock_report_vocabulary.yaml",
+        "--taxonomy-path",
+        help="taxonomy vocabulary 파일 경로",
+    ),
+    preview_limit: int = typer.Option(
+        12, "--preview-limit", help="canonical_summary 미리보기 개수"
+    ),
+):
+    """Stock Report Engine V2 (Phase 1) 실행."""
+    from datetime import datetime as dt
+    from datetime import timedelta
+
+    from src.pipelines.stock_report.pipeline import format_daily_v2_report, run_daily_v2
+
+    if date is None:
+        date = (dt.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+
+    console.print(f"[bold]Daily Report V2 생성 중... (날짜: {date})[/bold]\n")
+
+    try:
+        result = run_daily_v2(
+            date=date,
+            data_dir=data_dir,
+            provider=provider,
+            config_path=config_path,
+            taxonomy_path=taxonomy_path,
+            preview_limit=preview_limit,
+        )
+        output = format_daily_v2_report(result)
+        console.print(Markdown(output))
+
+        year_month = date[:7]
+        report_dir = Path(f"reports/{year_month}")
+        report_dir.mkdir(parents=True, exist_ok=True)
+        output_file = report_dir / f"daily_v2_{date}.md"
+        output_file.write_text(output, encoding="utf-8")
+        console.print(f"\n[green]✓ 리포트 저장: {output_file}[/green]")
+    except Exception as e:
+        console.print(f"[red]오류: {e}[/red]")
+        raise typer.Exit(1) from None
+
+
 # --- Telegram 서브커맨드 ---
 
 telegram_app = typer.Typer(help="Telegram 채널 메시지 수집")

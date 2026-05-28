@@ -12,6 +12,31 @@ from src.pipelines.daily_report.config import LLM_MAX_RETRIES, LLM_TIMEOUT_SECON
 logger = logging.getLogger(__name__)
 
 
+def _format_llm_log_context(config: dict) -> str:
+    metadata = config.get("metadata", {}) if isinstance(config, dict) else {}
+    if not isinstance(metadata, dict):
+        metadata = {}
+
+    keys = (
+        "stage",
+        "model",
+        "provider",
+        "report_date",
+        "telegram_message_id",
+        "channel_key",
+        "channel_message_id",
+        "processing_mode",
+        "content_chars",
+        "chunk_count",
+        "prompt_chars",
+    )
+    parts = [f"{key}={metadata[key]}" for key in keys if metadata.get(key) is not None]
+    run_name = config.get("run_name") if isinstance(config, dict) else None
+    if run_name:
+        parts.append(f"run_name={run_name}")
+    return " ".join(parts)
+
+
 async def invoke_llm_with_retry(
     llm,
     output_model: type[BaseModel],
@@ -41,6 +66,7 @@ async def invoke_llm_with_retry(
     last_exception = None
     original_msg_count = len(messages)
     messages_to_send = list(messages)
+    log_context = _format_llm_log_context(config)
 
     for attempt in range(max_retries):
         try:
@@ -52,10 +78,11 @@ async def invoke_llm_with_retry(
         except TimeoutError:
             last_exception = TimeoutError(f"LLM call timed out after {timeout_seconds}s")
             logger.warning(
-                "LLM timeout (attempt %d/%d, %ds)",
+                "LLM timeout (attempt %d/%d, %.2fs) %s",
                 attempt + 1,
                 max_retries,
                 timeout_seconds,
+                log_context,
             )
         except Exception as e:
             last_exception = e
@@ -93,17 +120,19 @@ async def invoke_llm_with_retry(
                 messages_to_send = messages[:original_msg_count] + [feedback_message]
 
                 logger.warning(
-                    "ValidationError (attempt %d/%d): %s",
+                    "ValidationError (attempt %d/%d): %s %s",
                     attempt + 1,
                     max_retries,
                     "; ".join(error_summary),
+                    log_context,
                 )
             else:
                 logger.warning(
-                    "LLM call failed (attempt %d/%d): %s",
+                    "LLM call failed (attempt %d/%d): %s %s",
                     attempt + 1,
                     max_retries,
                     e,
+                    log_context,
                 )
 
         if attempt < max_retries - 1:

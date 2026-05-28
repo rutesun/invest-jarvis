@@ -253,7 +253,44 @@ uv run python -m src.pipelines.daily_report.stages.wrapup_stage 2026-04-17
 
 ---
 
-#### 3-3. report upload - 기존 리포트 일괄 업로드
+#### 3-3. report daily-v2 - Stock Report Engine V2 실행 (Phase 1)
+
+**특징:**
+- LLM semantic extraction 기반 `canonical_summary`/`evidence_items` 생성
+- `taxonomy_path` 기준 카테고리/테마 정규화
+- `reports/YYYY-MM/daily_v2_YYYY-MM-DD.md` 저장
+
+**요구사항:**
+- 텔레그램 데이터 필요: `uv run jarvis telegram fetch <날짜>` 먼저 실행
+- LLM API 키 필요 (`OPENAI_API_KEY` 또는 provider에 맞는 키)
+- Postgres 연결 필요 (`STOCK_REPORT_DB_DSN` 또는 `DATABASE_URL`)
+
+**사용법:**
+```bash
+uv run jarvis report daily-v2 [날짜] [OPTIONS]
+```
+
+**옵션:**
+- `--data-dir, -d`: 데이터 디렉토리 (기본값: data)
+- `--provider, -p`: LLM provider (기본값: openai)
+- `--config-path`: stock report 설정 파일 경로 (기본값: config.yaml)
+- `--taxonomy-path`: taxonomy vocabulary 파일 경로 (기본값: config/stock_report_vocabulary.yaml)
+- `--preview-limit`: canonical_summary 미리보기 개수 (기본값: 12)
+
+**예시:**
+```bash
+# 기본 실행
+uv run jarvis report daily-v2 2026-05-19
+
+# taxonomy 교체 + preview 확장
+uv run jarvis report daily-v2 2026-05-19 \
+  --taxonomy-path config/stock_report_vocabulary.yaml \
+  --preview-limit 50
+```
+
+---
+
+#### 3-4. report upload - 기존 리포트 일괄 업로드
 
 **특징:**
 - `reports/` 디렉토리의 기존 MD 파일을 Notion에 업로드
@@ -300,6 +337,46 @@ uv run jarvis report upload 2026-04-18 --type screener
 
 완료: 성공 2, 실패 1
 ```
+
+---
+
+#### 3-6. V2 튜닝/DB 확인 스크립트
+
+**Prompt 튜닝 (실데이터 샘플 기반):**
+```bash
+uv run python scripts/stock_report_prompt_tuning.py 2026-05-19 \
+  --provider openai \
+  --model gpt-5.4-mini \
+  --sample-size 30 \
+  --per-channel 2 \
+  --pick hana_us_stock:9609 \
+  --pick shinhanresearch:50725
+```
+
+**핵심 옵션:**
+- `--model`: 모델 override
+- `--pick`: 특정 메시지 강제 포함 (`channel_key:channel_message_id`, 반복 가능)
+- `--pick-file`: selector 파일로 일괄 지정
+- `--include-grouped-only`: grouped_only 후보도 샘플에 포함
+- `--max-raw-chars`: 샘플 원문 길이 제한 (`<=0`이면 full)
+
+**DB 적재 결과 확인 (knowledge_chunks):**
+```bash
+uv run python scripts/stock_report_show_chunks.py 2026-05-19
+
+# 채널 필터
+uv run python scripts/stock_report_show_chunks.py 2026-05-19 --channel-key hana_us_stock
+
+# T09 입력 근거 검토용 MD 저장 (전체 evidence/supporting_facts 출력)
+uv run python scripts/stock_report_show_chunks.py 2026-05-19 \
+  --source-type telegram_unit_v2 \
+  --output reports/2026-05/t09_input_evidence_2026-05-19.md
+```
+
+`stock_report_show_chunks.py` 출력은 `message(source_pk)` 단위로 묶어서
+`canonical_summary`, `category/theme`, `evidence_items`, `qa_warnings`를 함께 보여줍니다.
+각 summary에는 `chunk_ref: <channel_key>+<chunk_id>`가 포함되며,
+`evidence_items`/`supporting_facts`는 잘리지 않고 전체가 출력됩니다.
 
 ---
 
@@ -514,6 +591,13 @@ KIS_APP_SECRET=...
 KIS_ACCOUNT_NO=...
 ```
 
+### Stock Report V2 DB (.env)
+```bash
+# 둘 중 하나 사용
+STOCK_REPORT_DB_DSN=postgresql://report:${DB_PASSWORD}@localhost:5432/stock_report
+DATABASE_URL=postgresql://report:${DB_PASSWORD}@localhost:5432/stock_report
+```
+
 ---
 
 ## 문제 해결
@@ -564,13 +648,13 @@ uv run jarvis analyze AAPL
 ### 2. 여러 종목 동시 분석
 ```bash
 # report로 한 번에 여러 종목 체크
-uv run jarvis report --tickers "AAPL,MSFT,GOOGL,AMZN,META"
+uv run jarvis report ticker --tickers "AAPL,MSFT,GOOGL,AMZN,META"
 ```
 
 ### 3. 정기적인 모니터링
 ```bash
 # cron이나 스케줄러로 자동화
-0 9 * * 1-5 cd /path/to/invest-jarvis && uv run jarvis report
+0 9 * * 1-5 cd /path/to/invest-jarvis && uv run jarvis report ticker
 ```
 
 ### 4. 출력 저장
@@ -579,5 +663,5 @@ uv run jarvis report --tickers "AAPL,MSFT,GOOGL,AMZN,META"
 uv run jarvis check AAPL > aapl_analysis.txt
 
 # 날짜별로 저장
-uv run jarvis report > report_$(date +%Y%m%d).txt
+uv run jarvis report daily-v2 2026-05-19 > report_v2_$(date +%Y%m%d).txt
 ```
