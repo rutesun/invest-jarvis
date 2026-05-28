@@ -146,6 +146,11 @@ def parse_args() -> argparse.Namespace:
         default=[],
         help="특정 채널만 조회 (여러 번 지정 가능). 예: --channel-key ked_epic_ai",
     )
+    parser.add_argument(
+        "--output",
+        default=None,
+        help="출력 파일 경로 (.md 권장). 미지정 시 stdout으로 출력",
+    )
     return parser.parse_args()
 
 
@@ -270,7 +275,7 @@ def render_grouped(chunks: list[ChunkRow]) -> str:
         for idx, item in enumerate(items, start=1):
             sub = ", ".join(item.sub_themes) if item.sub_themes else "-"
             tickers = ", ".join(item.ticker_tags) if item.ticker_tags else "-"
-            facts = " | ".join(item.supporting_facts[:3]) if item.supporting_facts else "-"
+            facts = " | ".join(item.supporting_facts) if item.supporting_facts else "-"
             warnings = (
                 " | ".join(
                     (
@@ -284,6 +289,11 @@ def render_grouped(chunks: list[ChunkRow]) -> str:
                 else "-"
             )
             lines.append(f"- summary {idx}: {item.canonical_summary}")
+            lines.append(
+                "  - chunk_ref: "
+                f"{item.channel_key or '-'}+{item.chunk_id} "
+                f"(channel_message_id={item.channel_message_id or '-'})"
+            )
             lines.append(
                 f"  - type: {item.message_type}"
                 + (f" / {item.event_type}" if item.event_type else "")
@@ -300,7 +310,7 @@ def render_grouped(chunks: list[ChunkRow]) -> str:
             grouped_evidence = _group_evidence_by_kind(item.evidence_items)
             if grouped_evidence:
                 for kind, evidence_texts in grouped_evidence.items():
-                    lines.append(f"  - evidence_items.{kind}: {' | '.join(evidence_texts[:5])}")
+                    lines.append(f"  - evidence_items.{kind}: {' | '.join(evidence_texts)}")
             else:
                 lines.append("  - evidence_items: -")
             lines.append(f"  - supporting_facts: {facts}")
@@ -320,7 +330,13 @@ def main() -> None:
             source_type=args.source_type,
             channel_keys=args.channel_key,
         )
-    print(render_grouped(chunks))
+    output = render_grouped(chunks)
+    if args.output:
+        with open(args.output, "w", encoding="utf-8") as file:
+            file.write(output)
+        print(f"Saved: {args.output}")
+        return
+    print(output)
 
 
 if __name__ == "__main__":

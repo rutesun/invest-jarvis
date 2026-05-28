@@ -381,10 +381,17 @@ uv run python scripts/stock_report_show_chunks.py 2026-05-19
 
 # 채널 필터
 uv run python scripts/stock_report_show_chunks.py 2026-05-19 --channel-key hana_us_stock
+
+# T09 입력 근거 검토용 MD 저장 (전체 evidence/supporting_facts 출력)
+uv run python scripts/stock_report_show_chunks.py 2026-05-19 \
+  --source-type telegram_unit_v2 \
+  --output reports/2026-05/t09_input_evidence_2026-05-19.md
 ```
 
 `stock_report_show_chunks.py` 출력은 `message(source_pk)` 단위로 묶어서
 `canonical_summary`, `category/theme`, `evidence_items`, `qa_warnings`를 함께 보여줍니다.
+각 summary에는 `chunk_ref: <channel_key>+<chunk_id>`가 포함되며,
+`evidence_items`/`supporting_facts`는 잘리지 않고 전체가 출력됩니다.
 
 ---
 

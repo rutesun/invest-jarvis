@@ -73,6 +73,7 @@ def test_render_grouped_prints_typed_evidence_and_warnings() -> None:
     assert "- evidence_items.market_context: 가격 전망은 견조" in output
     assert "- qa_warnings: missing_metric_candidate: test warning" in output
     assert "- provisional: category=-, theme=AI 반도체, is_provisional=False" in output
+    assert "  - chunk_ref: hana_us_stock+1 (channel_message_id=9609)" in output
 
 
 def test_render_grouped_handles_legacy_rows_without_typed_evidence() -> None:
@@ -105,3 +106,40 @@ def test_render_grouped_handles_legacy_rows_without_typed_evidence() -> None:
 
     assert "- evidence_items: -" in output
     assert "- qa_warnings: -" in output
+
+
+def test_render_grouped_prints_all_evidence_items_without_truncation() -> None:
+    output = render_grouped(
+        [
+            ChunkRow(
+                chunk_id=10,
+                source_pk=200,
+                posted_at=None,
+                channel_key="ked_epic_ai",
+                channel_message_id="33255",
+                message_type="signal",
+                event_type="해석/전망",
+                category_key="반도체",
+                main_theme="HBM",
+                sub_themes=[],
+                ticker_tags=["SK하이닉스"],
+                canonical_summary="HBM 관련 다중 근거",
+                supporting_facts=[f"fact-{idx}" for idx in range(1, 8)],
+                evidence_items=[{"kind": "fact", "text": f"evidence-{idx}"} for idx in range(1, 8)],
+                qa_warnings=[],
+                provisional_category=None,
+                provisional_theme=None,
+                is_provisional=False,
+                content_clean="",
+                raw_text="",
+            )
+        ]
+    )
+
+    assert (
+        "- evidence_items.fact: "
+        "evidence-1 | evidence-2 | evidence-3 | evidence-4 | evidence-5 | evidence-6 | evidence-7"
+    ) in output
+    assert (
+        "- supporting_facts: fact-1 | fact-2 | fact-3 | fact-4 | fact-5 | fact-6 | fact-7"
+    ) in output

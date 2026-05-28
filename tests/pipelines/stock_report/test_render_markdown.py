@@ -72,8 +72,8 @@ def test_markdown_report_builder_renders_fixed_sections() -> None:
     assert "## Core Themes" in markdown
     assert "## Focus Tickers" in markdown
     assert "## Low Confidence" in markdown
-    assert "- 근거: NVDA HBM 수요 증가" in markdown
-    assert "- Impact: 반도체 업황 회복 기대가 강화된다" in markdown
+    assert "- NVDA HBM 수요 증가" in markdown
+    assert "- **Impact:** 반도체 업황 회복 기대가 강화된다" in markdown
     assert "- 관련 종목: 엔비디아(NVDA): HBM 수요" in markdown
     assert "- 출처: chunk 1 신한 리서치#51014" in markdown
 
@@ -170,8 +170,8 @@ def test_markdown_report_builder_renders_rich_core_theme_card() -> None:
     markdown = MarkdownReportBuilder().build(artifact)
 
     assert "- 핵심 주장: AI CAPEX가 GPU를 넘어 HBM, 전력, 커패시터로 확산 중이다." in markdown
-    assert "- 근거: ADI 데이터센터 매출이 통신 부문의 75%" in markdown
-    assert "- Impact: AI 수혜가 엔비디아 중심에서 부품·전력·메모리로 넓어진다." in markdown
+    assert "- ADI 데이터센터 매출이 통신 부문의 75%" in markdown
+    assert "- **Impact:** AI 수혜가 엔비디아 중심에서 부품·전력·메모리로 넓어진다." in markdown
     assert "- 확인 변수: 빅테크 CAPEX 지속성, 메모리 가격 상승 지속 여부" in markdown
     assert "- 연결 카테고리: AI인프라, 반도체, 원전/전력인프라" in markdown
 
@@ -205,6 +205,34 @@ def test_markdown_report_builder_renders_rich_focus_ticker_card() -> None:
     assert "- 투자 포인트: HBM 수요와 ETF 수급이 동시에 붙는 대표 수혜주다." in markdown
     assert "- 촉매: iHBM 냉각 솔루션 공개, 단일종목 레버리지 ETF 출시" in markdown
     assert "- 핵심 수치: 주가 5.72% 급등, 열 저항 30% 감소" in markdown
-    assert "- 근거: 주가 5.72% 급등" in markdown
+    assert "- 주가 5.72% 급등" in markdown
     assert "- 리스크/확인: ETF 출시 후 차익실현, HBM 공급 경쟁 심화" in markdown
     assert "- 관련 테마: HBM, 반도체 레버리지 ETF" in markdown
+
+
+def test_markdown_report_builder_renders_related_stocks_as_separate_bullets() -> None:
+    artifact = StockReportArtifact(
+        report_date=date(2026, 5, 26),
+        pulse=[],
+        category_summaries=[
+            ReportSectionItem(
+                key="ai-infra",
+                title="AI 인프라",
+                body="",
+                related_stocks=[
+                    {"name": "삼화콘덴서", "ticker": None, "catalyst": "전력 인프라 수요 증가"},
+                    {"name": "삼성전기", "ticker": None, "catalyst": "실리콘 커패시터 공급 기대"},
+                ],
+            )
+        ],
+        core_themes=[],
+        focus_tickers=[],
+        low_confidence_notes=[],
+        evidence_refs=[],
+    )
+
+    markdown = MarkdownReportBuilder().build(artifact)
+
+    assert "- 관련 종목: 삼화콘덴서: 전력 인프라 수요 증가" in markdown
+    assert "- 관련 종목: 삼성전기: 실리콘 커패시터 공급 기대" in markdown
+    assert "삼화콘덴서: 전력 인프라 수요 증가, 삼성전기: 실리콘 커패시터 공급 기대" not in markdown

@@ -59,12 +59,12 @@ class MarkdownReportBuilder:
             if item.thesis:
                 lines.append(f"- 핵심 주장: {item.thesis}")
             if item.evidence_bullets:
-                lines.extend(f"- 근거: {bullet}" for bullet in item.evidence_bullets)
+                lines.extend(f"- {bullet}" for bullet in item.evidence_bullets)
             elif item.body:
                 lines.append(item.body)
 
             if item.impact:
-                lines.append(f"- Impact: {item.impact}")
+                lines.append(f"- **Impact:** {item.impact}")
             if item.watch_points:
                 lines.append(f"- 확인 변수: {', '.join(item.watch_points)}")
             if item.risks_or_watch_points:
@@ -74,10 +74,10 @@ class MarkdownReportBuilder:
             if item.related_themes:
                 lines.append(f"- 관련 테마: {', '.join(item.related_themes)}")
             if item.related_stocks:
-                related = ", ".join(
-                    self._format_related_stock(stock) for stock in item.related_stocks
+                lines.extend(
+                    f"- 관련 종목: {self._format_related_stock(stock)}"
+                    for stock in item.related_stocks
                 )
-                lines.append(f"- 관련 종목: {related}")
 
             sources = source_lookup.get((section_key, item.key), [])
             if not sources and item.evidence_chunk_ids:
