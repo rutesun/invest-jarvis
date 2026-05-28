@@ -30,7 +30,6 @@
 - `src/pipelines/stock_report/retrieval.py`
 - `src/pipelines/stock_report/synthesize.py`
 - `src/pipelines/stock_report/render_markdown.py`
-- `src/pipelines/stock_report/compare.py`
 - `migrations/stock_report/001_phase1.sql`
 - `migrations/stock_report/002_phase2.sql`
 - `migrations/stock_report/003_phase3.sql`
@@ -45,7 +44,7 @@
 - `config/stock_report_vocabulary.yaml`
 
 ### 수정하는 파일
-- `src/cli/main.py` - `report daily-v2`, `report validate`, 이후 `report ingest-pdf` 추가
+- `src/cli/main.py` - `report daily-v2`, 이후 `report ingest-pdf` 추가
 - `pyproject.toml` - `psycopg` 관련 의존성 추가 (Vector DB client 의존성은 Phase 2에서 추가)
 - `config.yaml` - `stock_report` operational knobs 추가
 
@@ -87,9 +86,8 @@ flowchart TD
 
 **기대효과:** `jarvis report daily-v2 DATE`로 새 엔진을 독립 실행할 수 있다.
 
-- [x] `run_daily_v2(date, data_dir, provider, compare)` 시그니처를 고정한다
+- [x] `run_daily_v2(date, data_dir, provider)` 시그니처를 고정한다
 - [x] `@report_app.command("daily-v2")`를 추가한다
-- [x] `@report_app.command("validate")`를 추가한다
 
 ### T03. Phase 1 Postgres migration과 연결 계층을 만든다
 
@@ -227,18 +225,15 @@ flowchart TD
 - [x] `report_runs`, `report_evidence`를 함께 기록한다
 - [x] chunk 재생성 후에도 과거 run의 evidence trace가 남도록 `report_evidence`에 chunk snapshot을 저장한다
 
-### T10. compare validator와 acceptance 테스트를 만든다
+### T10. acceptance 테스트를 만든다
 
 **Files:**
-- Create: `src/pipelines/stock_report/compare.py`
 - Modify: `tests/pipelines/stock_report/test_pipeline.py`
 
-**Why:** 병행 운영은 실제 비교 루틴이 있어야 끝난다.
+**Why:** Phase 1 운영 안정성은 고정 fixture 기반 acceptance로 검증해야 한다.
 
 **기대효과:** Phase 1 종료 조건을 객관적으로 확인할 수 있다.
 
-- [ ] `jarvis report validate DATE --mode compare`를 구현한다
-- [ ] 같은 날짜의 V1/V2 결과를 나란히 저장하거나 출력한다
 - [ ] fixture 날짜 기준 acceptance 테스트를 만든다
 
 ## Phase 2: Vector DB + PDF / Report Grounding

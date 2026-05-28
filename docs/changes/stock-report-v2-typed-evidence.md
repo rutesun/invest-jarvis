@@ -41,8 +41,8 @@ LLM 의미 판단과 코드 정규화/검증 경계를 분리해 회귀를 줄�
 # V2 실행
 uv run jarvis report daily-v2 2026-05-19 --preview-limit 50
 
-# 비교 검증
-uv run jarvis report validate 2026-05-19 --mode compare --preview-limit 50
+# 재실행 검증 (동일 입력 재실행)
+uv run jarvis report daily-v2 2026-05-19 --preview-limit 50
 
 # 샘플 튜닝
 uv run python scripts/stock_report_prompt_tuning.py 2026-05-19 --provider openai --model gpt-5.4-mini

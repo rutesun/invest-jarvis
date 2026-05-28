@@ -1195,7 +1195,6 @@ def report_daily_v2(
     ),
     data_dir: str = typer.Option("data", "--data-dir", "-d", help="데이터 디렉토리"),
     provider: str = typer.Option("openai", "--provider", "-p", help="LLM provider"),
-    compare: bool = typer.Option(False, "--compare", help="비교 모드 실행"),
     config_path: str = typer.Option(
         "config.yaml", "--config-path", help="stock report 설정 파일 경로"
     ),
@@ -1224,7 +1223,6 @@ def report_daily_v2(
             date=date,
             data_dir=data_dir,
             provider=provider,
-            compare=compare,
             config_path=config_path,
             taxonomy_path=taxonomy_path,
             preview_limit=preview_limit,
@@ -1238,52 +1236,6 @@ def report_daily_v2(
         output_file = report_dir / f"daily_v2_{date}.md"
         output_file.write_text(output, encoding="utf-8")
         console.print(f"\n[green]✓ 리포트 저장: {output_file}[/green]")
-    except Exception as e:
-        console.print(f"[red]오류: {e}[/red]")
-        raise typer.Exit(1) from None
-
-
-@report_app.command("validate")
-def report_validate_v2(
-    date: str = typer.Argument(
-        ...,
-        help="검증할 날짜 (YYYY-MM-DD)",
-    ),
-    mode: str = typer.Option("compare", "--mode", help="검증 모드 (현재 compare만 지원)"),
-    data_dir: str = typer.Option("data", "--data-dir", "-d", help="데이터 디렉토리"),
-    provider: str = typer.Option("openai", "--provider", "-p", help="LLM provider"),
-    config_path: str = typer.Option(
-        "config.yaml", "--config-path", help="stock report 설정 파일 경로"
-    ),
-    taxonomy_path: str = typer.Option(
-        "config/stock_report_vocabulary.yaml",
-        "--taxonomy-path",
-        help="taxonomy vocabulary 파일 경로",
-    ),
-    preview_limit: int = typer.Option(
-        12, "--preview-limit", help="canonical_summary 미리보기 개수"
-    ),
-):
-    """Stock Report Engine V2 검증 실행."""
-    from src.pipelines.stock_report.pipeline import format_daily_v2_report, run_validate_v2
-
-    if mode != "compare":
-        console.print("[red]오류: 현재 validate는 --mode compare만 지원합니다.[/red]")
-        raise typer.Exit(1) from None
-
-    console.print(f"[bold]Daily Report V2 검증 중... (날짜: {date}, 모드: {mode})[/bold]\n")
-
-    try:
-        result = run_validate_v2(
-            date=date,
-            data_dir=data_dir,
-            provider=provider,
-            config_path=config_path,
-            taxonomy_path=taxonomy_path,
-            preview_limit=preview_limit,
-        )
-        output = format_daily_v2_report(result)
-        console.print(Markdown(output))
     except Exception as e:
         console.print(f"[red]오류: {e}[/red]")
         raise typer.Exit(1) from None

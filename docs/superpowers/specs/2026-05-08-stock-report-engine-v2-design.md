@@ -151,7 +151,7 @@ flowchart TD
 ```text
 src/pipelines/stock_report/
   __init__.py
-  pipeline.py                # run_daily_v2(date, data_dir, provider, compare)
+  pipeline.py                # run_daily_v2(date, data_dir, provider)
   models.py                  # typed contracts for normalized message, chunk, evidence, report
   config.py                  # stock_report LLM settings
   db.py                      # psycopg connection helpers, SQL execution
@@ -580,17 +580,15 @@ class MarkdownReportBuilder:
 
 ### Phase 1 CLI Contract
 
-Phase 1에서 추가할 커맨드는 아래 2개다.
+Phase 1에서 추가할 커맨드는 아래 1개다.
 
 ```bash
 uv run jarvis report daily-v2 2026-04-16
-uv run jarvis report validate 2026-04-16 --mode compare
 ```
 
 동작:
 
 - `daily-v2`: 새 엔진 실행, Markdown 출력, report_runs/report_evidence 기록
-- `validate --mode compare`: 같은 날짜의 `daily`와 `daily-v2`를 나란히 저장하고 품질 체크
 
 ### Phase 1 Test Plan
 

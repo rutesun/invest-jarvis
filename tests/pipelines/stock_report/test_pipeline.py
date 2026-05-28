@@ -302,13 +302,11 @@ def test_run_daily_v2_calls_migration_and_ingest(monkeypatch):
         date="2026-05-08",
         data_dir="data",
         provider="openai",
-        compare=False,
         dsn=None,
     )
 
     assert result.date == "2026-05-08"
     assert result.provider == "openai"
-    assert result.compare is False
     assert result.csv_files == 2
     assert result.parsed_rows == 12
     assert result.upserted_rows == 11

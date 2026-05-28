@@ -38,7 +38,6 @@ logger = logging.getLogger(__name__)
 class DailyV2RunResult:
     date: str
     provider: str
-    compare: bool
     csv_files: int
     parsed_rows: int
     upserted_rows: int
@@ -232,7 +231,6 @@ def run_daily_v2(
     date: str,
     data_dir: str = "data",
     provider: str = "openai",
-    compare: bool = False,
     dsn: str | None = None,
     migrations_dir: str = "migrations/stock_report",
     config_path: str = "config.yaml",
@@ -338,7 +336,6 @@ def run_daily_v2(
     return DailyV2RunResult(
         date=date,
         provider=provider,
-        compare=compare,
         csv_files=ingest_stats.csv_files,
         parsed_rows=ingest_stats.parsed_rows,
         upserted_rows=ingest_stats.upserted_rows,
@@ -360,29 +357,6 @@ def run_daily_v2(
     )
 
 
-def run_validate_v2(
-    date: str,
-    data_dir: str = "data",
-    provider: str = "openai",
-    dsn: str | None = None,
-    migrations_dir: str = "migrations/stock_report",
-    config_path: str = "config.yaml",
-    taxonomy_path: str = "config/stock_report_vocabulary.yaml",
-    preview_limit: int = 12,
-) -> DailyV2RunResult:
-    return run_daily_v2(
-        date=date,
-        data_dir=data_dir,
-        provider=provider,
-        compare=True,
-        dsn=dsn,
-        migrations_dir=migrations_dir,
-        config_path=config_path,
-        taxonomy_path=taxonomy_path,
-        preview_limit=preview_limit,
-    )
-
-
 def format_daily_v2_report(result: DailyV2RunResult) -> str:
     if result.output_markdown:
         return result.output_markdown
@@ -392,7 +366,6 @@ def format_daily_v2_report(result: DailyV2RunResult) -> str:
         "",
         f"- date: `{result.date}`",
         f"- provider: `{result.provider}`",
-        f"- compare mode: `{result.compare}`",
         f"- csv files: `{result.csv_files}`",
         f"- parsed rows: `{result.parsed_rows}`",
         f"- upserted rows: `{result.upserted_rows}`",

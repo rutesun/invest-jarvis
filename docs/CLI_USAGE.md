@@ -243,7 +243,6 @@ uv run python -m src.pipelines.daily_report.stages.wrapup_stage 2026-04-17
 - LLM semantic extraction 기반 `canonical_summary`/`evidence_items` 생성
 - `taxonomy_path` 기준 카테고리/테마 정규화
 - `reports/YYYY-MM/daily_v2_YYYY-MM-DD.md` 저장
-- `--compare`로 V1/V2 비교 출력 가능
 
 **요구사항:**
 - 텔레그램 데이터 필요: `uv run jarvis telegram fetch <날짜>` 먼저 실행
@@ -258,7 +257,6 @@ uv run jarvis report daily-v2 [날짜] [OPTIONS]
 **옵션:**
 - `--data-dir, -d`: 데이터 디렉토리 (기본값: data)
 - `--provider, -p`: LLM provider (기본값: openai)
-- `--compare`: 비교 모드 실행
 - `--config-path`: stock report 설정 파일 경로 (기본값: config.yaml)
 - `--taxonomy-path`: taxonomy vocabulary 파일 경로 (기본값: config/stock_report_vocabulary.yaml)
 - `--preview-limit`: canonical_summary 미리보기 개수 (기본값: 12)
@@ -268,9 +266,6 @@ uv run jarvis report daily-v2 [날짜] [OPTIONS]
 # 기본 실행
 uv run jarvis report daily-v2 2026-05-19
 
-# 비교 모드
-uv run jarvis report daily-v2 2026-05-19 --compare
-
 # taxonomy 교체 + preview 확장
 uv run jarvis report daily-v2 2026-05-19 \
   --taxonomy-path config/stock_report_vocabulary.yaml \
@@ -279,33 +274,7 @@ uv run jarvis report daily-v2 2026-05-19 \
 
 ---
 
-#### 3-4. report validate - Stock Report Engine V2 검증
-
-**특징:**
-- 현재 `--mode compare` 검증 모드 지원
-- 동일 날짜 입력으로 재실행하여 분류/요약 결과를 검토할 때 사용
-
-**사용법:**
-```bash
-uv run jarvis report validate <날짜> --mode compare [OPTIONS]
-```
-
-**옵션:**
-- `--mode`: 검증 모드 (현재 `compare`만 지원)
-- `--data-dir, -d`: 데이터 디렉토리 (기본값: data)
-- `--provider, -p`: LLM provider (기본값: openai)
-- `--config-path`: stock report 설정 파일 경로 (기본값: config.yaml)
-- `--taxonomy-path`: taxonomy vocabulary 파일 경로 (기본값: config/stock_report_vocabulary.yaml)
-- `--preview-limit`: canonical_summary 미리보기 개수 (기본값: 12)
-
-**예시:**
-```bash
-uv run jarvis report validate 2026-05-19 --mode compare --preview-limit 30
-```
-
----
-
-#### 3-5. report upload - 기존 리포트 일괄 업로드
+#### 3-4. report upload - 기존 리포트 일괄 업로드
 
 **특징:**
 - `reports/` 디렉토리의 기존 MD 파일을 Notion에 업로드
