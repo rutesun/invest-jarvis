@@ -216,14 +216,72 @@ flowchart TD
 
 - [x] `T09-A` 기본 경로: synthesis 입력은 당일 `category/theme/ticker` bundle만 받게 하고 prior evidence는 받지 않게 한다
 - [x] `T09-A` 기본 경로: 출력 섹션을 `Pulse / Category Summaries / Core Themes / Focus Tickers / Low Confidence`로 고정한다
-- [ ] `T09-B` Google 경로: 동일한 T08 bundle을 Gemini Google Search Grounding이 켜진 synthesis adapter에 넣는다
-- [ ] `T09-B` Google 경로: 검색 citation을 Markdown 하단에 렌더링하되, theme/ticker evidence bundle과 연결 가능한 구조로 보존한다
-- [ ] `T09-B` Google 경로: Google 결과는 Phase 3의 `news_items`/Vector DB corpus를 대체하지 않는 실험 경로로 표시한다
-- [ ] `T09-C` compare 경로: 같은 날짜에 `daily_v2_DATE.md`와 `daily_v2_DATE.google.md`를 나란히 생성한다
-- [ ] `T09-D` 평가 기준: 누락 보강, 환각 감소, citation 유효성, DB trace, 비용/시간을 비교한다
+- [x] `T09-B` Google 경로: 동일한 T08 bundle을 Gemini Google Search Grounding이 켜진 synthesis adapter에 넣는다
+- [x] `T09-B` Google 경로: 검색 citation을 Markdown 하단에 렌더링하되, theme/ticker evidence bundle과 연결 가능한 구조로 보존한다
+- [x] `T09-B` Google 경로: Google 결과는 Phase 3의 `news_items`/Vector DB corpus를 대체하지 않는 실험 경로로 표시한다
+- [x] `T09-C` compare 경로: 같은 날짜에 `daily_v2_DATE.md`와 `daily_v2_DATE.google.md`를 나란히 생성한다
+- [~] `T09-D` 평가 기준 → eng-review(2026-05-30)에서 **T09-I 검증 하니스**로 재설계 (아래 리팩터 섹션)
 - [x] Jinja 없이 builder 메서드 기반으로 Markdown을 렌더링한다
 - [x] `report_runs`, `report_evidence`를 함께 기록한다
 - [x] chunk 재생성 후에도 과거 run의 evidence trace가 남도록 `report_evidence`에 chunk snapshot을 저장한다
+
+### T09 리팩터: single-call → per-category map-reduce (eng-review 2026-05-30)
+
+**배경:** 단일 호출 synthesis가 당일 chunk의 ~65%를 드롭(coverage 35% OpenAI / 30% Gemini, 2026-05-28 측정). eng-review에서 진짜 병목이 둘로 판명됨:
+- (a) **packet 절단**: `_build_chunk_packet`이 chunk당 `supporting_facts[:3]` / `evidence_items_excerpt[:4]`만 실어 LLM 도달 전에 근거 손실
+- (b) **attention 분산**: 158 chunk 단일 호출이 카테고리·사건을 드롭
+
+메트릭 교정: "chunk 커버리지"는 틀린 잣대(다채널 중복은 병합이 정답) → **distinct 정보 보존**으로 측정한다.
+
+**최종 아키텍처:** per-category map → reduce. 커버리지가 아니라 **정리(consolidation) 품질** 근거로 채택. (외부 AI 2개(codex, Claude)는 single-call+appendix를 권고했으나, per-category의 가치가 consolidation 품질이라는 근거로 user sovereignty override.)
+
+**Files:**
+- Modify: `synthesize.py` (map/reduce 오케스트레이터, evidence bundle 계약, 구 단일호출 경로 삭제)
+- Modify: `prompts.py` (per-category/ticker/overview 프롬프트, packet 절단 캡 상향)
+- Modify: `render_markdown.py` (섹션 조립 + `[chunk_id] channel#msgid` 부착)
+- Modify: `pipeline.py` (T09-A/B 배선, 부분 실패 처리)
+- Modify: `google_grounding.py` (reduce-only grounding)
+- Create: `scripts/stock_report_eval.py` (검증 하니스)
+- Create: `tests/pipelines/stock_report/fixtures/bundles/*.json` (골든셋 동결 bundle)
+
+#### T09-E. evidence bundle 계약 (Phase 2/3 seam)
+- [ ] `EvidenceItem` + `build_category_evidence(bucket)` / `build_ticker_evidence(bucket)` (Phase 1=당일 chunk만, Phase 2/3가 확장)
+- [ ] 카드 dataclass: `CategorySummaryCard`, `TickerCard`, `OverviewResult` (`evidence_chunk_ids` 필수)
+
+#### T09-F. per-category / per-ticker map 합성
+- [ ] `_run_synthesis_call` 공유 헬퍼 (call + sanitize + 검증) — DRY
+- [ ] `_sanitize_chunk_ids` 단일 통합 (google_grounding/synthesize 중복 제거)
+- [ ] `synthesize_category`: 풀 내용 던짐(절단 해제), 다채널 중복 병합, 구체 사실(숫자·급등락·사건명) 보존
+- [ ] 하이브리드: chunk < 3 → raw 결정론 카드 (LLM 카드와 동일 shape)
+- [ ] map 호출 실패 → raw fallback (커버리지 유지)
+- [ ] `synthesize_ticker`: top-N(=10), chunk 수 기준
+- [ ] **[CRITICAL]** 카테고리별 토큰 예산 + 초과 시 서브배치 (절단 해제로 큰 카테고리 컨텍스트 초과 위험)
+
+#### T09-G. reduce 합성 (Pulse + Core Themes)
+- [ ] `synthesize_overview(category_cards, ticker_cards)` — 입력은 카드(요약), raw chunk 아님
+- [ ] 카테고리 요약의 구체 사실 보존 → reduce가 cross-category 연결 (예: 유가↓ → 항공↑)
+- [ ] reduce `chunk_id` = 항목별 재귀속 (union blob 금지)
+- [ ] grounding(T09-B) reduce-only, 실패 → 비-grounding OpenAI → 결정론 Pulse
+
+#### T09-H. 오케스트레이션 + 렌더
+- [ ] `synthesize_tiered`: 카테고리/티커 map 동시 실행(Semaphore=8) → reduce
+- [ ] bundle 1회 로드 후 메모리 전달 (카테고리별 DB 재쿼리 금지, N+1 회피)
+- [ ] render: 코드가 `[chunk_id] channel#msgid` 결정론 부착, LLM/raw 동일 렌더
+- [ ] 구 단일호출 경로(`synthesize_same_day_bundle`, `build_report_synthesis_user_prompt`, `_build_chunk_packet`, `_build_focus_ticker_packet`) 삭제. `_build_deterministic_artifact`는 최종 fallback 유지
+
+#### T09-I. 검증 하니스 (구 T09-D 대체)
+- [ ] coverage: report_evidence(A)/markdown 파싱(B) → 카테고리별. **분모 = deduped 합성 chunk**, raw→dedup shrink 별도 기록
+- [ ] LLM-as-judge = "빠진 사건 찾기"(사람 must-have 체크리스트 대비 recall) + "헛소리 찾기"(claim → chunk 추적). holistic 점수 금지
+- [ ] 골든셋 = fixture 4일(T01) 동결 bundle JSON + 사람이 원본에서 만든 must-have 체크리스트
+- [ ] 투트랙: Track1 동결 bundle(CI mocked + on-demand 실제 LLM), Track2 당일 라이브(드리프트 감지, 게이트 X)
+- [ ] **[CRITICAL REGRESSION]** report_evidence 무결성: 전 `chunk_id` ∈ `knowledge_chunks`
+- [ ] **[★ 증명 테스트]** `synthesize_tiered` → signal 청크 있는 모든 카테고리 카드 생성, 일부 map 실패 주입해도 유지
+
+**리뷰 결정 (잠김):**
+- 랜딩: 단일 PR (`feature/stock-report-google-grounding`)
+- appendix: blanket catch-all 강등/제거 (중복 재주입 방지, 메트릭으로 대체)
+- NOT in scope: priority_score 차등화(P2), Vector DB/PDF/news(P2/3), per-ticker 뉴스 grounding(P3), cross-category 세부 연결(수용)
+- TODO: 그날 수동 eval의 "빠진 사건" → 골든셋 must-have 승격 루프. **기존 `tuning.py` 주간 QA 리뷰 + `vocab_candidates` 패턴 재사용**(저장소는 분리, SRP)
 
 ### T10. acceptance 테스트를 만든다
 
@@ -446,3 +504,18 @@ Phase 3 완료 기준:
 - Phase 1은 Telegram-only same-day report로 가치를 먼저 검증한다
 - PDF 파서는 [opendataloader-pdf](https://github.com/opendataloader-project/opendataloader-pdf) 고정이다
 - 렌더링은 `Jinja` 없이 Python 코드로 구현한다
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
+| Codex Review | `/codex review` | Independent 2nd opinion | 1 | issues_found | outside-voice: codex+claude → single-call 권고, consolidation 근거로 override |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | issues_open | 9 issues, 1 critical gap |
+| Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | N/A (백엔드/프롬프트) |
+| DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | — |
+
+- **CROSS-MODEL:** codex + Claude 독립 검토 둘 다 single-call+appendix 권고. user가 per-category의 consolidation 품질 근거로 override (sovereignty). codex 단독 발견: packet 절단(`prompts.py:137`)이 coverage와 독립된 진짜 병목.
+- **CRITICAL GAP (1):** 절단 해제 시 큰 카테고리 × 풀 내용 → 컨텍스트 초과. 카테고리별 토큰 예산 + 서브배치로 구현 단계에서 처리 필수 (T09-F).
+- **UNRESOLVED (1):** 골든셋 must-have 승격 루프를 기존 `tuning.py`/`vocab_candidates`에 어떻게 통합할지 세부 (TODO로 추적).
+- **VERDICT:** ENG REVIEW 통과 (DONE_WITH_CONCERNS) — 설계 잠김. critical gap 1개는 구현 시 처리. 구현 진입 가능.

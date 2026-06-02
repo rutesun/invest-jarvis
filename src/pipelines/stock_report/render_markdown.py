@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from typing import TYPE_CHECKING
 
 from src.pipelines.stock_report.synthesize import ReportSectionItem, StockReportArtifact
+
+
+if TYPE_CHECKING:
+    from src.pipelines.stock_report.google_grounding import GoogleGroundedArtifact
 
 
 class MarkdownReportBuilder:
@@ -104,3 +109,28 @@ class MarkdownReportBuilder:
 
 def render_stock_report_markdown(report: StockReportArtifact) -> str:
     return MarkdownReportBuilder().build(report)
+
+
+def render_google_grounded_report(artifact: GoogleGroundedArtifact) -> str:
+    grounding_label = (
+        "✓ Grounding 활성" if artifact.grounding_active else "✗ Grounding 미발동 (fallback)"
+    )
+    parts = [
+        f"> ⚠️ **[EXPERIMENTAL] Google Search Grounding 실험 경로** — {grounding_label}  \n"
+        "> Phase 3 news corpus 도입 전 T09-A 기본 경로와 비교 목적으로만 사용하세요.",
+        artifact.synthesis_markdown.rstrip(),
+    ]
+
+    if artifact.citations:
+        citation_lines = ["---", "## 검색 출처 (Google Search Grounding)"]
+        for citation in artifact.citations:
+            label = citation.title or citation.uri
+            citation_lines.append(f"[{citation.index}] [{label}]({citation.uri})")
+        parts.append("\n".join(citation_lines))
+
+    if artifact.search_queries:
+        query_lines = ["## 검색 쿼리"]
+        query_lines.extend(f"- {q}" for q in artifact.search_queries)
+        parts.append("\n".join(query_lines))
+
+    return "\n\n".join(parts).rstrip() + "\n"
