@@ -659,29 +659,137 @@ async def _run_overview_grounding_call(
 # ---------------------------------------------------------------------------
 
 
+_TIER_MAP_CONCURRENCY = 8
+_TIER_FOCUS_TICKER_LIMIT = 10
+
+
+def _card_to_category_item(card: CategorySummaryCard) -> ReportSectionItem:
+    return ReportSectionItem(
+        key=card.category_key,
+        title=card.title or card.category_key,
+        body=card.narrative,
+        evidence_bullets=list(card.evidence_bullets),
+        impact=card.impact or None,
+        related_stocks=list(card.related_stocks),
+        evidence_chunk_ids=list(card.evidence_chunk_ids),
+        priority_score=card.priority_score,
+    )
+
+
+def _card_to_ticker_item(card: TickerCard) -> ReportSectionItem:
+    return ReportSectionItem(
+        key=card.ticker,
+        title=card.ticker,
+        body=card.investment_case,
+        investment_case=card.investment_case,
+        catalysts=list(card.catalysts),
+        key_metrics=list(card.key_metrics),
+        risks_or_watch_points=list(card.risks),
+        evidence_chunk_ids=list(card.evidence_chunk_ids),
+    )
+
+
+def _refs_for_items(
+    section_key: str,
+    items: list[ReportSectionItem],
+    chunk_index: dict[int, SameDayChunk],
+) -> list[ReportEvidenceRef]:
+    refs: list[ReportEvidenceRef] = []
+    for item in items:
+        chunks = [chunk_index[cid] for cid in item.evidence_chunk_ids if cid in chunk_index]
+        if not chunks:
+            continue
+        refs.extend(_evidence_refs(section_key=section_key, item_key=item.key, chunks=chunks))
+    return refs
+
+
+def _assemble_tiered_artifact(
+    bundle: SameDayBundle,
+    category_cards: list[CategorySummaryCard],
+    ticker_cards: list[TickerCard],
+    overview: OverviewResult,
+) -> StockReportArtifact:
+    """Adapt T09-F/G cards + reduce output into the StockReportArtifact contract."""
+    chunk_index = _index_chunks(bundle)
+    category_summaries = [_card_to_category_item(c) for c in category_cards]
+    focus_tickers = [_card_to_ticker_item(c) for c in ticker_cards]
+    pulse = list(overview.pulse)
+    core_themes = list(overview.core_themes)
+    low_confidence_notes = [
+        chunk.canonical_summary for chunk in bundle.low_confidence_chunks if chunk.canonical_summary
+    ]
+
+    evidence_refs: list[ReportEvidenceRef] = []
+    evidence_refs.extend(_refs_for_items("pulse", pulse, chunk_index))
+    evidence_refs.extend(_refs_for_items("category_summaries", category_summaries, chunk_index))
+    evidence_refs.extend(_refs_for_items("core_themes", core_themes, chunk_index))
+    evidence_refs.extend(_refs_for_items("focus_tickers", focus_tickers, chunk_index))
+
+    return StockReportArtifact(
+        report_date=bundle.report_date,
+        pulse=pulse,
+        category_summaries=category_summaries,
+        core_themes=core_themes,
+        focus_tickers=focus_tickers,
+        low_confidence_notes=low_confidence_notes,
+        evidence_refs=evidence_refs,
+    )
+
+
 async def synthesize_tiered(
+    bundle: SameDayBundle,
     *,
-    category_buckets: list,
-    ticker_buckets: list,
     provider: str = "openai",
     grounding: bool = False,
-) -> OverviewResult:
-    """Full map-reduce pipeline: synthesize per-category/ticker then reduce to OverviewResult.
+) -> StockReportArtifact:
+    """Full map-reduce: per-category + top-N ticker map → reduce → StockReportArtifact.
 
-    This is the top-level entry point for T09-F + T09-G.
+    Category coverage is guaranteed by iterating bundle.category_buckets in code.
+    Falls back to the deterministic artifact only if the whole pipeline raises or
+    yields nothing.
     """
-    cat_tasks = [synthesize_category(b, provider=provider) for b in category_buckets]
-    ticker_tasks = [synthesize_ticker(b, provider=provider) for b in ticker_buckets]
+    category_buckets = list(bundle.category_buckets)
+    ticker_buckets = sorted(bundle.focus_ticker_buckets, key=lambda b: len(b.chunks), reverse=True)[
+        :_TIER_FOCUS_TICKER_LIMIT
+    ]
 
-    category_cards: list[CategorySummaryCard] = list(await asyncio.gather(*cat_tasks))
-    ticker_cards: list[TickerCard] = list(await asyncio.gather(*ticker_tasks))
+    sem = asyncio.Semaphore(_TIER_MAP_CONCURRENCY)
 
-    return await synthesize_overview(
-        category_cards,
-        ticker_cards,
-        provider=provider,
-        grounding=grounding,
-    )
+    async def _cat(b: CategoryBucket) -> CategorySummaryCard:
+        async with sem:
+            return await synthesize_category(b, provider=provider)
+
+    async def _tic(b: TickerBucket) -> TickerCard:
+        async with sem:
+            return await synthesize_ticker(b, provider=provider)
+
+    try:
+        category_cards = list(await asyncio.gather(*[_cat(b) for b in category_buckets]))
+        ticker_cards = list(await asyncio.gather(*[_tic(b) for b in ticker_buckets]))
+        overview = await synthesize_overview(
+            category_cards, ticker_cards, provider=provider, grounding=grounding
+        )
+        artifact = _assemble_tiered_artifact(bundle, category_cards, ticker_cards, overview)
+        if artifact.category_summaries or artifact.focus_tickers or artifact.core_themes:
+            return artifact
+        logger.warning(
+            "tiered synthesis empty, fallback to deterministic: date=%s", bundle.report_date
+        )
+    except Exception:
+        logger.exception(
+            "tiered synthesis failed, fallback to deterministic: date=%s", bundle.report_date
+        )
+    return _build_deterministic_artifact(bundle)
+
+
+def synthesize_daily(
+    bundle: SameDayBundle,
+    *,
+    provider: str = "openai",
+    grounding: bool = False,
+) -> StockReportArtifact:
+    """Sync entry point for the tiered pipeline (wraps asyncio.run)."""
+    return asyncio.run(synthesize_tiered(bundle, provider=provider, grounding=grounding))
 
 
 # ---------------------------------------------------------------------------

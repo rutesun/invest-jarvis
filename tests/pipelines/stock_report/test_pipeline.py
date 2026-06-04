@@ -286,7 +286,7 @@ def test_run_daily_v2_calls_migration_and_ingest(monkeypatch):
         _fake_load_same_day_bundle,
     )
     monkeypatch.setattr(
-        "src.pipelines.stock_report.pipeline.synthesize_same_day_bundle",
+        "src.pipelines.stock_report.pipeline.synthesize_daily",
         _fake_synthesize_same_day_bundle,
     )
     monkeypatch.setattr(

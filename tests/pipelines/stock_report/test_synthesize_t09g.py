@@ -9,11 +9,17 @@ from src.pipelines.stock_report.prompts import (
     OVERVIEW_SYNTHESIS_SYSTEM_PROMPT,
     build_overview_prompt,
 )
-from src.pipelines.stock_report.retrieval import CategoryBucket, SameDayChunk, TickerBucket
+from src.pipelines.stock_report.retrieval import (
+    CategoryBucket,
+    SameDayBundle,
+    SameDayChunk,
+    TickerBucket,
+)
 from src.pipelines.stock_report.synthesize import (
     CategorySummaryCard,
     OverviewLLMOutput,
     OverviewResult,
+    StockReportArtifact,
     TickerCard,
     _build_deterministic_pulse,
     _build_overview_result_from_llm,
@@ -552,18 +558,20 @@ def test_synthesize_tiered_happy_path(monkeypatch) -> None:
     # 3 chunks each so synthesize_category/ticker takes LLM path
     cat_bucket = _cat_bucket([1, 2, 3], "반도체")
     ticker_bucket = _ticker_bucket([1, 2, 3], "NVDA")
-
-    result = asyncio.run(
-        synthesize_tiered(
-            category_buckets=[cat_bucket],
-            ticker_buckets=[ticker_bucket],
-            provider="openai",
-            grounding=False,
-        )
+    bundle = SameDayBundle(
+        report_date=date(2026, 5, 26),
+        chunks=[_chunk(1), _chunk(2), _chunk(3)],
+        category_buckets=[cat_bucket],
+        focus_ticker_buckets=[ticker_bucket],
+        low_confidence_chunks=[],
     )
 
-    assert isinstance(result, OverviewResult)
+    result = asyncio.run(synthesize_tiered(bundle, provider="openai", grounding=False))
+
+    assert isinstance(result, StockReportArtifact)
     assert len(result.pulse) >= 1
+    assert len(result.category_summaries) == 1
+    assert len(result.focus_tickers) == 1
     # _run_synthesis_call called: 1 category + 1 ticker + 1 overview = 3
     assert call_count["n"] == 3
 

@@ -26,7 +26,7 @@ from src.pipelines.stock_report.db import (
 from src.pipelines.stock_report.normalize import normalize_messages, persist_normalized_messages
 from src.pipelines.stock_report.render_markdown import render_stock_report_markdown
 from src.pipelines.stock_report.retrieval import load_same_day_bundle
-from src.pipelines.stock_report.synthesize import synthesize_same_day_bundle
+from src.pipelines.stock_report.synthesize import synthesize_daily
 from src.pipelines.stock_report.taxonomy import load_taxonomy_registry
 from src.pipelines.stock_report.telegram_ingest import TelegramIngestStats, ingest_telegram_raw_csvs
 
@@ -267,7 +267,7 @@ def _stage_load_same_day_bundle(conn, date: str):
 
 @traceable(name="Stock Report Daily V2 - Local Evidence Synthesis")
 def _stage_local_evidence_synthesis(bundle, *, provider: str):
-    return synthesize_same_day_bundle(bundle, provider=provider)
+    return synthesize_daily(bundle, provider=provider)
 
 
 @traceable(
