@@ -14,6 +14,7 @@ from src.pipelines.stock_report.config import (
     SEMANTIC_EXTRACTION_TIMEOUT_SECONDS,
     get_report_synthesis_llm_config,
 )
+from src.pipelines.stock_report.event_safety_net import enforce_high_impact_event_coverage
 from src.pipelines.stock_report.prompts import (
     CATEGORY_SYNTHESIS_SYSTEM_PROMPT,
     OVERVIEW_SYNTHESIS_SYSTEM_PROMPT,
@@ -308,7 +309,7 @@ async def synthesize_category(
             }
             for stock in output.related_stocks
         ]
-        return CategorySummaryCard(
+        card = CategorySummaryCard(
             category_key=output.category_key or bucket.category_key,
             title=output.title or bucket.category_key,
             narrative=output.narrative,
@@ -318,6 +319,7 @@ async def synthesize_category(
             evidence_chunk_ids=clean_ids,
             priority_score=output.priority_score,
         )
+        return enforce_high_impact_event_coverage(card, bucket.chunks)
     except Exception:
         logger.warning(
             "synthesize_category LLM failed, using raw fallback: category=%s provider=%s",

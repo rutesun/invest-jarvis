@@ -11,6 +11,28 @@ from src.pipelines.stock_report.retrieval import (
 )
 
 
+# Canonical event_type taxonomy — single source of truth. The prose enumeration inside
+# SEMANTIC_EXTRACTION_SYSTEM_PROMPT must mirror this set (guarded by a test that asserts
+# every member appears in the prompt). Downstream consumers (e.g. the event safety net)
+# import this rather than re-hardcoding the literals, so a rename fails fast instead of
+# silently degrading.
+CANONICAL_EVENT_TYPES: frozenset[str] = frozenset(
+    {
+        "자본조달",
+        "수주/계약",
+        "실적",
+        "정책",
+        "인증/승인",
+        "M&A",
+        "출시/제품",
+        "가격/마진",
+        "통계/지표",
+        "해석/전망",
+        "공지",
+    }
+)
+
+
 SEMANTIC_EXTRACTION_SYSTEM_PROMPT = dedent(
     """
     당신은 텔레그램 증시 메시지를 report unit으로 구조화하는 분석기다.
