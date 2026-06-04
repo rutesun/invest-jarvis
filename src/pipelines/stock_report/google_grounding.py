@@ -8,14 +8,7 @@ from dataclasses import dataclass
 from datetime import date
 from textwrap import dedent
 
-from src.pipelines.stock_report.prompts import (
-    _build_chunk_packet,
-)
 from src.pipelines.stock_report.retrieval import SameDayBundle
-from src.pipelines.stock_report.synthesize import (
-    LocalEvidenceSynthesisOutput,
-    _from_llm_output,
-)
 
 
 try:
@@ -70,7 +63,18 @@ _SYSTEM_PROMPT = dedent("""
 
 
 def _build_user_prompt(bundle: SameDayBundle) -> str:
-    chunk_packet = _build_chunk_packet(bundle)
+    chunk_packet = [
+        {
+            "chunk_id": chunk.id,
+            "category": chunk.display_category,
+            "theme": chunk.display_theme,
+            "tickers": chunk.ticker_tags,
+            "summary": chunk.canonical_summary,
+            "supporting_facts": chunk.supporting_facts,
+            "source": f"{chunk.channel_name or chunk.channel_key or 'unknown'}#{chunk.channel_message_id or ''}",
+        }
+        for chunk in bundle.chunks
+    ]
     chunk_json = json.dumps(chunk_packet, ensure_ascii=False, indent=2)
 
     prompt = dedent(f"""
@@ -117,39 +121,6 @@ evidence chunks (JSON):
     return prompt
 
 
-def _parse_json_output(text: str) -> dict:
-    text = text.strip()
-    # JSON 블록이 마크다운 코드펜스로 감싸진 경우 추출
-    if text.startswith("```"):
-        lines = text.splitlines()
-        start = next((i + 1 for i, line in enumerate(lines) if line.startswith("```")), 1)
-        end = next(
-            (i for i in range(len(lines) - 1, start, -1) if lines[i].startswith("```")), len(lines)
-        )
-        text = "\n".join(lines[start:end])
-    return json.loads(text)
-
-
-def _sanitize_obj_chunk_ids(obj: object) -> None:
-    """Recursively sanitize evidence_chunk_ids in a parsed JSON object.
-
-    Removes non-integer ids in-place. Used for Gemini output that may
-    contain string ids. Delegates integer validation to the synthesize-layer
-    _sanitize_chunk_ids when bundle ids are known; this variant is used when
-    no bundle context is available (raw JSON pass).
-    """
-    if isinstance(obj, dict):
-        if "evidence_chunk_ids" in obj:
-            ids = obj["evidence_chunk_ids"]
-            if isinstance(ids, list):
-                obj["evidence_chunk_ids"] = [v for v in ids if isinstance(v, int)]
-        for v in obj.values():
-            _sanitize_obj_chunk_ids(v)
-    elif isinstance(obj, list):
-        for item in obj:
-            _sanitize_obj_chunk_ids(item)
-
-
 def _strip_code_fence(text: str) -> str:
     text = text.strip()
     if text.startswith("```"):
@@ -163,19 +134,8 @@ def _strip_code_fence(text: str) -> str:
 
 
 def _to_markdown(bundle: SameDayBundle, raw_text: str) -> str:
-    """JSON 응답이면 StockReportArtifact로 파싱 후 렌더링, Markdown이면 그대로 반환."""
-    from src.pipelines.stock_report.render_markdown import render_stock_report_markdown
-
-    try:
-        parsed = _parse_json_output(raw_text)
-        _sanitize_obj_chunk_ids(parsed)
-        llm_output = LocalEvidenceSynthesisOutput.model_validate(parsed)
-        artifact = _from_llm_output(bundle, llm_output)
-        logger.debug("google grounding: JSON parsed and rendered")
-        return render_stock_report_markdown(artifact)
-    except Exception:
-        logger.debug("google grounding: response is Markdown, using as-is")
-        return _strip_code_fence(raw_text)
+    """Google grounding returns Markdown; strip any code fence and return as-is."""
+    return _strip_code_fence(raw_text)
 
 
 def _extract_citations(candidate) -> tuple[list[GroundingCitation], list[str]]:

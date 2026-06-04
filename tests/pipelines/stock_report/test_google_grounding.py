@@ -250,9 +250,9 @@ class TestSynthesizeWithGoogleGrounding:
         assert artifact.synthesis_markdown.strip() == markdown_text.strip()
         assert artifact.grounding_active is False
 
-    def test_json_response_rendered_to_markdown(self):
+    def test_strips_code_fence_from_response(self):
         bundle = _make_bundle()
-        fenced = f"```json\n{_minimal_llm_json()}\n```"
+        fenced = "```markdown\n## Pulse\n- NVDA 수요 급증\n```"
         fake_response = _make_fake_response(fenced, [], [])
         mock_client = MagicMock()
         mock_client.models.generate_content.return_value = fake_response
@@ -264,8 +264,9 @@ class TestSynthesizeWithGoogleGrounding:
             mock_genai.Client.return_value = mock_client
             artifact = synthesize_with_google_grounding(bundle)
 
-        # JSON이 Markdown으로 렌더링됐어야 함
+        # 코드펜스는 벗겨지고 본문만 남는다 (google는 Markdown 반환)
         assert "## Pulse" in artifact.synthesis_markdown
+        assert "```" not in artifact.synthesis_markdown
 
     def test_uses_custom_model(self):
         bundle = _make_bundle()
