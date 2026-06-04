@@ -130,18 +130,24 @@ def _parse_json_output(text: str) -> dict:
     return json.loads(text)
 
 
-def _sanitize_chunk_ids(obj: object) -> None:
-    """compact 프롬프트에서 Gemini가 문자열 chunk ID를 반환하는 경우 빈 리스트로 교체."""
+def _sanitize_obj_chunk_ids(obj: object) -> None:
+    """Recursively sanitize evidence_chunk_ids in a parsed JSON object.
+
+    Removes non-integer ids in-place. Used for Gemini output that may
+    contain string ids. Delegates integer validation to the synthesize-layer
+    _sanitize_chunk_ids when bundle ids are known; this variant is used when
+    no bundle context is available (raw JSON pass).
+    """
     if isinstance(obj, dict):
         if "evidence_chunk_ids" in obj:
             ids = obj["evidence_chunk_ids"]
             if isinstance(ids, list):
                 obj["evidence_chunk_ids"] = [v for v in ids if isinstance(v, int)]
         for v in obj.values():
-            _sanitize_chunk_ids(v)
+            _sanitize_obj_chunk_ids(v)
     elif isinstance(obj, list):
         for item in obj:
-            _sanitize_chunk_ids(item)
+            _sanitize_obj_chunk_ids(item)
 
 
 def _strip_code_fence(text: str) -> str:
@@ -162,7 +168,7 @@ def _to_markdown(bundle: SameDayBundle, raw_text: str) -> str:
 
     try:
         parsed = _parse_json_output(raw_text)
-        _sanitize_chunk_ids(parsed)
+        _sanitize_obj_chunk_ids(parsed)
         llm_output = LocalEvidenceSynthesisOutput.model_validate(parsed)
         artifact = _from_llm_output(bundle, llm_output)
         logger.debug("google grounding: JSON parsed and rendered")
