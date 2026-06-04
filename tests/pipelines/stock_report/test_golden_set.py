@@ -1,10 +1,14 @@
 """Golden-set regression: frozen high-impact must-have events must never silently drop.
 
 Hermetic by design — reads committed JSON fixtures (no DB, no LLM), so it runs in the
-normal `uv run pytest` loop. Fixtures are content-based (not chunk-id based) because the
-daily-v2 pipeline re-ingests chunks with fresh ids on every run.
+normal `uv run pytest` loop. Fixtures are hand-maintained static files, DB-independent on
+purpose: the daily-v2 pipeline re-ingests chunks with fresh ids on every run, so there is
+nothing stable to re-fetch. To add a must-have, append an entry to
+tests/fixtures/stock_report/golden/<date>.json:
 
-Regenerate fixtures with: uv run python scripts/stock_report_freeze_golden.py
+    {"description": "...", "match_any": ["...substrings..."],
+     "chunk": {"canonical_summary": "...", "supporting_facts": ["..."],
+               "event_type": "M&A" | "자본조달", "category_key": "...", "priority_score": 1.0}}
 
 Each must-have is validated two ways:
 1. its frozen event_type is a high-impact type the safety net protects (precondition);

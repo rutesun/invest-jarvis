@@ -200,7 +200,8 @@ def _strip_fence(text: str) -> str:
 # ---------------------------------------------------------------------------
 # Golden set (curated must-have events) — same fixtures power the hermetic pytest
 # regression (tests/pipelines/stock_report/test_golden_set.py) and this live-drift check
-# against a rendered report. Freeze with scripts/stock_report_freeze_golden.py.
+# against a rendered report. Fixtures are hand-maintained static JSON (format documented
+# in test_golden_set.py); no DB is involved.
 # ---------------------------------------------------------------------------
 
 GOLDEN_DIR = (
@@ -299,7 +300,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.golden:
         must_haves = load_golden_must_haves(args.date)
         if not must_haves:
-            print(f"\n[golden] {args.date}: no fixture (run scripts/stock_report_freeze_golden.py)")
+            print(f"\n[golden] {args.date}: no fixture at {GOLDEN_DIR / f'{args.date}.json'}")
         elif not report_text:
             print("\n[golden] requires --markdown to check the rendered report")
         else:
