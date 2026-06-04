@@ -82,30 +82,42 @@ report_date: {bundle.report_date.isoformat()}
 
 아래 당일 Telegram evidence chunks를 바탕으로, Google Search로 관련 최신 뉴스/공시/데이터를 검색해 보강한 **Markdown 리포트**를 작성하라.
 
-출력 형식 (Markdown, 섹션 순서 고정):
+출력 형식 (Markdown). 섹션 순서와 **라벨·제목 형식을 아래와 정확히 일치**시킨다.
+상단에 `#` 제목을 붙이지 말고 `## Pulse`부터 시작한다.
 
 ## Pulse
-- (3~5개 bullet) 당일 핵심 시장 신호 요약. 각 항목은 1~2문장.
+- (3~5개) 당일 핵심 시장 신호. 각 항목 1~2문장. 라벨 없는 일반 bullet.
 
 ## Category Summaries
 ### (카테고리명)
-- 투자 내러티브, 수혜 종목, Google 검색으로 보강된 최신 데이터 포함
-- 출처: chunk 2884 키움증권 미국주식 톡톡#58426, chunk 2910 신한 리서치#51081 (이 형태로)
+- (서술 bullet 여러 개. 그 카테고리의 핵심 사실/맥락을 라벨 없이 일반 bullet로 적는다.)
+- **Impact:** (이 카테고리가 시장에 주는 함의 1~2문장)
+- 관련 종목: 종목명(티커): 촉매  ← 종목마다 한 줄, 라벨은 정확히 `관련 종목:`
+- 출처: chunk {{chunk_id}} {{source}}, ...
 
 ## Core Themes
 ### (테마명)
-- 2개 이상 카테고리를 연결하는 상위 투자 논리
-- thesis, 근거, impact, 확인 변수 포함
-- 출처: chunk 2884 키움증권 미국주식 톡톡#58426 (이 형태로)
+- 핵심 주장: (2개 이상 카테고리를 잇는 상위 투자 논리)
+- (근거 서술 bullet)
+- **Impact:** (시장 함의)
+- 확인 변수: 항목1, 항목2
+- 출처: chunk {{chunk_id}} {{source}}, ...
 
 ## Focus Tickers
-### (종목명 / 티커)
-- 각 chunk의 tickers 필드에 등장하는 종목 중 근거가 많은 것을 선택
-- investment case, 촉매, 핵심 수치, 리스크
-- 출처: chunk 2884 키움증권 미국주식 톡톡#58426 (이 형태로)
+### (티커 심볼만. 예: `AVGO`, `MRVL`, `SK하이닉스`. 풀네임/괄호 표기 금지)
+- 투자 포인트: ...
+- 촉매: ...
+- 핵심 수치: ...
+- 리스크/확인: ...
+- 출처: chunk {{chunk_id}} {{source}}, ...
 
 ## Low Confidence
 - 당일 확인되지 않은 항목
+
+라벨 규칙 (정확히 지킬 것):
+- 라벨은 위와 똑같은 한국어로 쓴다. `Investment Case` 같은 영어 라벨 금지.
+- 라벨을 굵게(`**`) 처리하지 않는다. 단 `**Impact:**`만 예외로 굵게 쓴다.
+- Focus Tickers의 `###` 제목은 티커 심볼만 쓴다(괄호·풀네임 금지).
 
 작성 규칙:
 - 출처는 반드시 `chunk {{chunk_id}} {{source}}` 형태로 명시한다. source는 각 chunk의 source 필드 값(channel_name#message_id)을 그대로 사용한다.

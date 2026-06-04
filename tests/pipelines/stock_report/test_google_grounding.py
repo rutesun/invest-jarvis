@@ -134,6 +134,23 @@ class TestBuildUserPrompt:
         assert "Category Summaries" in prompt
         assert "Focus Tickers" in prompt
 
+    def test_prescribes_canonical_labels(self):
+        bundle = _make_bundle()
+        prompt = _build_user_prompt(bundle)
+        # labels must match MarkdownReportBuilder so the grounded report aligns with T09-A
+        for label in [
+            "투자 포인트:",
+            "촉매:",
+            "핵심 수치:",
+            "리스크/확인:",
+            "관련 종목:",
+            "**Impact:**",
+            "출처:",
+        ]:
+            assert label in prompt
+        assert "영어 라벨 금지" in prompt
+        assert "티커 심볼만" in prompt
+
     def test_no_markdown_output_instruction(self):
         bundle = _make_bundle()
         prompt = _build_user_prompt(bundle)
@@ -394,6 +411,15 @@ class TestRenderGoogleGroundedReport:
         inactive = render_google_grounded_report(self._make_artifact(grounding_active=False))
         assert "Grounding 활성" in active
         assert "미발동" in inactive
+
+    def test_starts_with_canonical_h1_title(self):
+        from src.pipelines.stock_report.render_markdown import render_google_grounded_report
+
+        result = render_google_grounded_report(self._make_artifact())
+        # H1 matches the T09-A canonical report (MarkdownReportBuilder) so both share layout
+        assert result.startswith("# Daily Stock Report V2 - 2025-05-08")
+        assert result.index("# Daily Stock Report V2") < result.index("EXPERIMENTAL")
+        assert result.index("EXPERIMENTAL") < result.index("## Pulse")
 
     def test_no_citation_section_when_empty(self):
         from src.pipelines.stock_report.render_markdown import render_google_grounded_report

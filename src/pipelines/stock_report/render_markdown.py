@@ -116,6 +116,9 @@ def render_google_grounded_report(artifact: GoogleGroundedArtifact) -> str:
         "✓ Grounding 활성" if artifact.grounding_active else "✗ Grounding 미발동 (fallback)"
     )
     parts = [
+        # H1 title matches the canonical T09-A report (MarkdownReportBuilder.build) so both
+        # outputs share the same top-level layout.
+        f"# Daily Stock Report V2 - {artifact.report_date.isoformat()}",
         f"> ⚠️ **[EXPERIMENTAL] Google Search Grounding 실험 경로** — {grounding_label}  \n"
         "> Phase 3 news corpus 도입 전 T09-A 기본 경로와 비교 목적으로만 사용하세요.",
         artifact.synthesis_markdown.rstrip(),
