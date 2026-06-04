@@ -384,6 +384,8 @@ TelegramMessage → MappedIssue → ShuffleResult → ThemeAnalysis/NewsItem →
 - 런타임 taxonomy overlay로 `provisional_category/provisional_theme` 보강
 - `knowledge_chunks` 적재 및 grouped-only chunk 생성
 - 날짜별 DB 적재 결과를 메시지 단위로 조회하는 `scripts/stock_report_show_chunks.py` 제공
+- map-reduce 종합: 카테고리/티커별 LLM consolidation(중복 채널 병합) → reduce로 Pulse/Core Themes 생성, LLM 실패 시 결정적 raw 카드로 graceful fallback
+- 결정적 high-impact 이벤트 안전망: `event_type ∈ {M&A, 자본조달}` 청크를 LLM이 누락해도 카테고리 카드에 강제 보강 (`event_safety_net.py`) — 프롬프트로 못 잡는 nondeterministic 누락 방지
 
 **저장소:**
 - 개발 환경은 로컬 Docker Postgres + pgvector 이미지 사용
