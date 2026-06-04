@@ -245,37 +245,37 @@ flowchart TD
 - Create: `tests/pipelines/stock_report/fixtures/bundles/*.json` (골든셋 동결 bundle)
 
 #### T09-E. evidence bundle 계약 (Phase 2/3 seam)
-- [ ] `EvidenceItem` + `build_category_evidence(bucket)` / `build_ticker_evidence(bucket)` (Phase 1=당일 chunk만, Phase 2/3가 확장)
-- [ ] 카드 dataclass: `CategorySummaryCard`, `TickerCard`, `OverviewResult` (`evidence_chunk_ids` 필수)
+- [x] `EvidenceItem` + `build_category_evidence(bucket)` / `build_ticker_evidence(bucket)` (Phase 1=당일 chunk만, Phase 2/3가 확장)
+- [x] 카드 dataclass: `CategorySummaryCard`, `TickerCard`, `OverviewResult` (`evidence_chunk_ids` 필수)
 
 #### T09-F. per-category / per-ticker map 합성
-- [ ] `_run_synthesis_call` 공유 헬퍼 (call + sanitize + 검증) — DRY
-- [ ] `_sanitize_chunk_ids` 단일 통합 (google_grounding/synthesize 중복 제거)
-- [ ] `synthesize_category`: 풀 내용 던짐(절단 해제), 다채널 중복 병합, 구체 사실(숫자·급등락·사건명) 보존
-- [ ] 하이브리드: chunk < 3 → raw 결정론 카드 (LLM 카드와 동일 shape)
-- [ ] map 호출 실패 → raw fallback (커버리지 유지)
-- [ ] `synthesize_ticker`: top-N(=10), chunk 수 기준
-- [ ] **[CRITICAL]** 카테고리별 토큰 예산 + 초과 시 서브배치 (절단 해제로 큰 카테고리 컨텍스트 초과 위험)
+- [x] `_run_synthesis_call` 공유 헬퍼 (call + sanitize + 검증) — DRY
+- [x] `_sanitize_chunk_ids` 단일 통합 (google_grounding/synthesize 중복 제거)
+- [x] `synthesize_category`: 풀 내용 던짐(절단 해제), 다채널 중복 병합, 구체 사실(숫자·급등락·사건명) 보존
+- [x] 하이브리드: chunk < 3 → raw 결정론 카드 (LLM 카드와 동일 shape)
+- [x] map 호출 실패 → raw fallback (커버리지 유지)
+- [x] `synthesize_ticker`: top-N(=10), chunk 수 기준
+- [x] **[CRITICAL]** 카테고리별 토큰 예산 + 초과 시 서브배치 (절단 해제로 큰 카테고리 컨텍스트 초과 위험)
 
 #### T09-G. reduce 합성 (Pulse + Core Themes)
-- [ ] `synthesize_overview(category_cards, ticker_cards)` — 입력은 카드(요약), raw chunk 아님
-- [ ] 카테고리 요약의 구체 사실 보존 → reduce가 cross-category 연결 (예: 유가↓ → 항공↑)
-- [ ] reduce `chunk_id` = 항목별 재귀속 (union blob 금지)
-- [ ] grounding(T09-B) reduce-only, 실패 → 비-grounding OpenAI → 결정론 Pulse
+- [x] `synthesize_overview(category_cards, ticker_cards)` — 입력은 카드(요약), raw chunk 아님
+- [x] 카테고리 요약의 구체 사실 보존 → reduce가 cross-category 연결 (예: 유가↓ → 항공↑)
+- [x] reduce `chunk_id` = 항목별 재귀속 (union blob 금지)
+- [x] grounding(T09-B) reduce-only, 실패 → 비-grounding OpenAI → 결정론 Pulse
 
 #### T09-H. 오케스트레이션 + 렌더
-- [ ] `synthesize_tiered`: 카테고리/티커 map 동시 실행(Semaphore=8) → reduce
-- [ ] bundle 1회 로드 후 메모리 전달 (카테고리별 DB 재쿼리 금지, N+1 회피)
-- [ ] render: 코드가 `[chunk_id] channel#msgid` 결정론 부착, LLM/raw 동일 렌더
-- [ ] 구 단일호출 경로(`synthesize_same_day_bundle`, `build_report_synthesis_user_prompt`, `_build_chunk_packet`, `_build_focus_ticker_packet`) 삭제. `_build_deterministic_artifact`는 최종 fallback 유지
+- [x] `synthesize_tiered`: 카테고리/티커 map 동시 실행(Semaphore=8) → reduce
+- [x] bundle 1회 로드 후 메모리 전달 (카테고리별 DB 재쿼리 금지, N+1 회피)
+- [x] render: 코드가 `[chunk_id] channel#msgid` 결정론 부착, LLM/raw 동일 렌더
+- [x] 구 단일호출 경로(`synthesize_same_day_bundle`, `build_report_synthesis_user_prompt`, `_build_chunk_packet`, `_build_focus_ticker_packet`) 삭제. `_build_deterministic_artifact`는 최종 fallback 유지
 
 #### T09-I. 검증 하니스 (구 T09-D 대체)
-- [ ] coverage: report_evidence(A)/markdown 파싱(B) → 카테고리별. **분모 = deduped 합성 chunk**, raw→dedup shrink 별도 기록
-- [ ] LLM-as-judge = "빠진 사건 찾기"(사람 must-have 체크리스트 대비 recall) + "헛소리 찾기"(claim → chunk 추적). holistic 점수 금지
-- [ ] 골든셋 = fixture 4일(T01) 동결 bundle JSON + 사람이 원본에서 만든 must-have 체크리스트
-- [ ] 투트랙: Track1 동결 bundle(CI mocked + on-demand 실제 LLM), Track2 당일 라이브(드리프트 감지, 게이트 X)
-- [ ] **[CRITICAL REGRESSION]** report_evidence 무결성: 전 `chunk_id` ∈ `knowledge_chunks`
-- [ ] **[★ 증명 테스트]** `synthesize_tiered` → signal 청크 있는 모든 카테고리 카드 생성, 일부 map 실패 주입해도 유지
+- [x] coverage: report_evidence(A)/markdown 파싱(B) → 카테고리별. **분모 = deduped 합성 chunk**, raw→dedup shrink 별도 기록
+- [x] LLM-as-judge = "빠진 사건 찾기"(사람 must-have 체크리스트 대비 recall) + "헛소리 찾기"(claim → chunk 추적). holistic 점수 금지
+- [x] 골든셋 = fixture 4일(T01) 동결 bundle JSON + 사람이 원본에서 만든 must-have 체크리스트
+- [x] 투트랙: Track1 동결 bundle(CI mocked + on-demand 실제 LLM), Track2 당일 라이브(드리프트 감지, 게이트 X)
+- [x] **[CRITICAL REGRESSION]** report_evidence 무결성: 전 `chunk_id` ∈ `knowledge_chunks`
+- [x] **[★ 증명 테스트]** `synthesize_tiered` → signal 청크 있는 모든 카테고리 카드 생성, 일부 map 실패 주입해도 유지
 
 **리뷰 결정 (잠김):**
 - 랜딩: 단일 PR (`feature/stock-report-google-grounding`)
