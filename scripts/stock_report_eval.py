@@ -28,6 +28,7 @@ import json
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from src.pipelines.stock_report.db import connect_db, resolve_db_dsn
@@ -197,6 +198,39 @@ def _strip_fence(text: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Golden set (curated must-have events) — same fixtures power the hermetic pytest
+# regression (tests/pipelines/stock_report/test_golden_set.py) and this live-drift check
+# against a rendered report. Freeze with scripts/stock_report_freeze_golden.py.
+# ---------------------------------------------------------------------------
+
+GOLDEN_DIR = (
+    Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "stock_report" / "golden"
+)
+
+
+def load_golden_must_haves(report_date: str) -> list[dict[str, Any]]:
+    """Load curated must-have events for a date; [] if no fixture exists."""
+    path = GOLDEN_DIR / f"{report_date}.json"
+    if not path.exists():
+        return []
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return list(data.get("must_have_events", []))
+
+
+def check_golden_coverage(report_markdown: str, must_haves: list[dict[str, Any]]) -> list[str]:
+    """Return descriptions of must-have events absent from the rendered report.
+
+    An event is present when ANY of its match_any substrings appears in the report text.
+    """
+    missing: list[str] = []
+    for event in must_haves:
+        substrings = event.get("match_any") or []
+        if not any(s in report_markdown for s in substrings):
+            missing.append(event.get("description", "(no description)"))
+    return missing
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -232,17 +266,25 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--dsn", default=None, help="DB DSN override")
     parser.add_argument("--json", action="store_true", help="emit JSON instead of table")
+    parser.add_argument(
+        "--golden",
+        action="store_true",
+        help="check the rendered report (requires --markdown) against the curated golden "
+        "must-have events for the date",
+    )
     args = parser.parse_args(argv)
 
     from dotenv import load_dotenv
 
     load_dotenv()
     dsn = resolve_db_dsn(args.dsn)
+    report_text = ""
     with connect_db(dsn) as conn:
         bundle = load_same_day_bundle(conn, args.date)
         if args.markdown:
             with open(args.markdown, encoding="utf-8") as f:
-                referenced = parse_referenced_from_markdown(f.read())
+                report_text = f.read()
+            referenced = parse_referenced_from_markdown(report_text)
         else:
             referenced = load_referenced_from_db(conn, args.date)
 
@@ -252,7 +294,22 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(cov, default=lambda o: o.__dict__, ensure_ascii=False, indent=2))
     else:
         print(_render_coverage(cov))
-    return 1 if cov.missing_categories else 0
+
+    golden_missing: list[str] = []
+    if args.golden:
+        must_haves = load_golden_must_haves(args.date)
+        if not must_haves:
+            print(f"\n[golden] {args.date}: no fixture (run scripts/stock_report_freeze_golden.py)")
+        elif not report_text:
+            print("\n[golden] requires --markdown to check the rendered report")
+        else:
+            golden_missing = check_golden_coverage(report_text, must_haves)
+            present = len(must_haves) - len(golden_missing)
+            print(f"\n# Golden must-haves — {args.date}: {present}/{len(must_haves)} present")
+            for desc in golden_missing:
+                print(f"  MISSING: {desc}")
+
+    return 1 if (cov.missing_categories or golden_missing) else 0
 
 
 if __name__ == "__main__":

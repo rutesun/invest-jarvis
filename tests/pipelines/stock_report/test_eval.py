@@ -143,3 +143,33 @@ class TestJudgeFaithfulness:
         report = seval.judge_faithfulness("report", ["fact"], judge_call=lambda s, u: {})
         assert report.missing_events == []
         assert report.hallucinated_claims == []
+
+
+class TestGoldenCoverage:
+    def test_all_present_returns_empty(self) -> None:
+        must_haves = [
+            {"description": "MGM 인수", "match_any": ["MGM"]},
+            {"description": "퍼페추아 대출", "match_any": ["퍼페추아"]},
+        ]
+        report = "오늘 MGM 인수 제안과 퍼페추아 리소스 대출이 보도됐다."
+        assert seval.check_golden_coverage(report, must_haves) == []
+
+    def test_reports_missing_description(self) -> None:
+        must_haves = [
+            {"description": "MGM 인수", "match_any": ["MGM"]},
+            {"description": "네비우스 지분", "match_any": ["네비우스", "Nebius"]},
+        ]
+        report = "오늘 MGM 인수 제안만 보도됐다."
+        assert seval.check_golden_coverage(report, must_haves) == ["네비우스 지분"]
+
+    def test_any_substring_counts_as_present(self) -> None:
+        must_haves = [{"description": "우버-딜리버리히어로", "match_any": ["딜리버리", "우버"]}]
+        assert seval.check_golden_coverage("우버가 인수를 제안했다", must_haves) == []
+
+    def test_missing_fixture_returns_empty(self) -> None:
+        assert seval.load_golden_must_haves("1999-01-01") == []
+
+    def test_loads_frozen_fixture(self) -> None:
+        events = seval.load_golden_must_haves("2026-06-02")
+        assert events
+        assert any("MGM" in (event.get("match_any") or []) for event in events)
