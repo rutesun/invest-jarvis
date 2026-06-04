@@ -137,19 +137,24 @@ class TestBuildUserPrompt:
     def test_prescribes_canonical_labels(self):
         bundle = _make_bundle()
         prompt = _build_user_prompt(bundle)
-        # labels must match MarkdownReportBuilder so the grounded report aligns with T09-A
+        # grouped/nested labels must match MarkdownReportBuilder so the grounded report
+        # aligns with the T09-A report
         for label in [
-            "투자 포인트:",
-            "촉매:",
-            "핵심 수치:",
-            "리스크/확인:",
-            "관련 종목:",
-            "**Impact:**",
-            "출처:",
+            "Narrative",
+            "Impact",
+            "근거",
+            "핵심 주장",
+            "투자 포인트",
+            "촉매",
+            "핵심 수치",
+            "리스크/확인",
+            "관련 종목",
+            "출처",
         ]:
             assert label in prompt
         assert "영어 라벨 금지" in prompt
         assert "티커 심볼만" in prompt
+        assert "2칸 들여쓰기" in prompt
 
     def test_no_markdown_output_instruction(self):
         bundle = _make_bundle()

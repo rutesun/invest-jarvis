@@ -17,9 +17,11 @@ class MarkdownReportBuilder:
             f"# Daily Stock Report V2 - {report.report_date.isoformat()}",
             "",
             self.render_pulse(report.pulse),
-            self.render_items("Category Summaries", report.category_summaries, source_lookup),
-            self.render_items("Core Themes", report.core_themes, source_lookup),
-            self.render_items("Focus Tickers", report.focus_tickers, source_lookup),
+            self.render_section(
+                "Category Summaries", "category", report.category_summaries, source_lookup
+            ),
+            self.render_section("Core Themes", "theme", report.core_themes, source_lookup),
+            self.render_section("Focus Tickers", "ticker", report.focus_tickers, source_lookup),
             self.render_notes(report.low_confidence_notes),
         ]
         return "\n\n".join(part for part in parts if part.strip()).rstrip() + "\n"
@@ -41,12 +43,15 @@ class MarkdownReportBuilder:
         lines.extend(f"- {item.title}: {item.body}" for item in pulse)
         return "\n".join(lines)
 
-    def render_items(
+    def render_section(
         self,
         title: str,
+        kind: str,
         items: list[ReportSectionItem],
         source_lookup: dict[tuple[str, str], list[str]],
     ) -> str:
+        """Render a section as grouped/nested bullets: each field is a labeled group
+        with its content indented beneath it (same layout across category/theme/ticker)."""
         lines = [f"## {title}"]
         if not items:
             lines.append("- 해당 항목 없음")
@@ -54,42 +59,54 @@ class MarkdownReportBuilder:
 
         section_key = title.lower().replace(" ", "_")
         for item in items:
-            lines.append(f"### {item.title}")
-            if item.investment_case:
-                lines.append(f"- 투자 포인트: {item.investment_case}")
-            if item.catalysts:
-                lines.append(f"- 촉매: {', '.join(item.catalysts)}")
-            if item.key_metrics:
-                lines.append(f"- 핵심 수치: {', '.join(item.key_metrics)}")
-            if item.thesis:
-                lines.append(f"- 핵심 주장: {item.thesis}")
-            if item.evidence_bullets:
-                lines.extend(f"- {bullet}" for bullet in item.evidence_bullets)
-            elif item.body and item.body not in (item.thesis, item.investment_case):
-                lines.append(item.body)
-
-            if item.impact:
-                lines.append(f"- **Impact:** {item.impact}")
-            if item.watch_points:
-                lines.append(f"- 확인 변수: {', '.join(item.watch_points)}")
-            if item.risks_or_watch_points:
-                lines.append(f"- 리스크/확인: {', '.join(item.risks_or_watch_points)}")
-            if item.related_categories:
-                lines.append(f"- 연결 카테고리: {', '.join(item.related_categories)}")
-            if item.related_themes:
-                lines.append(f"- 관련 테마: {', '.join(item.related_themes)}")
-            if item.related_stocks:
-                lines.extend(
-                    f"- 관련 종목: {self._format_related_stock(stock)}"
-                    for stock in item.related_stocks
-                )
-
             sources = source_lookup.get((section_key, item.key), [])
             if not sources and item.evidence_chunk_ids:
                 sources = [f"chunk {chunk_id}" for chunk_id in item.evidence_chunk_ids]
-            if sources:
-                lines.append(f"- 출처: {', '.join(sources)}")
+
+            lines.append(f"### {item.title}")
+            for label, values in self._groups_for(kind, item, sources):
+                clean = [str(v).strip() for v in values if v and str(v).strip()]
+                if not clean:
+                    continue
+                lines.append(f"- {label}")
+                lines.extend(f"  - {value}" for value in clean)
         return "\n".join(lines)
+
+    def _groups_for(
+        self, kind: str, item: ReportSectionItem, sources: list[str]
+    ) -> list[tuple[str, list[str]]]:
+        """Ordered (label, values) groups per section type. Empty groups are skipped
+        by the caller, so a missing field simply omits its label."""
+        if kind == "category":
+            related = ", ".join(item.related_categories) if item.related_categories else ""
+            themes = ", ".join(item.related_themes) if item.related_themes else ""
+            return [
+                ("Narrative", [item.body]),
+                ("Impact", [item.impact or ""]),
+                ("근거", list(item.evidence_bullets)),
+                ("관련 종목", [self._format_related_stock(s) for s in item.related_stocks]),
+                ("연결 카테고리", [related]),
+                ("관련 테마", [themes]),
+                ("출처", sources),
+            ]
+        if kind == "theme":
+            related = ", ".join(item.related_categories) if item.related_categories else ""
+            return [
+                ("핵심 주장", [item.thesis or item.body]),
+                ("Impact", [item.impact or ""]),
+                ("확인 변수", list(item.watch_points)),
+                ("연결 카테고리", [related]),
+                ("출처", sources),
+            ]
+        if kind == "ticker":
+            return [
+                ("투자 포인트", [item.investment_case or item.body]),
+                ("촉매", list(item.catalysts)),
+                ("핵심 수치", list(item.key_metrics)),
+                ("리스크/확인", list(item.risks_or_watch_points)),
+                ("출처", sources),
+            ]
+        return [("출처", sources)]
 
     def render_notes(self, notes: list[str]) -> str:
         lines = ["## Low Confidence"]
