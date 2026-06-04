@@ -154,14 +154,21 @@ def _sanitize_chunk_ids(ids: list[Any], allowed_bundle_ids: set[int]) -> list[in
 # ---------------------------------------------------------------------------
 
 
+class RelatedStockLLM(BaseModel):
+    # Nested model (not dict[str, Any]) so OpenAI strict structured-output accepts the schema.
+    name: str = ""
+    ticker: str | None = None
+    catalyst: str = ""
+
+
 class CategoryCardLLMOutput(BaseModel):
     category_key: str | None = None
     title: str = ""
     narrative: str = ""
     evidence_bullets: list[str] = Field(default_factory=list)
     impact: str = ""
-    related_stocks: list[dict[str, Any]] = Field(default_factory=list)
-    evidence_chunk_ids: list[Any] = Field(default_factory=list)
+    related_stocks: list[RelatedStockLLM] = Field(default_factory=list)
+    evidence_chunk_ids: list[int] = Field(default_factory=list)
     priority_score: float = 0.0
 
 
@@ -171,7 +178,7 @@ class TickerCardLLMOutput(BaseModel):
     catalysts: list[str] = Field(default_factory=list)
     key_metrics: list[str] = Field(default_factory=list)
     risks: list[str] = Field(default_factory=list)
-    evidence_chunk_ids: list[Any] = Field(default_factory=list)
+    evidence_chunk_ids: list[int] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -293,16 +300,14 @@ async def synthesize_category(
         )
         assert isinstance(output, CategoryCardLLMOutput)
         clean_ids = _sanitize_chunk_ids(output.evidence_chunk_ids, allowed_ids)
-        related_stocks: list[dict[str, str | None]] = []
-        for stock in output.related_stocks:
-            if isinstance(stock, dict):
-                related_stocks.append(
-                    {
-                        "name": str(stock.get("name") or ""),
-                        "ticker": stock.get("ticker") or None,
-                        "catalyst": str(stock.get("catalyst") or ""),
-                    }
-                )
+        related_stocks: list[dict[str, str | None]] = [
+            {
+                "name": stock.name,
+                "ticker": stock.ticker or None,
+                "catalyst": stock.catalyst,
+            }
+            for stock in output.related_stocks
+        ]
         return CategorySummaryCard(
             category_key=output.category_key or bucket.category_key,
             title=output.title or bucket.category_key,
@@ -375,7 +380,7 @@ class OverviewPulseItemOutput(BaseModel):
     key: str = ""
     title: str = ""
     body: str = ""
-    source_card_indices: list[Any] = Field(default_factory=list)
+    source_card_indices: list[int] = Field(default_factory=list)
     priority_score: float = 0.0
 
 
@@ -386,7 +391,7 @@ class OverviewCoreThemeOutput(BaseModel):
     connected_categories: list[str] = Field(default_factory=list)
     impact: str = ""
     watch_points: list[str] = Field(default_factory=list)
-    source_card_indices: list[Any] = Field(default_factory=list)
+    source_card_indices: list[int] = Field(default_factory=list)
     priority_score: float = 0.0
 
 

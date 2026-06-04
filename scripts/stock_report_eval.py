@@ -23,6 +23,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import re
 from collections.abc import Callable
@@ -177,7 +178,7 @@ def _default_judge_call(system: str, user: str) -> dict[str, Any]:
 
     llm = get_report_synthesis_llm_config("openai").create_llm()
     messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
-    response = llm.invoke(messages)
+    response = asyncio.run(llm.ainvoke(messages))
     text = response.content if hasattr(response, "content") else str(response)
     return json.loads(_strip_fence(str(text)))
 
@@ -233,6 +234,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--json", action="store_true", help="emit JSON instead of table")
     args = parser.parse_args(argv)
 
+    from dotenv import load_dotenv
+
+    load_dotenv()
     dsn = resolve_db_dsn(args.dsn)
     with connect_db(dsn) as conn:
         bundle = load_same_day_bundle(conn, args.date)

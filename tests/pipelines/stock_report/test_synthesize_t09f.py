@@ -297,7 +297,7 @@ def test_synthesize_ticker_sanitizes_out_of_bundle_ids(monkeypatch) -> None:
         return TickerCardLLMOutput(
             ticker="NVDA",
             investment_case="테스트",
-            evidence_chunk_ids=[1, "bad_id", 3, 999],
+            evidence_chunk_ids=[1, 3, 999],  # 999 is out-of-bundle
         )
 
     monkeypatch.setattr(
