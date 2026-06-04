@@ -40,7 +40,11 @@ class MarkdownReportBuilder:
 
     def render_pulse(self, pulse: list[ReportSectionItem]) -> str:
         lines = ["## Pulse"]
-        lines.extend(f"- {item.title}: {item.body}" for item in pulse)
+        for item in pulse:
+            lines.append(f"- {item.title}")
+            body = (item.body or "").strip()
+            if body:
+                lines.append(f"  - {body}")
         return "\n".join(lines)
 
     def render_section(
@@ -67,6 +71,10 @@ class MarkdownReportBuilder:
             for label, values in self._groups_for(kind, item, sources):
                 clean = [str(v).strip() for v in values if v and str(v).strip()]
                 if not clean:
+                    continue
+                # 출처 stays on a single comma-separated line; other fields nest.
+                if label == "출처":
+                    lines.append(f"- 출처: {', '.join(clean)}")
                     continue
                 lines.append(f"- {label}")
                 lines.extend(f"  - {value}" for value in clean)

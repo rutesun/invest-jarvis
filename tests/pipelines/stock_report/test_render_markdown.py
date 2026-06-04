@@ -72,6 +72,9 @@ def test_markdown_report_builder_renders_fixed_sections() -> None:
     assert "## Core Themes" in markdown
     assert "## Focus Tickers" in markdown
     assert "## Low Confidence" in markdown
+    # Pulse: title line + indented body
+    assert "- 시장 핵심" in markdown
+    assert "  - 오늘은 반도체와 자동차가 핵심 축이었다." in markdown
     # grouped/nested layout: label line + indented content
     assert "- Narrative" in markdown
     assert "  - HBM 공급 타이트닝이 이어진다" in markdown  # narrative now surfaced
@@ -81,8 +84,8 @@ def test_markdown_report_builder_renders_fixed_sections() -> None:
     assert "  - 반도체 업황 회복 기대가 강화된다" in markdown
     assert "- 관련 종목" in markdown
     assert "  - 엔비디아(NVDA): HBM 수요" in markdown
-    assert "- 출처" in markdown
-    assert "  - chunk 1 신한 리서치#51014" in markdown
+    # 출처 stays on a single comma-separated line
+    assert "- 출처: chunk 1 신한 리서치#51014" in markdown
 
 
 def test_markdown_report_builder_omits_empty_ticker_parentheses() -> None:

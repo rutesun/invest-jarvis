@@ -88,7 +88,9 @@ report_date: {bundle.report_date.isoformat()}
 `  - 내용`(공백 2칸 들여쓰기). 라벨과 내용을 한 줄에 합치지 않는다.
 
 ## Pulse
-- (신호 제목): (1~2문장)   ← Pulse만 예외로 `- 제목: 내용` 한 줄 형식. 3~5개.
+- (방향성 있는 신호 제목)
+  - (투자 인사이트: 핵심 신호와 수치를 담되 단순 뉴스 나열에서 멈추지 말고, 그 신호의 투자 함의 — 방향성/수급/밸류에이션/포지셔닝/주목 포인트 — 를 1~2문장으로. 투자자가 어떻게 읽어야 하는지가 보여야 한다.)
+- 3~5개, 서로 다른 신호.
 
 ## Category Summaries
 ### (카테고리명)
@@ -101,8 +103,7 @@ report_date: {bundle.report_date.isoformat()}
   - (여러 개)
 - 관련 종목
   - 종목명(티커): 촉매
-- 출처
-  - chunk {{chunk_id}} {{source}}
+- 출처: chunk {{chunk_id}} {{source}}, chunk {{chunk_id}} {{source}}  ← 한 줄, 콤마 구분
 
 ## Core Themes
 ### (테마명)
@@ -114,8 +115,7 @@ report_date: {bundle.report_date.isoformat()}
   - (이 논리가 약해지는 조건)
 - 연결 카테고리
   - (연결된 category 2개 이상)
-- 출처
-  - chunk {{chunk_id}} {{source}}
+- 출처: chunk {{chunk_id}} {{source}}, chunk {{chunk_id}} {{source}}  ← 한 줄, 콤마 구분
 
 ## Focus Tickers
 ### (티커 심볼만. 예: AVGO, MRVL, SK하이닉스. 괄호·풀네임 금지)
@@ -127,17 +127,17 @@ report_date: {bundle.report_date.isoformat()}
   - (수치 근거)
 - 리스크/확인
   - (논리가 약해지는 조건)
-- 출처
-  - chunk {{chunk_id}} {{source}}
+- 출처: chunk {{chunk_id}} {{source}}, chunk {{chunk_id}} {{source}}  ← 한 줄, 콤마 구분
 
 ## Low Confidence
 - 당일 확인되지 않은 항목
 
 라벨·구조 규칙 (정확히 지킬 것):
 - 라벨 줄(`- 라벨`)과 내용(`  - 내용`, 2칸 들여쓰기)을 분리한다. 한 줄에 합치지 않는다.
+  단 `출처`만 예외로 `- 출처: ...` 한 줄에 콤마로 모아 쓴다.
 - 라벨은 위 표기 그대로 쓴다. `Investment Case` 같은 임의 영어 라벨 금지. 라벨을 굵게(`**`) 처리하지 않는다.
 - Focus Tickers의 `###` 제목은 티커 심볼만 쓴다(괄호·풀네임 금지).
-- 출처의 각 항목은 `chunk {{chunk_id}} {{source}}` 형태. source는 각 chunk의 source 필드 값(channel_name#message_id)을 그대로 쓴다.
+- 출처는 `- 출처: chunk {{chunk_id}} {{source}}, chunk ...` 한 줄. source는 각 chunk의 source 필드 값(channel_name#message_id)을 그대로 쓴다.
 - Google Search 보강 내용은 출처가 명확한 경우에만 반영한다.
 - 추측하거나 evidence에 없는 내용을 새로 만들지 않는다.
 - core_themes는 최소 2개 이상의 카테고리를 연결하는 경우만 작성한다.
