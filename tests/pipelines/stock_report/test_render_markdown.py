@@ -236,3 +236,38 @@ def test_markdown_report_builder_renders_related_stocks_as_separate_bullets() ->
     assert "- 관련 종목: 삼화콘덴서: 전력 인프라 수요 증가" in markdown
     assert "- 관련 종목: 삼성전기: 실리콘 커패시터 공급 기대" in markdown
     assert "삼화콘덴서: 전력 인프라 수요 증가, 삼성전기: 실리콘 커패시터 공급 기대" not in markdown
+
+
+def test_body_not_duplicated_when_equal_to_thesis_or_investment_case() -> None:
+    """Core Themes / Focus Tickers must not render body when it duplicates
+    thesis (core theme) or investment_case (focus ticker)."""
+    artifact = StockReportArtifact(
+        report_date=date(2026, 5, 26),
+        pulse=[],
+        category_summaries=[],
+        core_themes=[
+            ReportSectionItem(
+                key="t",
+                title="AI 확산",
+                body="AI 투자가 밸류체인 전반으로 번진다",
+                thesis="AI 투자가 밸류체인 전반으로 번진다",
+                evidence_chunk_ids=[1],
+            )
+        ],
+        focus_tickers=[
+            ReportSectionItem(
+                key="NVDA",
+                title="NVDA",
+                body="AI 칩 수요 강세가 지속된다",
+                investment_case="AI 칩 수요 강세가 지속된다",
+                evidence_chunk_ids=[1],
+            )
+        ],
+        low_confidence_notes=[],
+        evidence_refs=[],
+    )
+
+    markdown = MarkdownReportBuilder().build(artifact)
+
+    assert markdown.count("AI 투자가 밸류체인 전반으로 번진다") == 1
+    assert markdown.count("AI 칩 수요 강세가 지속된다") == 1

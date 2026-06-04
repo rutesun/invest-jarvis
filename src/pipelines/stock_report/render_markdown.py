@@ -65,7 +65,7 @@ class MarkdownReportBuilder:
                 lines.append(f"- 핵심 주장: {item.thesis}")
             if item.evidence_bullets:
                 lines.extend(f"- {bullet}" for bullet in item.evidence_bullets)
-            elif item.body:
+            elif item.body and item.body not in (item.thesis, item.investment_case):
                 lines.append(item.body)
 
             if item.impact:
