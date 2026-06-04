@@ -632,3 +632,69 @@ def test_pulse_item_ids_are_per_item_not_union(monkeypatch) -> None:
     assert result.pulse[2].evidence_chunk_ids == [30]
     # Union in top-level overview
     assert set(result.evidence_chunk_ids) == {10, 11, 20, 21, 30}
+
+
+# ---------------------------------------------------------------------------
+# T09-H proof tests: coverage guarantee + evidence-ref integrity
+# ---------------------------------------------------------------------------
+
+
+def test_tiered_covers_all_categories_even_when_llm_fails(monkeypatch) -> None:
+    """Every category with chunks yields a card; LLM failure → raw fallback, never dropped.
+
+    This is the proof that the map-reduce refactor fixes the old 65%-drop bug:
+    coverage is guaranteed by the code loop, not by the LLM.
+    """
+
+    async def _always_raise(system, user, schema, provider):
+        raise RuntimeError("LLM down")
+
+    monkeypatch.setattr("src.pipelines.stock_report.synthesize._run_synthesis_call", _always_raise)
+
+    bundle = SameDayBundle(
+        report_date=date(2026, 5, 26),
+        chunks=[
+            _chunk(1, category_key="반도체"),
+            _chunk(2, category_key="반도체"),
+            _chunk(3, category_key="반도체"),
+            _chunk(4, category_key="바이오"),
+            _chunk(5, category_key="금융"),
+        ],
+        category_buckets=[
+            _cat_bucket([1, 2, 3], "반도체"),  # >=3 → LLM path, fails → raw
+            _cat_bucket([4], "바이오"),  # <3 → raw
+            _cat_bucket([5], "금융"),  # <3 → raw
+        ],
+        focus_ticker_buckets=[],
+        low_confidence_chunks=[],
+    )
+
+    result = asyncio.run(synthesize_tiered(bundle, provider="openai"))
+
+    assert isinstance(result, StockReportArtifact)
+    covered = {item.key for item in result.category_summaries}
+    assert covered == {"반도체", "바이오", "금융"}  # coverage 100%, nothing silently dropped
+
+
+def test_tiered_evidence_refs_stay_within_bundle(monkeypatch) -> None:
+    """Every report_evidence chunk_id must exist in the bundle (no dangling refs)."""
+
+    async def _always_raise(system, user, schema, provider):
+        raise RuntimeError("LLM down")
+
+    monkeypatch.setattr("src.pipelines.stock_report.synthesize._run_synthesis_call", _always_raise)
+
+    bundle = SameDayBundle(
+        report_date=date(2026, 5, 26),
+        chunks=[_chunk(i) for i in (1, 2, 3, 4)],
+        category_buckets=[_cat_bucket([1, 2, 3], "반도체"), _cat_bucket([4], "바이오")],
+        focus_ticker_buckets=[_ticker_bucket([1, 2], "NVDA")],
+        low_confidence_chunks=[],
+    )
+
+    result = asyncio.run(synthesize_tiered(bundle, provider="openai"))
+
+    bundle_ids = {chunk.id for chunk in bundle.chunks}
+    assert result.evidence_refs  # non-empty
+    for ref in result.evidence_refs:
+        assert ref.knowledge_chunk_id in bundle_ids
