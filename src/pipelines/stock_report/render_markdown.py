@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 from typing import TYPE_CHECKING
 
@@ -136,31 +137,34 @@ def render_stock_report_markdown(report: StockReportArtifact) -> str:
     return MarkdownReportBuilder().build(report)
 
 
+# ---------------------------------------------------------------------------
+# Chunk-id reference parsing — inverse of the rendered "chunk {id}" source lines.
+# Lives here next to the renderer so the wire format and its parser change together.
+# ---------------------------------------------------------------------------
+
+# chunk ids appear as "[2884]" (T09-A) or "chunk 2884" (T09-B google) in rendered reports
+_CHUNK_ID_PATTERNS = (re.compile(r"\[(\d{3,6})\]"), re.compile(r"chunk\s+(\d{3,6})"))
+
+
+def parse_referenced_from_markdown(text: str) -> set[int]:
+    """Extract referenced chunk ids from a rendered report (T09-A [id] or T09-B 'chunk id')."""
+    ids: set[int] = set()
+    for pattern in _CHUNK_ID_PATTERNS:
+        for match in pattern.finditer(text):
+            ids.add(int(match.group(1)))
+    return ids
+
+
 def render_google_grounded_report(artifact: GoogleGroundedArtifact) -> str:
     grounding_label = (
         "✓ Grounding 활성" if artifact.grounding_active else "✗ Grounding 미발동 (fallback)"
     )
-    # H1 title matches the canonical T09-A report (MarkdownReportBuilder.build) so both
-    # outputs share the same top-level layout.
-    title = f"# Daily Stock Report V2 - {artifact.report_date.isoformat()}"
-    banner = (
-        f"> ⚠️ **[EXPERIMENTAL] Google Search Grounding 실험 경로** — {grounding_label}  \n"
-        "> Phase 3 news corpus 도입 전 T09-A 기본 경로와 비교 목적으로만 사용하세요."
-    )
-
-    # Safety net: when grounding did not fire, the body is ungrounded Gemini output that
-    # fabricates numbers/entities (e.g. clinical rates, FDA dates). Suppress it rather than
-    # ship unverified figures — direct the reader to the T09-A report instead.
-    if not artifact.grounding_active:
-        notice = (
-            "> ⚠️ Google Search Grounding이 발동하지 않아 검증되지 않은 본문 생성을 생략합니다. "
-            "기본 경로(T09-A) 리포트를 사용하세요."
-        )
-        return "\n\n".join([title, banner, notice]).rstrip() + "\n"
-
     parts = [
-        title,
-        banner,
+        # H1 title matches the canonical T09-A report (MarkdownReportBuilder.build) so both
+        # outputs share the same top-level layout.
+        f"# Daily Stock Report V2 - {artifact.report_date.isoformat()}",
+        f"> ⚠️ **[EXPERIMENTAL] Google Search Grounding 실험 경로** — {grounding_label}  \n"
+        "> Phase 3 news corpus 도입 전 T09-A 기본 경로와 비교 목적으로만 사용하세요.",
         artifact.synthesis_markdown.rstrip(),
     ]
 

@@ -25,20 +25,17 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-import re
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
 from src.pipelines.stock_report.db import connect_db, resolve_db_dsn
+from src.pipelines.stock_report.render_markdown import parse_referenced_from_markdown
 from src.pipelines.stock_report.retrieval import SameDayBundle, load_same_day_bundle
 
 
 MIN_SIGNAL_FOR_FLAG = 3
-
-# chunk ids appear as "[2884]" (T09-A) or "chunk 2884" (T09-B google) in rendered reports
-_CHUNK_ID_PATTERNS = (re.compile(r"\[(\d{3,6})\]"), re.compile(r"chunk\s+(\d{3,6})"))
 
 
 @dataclass(slots=True)
@@ -106,15 +103,6 @@ def compute_coverage(bundle: SameDayBundle, referenced_ids: set[int]) -> Coverag
         categories=categories,
         missing_categories=missing,
     )
-
-
-def parse_referenced_from_markdown(text: str) -> set[int]:
-    """Extract referenced chunk ids from a rendered report (T09-A [id] or T09-B 'chunk id')."""
-    ids: set[int] = set()
-    for pattern in _CHUNK_ID_PATTERNS:
-        for match in pattern.finditer(text):
-            ids.add(int(match.group(1)))
-    return ids
 
 
 def load_referenced_from_db(conn: Any, report_date: str) -> set[int]:
