@@ -27,7 +27,7 @@ import asyncio
 import json
 import re
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -292,7 +292,9 @@ def main(argv: list[str] | None = None) -> int:
     cov = compute_coverage(bundle, referenced)
 
     if args.json:
-        print(json.dumps(cov, default=lambda o: o.__dict__, ensure_ascii=False, indent=2))
+        # asdict recurses into the nested CategoryCoverage list; slots dataclasses have
+        # no __dict__, so the previous default=lambda o: o.__dict__ always crashed here.
+        print(json.dumps(asdict(cov), ensure_ascii=False, indent=2))
     else:
         print(_render_coverage(cov))
 

@@ -173,3 +173,27 @@ class TestGoldenCoverage:
         events = seval.load_golden_must_haves("2026-06-02")
         assert events
         assert any("MGM" in (event.get("match_any") or []) for event in events)
+
+
+def test_coverage_report_is_json_serializable() -> None:
+    """Guards the `--json` path: slots dataclasses have no __dict__, so serialization
+    must go through dataclasses.asdict (regression for the eval --json crash)."""
+    import json
+    from dataclasses import asdict
+
+    cov = seval.CoverageReport(
+        report_date="2026-06-04",
+        denominator=2,
+        referenced_total=1,
+        coverage_rate=0.5,
+        categories=[
+            seval.CategoryCoverage(
+                category="반도체", total=2, signal_total=2, referenced=1, missing=False
+            )
+        ],
+        missing_categories=[],
+    )
+
+    out = json.dumps(asdict(cov), ensure_ascii=False)
+    assert "반도체" in out
+    assert '"category"' in out
