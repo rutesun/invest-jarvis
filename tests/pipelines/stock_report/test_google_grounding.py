@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import date
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 
@@ -371,7 +371,7 @@ class TestSynthesizeWithGoogleGrounding:
 
         assert isinstance(artifact.synthesis_markdown, str)
         assert mock_client.models.generate_content.call_count == 2
-        mock_time.sleep.assert_called_once()
+        mock_time.sleep.assert_called_once_with(1)  # _RETRY_BASE_WAIT_SECONDS ** attempt(0)
 
     def test_raises_after_all_retries_exhausted(self):
         bundle = _make_bundle()
@@ -399,13 +399,15 @@ class TestSynthesizeWithGoogleGrounding:
         with (
             patch.dict("os.environ", {"GOOGLE_API_KEY": "test-key"}),
             patch("src.pipelines.stock_report.google_grounding.genai") as mock_genai,
-            patch("src.pipelines.stock_report.google_grounding.time"),
+            patch("src.pipelines.stock_report.google_grounding.time") as mock_time,
         ):
             mock_genai.Client.return_value = mock_client
             artifact = synthesize_with_google_grounding(bundle)
 
         assert mock_client.models.generate_content.call_count == 3
         assert artifact.grounding_active is True
+        # not-fired retries actually slept, with exponential backoff (2**0, 2**1)
+        assert mock_time.sleep.call_args_list == [call(1), call(2)]
 
     def test_returns_inactive_when_grounding_never_fires(self):
         bundle = _make_bundle()
@@ -416,7 +418,7 @@ class TestSynthesizeWithGoogleGrounding:
         with (
             patch.dict("os.environ", {"GOOGLE_API_KEY": "test-key"}),
             patch("src.pipelines.stock_report.google_grounding.genai") as mock_genai,
-            patch("src.pipelines.stock_report.google_grounding.time"),
+            patch("src.pipelines.stock_report.google_grounding.time") as mock_time,
         ):
             mock_genai.Client.return_value = mock_client
             artifact = synthesize_with_google_grounding(bundle)
@@ -425,6 +427,10 @@ class TestSynthesizeWithGoogleGrounding:
         # renderer suppresses the ungrounded body
         assert mock_client.models.generate_content.call_count == 3
         assert artifact.grounding_active is False
+        assert mock_time.sleep.call_args_list == [call(1), call(2)]
+        # ungrounded response is still parsed into markdown (artifact carries the body;
+        # suppression happens at render time, not here)
+        assert "## Pulse" in artifact.synthesis_markdown
 
 
 class TestRenderGoogleGroundedReport:
@@ -485,6 +491,7 @@ class TestRenderGoogleGroundedReport:
         assert "본문 생성을 생략" in result
         assert "미발동" in result
         assert result.startswith("# Daily Stock Report V2 - 2025-05-08")
+        assert result.endswith("\n")
 
     def test_no_citation_section_when_empty(self):
         from src.pipelines.stock_report.render_markdown import render_google_grounded_report

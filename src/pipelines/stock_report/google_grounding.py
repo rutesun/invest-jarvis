@@ -232,6 +232,9 @@ def synthesize_with_google_grounding(
             # Retry when grounding did not fire: an ungrounded response is pure
             # parametric Gemini output (no search), which fabricates numbers/entities.
             # Try to recover real grounding before falling back to a suppressed report.
+            # not-fired and exception retries deliberately share one bounded budget
+            # (max _MAX_RETRIES + 1 total calls) to cap per-request grounding cost;
+            # not-fired is the common case and gets the budget unless exceptions intervene.
             if not grounding_active and attempt < _MAX_RETRIES:
                 wait = _RETRY_BASE_WAIT_SECONDS**attempt
                 logger.warning(
