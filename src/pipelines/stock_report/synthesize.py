@@ -133,15 +133,14 @@ def build_ticker_evidence(bucket: TickerBucket) -> list[EvidenceItem]:
 
 
 # ---------------------------------------------------------------------------
-# T09-F: _sanitize_chunk_ids — unified helper (google_grounding imports from here)
+# T09-F: _sanitize_chunk_ids — unified chunk-id sanitization helper
 # ---------------------------------------------------------------------------
 
 
 def _sanitize_chunk_ids(ids: list[Any], allowed_bundle_ids: set[int]) -> list[int]:
     """Return only integer chunk ids that are present in allowed_bundle_ids.
 
-    This is the single source of truth for chunk-id sanitization.  google_grounding.py
-    should import this rather than maintaining a duplicate.
+    Single source of truth for chunk-id sanitization across the synthesis pipeline.
     """
     result: list[int] = []
     for v in ids:
@@ -493,19 +492,17 @@ async def synthesize_overview(
     ticker_cards: list[TickerCard],
     *,
     provider: str = "openai",
-    grounding: bool = False,
 ) -> OverviewResult:
     """Reduce per-category/per-ticker cards into an OverviewResult (Pulse + Core Themes).
 
     Fallback ladder:
-    1. grounding=True  → Google Grounding Gemini call
-    2. grounding=False (or grounding failed) → OpenAI structured call
-    3. LLM entirely failed → deterministic Pulse from top-priority cards, empty core_themes
+    1. OpenAI structured call
+    2. LLM failed → deterministic Pulse from top-priority cards, empty core_themes
     """
     allowed_ids = _collect_allowed_ids_from_cards(category_cards, ticker_cards)
     user_prompt = build_overview_prompt(category_cards, ticker_cards)
 
-    async def _call_openai() -> OverviewResult:
+    try:
         output = await _run_synthesis_call(
             OVERVIEW_SYNTHESIS_SYSTEM_PROMPT,
             user_prompt,
@@ -514,23 +511,6 @@ async def synthesize_overview(
         )
         assert isinstance(output, OverviewLLMOutput)
         return _build_overview_result_from_llm(output, category_cards, ticker_cards, allowed_ids)
-
-    async def _call_grounding() -> OverviewResult:
-        return await _run_overview_grounding_call(
-            user_prompt, category_cards, ticker_cards, allowed_ids
-        )
-
-    if grounding:
-        try:
-            return await _call_grounding()
-        except Exception:
-            logger.warning(
-                "synthesize_overview grounding call failed, falling back to openai",
-                exc_info=True,
-            )
-
-    try:
-        return await _call_openai()
     except Exception:
         logger.warning(
             "synthesize_overview openai call failed, using deterministic fallback",
@@ -598,65 +578,6 @@ def _build_overview_result_from_llm(
         core_themes=core_themes,
         evidence_chunk_ids=all_item_ids,
     )
-
-
-async def _run_overview_grounding_call(
-    user_prompt: str,
-    category_cards: list[CategorySummaryCard],
-    ticker_cards: list[TickerCard],
-    allowed_ids: set[int],
-) -> OverviewResult:
-    """Attempt a Google Grounding Gemini call for the reduce step.
-
-    Raises on failure so synthesize_overview can fall back to openai.
-    """
-    import os
-
-    try:
-        from google import genai
-        from google.genai.types import GenerateContentConfig, GoogleSearch, Tool
-    except ImportError as exc:
-        raise ImportError(
-            "google-genai is required for grounding. Run: uv add google-genai"
-        ) from exc
-
-    api_key = os.getenv("GOOGLE_API_KEY")
-    if not api_key:
-        raise ValueError("GOOGLE_API_KEY is required for grounding")
-
-    model = os.getenv("STOCK_REPORT_GOOGLE_MODEL") or "gemini-2.5-flash"
-    client = genai.Client(api_key=api_key)
-    gen_config = GenerateContentConfig(
-        system_instruction=OVERVIEW_SYNTHESIS_SYSTEM_PROMPT,
-        tools=[Tool(google_search=GoogleSearch())],
-        temperature=0.1,
-    )
-
-    full_prompt = user_prompt
-    loop = asyncio.get_event_loop()
-    response = await loop.run_in_executor(
-        None,
-        lambda: client.models.generate_content(
-            model=model,
-            contents=full_prompt,
-            config=gen_config,
-        ),
-    )
-    raw_text = response.text or ""
-    import json as _json
-
-    cleaned = raw_text.strip()
-    if cleaned.startswith("```"):
-        lines = cleaned.splitlines()
-        start = next((i + 1 for i, line in enumerate(lines) if line.startswith("```")), 1)
-        end = next(
-            (i for i in range(len(lines) - 1, start, -1) if lines[i].startswith("```")),
-            len(lines),
-        )
-        cleaned = "\n".join(lines[start:end])
-    parsed = _json.loads(cleaned)
-    output = OverviewLLMOutput.model_validate(parsed)
-    return _build_overview_result_from_llm(output, category_cards, ticker_cards, allowed_ids)
 
 
 # ---------------------------------------------------------------------------
@@ -745,7 +666,6 @@ async def synthesize_tiered(
     bundle: SameDayBundle,
     *,
     provider: str = "openai",
-    grounding: bool = False,
 ) -> StockReportArtifact:
     """Full map-reduce: per-category + top-N ticker map → reduce → StockReportArtifact.
 
@@ -771,9 +691,7 @@ async def synthesize_tiered(
     try:
         category_cards = list(await asyncio.gather(*[_cat(b) for b in category_buckets]))
         ticker_cards = list(await asyncio.gather(*[_tic(b) for b in ticker_buckets]))
-        overview = await synthesize_overview(
-            category_cards, ticker_cards, provider=provider, grounding=grounding
-        )
+        overview = await synthesize_overview(category_cards, ticker_cards, provider=provider)
         artifact = _assemble_tiered_artifact(bundle, category_cards, ticker_cards, overview)
         if artifact.category_summaries or artifact.focus_tickers or artifact.core_themes:
             return artifact
@@ -791,10 +709,9 @@ def synthesize_daily(
     bundle: SameDayBundle,
     *,
     provider: str = "openai",
-    grounding: bool = False,
 ) -> StockReportArtifact:
     """Sync entry point for the tiered pipeline (wraps asyncio.run)."""
-    return asyncio.run(synthesize_tiered(bundle, provider=provider, grounding=grounding))
+    return asyncio.run(synthesize_tiered(bundle, provider=provider))
 
 
 # ---------------------------------------------------------------------------

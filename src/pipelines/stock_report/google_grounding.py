@@ -173,11 +173,13 @@ def _extract_citations(candidate) -> tuple[list[GroundingCitation], list[str]]:
         meta = candidate.grounding_metadata
         if not meta:
             return citations, search_queries
-        for idx, chunk in enumerate(meta.grounding_chunks or []):
+        for chunk in meta.grounding_chunks or []:
             if chunk.web:
+                # Number web citations contiguously (1-based). Non-web chunks are skipped
+                # without consuming a number, so the first web citation is always [1].
                 citations.append(
                     GroundingCitation(
-                        index=idx + 1,
+                        index=len(citations) + 1,
                         title=chunk.web.title or "",
                         uri=chunk.web.uri or "",
                     )
@@ -228,23 +230,6 @@ def synthesize_with_google_grounding(
             raw_text = response.text or ""
             citations, search_queries = _extract_citations(response.candidates[0])
             grounding_active = bool(citations or search_queries)
-
-            # Retry when grounding did not fire: an ungrounded response is pure
-            # parametric Gemini output (no search), which fabricates numbers/entities.
-            # Try to recover real grounding before falling back to a suppressed report.
-            # not-fired and exception retries deliberately share one bounded budget
-            # (max _MAX_RETRIES + 1 total calls) to cap per-request grounding cost;
-            # not-fired is the common case and gets the budget unless exceptions intervene.
-            if not grounding_active and attempt < _MAX_RETRIES:
-                wait = _RETRY_BASE_WAIT_SECONDS**attempt
-                logger.warning(
-                    "google grounding did not fire (attempt %d/%d), retrying in %ds",
-                    attempt + 1,
-                    _MAX_RETRIES + 1,
-                    wait,
-                )
-                time.sleep(wait)
-                continue
 
             synthesis_markdown = _to_markdown(bundle, raw_text)
             logger.info(

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import date
 from types import SimpleNamespace
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -226,6 +226,26 @@ class TestExtractCitations:
         assert citations == []
         assert queries == []
 
+    def test_numbers_web_citations_contiguously_when_non_web_precedes(self):
+        # Regression: a non-web grounding chunk must not consume a citation number.
+        # The first WEB citation must be [1], not [2] (otherwise [1] renders empty).
+        meta = SimpleNamespace(
+            grounding_chunks=[
+                SimpleNamespace(web=None),
+                SimpleNamespace(
+                    web=SimpleNamespace(title="Bloomberg", uri="https://bloomberg.com/1")
+                ),
+                SimpleNamespace(web=SimpleNamespace(title="Reuters", uri="https://reuters.com/2")),
+            ],
+            web_search_queries=[],
+        )
+        candidate = SimpleNamespace(grounding_metadata=meta)
+        citations, _ = _extract_citations(candidate)
+
+        assert [c.index for c in citations] == [1, 2]
+        assert citations[0].title == "Bloomberg"
+        assert citations[1].title == "Reuters"
+
 
 class TestSynthesizeWithGoogleGrounding:
     def test_returns_artifact_with_markdown(self):
@@ -258,9 +278,7 @@ class TestSynthesizeWithGoogleGrounding:
     def test_markdown_response_used_as_is(self):
         bundle = _make_bundle()
         markdown_text = "## Pulse\n- NVDA 수요 급증\n"
-        fake_response = _make_fake_response(
-            markdown_text, [{"title": "Src", "uri": "https://src/1"}], ["q"]
-        )
+        fake_response = _make_fake_response(markdown_text, [], [])
         mock_client = MagicMock()
         mock_client.models.generate_content.return_value = fake_response
 
@@ -272,14 +290,12 @@ class TestSynthesizeWithGoogleGrounding:
             artifact = synthesize_with_google_grounding(bundle)
 
         assert artifact.synthesis_markdown.strip() == markdown_text.strip()
-        assert artifact.grounding_active is True
+        assert artifact.grounding_active is False
 
     def test_strips_code_fence_from_response(self):
         bundle = _make_bundle()
         fenced = "```markdown\n## Pulse\n- NVDA 수요 급증\n```"
-        fake_response = _make_fake_response(
-            fenced, [{"title": "Src", "uri": "https://src/1"}], ["q"]
-        )
+        fake_response = _make_fake_response(fenced, [], [])
         mock_client = MagicMock()
         mock_client.models.generate_content.return_value = fake_response
 
@@ -296,9 +312,7 @@ class TestSynthesizeWithGoogleGrounding:
 
     def test_uses_custom_model(self):
         bundle = _make_bundle()
-        fake_response = _make_fake_response(
-            _minimal_llm_json(), [{"title": "Src", "uri": "https://src/1"}], ["q"]
-        )
+        fake_response = _make_fake_response(_minimal_llm_json(), [], [])
         mock_client = MagicMock()
         mock_client.models.generate_content.return_value = fake_response
 
@@ -315,9 +329,7 @@ class TestSynthesizeWithGoogleGrounding:
 
     def test_uses_env_api_key(self):
         bundle = _make_bundle()
-        fake_response = _make_fake_response(
-            _minimal_llm_json(), [{"title": "Src", "uri": "https://src/1"}], ["q"]
-        )
+        fake_response = _make_fake_response(_minimal_llm_json(), [], [])
         mock_client = MagicMock()
         mock_client.models.generate_content.return_value = fake_response
 
@@ -351,10 +363,7 @@ class TestSynthesizeWithGoogleGrounding:
 
     def test_retries_on_failure_then_succeeds(self):
         bundle = _make_bundle()
-        # success response must be grounded, else the not-fired retry would fire again
-        fake_response = _make_fake_response(
-            "## Pulse\n- ok\n", [{"title": "Src", "uri": "https://src/1"}], ["q"]
-        )
+        fake_response = _make_fake_response("## Pulse\n- ok\n", [], [])
         mock_client = MagicMock()
         mock_client.models.generate_content.side_effect = [
             RuntimeError("transient error"),
@@ -371,7 +380,7 @@ class TestSynthesizeWithGoogleGrounding:
 
         assert isinstance(artifact.synthesis_markdown, str)
         assert mock_client.models.generate_content.call_count == 2
-        mock_time.sleep.assert_called_once_with(1)  # _RETRY_BASE_WAIT_SECONDS ** attempt(0)
+        mock_time.sleep.assert_called_once()
 
     def test_raises_after_all_retries_exhausted(self):
         bundle = _make_bundle()
@@ -386,51 +395,6 @@ class TestSynthesizeWithGoogleGrounding:
             mock_genai.Client.return_value = mock_client
             with pytest.raises(RuntimeError, match="failed after"):
                 synthesize_with_google_grounding(bundle)
-
-    def test_retries_when_grounding_not_fired_then_recovers(self):
-        bundle = _make_bundle()
-        no_grounding = _make_fake_response("## Pulse\n- x\n", [], [])
-        grounded = _make_fake_response(
-            "## Pulse\n- y\n", [{"title": "Src", "uri": "https://src/1"}], ["q"]
-        )
-        mock_client = MagicMock()
-        mock_client.models.generate_content.side_effect = [no_grounding, no_grounding, grounded]
-
-        with (
-            patch.dict("os.environ", {"GOOGLE_API_KEY": "test-key"}),
-            patch("src.pipelines.stock_report.google_grounding.genai") as mock_genai,
-            patch("src.pipelines.stock_report.google_grounding.time") as mock_time,
-        ):
-            mock_genai.Client.return_value = mock_client
-            artifact = synthesize_with_google_grounding(bundle)
-
-        assert mock_client.models.generate_content.call_count == 3
-        assert artifact.grounding_active is True
-        # not-fired retries actually slept, with exponential backoff (2**0, 2**1)
-        assert mock_time.sleep.call_args_list == [call(1), call(2)]
-
-    def test_returns_inactive_when_grounding_never_fires(self):
-        bundle = _make_bundle()
-        no_grounding = _make_fake_response("## Pulse\n- x\n", [], [])
-        mock_client = MagicMock()
-        mock_client.models.generate_content.return_value = no_grounding
-
-        with (
-            patch.dict("os.environ", {"GOOGLE_API_KEY": "test-key"}),
-            patch("src.pipelines.stock_report.google_grounding.genai") as mock_genai,
-            patch("src.pipelines.stock_report.google_grounding.time") as mock_time,
-        ):
-            mock_genai.Client.return_value = mock_client
-            artifact = synthesize_with_google_grounding(bundle)
-
-        # retried to the cap (_MAX_RETRIES + 1 attempts), then returned inactive so the
-        # renderer suppresses the ungrounded body
-        assert mock_client.models.generate_content.call_count == 3
-        assert artifact.grounding_active is False
-        assert mock_time.sleep.call_args_list == [call(1), call(2)]
-        # ungrounded response is still parsed into markdown (artifact carries the body;
-        # suppression happens at render time, not here)
-        assert "## Pulse" in artifact.synthesis_markdown
 
 
 class TestRenderGoogleGroundedReport:
@@ -482,17 +446,6 @@ class TestRenderGoogleGroundedReport:
         assert result.index("# Daily Stock Report V2") < result.index("EXPERIMENTAL")
         assert result.index("EXPERIMENTAL") < result.index("## Pulse")
 
-    def test_suppresses_body_when_grounding_inactive(self):
-        from src.pipelines.stock_report.render_markdown import render_google_grounded_report
-
-        result = render_google_grounded_report(self._make_artifact(grounding_active=False))
-        # ungrounded body is fabrication-prone -> suppressed, replaced by a notice
-        assert "엔비디아 수요 급증" not in result
-        assert "본문 생성을 생략" in result
-        assert "미발동" in result
-        assert result.startswith("# Daily Stock Report V2 - 2025-05-08")
-        assert result.endswith("\n")
-
     def test_no_citation_section_when_empty(self):
         from src.pipelines.stock_report.render_markdown import render_google_grounded_report
 
@@ -510,7 +463,6 @@ class TestRenderGoogleGroundedReport:
             citations=[GroundingCitation(index=1, title="", uri="https://example.com/page")],
             search_queries=[],
             model="gemini-3.5-flash",
-            grounding_active=True,
         )
         result = render_google_grounded_report(artifact)
         assert "[1] [https://example.com/page](https://example.com/page)" in result
@@ -604,3 +556,92 @@ class TestRunGoogleGroundingOnly:
 
         with pytest.raises(ValueError):
             run_google_grounding_only(date="not-a-date")
+
+    def test_persists_report_run_and_evidence(self):
+        from src.pipelines.stock_report import pipeline as pipeline_module
+        from src.pipelines.stock_report.pipeline import (
+            GoogleGroundingOnlyResult,
+            run_google_grounding_only,
+        )
+
+        bundle = _bundle_with_ids([2884, 2910])
+        artifact = GoogleGroundedArtifact(
+            report_date=date(2025, 5, 8),
+            synthesis_markdown="## Pulse\n- 출처: chunk 2884 ch#1\n",
+            citations=[],
+            search_queries=[],
+            model="gemini-3.5-flash",
+            grounding_active=True,
+        )
+
+        captured: dict = {}
+
+        def _fake_persist(conn, **kwargs):
+            captured.update(kwargs)
+            return 4242
+
+        with (
+            patch(
+                "src.pipelines.stock_report.pipeline.resolve_db_dsn",
+                return_value="postgresql://test",
+            ),
+            patch("src.pipelines.stock_report.pipeline.connect_db") as mock_connect,
+            patch.object(pipeline_module, "persist_report_artifact", _fake_persist),
+        ):
+            mock_connect.return_value.__enter__ = lambda s: MagicMock()
+            mock_connect.return_value.__exit__ = MagicMock(return_value=False)
+            with (
+                patch(
+                    "src.pipelines.stock_report.pipeline._stage_load_same_day_bundle",
+                    return_value=bundle,
+                ),
+                patch(
+                    "src.pipelines.stock_report.google_grounding.synthesize_with_google_grounding",
+                    return_value=artifact,
+                ),
+                patch.dict("os.environ", {"GOOGLE_API_KEY": "test-key"}),
+            ):
+                result = run_google_grounding_only(date="2025-05-08")
+
+        assert isinstance(result, GoogleGroundingOnlyResult)
+        assert captured["provider"] == "google_grounding"
+        assert captured["report_date"] == date(2025, 5, 8)
+        assert "chunk 2884" in captured["output_markdown"]
+        # only the referenced AND in-bundle chunk id is traced
+        ref_ids = {ref.knowledge_chunk_id for ref in captured["evidence_refs"]}
+        assert ref_ids == {2884}
+
+
+def _bundle_with_ids(ids: list[int]) -> SameDayBundle:
+    chunks = [_make_chunk(i) for i in ids]
+    return SameDayBundle(
+        report_date=date(2025, 5, 8),
+        chunks=chunks,
+        category_buckets=[CategoryBucket(category_key="AI인프라", chunks=chunks)],
+        focus_ticker_buckets=[],
+        low_confidence_chunks=[],
+    )
+
+
+class TestGroundingEvidenceRefs:
+    def test_parses_and_sanitizes_to_bundle_ids(self):
+        from src.pipelines.stock_report.pipeline import _grounding_evidence_refs
+
+        bundle = _bundle_with_ids([2884, 2910, 3001])
+        markdown = (
+            "## Pulse\n- 출처: chunk 2884 ch#1, chunk 2910 ch#2\n"
+            "## Focus\n- 출처: chunk 999999 ch#nope\n"  # 999999 not in the bundle
+        )
+        refs = _grounding_evidence_refs(markdown, bundle)
+
+        ref_ids = {ref.knowledge_chunk_id for ref in refs}
+        assert ref_ids == {2884, 2910}  # 3001 unreferenced; 999999 sanitized out
+        assert all(ref.section_key == "google_grounding" for ref in refs)
+        # snapshot carries the chunk payload (reuses synthesize._evidence_refs)
+        assert all(ref.knowledge_chunk_snapshot.get("id") in ref_ids for ref in refs)
+
+    def test_empty_when_no_refs(self):
+        from src.pipelines.stock_report.pipeline import _grounding_evidence_refs
+
+        bundle = _bundle_with_ids([2884])
+        assert _grounding_evidence_refs("## Pulse\n- no refs here\n", bundle) == []

@@ -439,68 +439,6 @@ def test_synthesize_overview_openai_failure_deterministic_fallback(monkeypatch) 
     assert result.core_themes == []
 
 
-def test_synthesize_overview_grounding_fails_falls_back_to_openai(monkeypatch) -> None:
-    from src.pipelines.stock_report.synthesize import OverviewPulseItemOutput
-
-    async def _fake_grounding(*args, **kwargs):
-        raise RuntimeError("Gemini unavailable")
-
-    async def _fake_run(system, user, schema, provider):
-        return OverviewLLMOutput(
-            pulse=[
-                OverviewPulseItemOutput(
-                    key="p1",
-                    title="OpenAI fallback",
-                    body="OpenAI 경로로 성공",
-                    source_card_indices=[0],
-                    priority_score=0.8,
-                )
-            ],
-            core_themes=[],
-        )
-
-    monkeypatch.setattr(
-        "src.pipelines.stock_report.synthesize._run_overview_grounding_call",
-        _fake_grounding,
-    )
-    monkeypatch.setattr(
-        "src.pipelines.stock_report.synthesize._run_synthesis_call",
-        _fake_run,
-    )
-
-    cats = [_cat_card("반도체", [1])]
-    tickers: list[TickerCard] = []
-
-    result = asyncio.run(synthesize_overview(cats, tickers, provider="openai", grounding=True))
-
-    assert result.pulse[0].title == "OpenAI fallback"
-
-
-def test_synthesize_overview_grounding_and_openai_both_fail_deterministic(monkeypatch) -> None:
-    async def _fail_grounding(*args, **kwargs):
-        raise RuntimeError("Gemini down")
-
-    async def _fail_openai(system, user, schema, provider):
-        raise RuntimeError("OpenAI down")
-
-    monkeypatch.setattr(
-        "src.pipelines.stock_report.synthesize._run_overview_grounding_call",
-        _fail_grounding,
-    )
-    monkeypatch.setattr(
-        "src.pipelines.stock_report.synthesize._run_synthesis_call",
-        _fail_openai,
-    )
-
-    cats = [_cat_card("반도체", [1], priority_score=0.9, title="HBM")]
-    tickers: list[TickerCard] = []
-
-    result = asyncio.run(synthesize_overview(cats, tickers, provider="openai", grounding=True))
-
-    assert result.pulse[0].title == "HBM"
-    assert result.core_themes == []
-
-
 # ---------------------------------------------------------------------------
 # synthesize_tiered — happy path (mocked map + reduce)
 # ---------------------------------------------------------------------------
@@ -566,7 +504,7 @@ def test_synthesize_tiered_happy_path(monkeypatch) -> None:
         low_confidence_chunks=[],
     )
 
-    result = asyncio.run(synthesize_tiered(bundle, provider="openai", grounding=False))
+    result = asyncio.run(synthesize_tiered(bundle, provider="openai"))
 
     assert isinstance(result, StockReportArtifact)
     assert len(result.pulse) >= 1
