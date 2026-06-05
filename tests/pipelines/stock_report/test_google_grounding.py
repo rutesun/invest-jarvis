@@ -258,7 +258,9 @@ class TestSynthesizeWithGoogleGrounding:
     def test_markdown_response_used_as_is(self):
         bundle = _make_bundle()
         markdown_text = "## Pulse\n- NVDA 수요 급증\n"
-        fake_response = _make_fake_response(markdown_text, [], [])
+        fake_response = _make_fake_response(
+            markdown_text, [{"title": "Src", "uri": "https://src/1"}], ["q"]
+        )
         mock_client = MagicMock()
         mock_client.models.generate_content.return_value = fake_response
 
@@ -270,12 +272,14 @@ class TestSynthesizeWithGoogleGrounding:
             artifact = synthesize_with_google_grounding(bundle)
 
         assert artifact.synthesis_markdown.strip() == markdown_text.strip()
-        assert artifact.grounding_active is False
+        assert artifact.grounding_active is True
 
     def test_strips_code_fence_from_response(self):
         bundle = _make_bundle()
         fenced = "```markdown\n## Pulse\n- NVDA 수요 급증\n```"
-        fake_response = _make_fake_response(fenced, [], [])
+        fake_response = _make_fake_response(
+            fenced, [{"title": "Src", "uri": "https://src/1"}], ["q"]
+        )
         mock_client = MagicMock()
         mock_client.models.generate_content.return_value = fake_response
 
@@ -292,7 +296,9 @@ class TestSynthesizeWithGoogleGrounding:
 
     def test_uses_custom_model(self):
         bundle = _make_bundle()
-        fake_response = _make_fake_response(_minimal_llm_json(), [], [])
+        fake_response = _make_fake_response(
+            _minimal_llm_json(), [{"title": "Src", "uri": "https://src/1"}], ["q"]
+        )
         mock_client = MagicMock()
         mock_client.models.generate_content.return_value = fake_response
 
@@ -309,7 +315,9 @@ class TestSynthesizeWithGoogleGrounding:
 
     def test_uses_env_api_key(self):
         bundle = _make_bundle()
-        fake_response = _make_fake_response(_minimal_llm_json(), [], [])
+        fake_response = _make_fake_response(
+            _minimal_llm_json(), [{"title": "Src", "uri": "https://src/1"}], ["q"]
+        )
         mock_client = MagicMock()
         mock_client.models.generate_content.return_value = fake_response
 
@@ -343,7 +351,10 @@ class TestSynthesizeWithGoogleGrounding:
 
     def test_retries_on_failure_then_succeeds(self):
         bundle = _make_bundle()
-        fake_response = _make_fake_response("## Pulse\n- ok\n", [], [])
+        # success response must be grounded, else the not-fired retry would fire again
+        fake_response = _make_fake_response(
+            "## Pulse\n- ok\n", [{"title": "Src", "uri": "https://src/1"}], ["q"]
+        )
         mock_client = MagicMock()
         mock_client.models.generate_content.side_effect = [
             RuntimeError("transient error"),
@@ -375,6 +386,45 @@ class TestSynthesizeWithGoogleGrounding:
             mock_genai.Client.return_value = mock_client
             with pytest.raises(RuntimeError, match="failed after"):
                 synthesize_with_google_grounding(bundle)
+
+    def test_retries_when_grounding_not_fired_then_recovers(self):
+        bundle = _make_bundle()
+        no_grounding = _make_fake_response("## Pulse\n- x\n", [], [])
+        grounded = _make_fake_response(
+            "## Pulse\n- y\n", [{"title": "Src", "uri": "https://src/1"}], ["q"]
+        )
+        mock_client = MagicMock()
+        mock_client.models.generate_content.side_effect = [no_grounding, no_grounding, grounded]
+
+        with (
+            patch.dict("os.environ", {"GOOGLE_API_KEY": "test-key"}),
+            patch("src.pipelines.stock_report.google_grounding.genai") as mock_genai,
+            patch("src.pipelines.stock_report.google_grounding.time"),
+        ):
+            mock_genai.Client.return_value = mock_client
+            artifact = synthesize_with_google_grounding(bundle)
+
+        assert mock_client.models.generate_content.call_count == 3
+        assert artifact.grounding_active is True
+
+    def test_returns_inactive_when_grounding_never_fires(self):
+        bundle = _make_bundle()
+        no_grounding = _make_fake_response("## Pulse\n- x\n", [], [])
+        mock_client = MagicMock()
+        mock_client.models.generate_content.return_value = no_grounding
+
+        with (
+            patch.dict("os.environ", {"GOOGLE_API_KEY": "test-key"}),
+            patch("src.pipelines.stock_report.google_grounding.genai") as mock_genai,
+            patch("src.pipelines.stock_report.google_grounding.time"),
+        ):
+            mock_genai.Client.return_value = mock_client
+            artifact = synthesize_with_google_grounding(bundle)
+
+        # retried to the cap (_MAX_RETRIES + 1 attempts), then returned inactive so the
+        # renderer suppresses the ungrounded body
+        assert mock_client.models.generate_content.call_count == 3
+        assert artifact.grounding_active is False
 
 
 class TestRenderGoogleGroundedReport:
@@ -426,6 +476,16 @@ class TestRenderGoogleGroundedReport:
         assert result.index("# Daily Stock Report V2") < result.index("EXPERIMENTAL")
         assert result.index("EXPERIMENTAL") < result.index("## Pulse")
 
+    def test_suppresses_body_when_grounding_inactive(self):
+        from src.pipelines.stock_report.render_markdown import render_google_grounded_report
+
+        result = render_google_grounded_report(self._make_artifact(grounding_active=False))
+        # ungrounded body is fabrication-prone -> suppressed, replaced by a notice
+        assert "엔비디아 수요 급증" not in result
+        assert "본문 생성을 생략" in result
+        assert "미발동" in result
+        assert result.startswith("# Daily Stock Report V2 - 2025-05-08")
+
     def test_no_citation_section_when_empty(self):
         from src.pipelines.stock_report.render_markdown import render_google_grounded_report
 
@@ -443,6 +503,7 @@ class TestRenderGoogleGroundedReport:
             citations=[GroundingCitation(index=1, title="", uri="https://example.com/page")],
             search_queries=[],
             model="gemini-3.5-flash",
+            grounding_active=True,
         )
         result = render_google_grounded_report(artifact)
         assert "[1] [https://example.com/page](https://example.com/page)" in result

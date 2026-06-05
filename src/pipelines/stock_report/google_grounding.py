@@ -229,6 +229,20 @@ def synthesize_with_google_grounding(
             citations, search_queries = _extract_citations(response.candidates[0])
             grounding_active = bool(citations or search_queries)
 
+            # Retry when grounding did not fire: an ungrounded response is pure
+            # parametric Gemini output (no search), which fabricates numbers/entities.
+            # Try to recover real grounding before falling back to a suppressed report.
+            if not grounding_active and attempt < _MAX_RETRIES:
+                wait = _RETRY_BASE_WAIT_SECONDS**attempt
+                logger.warning(
+                    "google grounding did not fire (attempt %d/%d), retrying in %ds",
+                    attempt + 1,
+                    _MAX_RETRIES + 1,
+                    wait,
+                )
+                time.sleep(wait)
+                continue
+
             synthesis_markdown = _to_markdown(bundle, raw_text)
             logger.info(
                 "google grounding synthesis completed: date=%s model=%s "
