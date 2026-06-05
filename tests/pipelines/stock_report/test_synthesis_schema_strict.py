@@ -79,6 +79,9 @@ def _scan_schema(schema: dict[str, Any], path: str) -> list[str]:
     def walk(node: Any, where: str) -> None:
         if not isinstance(node, dict):
             return
+        if node == {}:
+            bad.append(where)  # list[Any] produces items: {} — untyped, rejected server-side
+            return
         if "$ref" in node:
             return
         for combo in _OBJECT_COMBINATORS:
@@ -178,4 +181,18 @@ def test_detector_catches_the_original_bug_shape() -> None:
     flagged = unconstrained_object_paths(_RegressionBugCard)
     assert any("related_stocks" in path for path in flagged), (
         f"detector failed to flag a dict[str, Any] field; flagged={flagged}"
+    )
+
+
+class _BrokenListAnyCard(BaseModel):
+    """Replicates the pre-94f55e4 schema: evidence_chunk_ids typed as list[Any]."""
+
+    evidence_chunk_ids: list[Any] = Field(default_factory=list)
+
+
+def test_detector_catches_list_any_bug_shape() -> None:
+    """Self-check: the detector must also flag list[Any] fields (items: {} schema)."""
+    flagged = unconstrained_object_paths(_BrokenListAnyCard)
+    assert any("evidence_chunk_ids" in path for path in flagged), (
+        f"detector failed to flag a list[Any] field; flagged={flagged}"
     )
