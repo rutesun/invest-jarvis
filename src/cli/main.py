@@ -1363,6 +1363,11 @@ def report_daily_v2(
     preview_limit: int = typer.Option(
         12, "--preview-limit", help="canonical_summary 미리보기 개수"
     ),
+    google_grounding: bool = typer.Option(
+        False,
+        "--google-grounding/--no-google-grounding",
+        help="Gemini Google Search Grounding 실험 경로를 함께 실행한다 (T09-B). GOOGLE_API_KEY 필요.",
+    ),
 ):
     """Stock Report Engine V2 (Phase 1) 실행."""
     from datetime import datetime as dt
@@ -1374,6 +1379,8 @@ def report_daily_v2(
         date = (dt.now() - timedelta(days=1)).strftime("%Y-%m-%d")
 
     console.print(f"[bold]Daily Report V2 생성 중... (날짜: {date})[/bold]\n")
+    if google_grounding:
+        console.print("[dim]Google Search Grounding 실험 경로 활성화됨[/dim]\n")
 
     try:
         result = run_daily_v2(
@@ -1383,6 +1390,7 @@ def report_daily_v2(
             config_path=config_path,
             taxonomy_path=taxonomy_path,
             preview_limit=preview_limit,
+            google_grounding=google_grounding,
         )
         output = format_daily_v2_report(result)
         console.print(Markdown(output))
@@ -1393,6 +1401,58 @@ def report_daily_v2(
         output_file = report_dir / f"daily_v2_{date}.md"
         output_file.write_text(output, encoding="utf-8")
         console.print(f"\n[green]✓ 리포트 저장: {output_file}[/green]")
+
+        if result.google_grounding_markdown:
+            google_file = report_dir / f"daily_v2_{date}.google.md"
+            google_file.write_text(result.google_grounding_markdown, encoding="utf-8")
+            console.print(f"[green]✓ Google Grounding 리포트 저장: {google_file}[/green]")
+        elif google_grounding:
+            console.print("[yellow]⚠ Google Grounding 실행 실패 — 로그를 확인하세요[/yellow]")
+    except Exception as e:
+        console.print(f"[red]오류: {e}[/red]")
+        raise typer.Exit(1) from None
+
+
+@report_app.command("daily-v2-google")
+def report_daily_v2_google(
+    date: str = typer.Argument(
+        None,
+        help="분석할 날짜 (YYYY-MM-DD). 미지정 시 전날.",
+    ),
+):
+    """DB에 저장된 데이터로 Google Search Grounding 리포트만 생성한다 (T09-B 단독 실행). GOOGLE_API_KEY 필요."""
+    from datetime import datetime as dt
+    from datetime import timedelta
+
+    from src.pipelines.stock_report.pipeline import run_google_grounding_only
+
+    if date is None:
+        date = (dt.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+
+    console.print(f"[bold]Google Grounding 리포트 생성 중... (날짜: {date})[/bold]\n")
+    console.print("[dim]DB 저장 데이터 기반 — ingest/classify 단계 생략[/dim]\n")
+
+    try:
+        result = run_google_grounding_only(date=date)
+
+        console.print(Markdown(result.google_grounding_markdown))
+        console.print(
+            f"\n[dim]chunks: {result.chunk_count} | "
+            f"categories: {result.category_bucket_count} | "
+            f"themes: {result.theme_bucket_count} | "
+            f"tickers: {result.focus_ticker_count} | "
+            f"model: {result.model}[/dim]"
+        )
+
+        year_month = date[:7]
+        report_dir = Path(f"reports/{year_month}")
+        report_dir.mkdir(parents=True, exist_ok=True)
+        google_file = report_dir / f"daily_v2_{date}.google.md"
+        google_file.write_text(result.google_grounding_markdown, encoding="utf-8")
+        console.print(f"[green]✓ Google Grounding 리포트 저장: {google_file}[/green]")
+    except ValueError as e:
+        console.print(f"[yellow]{e}[/yellow]")
+        raise typer.Exit(1) from None
     except Exception as e:
         console.print(f"[red]오류: {e}[/red]")
         raise typer.Exit(1) from None

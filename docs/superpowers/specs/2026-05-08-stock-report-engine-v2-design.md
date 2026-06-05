@@ -507,6 +507,10 @@ Postgres의 `knowledge_chunks`에 조회해서 최종 evidence를 조립한다.
 
 ### Phase 1 Synthesis Contract
 
+> 참고: 아래의 단일 호출 합성은 초기 설계다. 실데이터 운영 결과 카테고리별
+> map-reduce 합성(ADR-0007)과 결정적 이벤트 안전망(ADR-0008)으로 진화했다.
+> 현재 동작은 두 ADR과 `docs/FEATURES.md`를 기준으로 본다.
+
 LLM은 raw message를 직접 읽지 않는다. `same-day bundle`만 읽는다.
 
 입력 단위:

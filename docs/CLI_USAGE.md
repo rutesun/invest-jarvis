@@ -276,6 +276,7 @@ uv run jarvis report daily-v2 [날짜] [OPTIONS]
 - `--config-path`: stock report 설정 파일 경로 (기본값: config.yaml)
 - `--taxonomy-path`: taxonomy vocabulary 파일 경로 (기본값: config/stock_report_vocabulary.yaml)
 - `--preview-limit`: canonical_summary 미리보기 개수 (기본값: 12)
+- `--google-grounding / --no-google-grounding`: 기본 경로와 함께 Gemini Google Search Grounding 실험 경로(T09-B)도 실행, `daily_v2_DATE.google.md` 추가 저장 (기본값: 끔, `GOOGLE_API_KEY` 필요)
 
 **예시:**
 ```bash
@@ -286,11 +287,41 @@ uv run jarvis report daily-v2 2026-05-19
 uv run jarvis report daily-v2 2026-05-19 \
   --taxonomy-path config/stock_report_vocabulary.yaml \
   --preview-limit 50
+
+# 기본 경로 + Google grounding 실험 경로 동시 실행
+uv run jarvis report daily-v2 2026-05-19 --google-grounding
 ```
 
 ---
 
-#### 3-4. report upload - 기존 리포트 일괄 업로드
+#### 3-4. report daily-v2-google - DB 데이터로 Google Grounding 리포트만 생성 (T09-B 단독)
+
+**특징:**
+- DB에 이미 적재된 `knowledge_chunks`만 사용 — ingest/classify 단계를 생략한다
+- Gemini Google Search Grounding 경로만 단독 실행 (기본 합성 경로는 돌리지 않음)
+- `reports/YYYY-MM/daily_v2_YYYY-MM-DD.google.md` 저장
+
+**요구사항:**
+- `GOOGLE_API_KEY` 필요 (Gemini)
+- Postgres 연결 필요, 해당 날짜 chunk가 이미 적재돼 있어야 함
+
+**사용법:**
+```bash
+uv run jarvis report daily-v2-google [날짜]
+```
+
+**예시:**
+```bash
+# 어제 날짜 (인자 생략 시 전날)
+uv run jarvis report daily-v2-google
+
+# 특정 날짜
+uv run jarvis report daily-v2-google 2026-05-28
+```
+
+---
+
+#### 3-5. report upload - 기존 리포트 일괄 업로드
 
 **특징:**
 - `reports/` 디렉토리의 기존 MD 파일을 Notion에 업로드
@@ -377,6 +408,24 @@ uv run python scripts/stock_report_show_chunks.py 2026-05-19 \
 `canonical_summary`, `category/theme`, `evidence_items`, `qa_warnings`를 함께 보여줍니다.
 각 summary에는 `chunk_ref: <channel_key>+<chunk_id>`가 포함되며,
 `evidence_items`/`supporting_facts`는 잘리지 않고 전체가 출력됩니다.
+
+**리포트 평가 (coverage + 골든 must-have 체크):**
+```bash
+uv run python scripts/stock_report_eval.py 2026-06-02 \
+  --markdown reports/2026-06/daily_v2_2026-06-02.md \
+  --golden
+```
+
+**핵심 옵션:**
+- `--markdown`: 평가할 리포트 MD (생략 시 DB `report_evidence` 기준으로 coverage 계산)
+- `--golden`: `tests/fixtures/stock_report/golden/<날짜>.json`의 고임팩트 must-have
+  이벤트(M&A·자본조달)가 리포트에 모두 등장하는지 검사 (누락 시 종료코드 1)
+- `--json`: 표 대신 JSON 출력
+
+골든 must-have의 헤르메틱 회귀(DB·LLM 불필요)는 일반 테스트 루프에서 실행됩니다:
+```bash
+uv run pytest tests/pipelines/stock_report/test_golden_set.py
+```
 
 ---
 

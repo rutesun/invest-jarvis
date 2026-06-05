@@ -67,3 +67,18 @@ def get_report_synthesis_llm_config(provider: str) -> StockReportLLMConfig:
 SEMANTIC_EXTRACTION_MAX_CONCURRENCY = 8
 SEMANTIC_EXTRACTION_TIMEOUT_SECONDS = 180.0
 SEMANTIC_EXTRACTION_MAX_RETRIES = 3
+
+GOOGLE_GROUNDING_DEFAULT_MODEL = "gemini-3.5-flash"
+
+
+@dataclass(frozen=True)
+class GoogleGroundingConfig:
+    api_key: str | None = None
+    model: str = GOOGLE_GROUNDING_DEFAULT_MODEL
+
+
+def get_google_grounding_config() -> GoogleGroundingConfig:
+    return GoogleGroundingConfig(
+        api_key=os.getenv("GOOGLE_API_KEY"),
+        model=os.getenv("STOCK_REPORT_GOOGLE_MODEL") or GOOGLE_GROUNDING_DEFAULT_MODEL,
+    )
