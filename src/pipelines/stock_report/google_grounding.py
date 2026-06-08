@@ -59,6 +59,7 @@ _SYSTEM_PROMPT = dedent("""
 - Google Search 결과는 evidence에 근거가 있는 내용에 한해 보강에 사용한다.
 - 출력은 사용자 프롬프트에서 지정한 Markdown 형식을 따른다.
 - JSON 형식으로 출력하지 않는다.
+- 맞춤법을 정확히 지킨다. 특히 '카테고리'를 '카테리'로 줄여 쓰지 않는다.
 """).strip()
 
 
@@ -136,7 +137,7 @@ report_date: {bundle.report_date.isoformat()}
 - 라벨 줄(`- 라벨`)과 내용(`  - 내용`, 2칸 들여쓰기)을 분리한다. 한 줄에 합치지 않는다.
   단 `출처`만 예외로 `- 출처: ...` 한 줄에 콤마로 모아 쓴다.
 - 라벨은 위 표기 그대로 쓴다. `Investment Case` 같은 임의 영어 라벨 금지. 라벨을 굵게(`**`) 처리하지 않는다.
-- Focus Tickers의 `###` 제목은 티커 심볼만 쓴다(괄호·풀네임 금지).
+- Focus Tickers의 `###` 제목은 티커 심볼만 쓴다(괄호·풀네임 금지). 같은 종목을 회사명과 티커로 중복 표기하지 않는다(예: Tesla와 TSLA를 따로 만들지 말고 TSLA 하나로 합친다).
 - 출처는 `- 출처: chunk {{chunk_id}} {{source}}, chunk ...` 한 줄. source는 각 chunk의 source 필드 값(channel_name#message_id)을 그대로 쓴다.
 - Google Search 보강 내용은 출처가 명확한 경우에만 반영한다.
 - 추측하거나 evidence에 없는 내용을 새로 만들지 않는다.

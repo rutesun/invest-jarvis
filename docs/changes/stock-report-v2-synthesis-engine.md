@@ -2,7 +2,7 @@
 
 **Status**: In Progress
 **Created**: 2026-06-04
-**PRs**: (pending — branch `feature/stock-report-google-grounding`)
+**PRs**: #33 (feature/stock-report-google-grounding), feature/report-quality-polish (pending)
 
 > 이 문서는 PR/머지 단위 변경 기록입니다. 현재 기능 상태는 `docs/FEATURES.md`를 기준으로 봅니다.
 
@@ -41,10 +41,45 @@
 - [x] 테스트 통과 (761 passed)
 - [x] `docs/FEATURES.md` 업데이트
 - [x] ADR-0007 / ADR-0008 작성
-- [ ] PR 생성 및 머지
+- [x] PR #33 머지
+- [x] 리포트 가독성 개선 (feature/report-quality-polish, 아래 참조)
+- [ ] feature/report-quality-polish PR 생성 및 머지
+
+---
+
+## 후속: 리포트 가독성 개선 (2026-06-08)
+
+**Branch**: `feature/report-quality-polish`
+
+### Why
+
+PR #33 이후 `daily_v2_2026-06-04` 리포트 리뷰에서 4종 가독성 문제 발견:
+- minor 카테고리 10개가 저품질 raw 카드로 개별 노출돼 SNR 저하
+- 출처 줄에 동일 채널 chunk가 최대 26개까지 나열
+- LLM 출력에 '카테리'(→'카테고리') 오타 간헐 등장
+- Focus Tickers에 동일 종목 이름/티커 버킷 중복 가능성
+
+### What
+
+1. **기타 단신 통합**: chunk<3 minor 카테고리를 개별 카드 대신 단일 `기타 단신` 항목으로
+   병합. 고임팩트 이벤트 우선 배치, flat bullet 렌더. (→ ADR-0009)
+2. **출처 채널 dedup + cap**: chunk-level → 채널 단위 dedup, 상위 6개 + `외 N건`.
+   DB `report_evidence` 영속은 chunk 단위 그대로. (→ ADR-0009)
+3. **오타 가드**: `_normalize_report_typos` 결정적 후처리 + 시스템 프롬프트 맞춤법 주의.
+4. **raw 티커 카드 보강**: `_typed_evidence_texts`로 fallback 카드의 risk/metric 축을
+   typed evidence에서 추출.
+5. **티커 버킷 dedup**: chunk 집합 완전 동일 버킷을 보수적으로 병합. (→ ADR-0009)
+6. **Gemini 프롬프트 정합**: 맞춤법 주의·티커 중복 금지 지침 추가.
+
+### Constraints
+
+- DB attribution(report_evidence) 영속 경로 불변. 렌더 표시만 요약.
+- 부분집합 기반 ticker alias 병합 기각 — 실데이터(Ford⊆GM, 삼성디스플레이⊆BOE)로 오병합
+  위험 확인(ADR-0009 참조).
+- 날조 없음: risk evidence 없는 thin ticker 카드(SpaceX)는 리스크 축 공란 수용.
 
 ## Related
 
 - 상세 설계: `docs/superpowers/specs/2026-05-08-stock-report-engine-v2-design.md`,
   `docs/superpowers/plans/2026-05-08-stock-report-engine-v2.md`
-- ADR: ADR-0007(map-reduce 합성), ADR-0008(이벤트 안전망)
+- ADR: ADR-0007(map-reduce 합성), ADR-0008(이벤트 안전망), ADR-0009(가독성 개선 결정)

@@ -16,15 +16,19 @@ from src.pipelines.stock_report.retrieval import (
     TickerBucket,
 )
 from src.pipelines.stock_report.synthesize import (
+    MINOR_CATEGORY_ITEM_KEY,
     CategorySummaryCard,
     OverviewLLMOutput,
     OverviewResult,
     StockReportArtifact,
     TickerCard,
+    _assemble_tiered_artifact,
     _build_deterministic_pulse,
+    _build_minor_categories_item,
     _build_overview_result_from_llm,
     _collect_allowed_ids_from_cards,
     _ids_from_card_indices,
+    _partition_category_buckets,
     synthesize_overview,
     synthesize_tiered,
 )
@@ -578,10 +582,12 @@ def test_pulse_item_ids_are_per_item_not_union(monkeypatch) -> None:
 
 
 def test_tiered_covers_all_categories_even_when_llm_fails(monkeypatch) -> None:
-    """Every category with chunks yields a card; LLM failure → raw fallback, never dropped.
+    """Major categories yield a card; minor ones (chunk<3) are consolidated into '기타 단신' —
+    never silently dropped. LLM failure → raw fallback, still covered.
 
-    This is the proof that the map-reduce refactor fixes the old 65%-drop bug:
-    coverage is guaranteed by the code loop, not by the LLM.
+    This is the proof that the map-reduce refactor fixes the old 65%-drop bug: coverage is
+    guaranteed by the code loop, not by the LLM. Issue 1 only changes the *shape* of low-signal
+    coverage (one consolidated item), not whether it is present.
     """
 
     async def _always_raise(system, user, schema, provider):
@@ -599,9 +605,9 @@ def test_tiered_covers_all_categories_even_when_llm_fails(monkeypatch) -> None:
             _chunk(5, category_key="금융"),
         ],
         category_buckets=[
-            _cat_bucket([1, 2, 3], "반도체"),  # >=3 → LLM path, fails → raw
-            _cat_bucket([4], "바이오"),  # <3 → raw
-            _cat_bucket([5], "금융"),  # <3 → raw
+            _cat_bucket([1, 2, 3], "반도체"),  # >=3 → LLM path, fails → raw card
+            _cat_bucket([4], "바이오"),  # <3 → consolidated into 기타 단신
+            _cat_bucket([5], "금융"),  # <3 → consolidated into 기타 단신
         ],
         focus_ticker_buckets=[],
         low_confidence_chunks=[],
@@ -611,7 +617,13 @@ def test_tiered_covers_all_categories_even_when_llm_fails(monkeypatch) -> None:
 
     assert isinstance(result, StockReportArtifact)
     covered = {item.key for item in result.category_summaries}
-    assert covered == {"반도체", "바이오", "금융"}  # coverage 100%, nothing silently dropped
+    assert "반도체" in covered  # major category → full card
+    assert MINOR_CATEGORY_ITEM_KEY in covered  # minors consolidated, not dropped
+    # The minor categories' headlines survive inside the consolidated 기타 단신 item.
+    minor_item = next(i for i in result.category_summaries if i.key == MINOR_CATEGORY_ITEM_KEY)
+    briefs = " ".join(minor_item.evidence_bullets)
+    assert "바이오" in briefs
+    assert "금융" in briefs
 
 
 def test_tiered_evidence_refs_stay_within_bundle(monkeypatch) -> None:
@@ -636,3 +648,74 @@ def test_tiered_evidence_refs_stay_within_bundle(monkeypatch) -> None:
     assert result.evidence_refs  # non-empty
     for ref in result.evidence_refs:
         assert ref.knowledge_chunk_id in bundle_ids
+
+
+# ---------------------------------------------------------------------------
+# Issue 1: minor-category consolidation into '기타 단신'
+# ---------------------------------------------------------------------------
+
+
+def test_partition_category_buckets_splits_by_threshold() -> None:
+    major, minor = _partition_category_buckets(
+        [
+            _cat_bucket([1, 2, 3], "반도체"),  # >=3 → major
+            _cat_bucket([4, 5], "바이오"),  # <3 → minor
+            _cat_bucket([6], "금융"),  # <3 → minor
+        ]
+    )
+    assert [b.category_key for b in major] == ["반도체"]
+    assert [b.category_key for b in minor] == ["바이오", "금융"]
+
+
+def test_build_minor_categories_item_consolidates_headlines() -> None:
+    item = _build_minor_categories_item([_cat_bucket([4], "바이오"), _cat_bucket([5], "금융")])
+    assert item is not None
+    assert item.key == MINOR_CATEGORY_ITEM_KEY
+    assert item.title == "기타 단신"
+    joined = " ".join(item.evidence_bullets)
+    assert "바이오: summary-4" in joined
+    assert "금융: summary-5" in joined
+    assert set(item.evidence_chunk_ids) == {4, 5}
+
+
+def test_build_minor_categories_item_empty_returns_none() -> None:
+    assert _build_minor_categories_item([]) is None
+
+
+def test_build_minor_categories_item_flags_high_impact_first() -> None:
+    from dataclasses import replace
+
+    normal = _chunk(4, category_key="바이오")  # priority 1.0, event_type 해석/전망
+    high = replace(_chunk(5, category_key="M&A섹터"), event_type="M&A", priority_score=0.1)
+    item = _build_minor_categories_item(
+        [
+            CategoryBucket(category_key="바이오", chunks=[normal]),
+            CategoryBucket(category_key="M&A섹터", chunks=[high]),
+        ]
+    )
+    assert item is not None
+    # high-impact event is flagged and ordered first despite its lower priority
+    assert item.evidence_bullets[0].startswith("[M&A]")
+    assert any(b.startswith("바이오:") for b in item.evidence_bullets)
+
+
+def test_assemble_tiered_appends_minor_item_with_refs() -> None:
+    bundle = SameDayBundle(
+        report_date=date(2026, 5, 26),
+        chunks=[_chunk(1), _chunk(2), _chunk(3), _chunk(4)],
+        category_buckets=[_cat_bucket([1, 2, 3], "반도체"), _cat_bucket([4], "바이오")],
+        focus_ticker_buckets=[],
+        low_confidence_chunks=[],
+    )
+    major_card = _cat_card("반도체", [1, 2, 3])
+    minor_item = _build_minor_categories_item([_cat_bucket([4], "바이오")])
+    overview = OverviewResult(pulse=[], core_themes=[], evidence_chunk_ids=[])
+
+    artifact = _assemble_tiered_artifact(bundle, [major_card], [], overview, minor_item)
+
+    assert [i.key for i in artifact.category_summaries] == ["반도체", MINOR_CATEGORY_ITEM_KEY]
+    # the consolidated item still produces evidence refs (chunk 4) so its 출처 renders
+    assert any(
+        r.section_key == "category_summaries" and r.knowledge_chunk_id == 4
+        for r in artifact.evidence_refs
+    )

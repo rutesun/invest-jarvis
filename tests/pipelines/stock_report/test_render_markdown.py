@@ -4,6 +4,7 @@ from datetime import date
 
 from src.pipelines.stock_report.render_markdown import MarkdownReportBuilder
 from src.pipelines.stock_report.synthesize import (
+    MINOR_CATEGORY_ITEM_KEY,
     ReportEvidenceRef,
     ReportSectionItem,
     StockReportArtifact,
@@ -148,6 +149,37 @@ def test_markdown_report_builder_omits_duplicate_name_ticker_parentheses() -> No
     assert "삼성전자(삼성전자)" not in markdown
 
 
+def test_markdown_report_builder_omits_empty_catalyst_suffix() -> None:
+    """Raw-fallback related stocks carry an empty catalyst (``{name: ticker, ticker, catalyst: ""}``).
+    The renderer must show just the label, never a dangling ``: -``."""
+    artifact = StockReportArtifact(
+        report_date=date(2026, 5, 26),
+        pulse=[],
+        category_summaries=[
+            ReportSectionItem(
+                key="반도체",
+                title="반도체",
+                body="",
+                related_stocks=[
+                    {"name": "TSLA", "ticker": "TSLA", "catalyst": ""},
+                    {"name": "엔비디아", "ticker": "NVDA", "catalyst": ""},
+                ],
+            )
+        ],
+        core_themes=[],
+        focus_tickers=[],
+        low_confidence_notes=[],
+        evidence_refs=[],
+    )
+
+    markdown = MarkdownReportBuilder().build(artifact)
+
+    assert "  - TSLA" in markdown
+    assert "TSLA: -" not in markdown
+    assert "  - 엔비디아(NVDA)" in markdown
+    assert "엔비디아(NVDA): -" not in markdown
+
+
 def test_markdown_report_builder_renders_rich_core_theme_card() -> None:
     artifact = StockReportArtifact(
         report_date=date(2026, 5, 26),
@@ -256,6 +288,90 @@ def test_markdown_report_builder_renders_related_stocks_as_separate_bullets() ->
     assert "  - 삼화콘덴서: 전력 인프라 수요 증가" in markdown
     assert "  - 삼성전기: 실리콘 커패시터 공급 기대" in markdown
     assert "삼화콘덴서: 전력 인프라 수요 증가, 삼성전기: 실리콘 커패시터 공급 기대" not in markdown
+
+
+def test_source_line_dedups_by_channel_and_caps() -> None:
+    """Issue 2: 출처 must collapse repeated channels, cap at 6 representatives, and note '외 N건'.
+    Full chunk-level attribution still lives in the DB (report_evidence); the rendered line is
+    a human-facing summary, so it keeps one representative chunk id per channel."""
+
+    def _ref(chunk_id: int, channel: str, msgid: str) -> ReportEvidenceRef:
+        return ReportEvidenceRef(
+            section_key="category_summaries",
+            item_key="반도체",
+            knowledge_chunk_id=chunk_id,
+            rank_score=1.0,
+            knowledge_chunk_snapshot={
+                "channel_name": channel,
+                "channel_message_id": msgid,
+                "channel_key": channel,
+            },
+        )
+
+    # 채널1 cited 3x (chunks 1-3); 채널2..채널8 cited once each (chunks 4-10) → 8 unique channels.
+    refs = [_ref(1, "채널1", "101"), _ref(2, "채널1", "102"), _ref(3, "채널1", "103")]
+    refs += [_ref(i, f"채널{i - 2}", str(100 + i)) for i in range(4, 11)]
+
+    artifact = StockReportArtifact(
+        report_date=date(2026, 5, 26),
+        pulse=[],
+        category_summaries=[
+            ReportSectionItem(
+                key="반도체",
+                title="반도체",
+                body="HBM 공급 타이트",
+                evidence_chunk_ids=list(range(1, 11)),
+            )
+        ],
+        core_themes=[],
+        focus_tickers=[],
+        low_confidence_notes=[],
+        evidence_refs=refs,
+    )
+
+    markdown = MarkdownReportBuilder().build(artifact)
+    source_line = next(line for line in markdown.splitlines() if line.startswith("- 출처:"))
+
+    # 채널1 cited 3x but collapses to a single representative entry.
+    assert source_line.count("채널1") == 1
+    # Capped at 6 representative entries (each keeps a parseable "chunk {id}" token).
+    assert source_line.count("chunk ") == 6
+    # 8 unique channels - 6 shown = 2 remaining.
+    assert "외 2건" in source_line
+    # Channels beyond the cap are dropped from the human line.
+    assert "채널8" not in source_line
+
+
+def test_minor_briefs_item_renders_flat_bullets() -> None:
+    """Issue 1: the consolidated '기타 단신' item renders as flat one-liner bullets (not the
+    Narrative/Impact/근거 group layout) so the low-signal tail stays compact."""
+    artifact = StockReportArtifact(
+        report_date=date(2026, 5, 26),
+        pulse=[],
+        category_summaries=[
+            ReportSectionItem(
+                key=MINOR_CATEGORY_ITEM_KEY,
+                title="기타 단신",
+                body="",
+                evidence_bullets=["바이오: 임상 결과 발표", "[M&A] 금융: 인수 합의"],
+                evidence_chunk_ids=[4, 5],
+            )
+        ],
+        core_themes=[],
+        focus_tickers=[],
+        low_confidence_notes=[],
+        evidence_refs=[],
+    )
+
+    markdown = MarkdownReportBuilder().build(artifact)
+    section = markdown.split("### 기타 단신", 1)[1]
+
+    assert "### 기타 단신" in markdown
+    assert "- 바이오: 임상 결과 발표" in markdown
+    assert "- [M&A] 금융: 인수 합의" in markdown
+    # flat list — no nested group labels for this item
+    assert "- Narrative" not in section
+    assert "- 근거" not in section
 
 
 def test_body_not_duplicated_when_equal_to_thesis_or_investment_case() -> None:
