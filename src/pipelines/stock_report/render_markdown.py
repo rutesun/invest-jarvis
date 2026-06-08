@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from src.pipelines.stock_report.synthesize import (
     MINOR_CATEGORY_ITEM_KEY,
@@ -154,10 +154,17 @@ class MarkdownReportBuilder:
         return lines
 
     def _groups_for(
-        self, kind: str, item: ReportSectionItem, sources: list[str]
-    ) -> list[tuple[str, list[str]]]:
+        self, kind: str, item: ReportSectionItem, sources: list[tuple[str, str]]
+    ) -> list[tuple[str, list[Any]]]:
         """Ordered (label, values) groups per section type. Empty groups are skipped
-        by the caller, so a missing field simply omits its label."""
+        by the caller, so a missing field simply omits its label.
+
+        Most groups return ``list[str]`` values; the "출처" group returns
+        ``list[tuple[str, str]]`` (channel, display_line) pairs consumed by
+        ``_format_sources``. The heterogeneous value types are reflected in the
+        ``list[Any]`` return annotation — callers must branch on label == "출처"
+        before processing values (which ``render_section`` already does).
+        """
         if kind == "category":
             related = ", ".join(item.related_categories) if item.related_categories else ""
             themes = ", ".join(item.related_themes) if item.related_themes else ""
