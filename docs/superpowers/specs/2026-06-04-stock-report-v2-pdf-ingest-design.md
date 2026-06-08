@@ -517,3 +517,23 @@ EVAL: A-level은 LLM 미사용 → 불필요. B-level(LLM 메타 추출) 도입 
   2. **[Scope] 알려진 표 셀 추출 필요(Codex #2 승격)**: shinhan 다행 라벨 표(목표주가·실적추정)가 markdown 그리드에서 라벨↔숫자 결합 붕괴(현대위아 매출/영업이익/순이익 3행→1셀). 단순 표는 markdown 유지, **목표주가/실적추정 등 알려진 표 유형만 셀 key-value 추출**.
   3. [Minor] 빈 `| | |` 스켈레톤·차트축 라인 post-process 제거(junk chunk 방지).
 - **API 사실(스키마/구현에 반영)**: ① `convert` 배치는 **all-or-nothing** — 깨진 1건이 배치 전체 출력을 0으로 만듦 → `parse_pdfs`는 0바이트 사전검증 + per-file 폴백 필요. ② page_count는 markdown에 없음 → json에서 읽음. ③ **`ocr_lang` 파라미터 없음** — OCR은 hybrid 백엔드(`hancom-ai`, 서버 필요)로만 → `--retry-ocr` 레인은 hybrid 서버 전제. ④ `reading_order="xycut"` 기본.
+
+#### CP1 후속 — 복잡 표 스파이크 (JSON 가설 검증, 신한 단일종목 5개)
+
+- **결과: 표 붕괴는 렌더링이 아니라 opendataloader table-detection 엔진 단계에서 발생.** markdown이 뭉갠 요약표(실적추정/목표주가)가 **JSON에도 동일하게 깨져** 있음(예: 현대위아 50006 — `매출액/영업이익/순이익` 3행이 한 셀로, 값 `2,061.8 4.6 48.5 2.2 95.7 (56.0)` 융합). → **local 모드(markdown·JSON 공통)로는 최고가치 요약표를 못 살린다.**
+- 패턴: **줄 간격이 빽빽한 요약표 → 행 병합(LOST)**, **줄 간격 넓은 분기 상세표 → 정상(JSON에서 깔끔, markdown보다 우수)**. 즉 fidelity는 보고서 품질이 아니라 표 레이아웃 밀도에 좌우.
+- 수확: JSON 표 스키마 확인됨 — `kids[] → {type:"table", rows:[{cells:[{kids:[{type:"paragraph",content}]}]}]}`. `parse_pdfs(want_json=True)`의 `json_blocks`에서 `type=="table"` 필터로 추출(분기 상세표엔 유효, ~40줄 파서).
+- **Key Decision 1 갱신 필요**: "local 충분"은 산문·헤딩·단순/분기표엔 맞지만 **요약 실적추정·목표주가 표엔 불충분**. 다음 단계로 표 추출 경로 결정 필요(아래 Open Questions).
+- **검증 1 — `table_method="cluster"` (로컬, 무료)**: 실패. default와 동일하게 융합. 로컬은 어떤 table_method로도 빽빽한 요약표를 못 나눔.
+- **검증 2 — hybrid(docling) 50006·50005: PASS.** docling 백엔드(로컬 FastAPI, API 키 불필요)가 융합을 해소 — 매출액/영업이익/순이익이 **각각 별도 행 + 숫자 정상 결합**으로 복원(연간 재무제표 ~29행도 깔끔). 무음 Java fallback 없음.
+  - 잔여: 가끔 두 값이 한 셀/헤더 열 중복(컬럼 정렬 흔들림). **행 단위 라벨↔숫자는 신뢰 가능**, 컬럼 정밀 정렬은 불완전 → downstream 파싱이 허용해야.
+  - 비용(MPS): deps +~600MB(torch 등) + docling 모델 ~506MB, 서버 콜드스타트 ~31s, 변환 **PDF당 ~30~95s (local 4~6s 대비 ~8~16배)**. 부작용: typer 0.24→0.21 다운그레이드(transitive) → 채택 시 CLI 동작 확인 필요.
+  - **표 경로 결론(권고)**: 요약표 있는 **단일종목 리포트에만 hybrid 적용**(매크로/전략은 표 없으니 local). 운영: ① hybrid extras는 **optional dependency group**으로 분리 ② 일일 배치 시작 시 docling 서버 1회 기동→배치→종료(콜드스타트 amortize) ③ `hybrid_fallback=False`(실패를 조용히 숨기지 않음) ④ 컬럼 drift 허용. ⑤ 분기 상세표는 JSON 표 파서로(local에서도 OK).
+
+#### hybrid 라우팅 — "어떤 PDF만 hybrid?" (증상 기반, 보고서 종류 추측 X)
+
+파일명에 종류 정보가 없으므로 사전 분류하지 않는다. **local 먼저 전부 파싱 → 증상 보이는 문서만 hybrid로 재처리** (needs_ocr와 동일한 local-first 승격 패턴). 두 승격 트리거(둘 다 → docling hybrid):
+1. **표 융합 트리거(핵심)**: local 표 셀 중 **한 셀에 재무 line-item 라벨이 2개 이상** 뭉친 것이 있으면(예: 셀=`"매출액 영업이익 순이익"`) 그 문서는 융합 표가 있다는 증거 → hybrid. 판정: 셀 텍스트에 {매출액, 영업이익, 순이익, 지배주주순이익, EBITDA, EPS, BPS, ROE ...}(tunable set) 중 2개 이상 포함 여부 — 문자열 검사라 비용 ~0.
+2. **sparse/image 트리거**: `text_char_count` 낮음 / `image_ref_count` 과다(needs_ocr) → hybrid+OCR.
+- 효과: 매크로/전략 리포트는 융합 표가 없어 자동으로 local-only; 단일종목이라도 표가 멀쩡하면(예: 파트너십 표) hybrid 생략 → 느린 hybrid를 최소 문서에만. 티커 유무는 보조 힌트일 뿐, 방아쇠는 "융합 표 실재 여부".
+- `documents`에 `needs_hybrid BOOLEAN` 플래그를 두고 2패스에서 소비.
