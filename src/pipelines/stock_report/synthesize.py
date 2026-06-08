@@ -628,7 +628,14 @@ _TIER_FOCUS_TICKER_LIMIT = 10
 
 def _is_ticker_like(ticker: str) -> bool:
     """A label that looks like a market symbol — a short ALL-CAPS ASCII code (TSLA, AVGO) or a
-    numeric KR code (000660) — as opposed to a company name (Tesla, SpaceX, 테슬라)."""
+    numeric KR code (000660) — as opposed to a company name (Tesla, SpaceX, 테슬라).
+
+    **Caveat:** common financial abbreviations (IPO, ETF, AI, IT, EV) satisfy the same
+    ALL-CAPS + ≤5-char rule and will also return True. This is safe within
+    ``_dedupe_ticker_buckets`` because that function only merges when there is *exactly one*
+    ticker-like label in a same-chunk-set group, which prevents collapsing two co-mentioned
+    symbols. Do not use this predicate in isolation for strict ticker validation.
+    """
     t = ticker.strip()
     if not t:
         return False

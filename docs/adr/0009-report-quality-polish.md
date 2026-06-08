@@ -129,3 +129,21 @@ Core Themes 카드 한 줄에 출처가 최대 26개까지 나열됐다. chunk-l
 **운영:**
 - `_MINOR_BRIEF_MAX_ITEMS`(12)·`_MAX_SOURCES_SHOWN`(6)은 상수로 노출돼 튜닝 가능
 - thin ticker 카드 문제 재발 시 ADR 업데이트 후 이슈 3항 옵션 A(thin ticker 제외) 검토
+
+## 부록: Google Grounding not-fired 억제 정책 변경
+
+이번 브랜치(`feature/report-quality-polish`)에서 `synthesize_with_google_grounding`의
+**not-fired 재시도 + 결과 억제 로직**이 제거됐다. 이는 리포트 가독성 이슈와 직접 관련은
+없으나 같은 PR에 포함된 의도적 정리다.
+
+**변경 전**: grounding이 발동되지 않으면(no citations, no search queries) 최대
+`_MAX_RETRIES`회 재시도 후에도 not-fired면 결과를 억제해 빈 artifact를 반환.
+
+**변경 후**: 억제 없이 Gemini 응답을 그대로 반환. `grounding_active=False`이면
+렌더러 배너에 "Grounding 미발동" 표시만 남긴다.
+
+**이유**: 이 경로는 `## [EXPERIMENTAL]` 태그를 달고 T09-A(기본 OpenAI 경로)와 비교
+목적으로만 운영된다. 억제 로직이 재시도 예산(API 비용)을 소비하면서 비교 데이터 자체를
+버려 실험 목적에 반했다. not-fired 응답은 grounding 없이 Gemini 파라메트릭 지식만
+쓴 결과이므로, 억제 대신 "미발동" 레이블로 노출해 비교군으로 활용하는 것이 실험 설계에
+더 적합하다. 프로덕션 경로(T09-A)에 영향 없음.
