@@ -14,7 +14,10 @@ from src.pipelines.stock_report.config import (
     SEMANTIC_EXTRACTION_TIMEOUT_SECONDS,
     get_report_synthesis_llm_config,
 )
-from src.pipelines.stock_report.event_safety_net import enforce_high_impact_event_coverage
+from src.pipelines.stock_report.event_safety_net import (
+    HIGH_IMPACT_EVENT_TYPES,
+    enforce_high_impact_event_coverage,
+)
 from src.pipelines.stock_report.prompts import (
     CATEGORY_SYNTHESIS_SYSTEM_PROMPT,
     OVERVIEW_SYNTHESIS_SYSTEM_PROMPT,
@@ -221,6 +224,40 @@ async def _run_synthesis_call(
 # ---------------------------------------------------------------------------
 
 
+def _typed_evidence_texts(chunks: list[SameDayChunk], kind: str) -> list[str]:
+    """Ordered, de-duplicated ``evidence_items.text`` for a given ``kind`` across chunks.
+
+    The raw fallback otherwise ignores the typed evidence already attached to each chunk,
+    which left thin (chunk < 3) ticker cards with no risk/metric axis (issue 4). Reusing the
+    structured ``kind`` field surfaces those axes from real data — no invented placeholders.
+    """
+    seen: set[str] = set()
+    result: list[str] = []
+    for chunk in chunks:
+        for item in chunk.evidence_items:
+            if not isinstance(item, dict) or str(item.get("kind") or "").strip() != kind:
+                continue
+            text = str(item.get("text") or "").strip()
+            if text and text not in seen:
+                seen.add(text)
+                result.append(text)
+    return result
+
+
+# Observed LLM typo in category synthesis output: '카테리' written for '카테고리' (issue 3).
+# Prompt directives reduce but don't eliminate it (LLM nondeterminism), so we scrub it
+# deterministically on synthesized prose. Safe as a substring replace: '카테리' is not a
+# substring of the correct '카테고리', so correct text is never corrupted.
+_REPORT_TYPO_FIXES = {"카테리": "카테고리"}
+
+
+def _normalize_report_typos(text: str) -> str:
+    """Fix known LLM typos in synthesized prose (see _REPORT_TYPO_FIXES)."""
+    for wrong, right in _REPORT_TYPO_FIXES.items():
+        text = text.replace(wrong, right)
+    return text
+
+
 def _render_raw_category_card(bucket: CategoryBucket) -> CategorySummaryCard:
     """Deterministic fallback: build a CategorySummaryCard directly from the bucket."""
     summaries = [
@@ -262,8 +299,8 @@ def _render_raw_ticker_card(bucket: TickerBucket) -> TickerCard:
         ticker=bucket.ticker,
         investment_case=investment_case,
         catalysts=catalysts,
-        key_metrics=[],
-        risks=[],
+        key_metrics=_typed_evidence_texts(bucket.chunks, "metric"),
+        risks=_typed_evidence_texts(bucket.chunks, "risk"),
         evidence_chunk_ids=[chunk.id for chunk in bucket.chunks],
     )
 
@@ -310,10 +347,10 @@ async def synthesize_category(
         ]
         card = CategorySummaryCard(
             category_key=output.category_key or bucket.category_key,
-            title=output.title or bucket.category_key,
-            narrative=output.narrative,
-            evidence_bullets=output.evidence_bullets,
-            impact=output.impact,
+            title=_normalize_report_typos(output.title or bucket.category_key),
+            narrative=_normalize_report_typos(output.narrative),
+            evidence_bullets=[_normalize_report_typos(b) for b in output.evidence_bullets],
+            impact=_normalize_report_typos(output.impact),
             related_stocks=related_stocks,
             evidence_chunk_ids=clean_ids,
             priority_score=output.priority_score,
@@ -589,6 +626,131 @@ _TIER_MAP_CONCURRENCY = 8
 _TIER_FOCUS_TICKER_LIMIT = 10
 
 
+def _is_ticker_like(ticker: str) -> bool:
+    """A label that looks like a market symbol — a short ALL-CAPS ASCII code (TSLA, AVGO) or a
+    numeric KR code (000660) — as opposed to a company name (Tesla, SpaceX, 테슬라).
+
+    **Caveat:** common financial abbreviations (IPO, ETF, AI, IT, EV) satisfy the same
+    ALL-CAPS + ≤5-char rule and will also return True. This is safe within
+    ``_dedupe_ticker_buckets`` because that function only merges when there is *exactly one*
+    ticker-like label in a same-chunk-set group, which prevents collapsing two co-mentioned
+    symbols. Do not use this predicate in isolation for strict ticker validation.
+    """
+    t = ticker.strip()
+    if not t:
+        return False
+    if t.isdigit():
+        return True
+    return t.isascii() and t.isalpha() and t.isupper() and len(t) <= 5
+
+
+def _dedupe_ticker_buckets(buckets: list[TickerBucket]) -> list[TickerBucket]:
+    """Collapse name/symbol aliases that cover the exact same chunk set (issue 4a).
+
+    An extraction chunk can be tagged with both a company name ("Tesla", "SpaceX") and its
+    symbol ("TSLA"); each tag spawns a separate TickerBucket over the SAME chunks, which then
+    renders as duplicate Focus Ticker cards. We only consider buckets whose chunk-id sets are
+    identical, and only merge when exactly ONE of them is ticker-like: the names collapse into
+    that canonical symbol. Two+ ticker-like labels over the same chunks (e.g. an "AMD vs NVDA"
+    comparison piece) are kept separate — we must not silently merge two genuinely distinct
+    symbols. Groups with no symbol stay separate too (conservative: avoids merging unrelated
+    names). Original order is preserved for downstream determinism.
+    """
+    groups: dict[frozenset[int], list[tuple[int, TickerBucket]]] = {}
+    order: list[frozenset[int]] = []
+    for idx, bucket in enumerate(buckets):
+        key = frozenset(chunk.id for chunk in bucket.chunks)
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append((idx, bucket))
+
+    kept: list[tuple[int, TickerBucket]] = []
+    for key in order:
+        members = groups[key]
+        ticker_like = [m for m in members if _is_ticker_like(m[1].ticker)]
+        if len(members) > 1 and len(ticker_like) == 1:
+            kept.append(ticker_like[0])  # names → single canonical symbol
+        else:
+            kept.extend(members)
+    kept.sort(key=lambda m: m[0])
+    return [bucket for _, bucket in kept]
+
+
+# Issue 1: categories below this chunk count already take the deterministic raw-fallback path
+# (see _CATEGORY_RAW_FALLBACK_THRESHOLD) — no LLM narrative/impact — so rendering each as its own
+# card yields empty Impact and bare "ticker: -" stocks. We consolidate them into one compact
+# '기타 단신' item instead of dropping them, keeping headline coverage without the noise.
+MINOR_CATEGORY_ITEM_KEY = "__minor_briefs__"
+_MINOR_BRIEF_MAX_ITEMS = 12
+
+
+def _partition_category_buckets(
+    buckets: list[CategoryBucket],
+    *,
+    threshold: int = _CATEGORY_RAW_FALLBACK_THRESHOLD,
+) -> tuple[list[CategoryBucket], list[CategoryBucket]]:
+    """Split category buckets into (major, minor) by chunk count.
+
+    minor = chunk_count < threshold, deliberately matching the raw-fallback cutoff so the demoted
+    set is exactly the categories that would otherwise render as low-fidelity raw cards.
+    """
+    major = [b for b in buckets if len(b.chunks) >= threshold]
+    minor = [b for b in buckets if len(b.chunks) < threshold]
+    return major, minor
+
+
+def _format_minor_brief(chunk: SameDayChunk, category_key: str) -> str:
+    summary = chunk.canonical_summary.strip()
+    label = f"{category_key}: {summary}" if summary else category_key
+    # Flag high-impact events (M&A/자본조달) so the cap can never bury a market-moving event.
+    if chunk.event_type in HIGH_IMPACT_EVENT_TYPES:
+        return f"[{chunk.event_type}] {label}"
+    return label
+
+
+def _build_minor_categories_item(
+    minor_buckets: list[CategoryBucket],
+    *,
+    max_items: int = _MINOR_BRIEF_MAX_ITEMS,
+) -> ReportSectionItem | None:
+    """Consolidate low-signal categories into a single '기타 단신' ReportSectionItem.
+
+    Each surviving chunk becomes one compact '카테고리: 요약' bullet. High-impact events are
+    flagged and ordered first so the ``max_items`` cap never silently buries an M&A / capital
+    action; any overflow is logged and shown as a trailing '… 외 N건 생략' bullet (no silent
+    truncation). Returns None when there is nothing to surface.
+    """
+    candidates: list[tuple[bool, float, int, SameDayChunk, str]] = []
+    for bucket in minor_buckets:
+        for chunk in bucket.chunks:
+            if not chunk.canonical_summary.strip():
+                continue
+            high = chunk.event_type in HIGH_IMPACT_EVENT_TYPES
+            candidates.append((high, chunk.priority_score, chunk.id, chunk, bucket.category_key))
+    if not candidates:
+        return None
+
+    # high-impact first, then priority desc, then id for determinism
+    candidates.sort(key=lambda c: (not c[0], -c[1], c[2]))
+    shown = candidates[:max_items]
+    dropped = len(candidates) - len(shown)
+
+    bullets = [_format_minor_brief(chunk, category_key) for _, _, _, chunk, category_key in shown]
+    chunk_ids = [chunk.id for _, _, _, chunk, _ in shown]
+    if dropped > 0:
+        bullets.append(f"… 외 {dropped}건 생략")
+        logger.info("minor categories brief capped: shown=%d dropped=%d", len(shown), dropped)
+
+    return ReportSectionItem(
+        key=MINOR_CATEGORY_ITEM_KEY,
+        title="기타 단신",
+        body="",
+        evidence_bullets=bullets,
+        evidence_chunk_ids=chunk_ids,
+    )
+
+
 def _card_to_category_item(card: CategorySummaryCard) -> ReportSectionItem:
     return ReportSectionItem(
         key=card.category_key,
@@ -634,10 +796,17 @@ def _assemble_tiered_artifact(
     category_cards: list[CategorySummaryCard],
     ticker_cards: list[TickerCard],
     overview: OverviewResult,
+    minor_item: ReportSectionItem | None = None,
 ) -> StockReportArtifact:
-    """Adapt T09-F/G cards + reduce output into the StockReportArtifact contract."""
+    """Adapt T09-F/G cards + reduce output into the StockReportArtifact contract.
+
+    ``minor_item`` (issue 1) is the consolidated '기타 단신' card for low-signal categories; when
+    present it is appended after the full category cards so it shares the category 출처 pipeline.
+    """
     chunk_index = _index_chunks(bundle)
     category_summaries = [_card_to_category_item(c) for c in category_cards]
+    if minor_item is not None:
+        category_summaries.append(minor_item)
     focus_tickers = [_card_to_ticker_item(c) for c in ticker_cards]
     pulse = list(overview.pulse)
     core_themes = list(overview.core_themes)
@@ -673,8 +842,14 @@ async def synthesize_tiered(
     Falls back to the deterministic artifact only if the whole pipeline raises or
     yields nothing.
     """
-    category_buckets = list(bundle.category_buckets)
-    ticker_buckets = sorted(bundle.focus_ticker_buckets, key=lambda b: len(b.chunks), reverse=True)[
+    # Demote low-signal (chunk<3) categories to a single '기타 단신' card (issue 1): they only
+    # ever take the raw-fallback path, so a full card per category is noise. Major categories
+    # still get full per-category LLM synthesis.
+    major_buckets, minor_buckets = _partition_category_buckets(bundle.category_buckets)
+    # Collapse name/symbol alias buckets (Tesla/SpaceX → TSLA) before picking the top-N so the
+    # limit and the rendered Focus Tickers are over distinct entities (issue 4a).
+    deduped_ticker_buckets = _dedupe_ticker_buckets(bundle.focus_ticker_buckets)
+    ticker_buckets = sorted(deduped_ticker_buckets, key=lambda b: len(b.chunks), reverse=True)[
         :_TIER_FOCUS_TICKER_LIMIT
     ]
 
@@ -689,10 +864,13 @@ async def synthesize_tiered(
             return await synthesize_ticker(b, provider=provider)
 
     try:
-        category_cards = list(await asyncio.gather(*[_cat(b) for b in category_buckets]))
+        category_cards = list(await asyncio.gather(*[_cat(b) for b in major_buckets]))
         ticker_cards = list(await asyncio.gather(*[_tic(b) for b in ticker_buckets]))
         overview = await synthesize_overview(category_cards, ticker_cards, provider=provider)
-        artifact = _assemble_tiered_artifact(bundle, category_cards, ticker_cards, overview)
+        minor_item = _build_minor_categories_item(minor_buckets)
+        artifact = _assemble_tiered_artifact(
+            bundle, category_cards, ticker_cards, overview, minor_item
+        )
         if artifact.category_summaries or artifact.focus_tickers or artifact.core_themes:
             return artifact
         logger.warning(

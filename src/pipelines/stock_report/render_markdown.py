@@ -2,18 +2,30 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from src.pipelines.stock_report.synthesize import ReportSectionItem, StockReportArtifact
+from src.pipelines.stock_report.synthesize import (
+    MINOR_CATEGORY_ITEM_KEY,
+    ReportSectionItem,
+    StockReportArtifact,
+)
 
 
 if TYPE_CHECKING:
     from src.pipelines.stock_report.google_grounding import GoogleGroundedArtifact
 
 
+# Issue 2: Core Themes/category 출처 줄이 한 줄에 20여 개까지 나열돼 가독성을 해쳤다.
+# 채널 단위로 dedup해 대표 1줄씩만 남기고 이 개수까지만 노출한다 (나머지는 '외 N건').
+# 완전한 chunk 단위 출처는 DB report_evidence에 별도 영속되므로 표시 축약이 추적성을 해치지 않는다.
+_MAX_SOURCES_SHOWN = 6
+
+
 class MarkdownReportBuilder:
     def build(self, report: StockReportArtifact) -> str:
-        source_lookup = self._build_source_lookup(report)
+        source_lookup: dict[tuple[str, str], list[tuple[str, str]]] = self._build_source_lookup(
+            report
+        )
         parts = [
             f"# Daily Stock Report V2 - {report.report_date.isoformat()}",
             "",
@@ -27,16 +39,25 @@ class MarkdownReportBuilder:
         ]
         return "\n\n".join(part for part in parts if part.strip()).rstrip() + "\n"
 
-    def _build_source_lookup(self, report: StockReportArtifact) -> dict[tuple[str, str], list[str]]:
-        lookup: dict[tuple[str, str], list[str]] = defaultdict(list)
+    def _build_source_lookup(
+        self, report: StockReportArtifact
+    ) -> dict[tuple[str, str], list[tuple[str, str]]]:
+        """(section_key, item_key) -> ordered [(channel_name, display_line)].
+
+        Exact-duplicate display lines are dropped here; channel-level dedup + capping happens
+        at render time (see _format_sources) so the same lookup can feed every section.
+        """
+        lookup: dict[tuple[str, str], list[tuple[str, str]]] = defaultdict(list)
+        seen: dict[tuple[str, str], set[str]] = defaultdict(set)
         for ref in report.evidence_refs:
             snapshot = ref.knowledge_chunk_snapshot or {}
             channel_name = snapshot.get("channel_name") or snapshot.get("channel_key") or "unknown"
             channel_message_id = snapshot.get("channel_message_id") or "-"
             line = f"chunk {ref.knowledge_chunk_id} {channel_name}#{channel_message_id}"
             key = (ref.section_key, ref.item_key)
-            if line not in lookup[key]:
-                lookup[key].append(line)
+            if line not in seen[key]:
+                seen[key].add(line)
+                lookup[key].append((channel_name, line))
         return lookup
 
     def render_pulse(self, pulse: list[ReportSectionItem]) -> str:
@@ -53,7 +74,7 @@ class MarkdownReportBuilder:
         title: str,
         kind: str,
         items: list[ReportSectionItem],
-        source_lookup: dict[tuple[str, str], list[str]],
+        source_lookup: dict[tuple[str, str], list[tuple[str, str]]],
     ) -> str:
         """Render a section as grouped/nested bullets: each field is a labeled group
         with its content indented beneath it (same layout across category/theme/ticker)."""
@@ -66,26 +87,84 @@ class MarkdownReportBuilder:
         for item in items:
             sources = source_lookup.get((section_key, item.key), [])
             if not sources and item.evidence_chunk_ids:
-                sources = [f"chunk {chunk_id}" for chunk_id in item.evidence_chunk_ids]
+                sources = [(f"chunk {cid}", f"chunk {cid}") for cid in item.evidence_chunk_ids]
+
+            # 기타 단신 (issue 1): flat one-liner bullets, not the grouped card layout.
+            if item.key == MINOR_CATEGORY_ITEM_KEY:
+                lines.extend(self._render_minor_briefs(item, sources))
+                continue
 
             lines.append(f"### {item.title}")
             for label, values in self._groups_for(kind, item, sources):
+                # 출처 stays on a single line; channel-deduped + capped (see _format_sources).
+                if label == "출처":
+                    formatted = self._format_sources(values)
+                    if formatted:
+                        lines.append(f"- 출처: {formatted}")
+                    continue
                 clean = [str(v).strip() for v in values if v and str(v).strip()]
                 if not clean:
-                    continue
-                # 출처 stays on a single comma-separated line; other fields nest.
-                if label == "출처":
-                    lines.append(f"- 출처: {', '.join(clean)}")
                     continue
                 lines.append(f"- {label}")
                 lines.extend(f"  - {value}" for value in clean)
         return "\n".join(lines)
 
+    def _format_sources(
+        self, sources: list[tuple[str, str]], limit: int = _MAX_SOURCES_SHOWN
+    ) -> str:
+        """Collapse sources to one representative line per channel, rank by citation
+        frequency (then first appearance), cap at ``limit``, and append '외 N건' for the
+        remaining channels. Keeps the line readable while preserving one parseable
+        ``chunk {id}`` token per shown channel."""
+        first_line: dict[str, str] = {}
+        counts: dict[str, int] = {}
+        first_seen: dict[str, int] = {}
+        for idx, (channel, line) in enumerate(sources):
+            display = (line or "").strip()
+            if not display:
+                continue
+            if channel not in first_line:
+                first_line[channel] = display
+                counts[channel] = 0
+                first_seen[channel] = idx
+            counts[channel] += 1
+        if not first_line:
+            return ""
+        ranked = sorted(first_line, key=lambda c: (-counts[c], first_seen[c]))
+        shown = ranked[:limit]
+        text = ", ".join(first_line[c] for c in shown)
+        remaining = len(ranked) - len(shown)
+        if remaining > 0:
+            text = f"{text} 외 {remaining}건"
+        return text
+
+    def _render_minor_briefs(
+        self, item: ReportSectionItem, sources: list[tuple[str, str]]
+    ) -> list[str]:
+        """Flat one-liner layout for the consolidated '기타 단신' item (issue 1): each brief is a
+        bullet directly under the heading, followed by the deduped 출처 line."""
+        lines = [f"### {item.title}"]
+        for bullet in item.evidence_bullets:
+            text = str(bullet).strip()
+            if text:
+                lines.append(f"- {text}")
+        formatted = self._format_sources(sources)
+        if formatted:
+            lines.append(f"- 출처: {formatted}")
+        return lines
+
     def _groups_for(
-        self, kind: str, item: ReportSectionItem, sources: list[str]
-    ) -> list[tuple[str, list[str]]]:
+        self, kind: str, item: ReportSectionItem, sources: list[tuple[str, str]]
+    ) -> list[tuple[str, list[Any]]]:
         """Ordered (label, values) groups per section type. Empty groups are skipped
-        by the caller, so a missing field simply omits its label."""
+        by the caller, so a missing field simply omits its label.
+
+        Most groups return ``list[str]`` values; the "출처" group returns
+        ``list[tuple[str, str]]`` (channel, display_line) pairs consumed by
+        ``_format_sources``. The heterogeneous value types are reflected in the
+        ``list[Any]`` return annotation — callers must branch on label == "출처"
+        before processing values (which ``render_section`` already does).
+        """
         if kind == "category":
             related = ", ".join(item.related_categories) if item.related_categories else ""
             themes = ", ".join(item.related_themes) if item.related_themes else ""
@@ -128,9 +207,11 @@ class MarkdownReportBuilder:
     def _format_related_stock(self, stock: dict[str, str | None]) -> str:
         name = stock.get("name") or "-"
         ticker = stock.get("ticker")
-        catalyst = stock.get("catalyst") or "-"
+        catalyst = (stock.get("catalyst") or "").strip()
         label = f"{name}({ticker})" if ticker and ticker != name else name
-        return f"{label}: {catalyst}"
+        # Raw-fallback / LLM-failure cards carry stocks with no catalyst; render just the
+        # label instead of a dangling "라벨: -" (the empty-description noise from issue 1).
+        return f"{label}: {catalyst}" if catalyst else label
 
 
 def render_stock_report_markdown(report: StockReportArtifact) -> str:

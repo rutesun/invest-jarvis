@@ -161,6 +161,12 @@ class TestBuildUserPrompt:
         prompt = _build_user_prompt(bundle)
         assert "출력은 Markdown" not in prompt
 
+    def test_focus_tickers_warn_against_duplicate_symbols(self):
+        # Issue 4: same entity must not appear under both a name and a symbol bucket.
+        bundle = _make_bundle()
+        prompt = _build_user_prompt(bundle)
+        assert "중복" in prompt
+
     def test_is_compact(self):
         bundle = _make_bundle()
         prompt = _build_user_prompt(bundle)
@@ -183,6 +189,12 @@ class TestSystemPrompt:
         from src.pipelines.stock_report.google_grounding import _SYSTEM_PROMPT
 
         assert "JSON 형식으로 출력하지 않는다" in _SYSTEM_PROMPT
+
+    def test_includes_spelling_caution(self):
+        # Issue 3: scrub the observed '카테리' typo in the LLM path too.
+        from src.pipelines.stock_report.google_grounding import _SYSTEM_PROMPT
+
+        assert "맞춤법" in _SYSTEM_PROMPT
 
 
 class TestExtractCitations:

@@ -16,6 +16,8 @@ from src.pipelines.stock_report.synthesize import (
     CategorySummaryCard,
     TickerCard,
     TickerCardLLMOutput,
+    _dedupe_ticker_buckets,
+    _normalize_report_typos,
     _render_raw_category_card,
     _render_raw_ticker_card,
     _sanitize_chunk_ids,
@@ -136,6 +138,86 @@ def test_render_raw_ticker_card() -> None:
     assert card.evidence_chunk_ids == [5, 6]
 
 
+def test_render_raw_ticker_card_surfaces_risk_and_metric_evidence() -> None:
+    """Issue 4b: the deterministic fallback must populate the risk/metric axes from typed
+    evidence_items (kind=risk/metric) so thin (chunk<3) tickers are not left risk-less."""
+    chunks = [
+        _chunk(
+            1,
+            evidence_items=[
+                {"kind": "risk", "text": "규제 승인 지연 가능성"},
+                {"kind": "metric", "text": "매출 +12% YoY"},
+                {"kind": "fact", "text": "신제품 공개"},
+            ],
+        ),
+        _chunk(
+            2,
+            evidence_items=[
+                {"kind": "risk", "text": "경쟁 심화"},
+                {"kind": "metric", "text": "영업이익률 18%"},
+            ],
+        ),
+    ]
+    card = _render_raw_ticker_card(TickerBucket(ticker="NVDA", chunks=chunks))
+
+    assert "규제 승인 지연 가능성" in card.risks
+    assert "경쟁 심화" in card.risks
+    assert "매출 +12% YoY" in card.key_metrics
+    assert "영업이익률 18%" in card.key_metrics
+    # fact-kind evidence is neither a risk nor a metric
+    assert "신제품 공개" not in card.risks
+    assert "신제품 공개" not in card.key_metrics
+
+
+def test_render_raw_ticker_card_dedupes_repeated_evidence() -> None:
+    """Same risk/metric text repeated across chunks collapses to one entry, order preserved."""
+    chunks = [
+        _chunk(1, evidence_items=[{"kind": "risk", "text": "공급 차질"}]),
+        _chunk(2, evidence_items=[{"kind": "risk", "text": "공급 차질"}]),
+    ]
+    card = _render_raw_ticker_card(TickerBucket(ticker="NVDA", chunks=chunks))
+    assert card.risks == ["공급 차질"]
+
+
+# ---------------------------------------------------------------------------
+# _dedupe_ticker_buckets — issue 4a (name/symbol alias dedup)
+# ---------------------------------------------------------------------------
+
+
+def test_dedupe_ticker_buckets_merges_name_aliases_into_symbol() -> None:
+    """Tesla/SpaceX (names) over the same chunk set as TSLA (symbol) collapse to one TSLA card."""
+    chunks = [_chunk(1), _chunk(2)]
+    buckets = [
+        TickerBucket(ticker="Tesla", chunks=list(chunks)),
+        TickerBucket(ticker="SpaceX", chunks=list(chunks)),
+        TickerBucket(ticker="TSLA", chunks=list(chunks)),
+    ]
+    result = _dedupe_ticker_buckets(buckets)
+    assert [b.ticker for b in result] == ["TSLA"]
+
+
+def test_dedupe_ticker_buckets_keeps_distinct_chunk_sets() -> None:
+    """Different chunk sets are never merged (they are genuinely different stories)."""
+    buckets = [
+        TickerBucket(ticker="TSLA", chunks=[_chunk(1), _chunk(2)]),
+        TickerBucket(ticker="NVDA", chunks=[_chunk(3)]),
+    ]
+    result = _dedupe_ticker_buckets(buckets)
+    assert sorted(b.ticker for b in result) == ["NVDA", "TSLA"]
+
+
+def test_dedupe_ticker_buckets_keeps_co_mentioned_distinct_symbols() -> None:
+    """Two real symbols sharing the only chunk (a comparison piece) are NOT merged: with two
+    ticker-like labels we cannot assume aliasing, so both survive."""
+    chunks = [_chunk(1)]
+    buckets = [
+        TickerBucket(ticker="AMD", chunks=list(chunks)),
+        TickerBucket(ticker="NVDA", chunks=list(chunks)),
+    ]
+    result = _dedupe_ticker_buckets(buckets)
+    assert sorted(b.ticker for b in result) == ["AMD", "NVDA"]
+
+
 # ---------------------------------------------------------------------------
 # synthesize_category — raw fallback for chunk_count < 3
 # ---------------------------------------------------------------------------
@@ -214,6 +296,49 @@ def test_synthesize_category_sanitizes_out_of_bundle_ids(monkeypatch) -> None:
 
     assert 99 not in card.evidence_chunk_ids
     assert card.evidence_chunk_ids == [1, 3]
+
+
+# ---------------------------------------------------------------------------
+# _normalize_report_typos — issue 3 (observed '카테리' → '카테고리')
+# ---------------------------------------------------------------------------
+
+
+def test_normalize_report_typos_fixes_known_typo() -> None:
+    assert _normalize_report_typos("이 카테리는 강세다") == "이 카테고리는 강세다"
+
+
+def test_normalize_report_typos_leaves_correct_text_untouched() -> None:
+    correct = "이 카테고리는 HBM 강세다"
+    assert _normalize_report_typos(correct) == correct
+
+
+def test_synthesize_category_normalizes_typo_in_prose(monkeypatch) -> None:
+    """synthesize_category must scrub the observed '카테리' typo from synthesized prose."""
+    bucket = _category_bucket([1, 2, 3])
+
+    async def _fake_run(system, user, schema, provider):
+        return CategoryCardLLMOutput(
+            category_key="반도체",
+            title="반도체 카테리 요약",
+            narrative="이 카테리는 HBM 수요로 강세다.",
+            evidence_bullets=["카테리 내 대표 수혜주"],
+            impact="카테리 전반의 수급 개선",
+            evidence_chunk_ids=[1, 2, 3],
+            priority_score=0.5,
+        )
+
+    monkeypatch.setattr(
+        "src.pipelines.stock_report.synthesize._run_synthesis_call",
+        _fake_run,
+    )
+
+    card = asyncio.run(synthesize_category(bucket, provider="openai"))
+
+    assert "카테리" not in card.narrative
+    assert "카테고리" in card.narrative
+    assert "카테리" not in card.impact
+    assert "카테리" not in card.title
+    assert all("카테리" not in bullet for bullet in card.evidence_bullets)
 
 
 def test_synthesize_category_llm_failure_falls_back_to_raw(monkeypatch) -> None:
