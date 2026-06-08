@@ -507,3 +507,13 @@ EVAL: A-level은 LLM 미사용 → 불필요. B-level(LLM 메타 추출) 도입 
 | **CP4** | 전체 backfill 직전, 하루치 | parse_status 분포(needs_ocr 격리 동작), 멱등 재실행 중복 0, 비용·시간 | 분포 안정 + 멱등 + 운영 부담 수용 | 격리/멱등 버그 수정 후 재시도 |
 
 핵심: **CP1이 합격선** — 표 충실도(이 기능의 최대 리스크)가 여기서 갈린다. 통과 못 하면 markdown-only 접근을 바꾼다. CP2~4는 969개로 스케일 키우기 전에 출력 품질을 사람이 확인하는 지점.
+
+### CP1 결과 (2026-06-04 스파이크 38개, 구현+독립 판단 에이전트)
+
+- 실행: `pdf_parser.parse_pdfs`(opendataloader 2.4.7, local) → 38개. parse ok 37/38(97.4%, 1건 0바이트 깨진 파일). **배치 호출이 per-file 대비 ~2.4x 빠름**(JVM 1회 기동) → Key Decision 1 검증.
+- 양호: 한글(mojibake 0), 헤딩 계층, 2단 reading order(xycut 기본), **단순 grid 표**(하나/kwusa/kiwoom 재무표 숫자·라벨 정확).
+- **판정: CONDITIONAL.** 스키마 잠금 전 보완 2건:
+  1. **[Blocking] needs_ocr 탐지기 수정**: `text_char_count`가 `![image]()` 마크업을 포함해, 이미지/스캔 문서(jeilstock_44199: 실제 64자, pdftotext로도 22자 → 진짜 이미지 문서)가 `'ok'`로 샘. → **이미지 마크업 제거 후 실제 텍스트 + image_ref/실텍스트 비율**로 판정해야 함. (차트 많은 텍스트-정상 리포트는 통과, 진짜 빈 것만 needs_ocr)
+  2. **[Scope] 알려진 표 셀 추출 필요(Codex #2 승격)**: shinhan 다행 라벨 표(목표주가·실적추정)가 markdown 그리드에서 라벨↔숫자 결합 붕괴(현대위아 매출/영업이익/순이익 3행→1셀). 단순 표는 markdown 유지, **목표주가/실적추정 등 알려진 표 유형만 셀 key-value 추출**.
+  3. [Minor] 빈 `| | |` 스켈레톤·차트축 라인 post-process 제거(junk chunk 방지).
+- **API 사실(스키마/구현에 반영)**: ① `convert` 배치는 **all-or-nothing** — 깨진 1건이 배치 전체 출력을 0으로 만듦 → `parse_pdfs`는 0바이트 사전검증 + per-file 폴백 필요. ② page_count는 markdown에 없음 → json에서 읽음. ③ **`ocr_lang` 파라미터 없음** — OCR은 hybrid 백엔드(`hancom-ai`, 서버 필요)로만 → `--retry-ocr` 레인은 hybrid 서버 전제. ④ `reading_order="xycut"` 기본.
