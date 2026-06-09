@@ -466,6 +466,7 @@ EVAL: A-level은 LLM 미사용 → 불필요. B-level(LLM 메타 추출) 도입 
 - **표 충실도(최대 리스크)**: opendataloader가 한국어 bordered 표를 markdown으로 얼마나 보존하는지 실측 전 미검증 → 스파이크/T18에서 확정.
 - small chunk `max_chars`/`min_chars`/overlap 적정값(검증 후 튜닝).
 - 동일 종목 다중 브로커 중복/상충은 retrieval(T16) 소관.
+- **[needs_hybrid 한계] 표 라벨 truncation 미탐지(2차 실패 모드)**: needs_hybrid 트리거는 "셀 융합"(한 셀에 재무 라벨 2개+)만 잡는다. 50022(베스타스)처럼 **행은 분리됐으나 라벨이 잘린 경우**(매출액→`출액`, Adj-영업이익→`dj-영업이익`)는 다른 실패 모드라 안 잡힌다. hybrid가 truncation까지 고치는지 미검증(스파이크는 50006/50005만). 2차 트리거(잘린-라벨 감지: 셀이 알려진 라벨의 suffix지만 정확히 일치하지 않음) + hybrid truncation 재검증은 별도 결정. 빈도/영향이 낮으면 보류 가능.
 
 ---
 
