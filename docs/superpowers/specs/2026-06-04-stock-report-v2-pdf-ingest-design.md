@@ -193,6 +193,7 @@ CREATE TABLE IF NOT EXISTS documents (
     parse_mode TEXT NOT NULL DEFAULT 'local',     -- local | hybrid
     parser_version TEXT,                           -- 파서 버전 (재파스 정책, Codex #3)
     parse_status TEXT NOT NULL DEFAULT 'ok',       -- ok | low_confidence | needs_ocr | failed (Codex #5)
+    needs_hybrid BOOLEAN NOT NULL DEFAULT FALSE,   -- 융합 표 감지 시 hybrid 재처리 대상 (2패스에서 소비)
     text_char_count INTEGER,
     markdown TEXT,                                  -- 전문 보관 → 재청킹 시 재파싱 불필요
     parse_warnings JSONB NOT NULL DEFAULT '[]'::jsonb,
@@ -202,6 +203,7 @@ CREATE TABLE IF NOT EXISTS documents (
 CREATE INDEX IF NOT EXISTS idx_documents_published_date ON documents (published_date);
 CREATE INDEX IF NOT EXISTS idx_documents_target_ticker ON documents (target_ticker);
 CREATE INDEX IF NOT EXISTS idx_documents_parse_status ON documents (parse_status);
+CREATE INDEX IF NOT EXISTS idx_documents_needs_hybrid ON documents (needs_hybrid);
 
 CREATE TABLE IF NOT EXISTS document_chunks (
     id BIGSERIAL PRIMARY KEY,
