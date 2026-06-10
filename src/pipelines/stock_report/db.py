@@ -5,6 +5,7 @@ import json
 import os
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,9 @@ from src.pipelines.stock_report.models import (
     NormalizedMessage,
     RawTelegramMessage,
 )
+from src.pipelines.stock_report.pdf_chunking import PdfChunkDraft
+from src.pipelines.stock_report.pdf_metadata import DocumentMeta
+from src.pipelines.stock_report.pdf_parser import ParsedDocument
 from src.pipelines.stock_report.synthesize import ReportEvidenceRef
 
 
@@ -308,3 +312,232 @@ def persist_report_artifact(
             )
     conn.commit()
     return report_run_id
+
+
+# --- PDF ingest write-path (T15) -------------------------------------------
+#
+# 아래 함수들은 텔레그램 경로(persist_classified_chunks)와 의도적으로 다르게
+# **conn.commit()을 호출하지 않는다**. PDF 인제스트는 "문서 단위 원자적 트랜잭션 +
+# 2-패스(임베딩을 트랜잭션 밖으로)"가 요구사항이라 트랜잭션 경계를 호출자(다음
+# 단계 pdf_ingest)가 제어해야 한다. 따라서 이 함수들은 cursor 작업만 수행한다.
+
+
+def get_document_by_path(conn: Any, source_path: str) -> dict | None:
+    """source_path로 기존 문서의 멱등성 판단 필드를 조회한다.
+
+    반환: {"id", "content_hash", "parser_version"} 또는 None.
+    호출자(ingest)가 content_hash/parser_version 변경 여부로 재파스/skip을 판단한다.
+    commit은 호출자 책임(이 함수는 조회만, 트랜잭션 경계 제어 안 함).
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT id, content_hash, parser_version
+            FROM documents
+            WHERE source_path = %s;
+            """,
+            (source_path,),
+        )
+        row = cur.fetchone()
+
+    if row is None:
+        return None
+    return {"id": row[0], "content_hash": row[1], "parser_version": row[2]}
+
+
+def upsert_document(
+    conn: Any,
+    *,
+    parsed: ParsedDocument,
+    meta: DocumentMeta,
+    content_hash: str,
+    parser_version: str,
+) -> int:
+    """documents에 1행 upsert하고 document_id를 반환한다 (commit 안 함).
+
+    source_path UNIQUE 충돌 시 메타/파싱 결과/해시를 갱신(updated_at=NOW()).
+    parse_status='failed'/'needs_ocr' 문서도 documents에는 기록한다(청크는 호출자가 건너뜀).
+    트랜잭션 경계는 호출자(pdf_ingest)가 제어한다 — 여기서 conn.commit()을 호출하지 않는다.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO documents (
+                source_path,
+                content_hash,
+                broker_key,
+                broker_name,
+                title,
+                published_date,
+                target_ticker,
+                category_key,
+                main_theme,
+                page_count,
+                parse_mode,
+                parser_version,
+                parse_status,
+                needs_hybrid,
+                text_char_count,
+                markdown,
+                parse_warnings
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb
+            )
+            ON CONFLICT (source_path) DO UPDATE SET
+                content_hash = EXCLUDED.content_hash,
+                broker_key = EXCLUDED.broker_key,
+                broker_name = EXCLUDED.broker_name,
+                title = EXCLUDED.title,
+                published_date = EXCLUDED.published_date,
+                target_ticker = EXCLUDED.target_ticker,
+                category_key = EXCLUDED.category_key,
+                main_theme = EXCLUDED.main_theme,
+                page_count = EXCLUDED.page_count,
+                parse_mode = EXCLUDED.parse_mode,
+                parser_version = EXCLUDED.parser_version,
+                parse_status = EXCLUDED.parse_status,
+                needs_hybrid = EXCLUDED.needs_hybrid,
+                text_char_count = EXCLUDED.text_char_count,
+                markdown = EXCLUDED.markdown,
+                parse_warnings = EXCLUDED.parse_warnings,
+                updated_at = NOW()
+            RETURNING id;
+            """,
+            (
+                parsed.source_path,
+                content_hash,
+                meta.broker_key,
+                meta.broker_name,
+                meta.title,
+                meta.published_date,
+                meta.target_ticker,
+                meta.category_key,
+                meta.main_theme,
+                parsed.page_count,
+                parsed.parse_mode,
+                parser_version,
+                meta.parse_status,
+                meta.needs_hybrid,
+                parsed.text_char_count,
+                parsed.markdown,
+                json.dumps(parsed.warnings, ensure_ascii=False),
+            ),
+        )
+        return cur.fetchone()[0]
+
+
+def delete_document_chunks(conn: Any, document_id: int) -> None:
+    """재적재 전 기존 document_chunks를 삭제한다 (commit 안 함).
+
+    documents FK가 ON DELETE CASCADE지만, 문서는 유지하고 청크만 교체하는
+    재청킹 경로를 위해 명시적으로 청크만 삭제한다.
+    트랜잭션 경계는 호출자(pdf_ingest)가 제어한다 — 여기서 conn.commit()을 호출하지 않는다.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            "DELETE FROM document_chunks WHERE document_id = %s;",
+            (document_id,),
+        )
+
+
+def persist_document_chunks(
+    conn: Any,
+    *,
+    document_id: int,
+    source_date: date,
+    broker_key: str | None,
+    category_key: str | None,
+    main_theme: str | None,
+    drafts: list[PdfChunkDraft],
+) -> int:
+    """PdfChunkDraft들을 document_chunks에 INSERT한다 (embed_status='pending', embedding NULL).
+
+    executemany 배치 적재. 삽입 행 수 반환. 빈 drafts는 0 반환. commit 안 함.
+    ticker_tags는 jsonb로 직렬화. 임베딩은 패스2(upsert_embeddings)에서 채운다.
+    트랜잭션 경계는 호출자(pdf_ingest)가 제어한다 — 여기서 conn.commit()을 호출하지 않는다.
+    """
+    if not drafts:
+        return 0
+
+    query = """
+    INSERT INTO document_chunks (
+        document_id,
+        source_date,
+        broker_key,
+        section_path,
+        chunk_seq,
+        is_table,
+        category_key,
+        main_theme,
+        ticker_tags,
+        canonical_summary,
+        content_clean,
+        embed_payload,
+        priority_score
+    ) VALUES (
+        %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s
+    );
+    """
+
+    params: list[tuple[Any, ...]] = []
+    for draft in drafts:
+        # 표는 정보 밀도가 높아 산문보다 우선순위를 살짝 높인다.
+        priority_score = 1.2 if draft.is_table else 1.0
+        params.append(
+            (
+                document_id,
+                source_date,
+                broker_key,
+                draft.section_path,
+                draft.chunk_seq,
+                draft.is_table,
+                category_key,
+                main_theme,
+                json.dumps(draft.ticker_tags, ensure_ascii=False),
+                draft.canonical_summary,
+                draft.content_clean,
+                draft.embed_payload,
+                priority_score,
+            )
+        )
+
+    with conn.cursor() as cur:
+        cur.executemany(query, params)
+
+    return len(params)
+
+
+def load_pending_document_chunks(
+    conn: Any,
+    *,
+    document_id: int | None = None,
+    include_failed: bool = True,
+) -> list[tuple[int, str]]:
+    """임베딩이 필요한 청크 (id, embed_payload)를 조회한다.
+
+    embed_status='pending' (include_failed=True면 'failed'도) 인 행.
+    document_id 지정 시 해당 문서로 한정, None이면 전체(backfill용).
+    검색은 embed_status='done'만 보므로 pending/failed가 패스2 대상이다.
+    commit은 호출자 책임(이 함수는 조회만, 트랜잭션 경계 제어 안 함).
+    """
+    statuses = ("pending", "failed") if include_failed else ("pending",)
+    placeholders = ", ".join(["%s"] * len(statuses))
+    conditions = [f"embed_status IN ({placeholders})"]
+    params: list[Any] = list(statuses)
+
+    if document_id is not None:
+        conditions.append("document_id = %s")
+        params.append(document_id)
+
+    query = f"""
+    SELECT id, embed_payload
+    FROM document_chunks
+    WHERE {" AND ".join(conditions)}
+    ORDER BY id;
+    """
+
+    with conn.cursor() as cur:
+        cur.execute(query, tuple(params))
+        rows = cur.fetchall()
+
+    return [(row[0], row[1]) for row in rows]
