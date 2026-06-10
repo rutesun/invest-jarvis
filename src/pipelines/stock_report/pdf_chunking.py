@@ -45,6 +45,43 @@ _HANGUL_OR_WORD_RE = re.compile(r"[가-힣]|[A-Za-z]{2,}")
 # 차트 축 단독 줄로 흔히 나오는 짧은 라벨 토큰. 한두 글자 단위/축 표기라 의미가 없다.
 _AXIS_LABEL_TOKENS = frozenset({"좌축", "우축", "원", "점", "배", "회", "일", "조", "억"})
 
+# 표 셀 내 HTML <br> 태그: 공백으로 정리한다.
+_TABLE_BR_RE = re.compile(r"<br\s*/?>", re.IGNORECASE)
+
+# 출처줄 패턴: "자료:", "출처:", "Source:", "주:", "주1)", "* " 등으로 시작하는 줄.
+# 이 패턴과 일치하는 tiny 청크는 앞 청크에 병합한다.
+_SOURCE_LINE_RE = re.compile(
+    r"^(자료|출처|Source|Note|주\d*[):.]?|Notes?|\*\s)",
+    re.IGNORECASE,
+)
+
+
+def _has_meaningful_word(text: str) -> bool:
+    """셀 텍스트에 의미 있는 단어(2자+ 한글, 3자+ 영문)가 있으면 True."""
+    if re.search(r"[가-힣]{2,}", text):
+        return True
+    return bool(re.search(r"[A-Za-z]{3,}", text))
+
+
+def _is_chart_table(table_text: str) -> bool:
+    """숫자·기호·공백만으로 이루어진 표는 차트 파이프블록 잔해로 본다.
+
+    기준: 표의 모든 셀 중 의미 있는 단어(2자+ 한글, 3자+ 영문)가 들어간 셀이
+    단 하나도 없으면 True.
+    """
+    if not table_text.strip():
+        return False
+    cells: list[str] = []
+    for line in table_text.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("|"):
+            continue
+        for cell in stripped.strip("|").split("|"):
+            cells.append(cell.strip())
+    if not cells:
+        return False
+    return not any(_has_meaningful_word(c) for c in cells)
+
 
 @dataclass(slots=True)
 class PdfChunkDraft:
@@ -87,6 +124,29 @@ class _SectionContext:
         return self.stack[-1][1] if self.stack else ""
 
 
+def _filter_source_chunks(drafts: list[PdfChunkDraft]) -> list[PdfChunkDraft]:
+    """출처줄로만 이루어진 tiny 청크를 앞 청크의 본문에 병합한다.
+
+    조건: content_clean이 _SOURCE_LINE_RE 패턴으로 시작 AND MIN_CHARS 미만.
+    앞 청크가 없으면 그냥 유지한다.
+    """
+    result: list[PdfChunkDraft] = []
+    for draft in drafts:
+        if (
+            result
+            and not draft.is_table
+            and len(draft.content_clean) < MIN_CHARS
+            and _SOURCE_LINE_RE.match(draft.content_clean.splitlines()[0])
+        ):
+            prev = result[-1]
+            prev.content_clean = f"{prev.content_clean}\n\n{draft.content_clean}"
+            # embed_payload는 출처줄 병합 시 재생성하지 않는다.
+            # (출처줄은 검색 신호에 영향 없고, embed는 별도 패스에서 진행)
+        else:
+            result.append(draft)
+    return result
+
+
 def build_pdf_chunks(parsed: ParsedDocument, meta: DocumentMeta) -> list[PdfChunkDraft]:
     """파싱된 PDF markdown을 small-to-big 청크 리스트로 변환한다(reading order 보존)."""
     blocks = _split_blocks(parsed.markdown)
@@ -124,6 +184,7 @@ def build_pdf_chunks(parsed: ParsedDocument, meta: DocumentMeta) -> list[PdfChun
             )
             seq += 1
 
+    drafts = _filter_source_chunks(drafts)
     return drafts
 
 
@@ -208,8 +269,12 @@ def _consume_table(lines: list[str], start: int) -> tuple[str, int]:
             continue
         if _is_empty_table_row(line):
             continue
-        rows.append(line)
-    return "\n".join(rows), i
+        cleaned_line = _TABLE_BR_RE.sub(" ", line)
+        rows.append(cleaned_line)
+    table_text = "\n".join(rows)
+    if _is_chart_table(table_text):
+        return "", i
+    return table_text, i
 
 
 def _is_empty_table_row(line: str) -> bool:

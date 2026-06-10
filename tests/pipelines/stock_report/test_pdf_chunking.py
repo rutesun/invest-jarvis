@@ -182,9 +182,9 @@ def test_empty_skeleton_table_row_is_skipped() -> None:
 def test_two_separate_tables_yield_two_table_chunks() -> None:
     markdown = (
         "## 섹션\n\n"
-        "|a|b|\n|---|---|\n|1|2|\n\n"
+        "|구분|값|\n|---|---|\n|1|2|\n\n"
         "중간 산문 문단으로 두 표 사이를 의미적으로 구분하는 본문이다.\n\n"
-        "|c|d|\n|---|---|\n|3|4|\n"
+        "|항목|결과|\n|---|---|\n|3|4|\n"
     )
     tables = [c for c in _chunks(markdown) if c.is_table]
     assert len(tables) == 2
@@ -390,3 +390,86 @@ def test_table_kept_in_section_order_for_reconstruction() -> None:
 def test_empty_markdown_yields_no_chunks() -> None:
     assert _chunks("") == []
     assert _chunks("   \n\n  \n") == []
+
+
+# --- CP2 잡음 필터: 차트 파이프블록 -----------------------------------------
+
+
+def test_chart_table_filtered() -> None:
+    # 숫자·기호·공백만으로 이루어진 파이프 블록은 청크가 생성되지 않아야 한다.
+    markdown = "# MSCI 비중\n\n|0|2000|4000|6000|\n|---|---|---|---|\n|100|200|300|400|\n"
+    chunks = _chunks(markdown)
+    table_chunks = [c for c in chunks if c.is_table]
+    assert len(table_chunks) == 0
+
+
+def test_real_table_not_filtered() -> None:
+    # 한글 헤더가 있는 표는 is_table=True 청크 1개가 반드시 생성되어야 한다.
+    markdown = (
+        "## 실적 요약\n\n|구분|2025|2026|\n|---|---|---|\n|매출액|1,000|1,200|\n|영업이익|80|100|\n"
+    )
+    chunks = _chunks(markdown)
+    table_chunks = [c for c in chunks if c.is_table]
+    assert len(table_chunks) == 1
+    assert "매출액" in table_chunks[0].content_clean
+
+
+def test_table_br_cleaned() -> None:
+    # 표 셀에 <br> 태그가 포함되어 있어도 content_clean에는 남지 않아야 한다.
+    markdown = (
+        "## 브레이크 테스트\n\n"
+        "|구분|내용|\n"
+        "|---|---|\n"
+        "|매출액<br>증가율|2,157.6<BR/>|\n"
+        "|영업이익|49.6<br />|\n"
+    )
+    chunks = _chunks(markdown)
+    table_chunks = [c for c in chunks if c.is_table]
+    assert len(table_chunks) == 1
+    content = table_chunks[0].content_clean
+    assert "<br>" not in content.lower()
+    assert "<br/>" not in content.lower()
+    assert "매출액" in content
+    assert "2,157.6" in content
+
+
+# --- CP2 잡음 필터: 출처줄 병합 ----------------------------------------------
+
+
+def test_source_line_merged_to_prev() -> None:
+    # 출처줄 tiny 청크는 앞 청크의 content_clean에 병합되어야 한다.
+    big_para = "현대위아의 멕시코 법인은 가동률 개선으로 고정비 절감 효과가 기대된다. " * 8
+    markdown = f"# 본문 섹션\n\n{big_para.strip()}\n\n자료: 신한투자증권\n"
+    chunks = _chunks(markdown)
+    # "자료: 신한투자증권"이 단독 청크로 남아선 안 된다.
+    standalone = [c for c in chunks if c.content_clean.startswith("자료:")]
+    assert len(standalone) == 0
+    # 앞 청크(big_para 포함)에 출처줄이 병합되어 있어야 한다.
+    merged_chunk = next(c for c in chunks if "자료: 신한투자증권" in c.content_clean)
+    assert "가동률 개선" in merged_chunk.content_clean
+
+
+def test_source_line_first_chunk_kept() -> None:
+    # 앞 청크가 없으면 출처줄 청크도 그냥 독립 청크로 유지되어야 한다.
+    markdown = "출처: Bloomberg\n"
+    chunks = _chunks(markdown)
+    assert len(chunks) == 1
+    assert chunks[0].content_clean == "출처: Bloomberg"
+
+
+def test_chart_table_mixed_with_real() -> None:
+    # 차트 파이프블록과 진짜 표가 같이 있을 때, 차트 블록만 제거되고 진짜 표는 남아야 한다.
+    markdown = (
+        "# 섹션\n\n"
+        "| 0 | 2000 | 4000 |\n"
+        "|---|---|---|\n"
+        "| 100 | 200 | 300 |\n\n"
+        "중간 산문 문단으로 두 표 사이를 의미적으로 구분한다.\n\n"
+        "|구분|2025|\n"
+        "|---|---|\n"
+        "|매출액|1,000|\n"
+    )
+    chunks = _chunks(markdown)
+    table_chunks = [c for c in chunks if c.is_table]
+    assert len(table_chunks) == 1
+    assert "매출액" in table_chunks[0].content_clean
