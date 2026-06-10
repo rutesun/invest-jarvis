@@ -1398,6 +1398,51 @@ def report_daily_v2(
         raise typer.Exit(1) from None
 
 
+@report_app.command("ingest-pdf")
+def report_ingest_pdf(
+    date: str = typer.Argument(None, help="적재할 날짜 (YYYY-MM-DD). 미지정 시 전날."),
+    input_dir: str = typer.Option(
+        None, "--input-dir", "-i", help="PDF 디렉토리. 기본 data/files/{date}"
+    ),
+    use_hybrid: bool = typer.Option(
+        False, "--use-hybrid", help="docling hybrid 파싱(느림, 서버 필요)"
+    ),
+    ocr_lang: str = typer.Option(None, "--ocr-lang", help="OCR 언어(hybrid 백엔드 필요)"),
+    embed_missing: bool = typer.Option(
+        False, "--embed-missing", help="패스2만: pending/failed 임베딩 재시도"
+    ),
+    reembed: bool = typer.Option(False, "--reembed", help="재파스+재청킹+재임베딩(전체 재적재)"),
+):
+    """증권사 PDF를 documents/document_chunks에 적재하고 임베딩한다 (Phase 2)."""
+    from datetime import datetime as dt
+    from datetime import timedelta
+
+    from src.pipelines.stock_report.pdf_ingest import run_ingest_pdf
+
+    if date is None:
+        date = (dt.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+
+    console.print(f"[bold]PDF 인제스트 중... (날짜: {date})[/bold]\n")
+    try:
+        summary = run_ingest_pdf(
+            date=date,
+            input_dir=input_dir,
+            use_hybrid=use_hybrid,
+            ocr_lang=ocr_lang,
+            embed_missing=embed_missing,
+            reembed=reembed,
+        )
+        console.print(
+            f"[green]✓ 완료[/green] PDF {summary.total_pdfs}개 → "
+            f"문서 {summary.documents_upserted} / 청크 {summary.chunks_inserted} / "
+            f"임베딩 {summary.embedded} / skip {summary.skipped} / "
+            f"low_conf {summary.low_confidence} / 실패 {summary.failed}"
+        )
+    except Exception as e:
+        console.print(f"[red]오류: {e}[/red]")
+        raise typer.Exit(1) from None
+
+
 # --- Telegram 서브커맨드 ---
 
 telegram_app = typer.Typer(help="Telegram 채널 메시지 수집")
