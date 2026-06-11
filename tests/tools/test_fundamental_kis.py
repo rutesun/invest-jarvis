@@ -29,6 +29,8 @@ def test_normalize_kis_snapshot_sets_missing_values_to_none():
         quote_data={"price": 88200.0},
         profit_ratio=[],
         financial_ratio=[],
+        financial_ratio_q=[],
+        financial_ratio_a=[],
         other_major_ratios=[],
         income_statement=[],
         balance_sheet=[],
@@ -66,6 +68,8 @@ def test_normalize_kis_snapshot_maps_core_metrics_and_growth():
                 "total_cptl": "4363203.00",
             }
         ],
+        financial_ratio_q=[],
+        financial_ratio_a=[],
         other_major_ratios=[
             {
                 "stac_yymm": "202512",

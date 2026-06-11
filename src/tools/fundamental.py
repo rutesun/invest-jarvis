@@ -341,6 +341,29 @@ class FundamentalTool(BaseTool):
 
         return quarterly_data
 
+    @classmethod
+    def _build_quarterly_eps(cls, financial_ratio_q_rows: list[dict]) -> list[QuarterlyData]:
+        """financial-ratio div=1 분기 행으로 EPS + YoY 계산.
+
+        YoY는 같은 분기월(MM) 1년 전(YYYY-1) 행과 비교.
+        """
+        by_period: dict[str, float] = {}
+        for row in financial_ratio_q_rows:
+            ym = (row.get("stac_yymm") or "").strip()
+            eps = cls._to_float(row.get("eps"))
+            if len(ym) == 6 and eps is not None:
+                by_period[ym] = eps
+
+        result: list[QuarterlyData] = []
+        for ym in list(by_period.keys())[:4]:  # 최신 4분기
+            eps = by_period[ym]
+            year, mm = ym[:4], ym[4:]
+            prev = f"{int(year) - 1}{mm}"
+            prev_eps = by_period.get(prev)
+            eps_yoy = (eps - prev_eps) / abs(prev_eps) if prev_eps not in (None, 0) else None
+            result.append(QuarterlyData(period=f"{year}-{mm}", eps=eps, eps_yoy=eps_yoy))
+        return result
+
     def _normalize_kis_snapshot(
         self,
         *,
@@ -348,6 +371,8 @@ class FundamentalTool(BaseTool):
         quote_data: dict,
         profit_ratio: list[dict],
         financial_ratio: list[dict],
+        financial_ratio_q: list[dict],
+        financial_ratio_a: list[dict],
         other_major_ratios: list[dict],
         income_statement: list[dict],
         balance_sheet: list[dict],
@@ -406,6 +431,47 @@ class FundamentalTool(BaseTool):
             if current_earnings is not None and previous_earnings not in (None, 0):
                 earnings_growth = (current_earnings - previous_earnings) / previous_earnings
 
+        # Build quarterly data: merge balance-sheet revenue/earnings with financial-ratio EPS
+        balance_quarters = self._build_kis_quarterly_data(valid_balance_sheet) or []
+        eps_quarters = self._build_quarterly_eps(financial_ratio_q)
+        # Build period-keyed maps and merge
+        eps_by_period = {q.period: q for q in eps_quarters}
+        merged_quarters: list[QuarterlyData] = []
+        for bq in balance_quarters:
+            eq = eps_by_period.get(bq.period)
+            merged_quarters.append(
+                QuarterlyData(
+                    period=bq.period,
+                    revenue=bq.revenue,
+                    earnings=bq.earnings,
+                    revenue_yoy=bq.revenue_yoy,
+                    revenue_qoq=bq.revenue_qoq,
+                    earnings_yoy=bq.earnings_yoy,
+                    earnings_qoq=bq.earnings_qoq,
+                    eps=eq.eps if eq else None,
+                    eps_yoy=eq.eps_yoy if eq else None,
+                )
+            )
+        # Add EPS-only quarters not covered by balance sheet (e.g. latest not yet in balance_sheet)
+        balance_periods = {q.period for q in balance_quarters}
+        for eq in eps_quarters:
+            if eq.period not in balance_periods:
+                merged_quarters.append(eq)
+        quarterly_data_final = merged_quarters if merged_quarters else None
+
+        # Build annual_data from financial-ratio div=0
+        annual_data: list[AnnualData] | None = None
+        annual_rows = [
+            AnnualData(
+                year=(r.get("stac_yymm") or "")[:4],
+                eps=self._to_float(r.get("eps")),
+            )
+            for r in financial_ratio_a
+            if self._to_float(r.get("eps")) is not None
+        ][:5]
+        if annual_rows:
+            annual_data = annual_rows
+
         return FundamentalSnapshot(
             market_cap=None,
             sector=None,
@@ -457,7 +523,8 @@ class FundamentalTool(BaseTool):
             ),
             revenue_growth=revenue_growth,
             earnings_growth=earnings_growth,
-            quarterly_data=self._build_kis_quarterly_data(valid_balance_sheet),
+            quarterly_data=quarterly_data_final,
+            annual_data=annual_data,
             debt_to_equity=(
                 total_lblt / total_cptl
                 if total_lblt is not None and total_cptl not in (None, 0)
@@ -490,6 +557,14 @@ class FundamentalTool(BaseTool):
             "financial_ratio": self._run_with_retry(
                 "financial_ratio", lambda: self.kis_provider.get_financial_ratio(ticker)
             ),
+            "financial_ratio_q": self._run_with_retry(
+                "financial_ratio_q",
+                lambda: self.kis_provider.get_financial_ratio(ticker, div_cls_code="1"),
+            ),
+            "financial_ratio_a": self._run_with_retry(
+                "financial_ratio_a",
+                lambda: self.kis_provider.get_financial_ratio(ticker, div_cls_code="0"),
+            ),
             "balance_sheet": self._run_with_retry(
                 "balance_sheet", lambda: self.kis_provider.get_balance_sheet(ticker)
             ),
@@ -512,6 +587,8 @@ class FundamentalTool(BaseTool):
 
         quote_data = merged["quote"][0] or {}
         financial_ratio = merged["financial_ratio"][0] or []
+        financial_ratio_q = merged["financial_ratio_q"][0] or []
+        financial_ratio_a = merged["financial_ratio_a"][0] or []
         balance_sheet = merged["balance_sheet"][0] or []
         profit_ratio = merged["profit_ratio"][0] or []
         income_statement = merged["income_statement"][0] or []
@@ -529,6 +606,8 @@ class FundamentalTool(BaseTool):
             quote_data=quote_data,
             profit_ratio=profit_ratio,
             financial_ratio=financial_ratio,
+            financial_ratio_q=financial_ratio_q,
+            financial_ratio_a=financial_ratio_a,
             other_major_ratios=other_major,
             income_statement=income_statement,
             balance_sheet=balance_sheet,
