@@ -35,7 +35,7 @@
 | R18 | 한국 EPS는 "1줄" 아님 | R6 비용으로 재분류: div_cls+6메서드+growth-ratio+파싱+필드 (§7.2, §19) |
 | R19 | §14 result 모델 6개 누락 | 전부 스케치 추가 + `PlaybookVerdict.sector_strength` (§14) |
 | R20 | growth-ratio "EPS 직접" 과장 | ~~순이익 fallback~~ → **D3에서 개선**: profit-ratio의 EPS '값'을 분기/연간으로 받아 증가율을 직접 계산 (§7.2) |
-| **D3** | **[사용자 지적] EPS 증가율 직접 계산** | growth-ratio(순이익증가율)에 의존하지 않고, KIS 수익성비율(`get_profit_ratio`)의 **EPS 필드(실재, fundamental.py:366)를 분기/연간 시계열로** 받아 `(당기−전년동기)/전년동기`로 C·A 산출. 분기·기간 부족 시에만 순이익 fallback (§7, §7.2) |
+| **D3** | **[사용자 지적] EPS 증가율 직접 계산 — 실호출 확정** | KIS **`get_profit_ratio`(path=profit-ratio, tr=FHKST66430300)**의 `eps`를 div=1(분기)·div=0(연간)으로 받아 `(당기−전년동기)/전년동기`로 C·A 직접 산출. 2026-06 실호출 확정(005930: 분기 30개 202406~202603 eps → YoY 가능, 연간 EPS). **`get_financial_ratio`(tr=66430100)는 eps=None — KIS는 tr_id로 응답 결정**(이 혼동이 Plan 2 초기 버그 원인, 수정함). 순이익 fallback 불필요. ※ EGW00121은 worktree `.env` 키 부재로 인한 만료 캐시 토큰 오진. ※ KIS 8개 동시 호출은 EGW00133(rate limit) → throttle 필요(별도) |
 | **D4** | **[사용자 결정] Stage2 7조건 보강** | 미너비니 원전 조건 4(50>150>200 정배열)·5(종가>SMA50) 추가 → 4조건→7조건. RS(8번)는 C★ 별도 (§0.3) |
 | **D5** | **[사용자 지적] 단일 출처 = minervini (SRP + 죽은코드 제거)** | `IndicatorCalculator`는 공통 원자 지표만. `indicators._calculate_stage2`·`Is_Stage2` 컬럼 **제거**(grep 확인: 소비처 없는 죽은 코드). Stage2 7조건 판정·점수·`is_stage2` metric을 모두 `minervini.py`로 일원화 (§0.3, §4.3) |
 | R21 | **VCP가 `patterns._detect_vcp`에 일부 존재** | "전무" 아님 → 수축은 재사용, **피벗 돌파만 신규**, 이중 구현 회피 (§6.1 E) |
@@ -218,7 +218,7 @@ analyze(ticker)
 
 | | 의미 | 구현 | 데이터 |
 |---|---|---|---|
-| **C** | 분기 EPS 급증 | 분기 **EPS YoY** ≥ +25% + 가속 | 미국 `quarterly_data[].eps_yoy` / 한국 **profit-ratio EPS 분기 시계열 → YoY 직접 계산**(D3). 분기·기간 부족 시에만 순이익 fallback |
+| **C** | 분기 EPS 급증 | 분기 **EPS YoY** ≥ +25% + 가속 | 미국 `quarterly_data[].eps_yoy` / 한국 **`get_profit_ratio`(tr=FHKST66430300)의 `eps`를 div=1 분기로 받아 YoY 직접 계산**(2026-06 실호출 확정: 30분기 eps, 전년 동기 포함). `get_financial_ratio`(tr=66430100)는 eps=None — **KIS는 tr_id로 응답 결정** |
 | **A** | 연간 이익 성장 | 연 EPS/순이익 성장 ≥ +25% + 다년 추세 + ROE | `annual_data`, growth-ratio 연간 |
 | **N** | 새로움 | 52주 신고가 −25% 이내(참조) + 신제품·경영진 LLM | `minervini` metrics, `news`, `disclosure` |
 | **S** | 수급 | 돌파일 거래량(참조) + 유통주식 | `volume`, `float_shares`(미국) |

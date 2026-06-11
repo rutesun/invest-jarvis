@@ -466,8 +466,8 @@ class FundamentalTool(BaseTool):
         quote_data: dict,
         profit_ratio: list[dict],
         financial_ratio: list[dict],
-        financial_ratio_q: list[dict],
-        financial_ratio_a: list[dict],
+        profit_ratio_q: list[dict],
+        profit_ratio_a: list[dict],
         other_major_ratios: list[dict],
         income_statement: list[dict],
         balance_sheet: list[dict],
@@ -526,9 +526,9 @@ class FundamentalTool(BaseTool):
             if current_earnings is not None and previous_earnings not in (None, 0):
                 earnings_growth = (current_earnings - previous_earnings) / previous_earnings
 
-        # Build quarterly data: merge balance-sheet revenue/earnings with financial-ratio EPS
+        # Build quarterly data: merge balance-sheet revenue/earnings with profit-ratio EPS
         balance_quarters = self._build_kis_quarterly_data(valid_balance_sheet) or []
-        eps_quarters = self._build_quarterly_eps(financial_ratio_q)
+        eps_quarters = self._build_quarterly_eps(profit_ratio_q)
         # Build period-keyed maps and merge
         eps_by_period = {q.period: q for q in eps_quarters}
         merged_quarters: list[QuarterlyData] = []
@@ -554,14 +554,14 @@ class FundamentalTool(BaseTool):
                 merged_quarters.append(eq)
         quarterly_data_final = merged_quarters if merged_quarters else None
 
-        # Build annual_data from financial-ratio div=0
+        # Build annual_data from profit-ratio div=0
         annual_data: list[AnnualData] | None = None
         annual_rows = [
             AnnualData(
                 year=(r.get("stac_yymm") or "")[:4],
                 eps=self._to_float(r.get("eps")),
             )
-            for r in financial_ratio_a
+            for r in profit_ratio_a
             if self._to_float(r.get("eps")) is not None
         ][:5]
         if annual_rows:
@@ -652,19 +652,19 @@ class FundamentalTool(BaseTool):
             "financial_ratio": self._run_with_retry(
                 "financial_ratio", lambda: self.kis_provider.get_financial_ratio(ticker)
             ),
-            "financial_ratio_q": self._run_with_retry(
-                "financial_ratio_q",
-                lambda: self.kis_provider.get_financial_ratio(ticker, div_cls_code="1"),
-            ),
-            "financial_ratio_a": self._run_with_retry(
-                "financial_ratio_a",
-                lambda: self.kis_provider.get_financial_ratio(ticker, div_cls_code="0"),
-            ),
             "balance_sheet": self._run_with_retry(
                 "balance_sheet", lambda: self.kis_provider.get_balance_sheet(ticker)
             ),
             "profit_ratio": self._run_with_retry(
                 "profit_ratio", lambda: self.kis_provider.get_profit_ratio(ticker)
+            ),
+            "profit_ratio_q": self._run_with_retry(
+                "profit_ratio_q",
+                lambda: self.kis_provider.get_profit_ratio(ticker, div_cls_code="1"),
+            ),
+            "profit_ratio_a": self._run_with_retry(
+                "profit_ratio_a",
+                lambda: self.kis_provider.get_profit_ratio(ticker, div_cls_code="0"),
             ),
             "income_statement": self._run_with_retry(
                 "income_statement", lambda: self.kis_provider.get_income_statement(ticker)
@@ -682,10 +682,10 @@ class FundamentalTool(BaseTool):
 
         quote_data = merged["quote"][0] or {}
         financial_ratio = merged["financial_ratio"][0] or []
-        financial_ratio_q = merged["financial_ratio_q"][0] or []
-        financial_ratio_a = merged["financial_ratio_a"][0] or []
         balance_sheet = merged["balance_sheet"][0] or []
         profit_ratio = merged["profit_ratio"][0] or []
+        profit_ratio_q = merged["profit_ratio_q"][0] or []
+        profit_ratio_a = merged["profit_ratio_a"][0] or []
         income_statement = merged["income_statement"][0] or []
         other_major = merged["other_major_ratios"][0] or []
 
@@ -701,8 +701,8 @@ class FundamentalTool(BaseTool):
             quote_data=quote_data,
             profit_ratio=profit_ratio,
             financial_ratio=financial_ratio,
-            financial_ratio_q=financial_ratio_q,
-            financial_ratio_a=financial_ratio_a,
+            profit_ratio_q=profit_ratio_q,
+            profit_ratio_a=profit_ratio_a,
             other_major_ratios=other_major,
             income_statement=income_statement,
             balance_sheet=balance_sheet,

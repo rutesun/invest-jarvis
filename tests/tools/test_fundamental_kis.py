@@ -29,8 +29,8 @@ def test_normalize_kis_snapshot_sets_missing_values_to_none():
         quote_data={"price": 88200.0},
         profit_ratio=[],
         financial_ratio=[],
-        financial_ratio_q=[],
-        financial_ratio_a=[],
+        profit_ratio_q=[],
+        profit_ratio_a=[],
         other_major_ratios=[],
         income_statement=[],
         balance_sheet=[],
@@ -68,8 +68,8 @@ def test_normalize_kis_snapshot_maps_core_metrics_and_growth():
                 "total_cptl": "4363203.00",
             }
         ],
-        financial_ratio_q=[],
-        financial_ratio_a=[],
+        profit_ratio_q=[],
+        profit_ratio_a=[],
         other_major_ratios=[
             {
                 "stac_yymm": "202512",
@@ -154,6 +154,108 @@ async def test_fetch_kis_fundamentals_retries_endpoint_and_keeps_partial_success
     assert snapshot.pe_ratio == pytest.approx(10.0)
     assert snapshot.roe == pytest.approx(0.125)
     assert provider.get_income_statement.await_count == 3
+
+
+@pytest.mark.asyncio
+async def test_fetch_kis_fundamentals_uses_profit_ratio_for_eps_not_financial_ratio():
+    """EPS 소스는 get_financial_ratio(div_cls_code) 가 아닌 get_profit_ratio 여야 한다."""
+    provider = AsyncMock()
+    provider.get_quote.return_value = {"price": 55000.0}
+    provider.get_financial_ratio.return_value = []  # financial_ratio에 eps 없음
+    provider.get_balance_sheet.return_value = []
+    # profit_ratio div=0(연간) — _normalize_kis_snapshot에서 profit_row.eps를 쓴다
+    provider.get_profit_ratio.return_value = [
+        {"stac_yymm": "202512", "eps": "6564.00", "roe_val": "10.85"}
+    ]
+    provider.get_income_statement.return_value = []
+    provider.get_other_major_ratios.return_value = []
+
+    tool = FundamentalTool(kis_provider=provider)
+    snapshot = await tool._fetch_kis_fundamentals("005930.KS")  # type: ignore[attr-defined]
+
+    # profit_ratio에서 eps를 가져와 PE를 계산한다
+    assert snapshot.pe_ratio == pytest.approx(55000.0 / 6564.0)
+    assert snapshot.roe == pytest.approx(0.1085)
+
+
+@pytest.mark.asyncio
+async def test_fetch_kis_fundamentals_quarterly_eps_via_profit_ratio_q():
+    """분기 EPS는 get_profit_ratio(div_cls_code='1') 결과를 _build_quarterly_eps에 넘겨야 한다."""
+    provider = AsyncMock()
+    provider.get_quote.return_value = {"price": 55000.0}
+    provider.get_financial_ratio.return_value = []
+    provider.get_balance_sheet.return_value = []
+    # profit_ratio div=0 (기본, 연간)
+    provider.get_profit_ratio.return_value = [
+        {"stac_yymm": "202512", "eps": "6564.00", "roe_val": "10.85"}
+    ]
+    provider.get_income_statement.return_value = []
+    provider.get_other_major_ratios.return_value = []
+
+    tool = FundamentalTool(kis_provider=provider)
+    await tool._fetch_kis_fundamentals("005930.KS")  # type: ignore[attr-defined]
+
+    # profit_ratio_q 호출이 div_cls_code="1" 로 이루어져야 한다
+    calls = provider.get_profit_ratio.call_args_list
+    quarterly_call_args = [
+        c for c in calls if c.kwargs.get("div_cls_code") == "1" or (c.args and "1" in c.args)
+    ]
+    assert len(quarterly_call_args) >= 1, (
+        "get_profit_ratio(div_cls_code='1') must be called for quarterly EPS"
+    )
+    # annual call: div_cls_code="0"
+    annual_call_args = [
+        c for c in calls if c.kwargs.get("div_cls_code") == "0" or (c.args and "0" in c.args)
+    ]
+    assert len(annual_call_args) >= 1, (
+        "get_profit_ratio(div_cls_code='0') must be called for annual EPS"
+    )
+
+
+@pytest.mark.asyncio
+async def test_fetch_kis_fundamentals_annual_eps_from_profit_ratio_a():
+    """연간 EPS(annual_data)는 get_profit_ratio(div_cls_code='0') 결과를 사용해야 한다."""
+    provider = AsyncMock()
+    provider.get_quote.return_value = {"price": 55000.0}
+    provider.get_financial_ratio.return_value = []
+    provider.get_balance_sheet.return_value = []
+
+    def profit_ratio_side_effect(ticker, div_cls_code="0"):
+        if div_cls_code == "0":
+            return [
+                {"stac_yymm": "202512", "eps": "6564.00", "roe_val": "10.85"},
+                {"stac_yymm": "202412", "eps": "4950.00", "roe_val": "9.20"},
+                {"stac_yymm": "202312", "eps": "4100.00", "roe_val": "8.50"},
+            ]
+        # div_cls_code="1" (분기)
+        return [
+            {"stac_yymm": "202506", "eps": "1920.00"},
+            {"stac_yymm": "202503", "eps": "1186.00"},
+            {"stac_yymm": "202412", "eps": "4950.00"},
+            {"stac_yymm": "202409", "eps": "3834.00"},
+            {"stac_yymm": "202406", "eps": "2394.00"},  # 전년 동기
+        ]
+
+    provider.get_profit_ratio.side_effect = profit_ratio_side_effect
+    provider.get_income_statement.return_value = []
+    provider.get_other_major_ratios.return_value = []
+
+    tool = FundamentalTool(kis_provider=provider)
+    snapshot = await tool._fetch_kis_fundamentals("005930.KS")  # type: ignore[attr-defined]
+
+    # 연간 annual_data는 profit_ratio div=0에서 나와야 한다
+    assert snapshot.annual_data is not None
+    assert snapshot.annual_data[0].year == "2025"
+    assert snapshot.annual_data[0].eps == pytest.approx(6564.0)
+
+    # 분기 quarterly_data는 profit_ratio div=1에서 나와야 한다
+    assert snapshot.quarterly_data is not None
+    eps_by_period = {q.period: q for q in snapshot.quarterly_data}
+    q0 = eps_by_period.get("2025-06")
+    assert q0 is not None
+    assert q0.eps == pytest.approx(1920.0)
+    expected_yoy = (1920.0 - 2394.0) / abs(2394.0)
+    assert q0.eps_yoy == pytest.approx(expected_yoy, rel=1e-5)
 
 
 @pytest.mark.asyncio
