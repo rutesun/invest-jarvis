@@ -258,6 +258,69 @@ async def test_fetch_kis_fundamentals_annual_eps_from_profit_ratio_a():
     assert q0.eps_yoy == pytest.approx(expected_yoy, rel=1e-5)
 
 
+def test_normalize_kis_snapshot_quarterly_data_eps_series_based():
+    """quarterly_data는 profit-ratio 분기 EPS 기준이어야 한다 — balance-sheet 연간 행 혼입 없음."""
+    tool = FundamentalTool()
+
+    # balance_sheet에 연간 행(202312, 202412)이 섞인 경우
+    balance_sheet_mixed = [
+        {
+            "stac_yymm": "202503",
+            "sale_account": "800000",
+            "sale_totl_prfi": "200000",
+            "op_prfi": "80000",
+            "thtr_ntin": "70000",
+        },
+        {
+            "stac_yymm": "202412",  # 연간 행 (12월 = 연간일 수 있음)
+            "sale_account": "3000000",
+            "sale_totl_prfi": "1000000",
+            "op_prfi": "300000",
+            "thtr_ntin": "250000",
+        },
+        {
+            "stac_yymm": "202312",  # 연간 행
+            "sale_account": "2500000",
+            "sale_totl_prfi": "900000",
+            "op_prfi": "250000",
+            "thtr_ntin": "200000",
+        },
+    ]
+    profit_ratio_q = [
+        {"stac_yymm": "202506", "eps": "1920.00"},
+        {"stac_yymm": "202503", "eps": "1186.00"},
+        {"stac_yymm": "202412", "eps": "4950.00"},
+        {"stac_yymm": "202409", "eps": "3701.00"},
+        {"stac_yymm": "202406", "eps": "1186.00"},  # 전년 동기
+    ]
+
+    snap = tool._normalize_kis_snapshot(  # type: ignore[attr-defined]
+        ticker="005930.KS",
+        quote_data={"price": 55000.0},
+        profit_ratio=[],
+        financial_ratio=[],
+        profit_ratio_q=profit_ratio_q,
+        profit_ratio_a=[],
+        other_major_ratios=[],
+        income_statement=[],
+        balance_sheet=balance_sheet_mixed,
+    )
+
+    assert snap.quarterly_data is not None
+    # 최신 4개 분기만
+    assert len(snap.quarterly_data) == 4
+    # 모든 period가 YYYY-MM 형식(6자리 숫자 아님)
+    periods = [q.period for q in snap.quarterly_data]
+    assert "2025-06" in periods, f"Expected 2025-06 in {periods}"
+    assert "2025-03" in periods, f"Expected 2025-03 in {periods}"
+    # EPS가 채워져야 한다
+    eps_by_period = {q.period: q for q in snap.quarterly_data}
+    assert eps_by_period["2025-06"].eps == pytest.approx(1920.0)
+    assert eps_by_period["2025-06"].eps_yoy is not None, "eps_yoy should be set for 2025-06"
+    # balance-sheet에서 분기 매칭된 것은 revenue/earnings 있음
+    assert eps_by_period["2025-03"].revenue == pytest.approx(800000.0)
+
+
 @pytest.mark.asyncio
 async def test_fetch_kis_fundamentals_raises_when_all_endpoints_fail():
     provider = AsyncMock()

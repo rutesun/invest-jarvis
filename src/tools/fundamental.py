@@ -526,33 +526,39 @@ class FundamentalTool(BaseTool):
             if current_earnings is not None and previous_earnings not in (None, 0):
                 earnings_growth = (current_earnings - previous_earnings) / previous_earnings
 
-        # Build quarterly data: merge balance-sheet revenue/earnings with profit-ratio EPS
-        balance_quarters = self._build_kis_quarterly_data(valid_balance_sheet) or []
+        # Build quarterly data: profit-ratio 분기 EPS series를 기준으로 구성.
+        # balance-sheet 매출/순이익은 같은 period만 병합. 연간 행은 quarterly에 넣지 않음.
+        # EPS series가 없으면 balance-sheet 기준으로 fallback.
         eps_quarters = self._build_quarterly_eps(profit_ratio_q)
-        # Build period-keyed maps and merge
-        eps_by_period = {q.period: q for q in eps_quarters}
-        merged_quarters: list[QuarterlyData] = []
-        for bq in balance_quarters:
-            eq = eps_by_period.get(bq.period)
-            merged_quarters.append(
-                QuarterlyData(
-                    period=bq.period,
-                    revenue=bq.revenue,
-                    earnings=bq.earnings,
-                    revenue_yoy=bq.revenue_yoy,
-                    revenue_qoq=bq.revenue_qoq,
-                    earnings_yoy=bq.earnings_yoy,
-                    earnings_qoq=bq.earnings_qoq,
-                    eps=eq.eps if eq else None,
-                    eps_yoy=eq.eps_yoy if eq else None,
+        # balance-sheet 분기 행만 period-keyed map으로 구성 (EPS series period와 교집합만 병합)
+        balance_by_period: dict[str, tuple[float | None, float | None]] = {}
+        for row in valid_balance_sheet:
+            ym = (row.get("stac_yymm") or "").strip()
+            if len(ym) == 6:
+                period_key = f"{ym[:4]}-{ym[4:]}"
+                balance_by_period[period_key] = (
+                    self._to_float(row.get("sale_account")),
+                    self._to_float(row.get("thtr_ntin")),
                 )
-            )
-        # Add EPS-only quarters not covered by balance sheet (e.g. latest not yet in balance_sheet)
-        balance_periods = {q.period for q in balance_quarters}
-        for eq in eps_quarters:
-            if eq.period not in balance_periods:
-                merged_quarters.append(eq)
-        quarterly_data_final = merged_quarters if merged_quarters else None
+        if eps_quarters:
+            # EPS series 기준: balance-sheet는 period 매칭 시만 병합, 연간 행 제외
+            merged_quarters: list[QuarterlyData] = []
+            for eq in eps_quarters:
+                rev, earn = balance_by_period.get(eq.period, (None, None))
+                merged_quarters.append(
+                    QuarterlyData(
+                        period=eq.period,
+                        revenue=rev,
+                        earnings=earn,
+                        eps=eq.eps,
+                        eps_yoy=eq.eps_yoy,
+                    )
+                )
+            quarterly_data_final = merged_quarters if merged_quarters else None
+        else:
+            # EPS 없음: balance-sheet 기준 fallback (기존 동작 유지)
+            balance_quarters = self._build_kis_quarterly_data(valid_balance_sheet) or []
+            quarterly_data_final = balance_quarters if balance_quarters else None
 
         # Build annual_data from profit-ratio div=0
         annual_data: list[AnnualData] | None = None
