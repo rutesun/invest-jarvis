@@ -245,6 +245,11 @@ analyze(ticker)
 - **변경 범위(R6)**: 모델 + 로직 + LLM 요약 입력(`FundamentalSummaryInput`) + CLI 렌더(`main.py:690`). "1줄" 아님.
 - **구현 전 실호출 검증(D3)**: (a) profit-ratio가 분기(`div_cls="1"`)를 지원하는지, (b) **전년 동기 비교용 최소 5개 분기 EPS**를 주는지, (c) 수정주가 회귀. → (a)·(b) 불가 시에만 연간 EPS 또는 순이익(growth-ratio) fallback.
 
+**Plan 1 실호출 검증 결과 (2026-06-11, ticker=005930):**
+- (a) profit-ratio `div=0/1` 모두 `EGW00121 "유효하지 않은 token"` 500 오류 — 재무 API는 별도 KIS 서비스 승인 필요. 현 계정에서 확인 불가. Plan 2에서 승인 후 재검증 필요.
+- (b) 위와 같은 이유로 EPS 필드 존재 여부 미확인. growth-ratio도 동일 오류. Plan 2 fallback(연간 EPS or 순이익 fallback) 전략 유지.
+- (c) `FID_ORG_ADJ_PRC`: **"0"=수정주가, "1"=원주가**. 005930 2018-05-04 분할(50:1) 전후 실측: "0"은 분할 전 ~48,500원(조정치), "1"은 ~2,427,000원(원가). `ADJUSTED="0"` 확정.
+
 ---
 
 ## 8. 종목 상대강도 RS (`relative_strength.py`) — RSI와 별개

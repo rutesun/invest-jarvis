@@ -10,10 +10,11 @@ from src.core.interfaces import BaseProvider
 from src.providers.kis_models import KISToken
 
 
-# KIS FID_ORG_ADJ_PRC: "1" = 수정주가(split/dividend adjusted), "0" = 원주가(unadjusted).
-# Confirmed via Task 1 live call: 005930 had a 50:1 split in May 2018;
-# value "1" returns pre-split-adjusted closes (~50 000 range), "0" returns raw post-split closes.
-ADJUSTED = "1"
+# KIS FID_ORG_ADJ_PRC: "0" = 수정주가(split/dividend adjusted), "1" = 원주가(unadjusted).
+# Confirmed via Task 1 live call: 005930 had a 50:1 split in May 2018.
+# "0" returns split-adjusted closes (pre-split ~48 500 KRW, post-split ~52 000 KRW — continuous).
+# "1" returns raw/unadjusted closes (pre-split ~2 400 000 KRW, post-split ~52 000 — chart distortion).
+ADJUSTED = "0"
 
 
 class KISProvider(BaseProvider):
