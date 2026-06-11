@@ -708,6 +708,23 @@ def _format_raw_analysis_sections(result: dict) -> str:
 
             output += "\n"
 
+        # EPS 추이 (분기 YoY + 연간 시계열)
+        if fundamental.quarterly_data is not None:
+            eps_quarters = [q for q in fundamental.quarterly_data if q.eps is not None]
+            if eps_quarters:
+                output += "**분기 EPS 추이:**\n\n"
+                for q in eps_quarters:
+                    yoy_str = _format_growth_rate(q.eps_yoy)
+                    output += f"- {q.period}: EPS {q.eps:,.2f} (YoY {yoy_str})\n"
+                output += "\n"
+
+        if fundamental.annual_data is not None and len(fundamental.annual_data) > 0:
+            output += "**연간 EPS 추이:**\n\n"
+            for a in fundamental.annual_data:
+                if a.eps is not None:
+                    output += f"- {a.year}: EPS {a.eps:,.2f}\n"
+            output += "\n"
+
         output += "### LLM Analysis\n\n"
         output += f"**Summary**: {fundamental_summary.summary}\n\n"
         output += f"**Valuation**: {fundamental_summary.valuation_assessment} (신뢰도: {fundamental_summary.confidence * 100:.0f}%)\n\n"

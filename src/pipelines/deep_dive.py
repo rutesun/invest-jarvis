@@ -362,6 +362,23 @@ class DeepDivePipeline:
                 confidence=0.2,
             )
 
+        # Derive EPS growth metrics from quarterly/annual data
+        eps_growth_quarterly: float | None = None
+        if fundamental_data.quarterly_data:
+            for q in fundamental_data.quarterly_data:
+                if q.eps_yoy is not None:
+                    eps_growth_quarterly = q.eps_yoy
+                    break
+
+        eps_cagr_annual: float | None = None
+        if fundamental_data.annual_data and len(fundamental_data.annual_data) >= 2:
+            ann = fundamental_data.annual_data
+            newest = ann[0].eps
+            oldest = ann[-1].eps
+            n_years = len(ann) - 1
+            if newest is not None and oldest not in (None, 0) and n_years > 0:
+                eps_cagr_annual = (newest / oldest) ** (1 / n_years) - 1
+
         input_data = FundamentalSummaryInput(
             ticker=ticker,
             sector=fundamental_data.sector,
@@ -379,6 +396,8 @@ class DeepDivePipeline:
             fcf_yield=fundamental_data.fcf_yield,
             gross_margin=fundamental_data.gross_margin,
             operating_margin=fundamental_data.operating_margin,
+            eps_growth_quarterly=eps_growth_quarterly,
+            eps_cagr_annual=eps_cagr_annual,
         )
 
         return await generate_fundamental_summary(input_data, self.llm)

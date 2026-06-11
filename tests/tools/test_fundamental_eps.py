@@ -3,6 +3,7 @@
 import pandas as pd
 import pytest
 
+from src.llm.models import FundamentalSummaryInput
 from src.tools.fundamental import AnnualData, FundamentalSnapshot, FundamentalTool, QuarterlyData
 
 
@@ -134,3 +135,26 @@ def test_yf_quarterly_eps_nan_skipped():
     result = FundamentalTool._build_yf_quarterly_eps(qis)
 
     assert result[0].eps is None
+
+
+# ---------------------------------------------------------------------------
+# Task 5: FundamentalSummaryInput EPS fields
+# ---------------------------------------------------------------------------
+
+
+def test_fundamental_summary_input_has_eps_growth_fields():
+    """FundamentalSummaryInput에 eps_growth_quarterly와 eps_cagr_annual 필드가 있어야 한다."""
+    inp = FundamentalSummaryInput(
+        ticker="AAPL",
+        eps_growth_quarterly=0.2182,
+        eps_cagr_annual=0.07,
+    )
+    assert inp.eps_growth_quarterly == pytest.approx(0.2182)
+    assert inp.eps_cagr_annual == pytest.approx(0.07)
+
+
+def test_fundamental_summary_input_eps_fields_default_none():
+    """기존 필드와 호환: 새 필드는 optional."""
+    inp = FundamentalSummaryInput(ticker="AAPL")
+    assert inp.eps_growth_quarterly is None
+    assert inp.eps_cagr_annual is None
