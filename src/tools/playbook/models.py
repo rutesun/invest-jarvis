@@ -1,4 +1,4 @@
-from pydantic import BaseModel, computed_field
+from pydantic import BaseModel, Field, computed_field
 
 
 class RelativeStrengthResult(BaseModel):
@@ -38,3 +38,21 @@ class SectorStrengthResult(BaseModel):
     is_strong: bool | None  # None = 매핑 실패/데이터 없음 → 게이트는 종목 RS만(graceful)
     source: str  # "FMP" | "KIS" | "none"
     detail: str = ""
+
+
+class MarketRegimeResult(BaseModel):
+    """시장환경 게이트 결과 (지수 추세 기반)."""
+
+    regime: str  # "상승" | "조정" | "하락" | "unknown"
+    allow_new_buy: bool
+    index_symbol: str
+    detail: str = ""
+
+
+class VcpResult(BaseModel):
+    """VCP(Volatility Contraction Pattern) 피벗 돌파 결과."""
+
+    in_vcp: bool
+    pivot: float | None = None
+    breakout: bool
+    detail: str = Field(default="")
