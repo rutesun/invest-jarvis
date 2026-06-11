@@ -1,6 +1,20 @@
 from pydantic import BaseModel, computed_field
 
 
+class RelativeStrengthResult(BaseModel):
+    """맨스필드식 종목 상대강도 (종목 vs 시장). RSI와 무관."""
+
+    mansfield_rs: float  # (RP / SMA(RP,252) - 1) * 100
+    outperform_6m: float  # 종목 6M 수익률 - 지수 6M 수익률 (%p)
+    rp_slope_4w: float  # 상대가격선 4주(20거래일) 변화
+    index_symbol: str
+
+    @computed_field
+    @property
+    def is_strong(self) -> bool:
+        return self.mansfield_rs > 0 and self.rp_slope_4w >= 0
+
+
 class AccumulationResult(BaseModel):
     """오닐식 매집일/분산일 집계 (CAN SLIM I)."""
 
