@@ -27,3 +27,14 @@ class AccumulationResult(BaseModel):
     @property
     def is_accumulating(self) -> bool:
         return self.accumulation_ratio > 0.5
+
+
+class SectorStrengthResult(BaseModel):
+    """업종 강도 (게이트 C★ 업종 조건 + CAN SLIM L)."""
+
+    industry: str | None
+    rank_pct: float | None  # 미국: 전체 업종 중 백분위(0=최강). 한국: None(코스피 대비로 대체)
+    trend: str  # "up" | "down" | "flat" | "unknown"
+    is_strong: bool | None  # None = 매핑 실패/데이터 없음 → 게이트는 종목 RS만(graceful)
+    source: str  # "FMP" | "KIS" | "none"
+    detail: str = ""

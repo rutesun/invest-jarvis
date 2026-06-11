@@ -498,6 +498,22 @@ Daily Report 및 Screener 리포트를 Notion Database에 자동 업로드.
 
 ---
 
+## 10. Playbook Engine (WIP)
+
+게이트 기반 매매 판정 엔진 (CAN SLIM + Minervini). Plan 5 구현 중.
+
+**Plan 5 — 업종 강도 (Sector Strength):**
+- `SectorStrengthResult` — 업종 강도 판정 결과 (rank_pct, trend, is_strong, source)
+- `FmpSectorStrength` — FMP 업종 snapshot 백분위 + historical 추세 (미국)
+- `KisSectorStrength` — KIS 업종지수 vs 코스피 상대강도 (한국)
+- 매핑 실패 시 `is_strong=None` (graceful degradation)
+
+**의존성:** httpx, yfinance, FMP API, KIS API
+
+**환경 변수:** `FMP_API_KEY`
+
+---
+
 ## 환경 변수
 
 | 변수 | 필수 | 용도 |
@@ -508,3 +524,4 @@ Daily Report 및 Screener 리포트를 Notion Database에 자동 업로드.
 | `TELEGRAM_API_ID` / `TELEGRAM_API_HASH` | 선택 | 텔레그램 수집 |
 | `OPENDART_API_KEY` | 선택 | 한국 공시 |
 | `NOTION_TOKEN` / `NOTION_DATABASE_ID` | 선택 | 리포트 업로드 |
+| `FMP_API_KEY` | 선택 | 미국 업종 강도 (FMP) |
