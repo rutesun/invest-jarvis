@@ -46,10 +46,12 @@ class FakeEmbeddings:
     """langchain_openai.OpenAIEmbeddings 대체 — 호출 텍스트/배치를 기록한다."""
 
     calls: list[list[str]] = []
+    last_kwargs: dict[str, Any] = {}
     dim: int = EMBED_DIM
 
-    def __init__(self, model: str = "fake") -> None:
+    def __init__(self, model: str = "fake", **kwargs: Any) -> None:
         self.model = model
+        FakeEmbeddings.last_kwargs = {"model": model, **kwargs}
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         FakeEmbeddings.calls.append(list(texts))
@@ -60,6 +62,7 @@ class FakeEmbeddings:
 @pytest.fixture(autouse=True)
 def _reset_fake_embeddings() -> None:
     FakeEmbeddings.calls = []
+    FakeEmbeddings.last_kwargs = {}
     FakeEmbeddings.dim = EMBED_DIM
 
 
@@ -153,3 +156,50 @@ def test_format_vector_literal() -> None:
     assert _format_vector_literal([]) == "[]"
     # int 입력도 float로 정규화된다.
     assert _format_vector_literal([1, 2, 3]) == "[1.0,2.0,3.0]"
+
+
+def test_embed_payloads_truncates_over_token_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("langchain_openai.OpenAIEmbeddings", FakeEmbeddings)
+
+    long_text = "가" * 20000  # 토큰 한도를 크게 초과하는 거대 표 시뮬레이션
+    embed_payloads([long_text], max_tokens=10)
+
+    # 임베딩에 실제로 넘어간 텍스트는 토큰 상한으로 잘려 원본보다 짧다.
+    sent = FakeEmbeddings.calls[0][0]
+    assert len(sent) < len(long_text)
+
+
+def test_embed_payloads_uses_embed_specific_auth(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("langchain_openai.OpenAIEmbeddings", FakeEmbeddings)
+    monkeypatch.setenv("STOCK_REPORT_EMBED_API_KEY", "sk-embed-test")
+    monkeypatch.setenv("STOCK_REPORT_EMBED_BASE_URL", "https://emb.example.com/v1")
+
+    embed_payloads(["x"])
+
+    assert FakeEmbeddings.last_kwargs.get("api_key") == "sk-embed-test"
+    assert FakeEmbeddings.last_kwargs.get("base_url") == "https://emb.example.com/v1"
+
+
+def test_embed_payloads_ignores_gateway_base_url_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("langchain_openai.OpenAIEmbeddings", FakeEmbeddings)
+    monkeypatch.delenv("STOCK_REPORT_EMBED_BASE_URL", raising=False)
+    monkeypatch.delenv("STOCK_REPORT_EMBED_API_KEY", raising=False)
+    # chat용 사내 게이트웨이가 환경에 있어도 임베딩은 OpenAI 공식 기본을 쓴다.
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://gateway.internal/v1")
+
+    embed_payloads(["x"])
+
+    assert FakeEmbeddings.last_kwargs.get("base_url") == "https://api.openai.com/v1"
+
+
+def test_embed_payloads_reads_open_ai_embedding_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("langchain_openai.OpenAIEmbeddings", FakeEmbeddings)
+    monkeypatch.delenv("STOCK_REPORT_EMBED_API_KEY", raising=False)
+    monkeypatch.setenv("OPEN_AI_EMBEDDING_KEY", "sk-embedding-slot")
+
+    embed_payloads(["x"])
+
+    # 게이트웨이 chat 키와 분리된 OpenAI 직접 임베딩 키 슬롯을 인식한다.
+    assert FakeEmbeddings.last_kwargs.get("api_key") == "sk-embedding-slot"

@@ -6,20 +6,73 @@ knowledge_chunks(텔레그램)와 document_chunks(PDF)가 같은 임베딩 모�
 
 2-패스 원칙(Codex #4): OpenAI 호출(embed_payloads)과 DB 적재(upsert_embeddings)를
 분리해 외부 API를 트랜잭션 밖에 둔다.
+
+인증/엔드포인트 분리: chat(classify/synthesis)은 사내 게이트웨이(``OPENAI_BASE_URL``)를
+경유하지만, 게이트웨이가 임베딩 provider를 막는 경우가 있어 임베딩은 별도 키/URL로
+분리한다. 키는 ``STOCK_REPORT_EMBED_API_KEY`` 또는 ``OPEN_AI_EMBEDDING_KEY``로,
+엔드포인트는 ``STOCK_REPORT_EMBED_BASE_URL``로 지정한다. base_url 기본은 OpenAI 공식
+엔드포인트다(게이트웨이 ``OPENAI_BASE_URL``을 임베딩에 그대로 쓰지 않는다).
 """
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any
 
+
+logger = logging.getLogger(__name__)
 
 EMBED_MODEL = os.getenv("STOCK_REPORT_EMBED_MODEL", "text-embedding-3-small")
 EMBED_DIM = int(os.getenv("STOCK_REPORT_EMBED_DIM", "1536"))
 EMBED_VERSION = os.getenv("STOCK_REPORT_EMBED_VERSION", "v1")
 EMBED_BATCH_SIZE = int(os.getenv("STOCK_REPORT_EMBED_BATCH_SIZE", "128"))
+# 임베딩 입력 토큰 상한. text-embedding-3 계열은 8191 토큰 한도라 여유를 둬 8000.
+# 한도를 넘는 payload(예: 통째로 담은 거대 표)는 임베딩 전에 잘라 API 실패를 막는다.
+EMBED_MAX_TOKENS = int(os.getenv("STOCK_REPORT_EMBED_MAX_TOKENS", "8000"))
+
+# 임베딩 기본 엔드포인트(OpenAI 공식). 사내 게이트웨이는 임베딩 provider를 막을 수
+# 있어, STOCK_REPORT_EMBED_BASE_URL로 명시하지 않는 한 게이트웨이 OPENAI_BASE_URL을
+# 임베딩에 쓰지 않는다.
+_DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
 
 _ALLOWED_EMBED_TABLES = frozenset({"knowledge_chunks", "document_chunks"})
+
+
+def _resolve_embed_auth() -> tuple[str | None, str]:
+    """임베딩 전용 (api_key, base_url)을 환경에서 해석한다.
+
+    - api_key: ``STOCK_REPORT_EMBED_API_KEY`` → ``OPEN_AI_EMBEDDING_KEY`` →
+      ``OPENAI_API_KEY`` 순. (``OPEN_AI_EMBEDDING_KEY``는 게이트웨이 chat 키와 분리된
+      OpenAI 직접 임베딩 키 슬롯이다.)
+    - base_url: ``STOCK_REPORT_EMBED_BASE_URL`` 우선, 없으면 OpenAI 공식.
+    함수 내부에서 ``os.getenv``를 읽어 런타임 환경(테스트 setenv 포함)을 반영한다.
+    """
+    api_key = (
+        os.getenv("STOCK_REPORT_EMBED_API_KEY")
+        or os.getenv("OPEN_AI_EMBEDDING_KEY")
+        or os.getenv("OPENAI_API_KEY")
+    )
+    base_url = os.getenv("STOCK_REPORT_EMBED_BASE_URL") or _DEFAULT_OPENAI_BASE_URL
+    return api_key, base_url
+
+
+def _get_encoding(model: str) -> Any:
+    """모델에 맞는 tiktoken 인코딩(미지원 모델은 cl100k_base 폴백)."""
+    import tiktoken
+
+    try:
+        return tiktoken.encoding_for_model(model)
+    except KeyError:
+        return tiktoken.get_encoding("cl100k_base")
+
+
+def _truncate_to_tokens(text: str, max_tokens: int, encoding: Any) -> str:
+    """text를 max_tokens 이하로 자른다(토큰 경계 기준)."""
+    tokens = encoding.encode(text)
+    if len(tokens) <= max_tokens:
+        return text
+    return encoding.decode(tokens[:max_tokens])
 
 
 def embed_payloads(
@@ -28,13 +81,14 @@ def embed_payloads(
     model: str = EMBED_MODEL,
     dim: int = EMBED_DIM,
     batch_size: int = EMBED_BATCH_SIZE,
+    max_tokens: int = EMBED_MAX_TOKENS,
 ) -> list[list[float]]:
     """payload 텍스트들을 OpenAI 임베딩 벡터로 변환한다 (입력 순서 보존).
 
-    - langchain_openai.OpenAIEmbeddings 사용. batch_size 단위로 끊어 호출.
-    - 반환 각 벡터 길이가 dim과 다르면 ValueError(한국어). (차원 가드)
-    - 빈 입력은 빈 리스트 반환.
-    - import 가드: langchain_openai 미설치 시 한국어 RuntimeError (db._load_psycopg 패턴).
+    - 임베딩 전용 키/base_url(``_resolve_embed_auth``)로 OpenAIEmbeddings를 만든다.
+    - ``max_tokens``를 넘는 payload는 토큰 단위로 잘라 임베딩한다(거대 표 토큰 초과 방어).
+    - ``batch_size`` 단위로 끊어 호출. 반환 각 벡터 길이가 ``dim``과 다르면 ValueError.
+    - 빈 입력은 빈 리스트. langchain_openai 미설치 시 한국어 RuntimeError.
     """
     if not payloads:
         return []
@@ -46,11 +100,28 @@ def embed_payloads(
             "langchain-openai가 설치되지 않았습니다. `uv sync` 후 다시 실행하세요."
         ) from exc
 
-    embeddings = OpenAIEmbeddings(model=model)
+    encoding = _get_encoding(model)
+    prepared: list[str] = []
+    truncated = 0
+    for payload in payloads:
+        capped = _truncate_to_tokens(payload, max_tokens, encoding)
+        if capped != payload:
+            truncated += 1
+        prepared.append(capped)
+    if truncated:
+        logger.warning(
+            "임베딩 토큰 상한(%d) 초과로 payload %d개를 truncate했다", max_tokens, truncated
+        )
+
+    api_key, base_url = _resolve_embed_auth()
+    emb_kwargs: dict[str, Any] = {"model": model, "base_url": base_url}
+    if api_key:
+        emb_kwargs["api_key"] = api_key
+    embeddings = OpenAIEmbeddings(**emb_kwargs)
 
     vectors: list[list[float]] = []
-    for start in range(0, len(payloads), batch_size):
-        batch = payloads[start : start + batch_size]
+    for start in range(0, len(prepared), batch_size):
+        batch = prepared[start : start + batch_size]
         batch_vectors = embeddings.embed_documents(batch)
         for vec in batch_vectors:
             if len(vec) != dim:
