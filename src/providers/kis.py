@@ -10,6 +10,12 @@ from src.core.interfaces import BaseProvider
 from src.providers.kis_models import KISToken
 
 
+# KIS FID_ORG_ADJ_PRC: "1" = 수정주가(split/dividend adjusted), "0" = 원주가(unadjusted).
+# Confirmed via Task 1 live call: 005930 had a 50:1 split in May 2018;
+# value "1" returns pre-split-adjusted closes (~50 000 range), "0" returns raw post-split closes.
+ADJUSTED = "1"
+
+
 class KISProvider(BaseProvider):
     """한국투자증권 API provider for Korean stocks."""
 
@@ -159,10 +165,14 @@ class KISProvider(BaseProvider):
             "name": output.get("hts_kor_isnm", ""),
         }
 
-    async def get_price_history(self, ticker: str, period: str = "1y") -> pd.DataFrame:
+    async def get_price_history(
+        self, ticker: str, period: str = "1y", _org_adj_prc: str = ADJUSTED
+    ) -> pd.DataFrame:
         """Get historical price data for Korean stock.
 
         KIS API는 한 번에 100일만 반환하므로, 필요시 여러 번 호출해서 병합합니다.
+
+        _org_adj_prc: ADJUSTED(수정주가) or "0"(원주가). Use the module constant ADJUSTED.
         """
         period_days_map = {
             "1mo": 30,
@@ -203,7 +213,7 @@ class KISProvider(BaseProvider):
                 "FID_INPUT_DATE_1": batch_start.strftime("%Y%m%d"),
                 "FID_INPUT_DATE_2": batch_end.strftime("%Y%m%d"),
                 "FID_PERIOD_DIV_CODE": "D",
-                "FID_ORG_ADJ_PRC": "0",
+                "FID_ORG_ADJ_PRC": _org_adj_prc,
             }
 
             async with httpx.AsyncClient(timeout=30.0) as client:
@@ -551,8 +561,13 @@ class KISProvider(BaseProvider):
             )
         return results
 
-    async def _get_finance_data(self, path: str, tr_id: str, ticker: str) -> list[dict]:
-        """Get domestic stock finance data from KIS API."""
+    async def _get_finance_data(
+        self, path: str, tr_id: str, ticker: str, div_cls_code: str = "0"
+    ) -> list[dict]:
+        """Get domestic stock finance data from KIS API.
+
+        div_cls_code: "0"=연간, "1"=분기 (confirmed via Task 1 live call).
+        """
         token = await self._get_access_token()
         url = f"{self.BASE_URL}{path}"
         headers = {
@@ -563,7 +578,7 @@ class KISProvider(BaseProvider):
             "Content-Type": "application/json; charset=utf-8",
         }
         params = {
-            "FID_DIV_CLS_CODE": "0",
+            "FID_DIV_CLS_CODE": div_cls_code,
             "FID_COND_MRKT_DIV_CODE": "J",
             "FID_INPUT_ISCD": ticker.replace(".KS", "").replace(".KQ", ""),
         }
@@ -575,37 +590,55 @@ class KISProvider(BaseProvider):
 
         return data.get("output", [])
 
-    async def get_financial_ratio(self, ticker: str) -> list[dict]:
+    async def get_financial_ratio(self, ticker: str, div_cls_code: str = "0") -> list[dict]:
         return await self._get_finance_data(
             path="/uapi/domestic-stock/v1/finance/financial-ratio",
             tr_id="FHKST66430100",
             ticker=ticker,
+            div_cls_code=div_cls_code,
         )
 
-    async def get_balance_sheet(self, ticker: str) -> list[dict]:
+    async def get_balance_sheet(self, ticker: str, div_cls_code: str = "0") -> list[dict]:
         return await self._get_finance_data(
             path="/uapi/domestic-stock/v1/finance/balance-sheet",
             tr_id="FHKST66430200",
             ticker=ticker,
+            div_cls_code=div_cls_code,
         )
 
-    async def get_profit_ratio(self, ticker: str) -> list[dict]:
+    async def get_profit_ratio(self, ticker: str, div_cls_code: str = "0") -> list[dict]:
         return await self._get_finance_data(
             path="/uapi/domestic-stock/v1/finance/profit-ratio",
             tr_id="FHKST66430300",
             ticker=ticker,
+            div_cls_code=div_cls_code,
         )
 
-    async def get_income_statement(self, ticker: str) -> list[dict]:
+    async def get_income_statement(self, ticker: str, div_cls_code: str = "0") -> list[dict]:
         return await self._get_finance_data(
             path="/uapi/domestic-stock/v1/finance/income-statement",
             tr_id="FHKST66430400",
             ticker=ticker,
+            div_cls_code=div_cls_code,
         )
 
-    async def get_other_major_ratios(self, ticker: str) -> list[dict]:
+    async def get_other_major_ratios(self, ticker: str, div_cls_code: str = "0") -> list[dict]:
         return await self._get_finance_data(
             path="/uapi/domestic-stock/v1/finance/other-major-ratios",
             tr_id="FHKST66430500",
             ticker=ticker,
+            div_cls_code=div_cls_code,
+        )
+
+    async def get_growth_ratio(self, ticker: str, div_cls_code: str = "0") -> list[dict]:
+        """성장성비율 (매출/영업이익/순이익 증가율).
+
+        EPS증가율은 응답에 없을 수 있음 — Task 1 실호출 검증 결과 참조.
+        tr_id FHKST66430800 confirmed via Task 1 live call.
+        """
+        return await self._get_finance_data(
+            path="/uapi/domestic-stock/v1/finance/growth-ratio",
+            tr_id="FHKST66430800",
+            ticker=ticker,
+            div_cls_code=div_cls_code,
         )
