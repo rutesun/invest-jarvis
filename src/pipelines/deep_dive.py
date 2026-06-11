@@ -16,7 +16,7 @@ from src.llm.models import (
     TechnicalSummaryInput,
     TechnicalSummaryOutput,
 )
-from src.pipelines.analyze_decision import build_analyze_decision_bundle
+from src.pipelines.analyze_decision import apply_playbook_veto, build_analyze_decision_bundle
 from src.tools.disclosure import DisclosureItem, DisclosureTool, extract_kr_code, is_korean_ticker
 from src.tools.flow import FlowTool, InvestorFlow
 from src.tools.fundamental import FundamentalSnapshot, FundamentalTool
@@ -236,6 +236,11 @@ class DeepDivePipeline:
             flow_data=flow_data,
             chart_patterns=chart_patterns,
             price_levels=price_levels,
+        )
+        decision_bundle = decision_bundle.model_copy(
+            update={
+                "summary": apply_playbook_veto(decision_bundle.summary, playbook_verdict),
+            }
         )
 
         # Render technical chart

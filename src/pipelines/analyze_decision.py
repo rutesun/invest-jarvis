@@ -26,6 +26,8 @@ class AnalyzeDecisionSummary(BaseModel):
     timing: str
     action_sentence: str
     defer_reason: str | None = None
+    action_original: str | None = None
+    veto_applied: bool = False
 
 
 class AnalyzeScenario(BaseModel):
@@ -727,3 +729,45 @@ def build_analyze_decision_bundle(
         factor_assessments=assessments,
         scenarios=scenarios,
     )
+
+
+def apply_playbook_veto(
+    summary: AnalyzeDecisionSummary,
+    verdict,
+) -> AnalyzeDecisionSummary:
+    """PlaybookVerdict를 기반으로 decision_summary를 후처리하는 순수 함수.
+
+    - verdict=None → summary 원본 반환 (기존 동작 보존)
+    - 미보유 + gate FAIL → action='관망', veto_applied=True
+    - 보유 + 청산/비중축소 → action_sentence에 exit 내용 반영, veto_applied=True
+    - 그 외 → 변경 없음
+    """
+    if verdict is None:
+        return summary
+
+    if not verdict.holding and verdict.gate is not None and not verdict.gate.passed:
+        return summary.model_copy(
+            update={
+                "action_original": summary.action,
+                "veto_applied": True,
+                "action": "관망",
+                "action_sentence": f"신규진입 부적격: {verdict.gate.veto_reason}",
+            }
+        )
+
+    if (
+        verdict.holding
+        and verdict.exit_verdict is not None
+        and verdict.exit_verdict.action in ("청산", "비중축소")
+    ):
+        return summary.model_copy(
+            update={
+                "action_original": summary.action,
+                "veto_applied": True,
+                "action_sentence": (
+                    f"보유 판정: {verdict.exit_verdict.action} ({verdict.exit_verdict.detail})"
+                ),
+            }
+        )
+
+    return summary
