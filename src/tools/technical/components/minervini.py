@@ -4,7 +4,7 @@ from src.tools.technical.models import ComponentResult
 
 
 def analyze_minervini(df: pd.DataFrame) -> ComponentResult:
-    """Analyze Minervini Stage 2 conditions."""
+    """Analyze Minervini Stage 2 conditions (7 conditions)."""
     if df.empty or len(df) < 200:
         return ComponentResult(
             signals=[],
@@ -36,39 +36,59 @@ def analyze_minervini(df: pd.DataFrame) -> ComponentResult:
             score=0,
         )
 
-    # Check SMA_200 rising (vs 21 days ago)
+    # SMA_200 21일 전 (기존)
     sma_200_prev = 0.0
     if len(df) > 21:
         val = df.iloc[-22].get("SMA_200")
         if not pd.isna(val) and val is not None:
             sma_200_prev = float(val)
 
+    # SMA_150 21일 전 [신규: sma_150_rising 판정용]
+    sma_150_prev = 0.0
+    if len(df) > 21:
+        val = df.iloc[-22].get("SMA_150")
+        if not pd.isna(val) and val is not None:
+            sma_150_prev = float(val)
+
     conditions = {
-        "ma_stack": close > sma_150 > sma_200,
-        "sma_200_rising": sma_200 > sma_200_prev if sma_200_prev else False,
-        "above_50": close > sma_50,
-        "above_52w_low_30pct": close >= low_52w * 1.30 if low_52w else False,
-        "within_52w_high_25pct": close >= high_52w * 0.75 if high_52w else False,
+        "ma_stack": close > sma_150 > sma_200,  # 1
+        "ma_50_stack": sma_50 > sma_150 > sma_200,  # 2 [신규]
+        "sma_150_rising": (sma_150 > sma_150_prev) if sma_150_prev else False,  # 3 [신규]
+        "sma_200_rising": (sma_200 > sma_200_prev) if sma_200_prev else False,  # 4
+        "above_50": close > sma_50,  # 5
+        "above_52w_low_30pct": (close >= low_52w * 1.30) if low_52w else False,  # 6
+        "within_52w_high_25pct": (close >= high_52w * 0.75) if high_52w else False,  # 7
     }
 
     met_count = sum(conditions.values())
+    is_stage2 = met_count == 7
+
     metrics = {
         "conditions_met": float(met_count),
+        "is_stage2": 1.0 if is_stage2 else 0.0,
         "close": close,
         "sma_50": sma_50,
         "sma_150": sma_150,
         "sma_200": sma_200,
     }
 
-    # Build evidence with detailed reasons for unmet conditions
     def _get_failure_reason(name: str) -> str:
-        """Get detailed failure reason for unmet condition."""
         if name == "ma_stack":
             if close <= sma_150:
                 return f"{name}: 미충족 (종가 ${close:.2f} ≤ SMA_150 ${sma_150:.2f})"
             elif sma_150 <= sma_200:
                 return f"{name}: 미충족 (SMA_150 ${sma_150:.2f} ≤ SMA_200 ${sma_200:.2f})"
             return f"{name}: 미충족"
+        elif name == "ma_50_stack":
+            if sma_50 <= sma_150:
+                return f"{name}: 미충족 (SMA_50 ${sma_50:.2f} ≤ SMA_150 ${sma_150:.2f})"
+            elif sma_150 <= sma_200:
+                return f"{name}: 미충족 (SMA_150 ${sma_150:.2f} ≤ SMA_200 ${sma_200:.2f})"
+            return f"{name}: 미충족"
+        elif name == "sma_150_rising":
+            if sma_150_prev:
+                return f"{name}: 미충족 (SMA_150 ${sma_150:.2f} ≤ 21일 전 ${sma_150_prev:.2f})"
+            return f"{name}: 미충족 (21일 전 데이터 없음)"
         elif name == "sma_200_rising":
             if sma_200_prev:
                 return f"{name}: 미충족 (SMA_200 ${sma_200:.2f} ≤ 21일 전 ${sma_200_prev:.2f})"
@@ -91,7 +111,7 @@ def analyze_minervini(df: pd.DataFrame) -> ComponentResult:
     for name, met in conditions.items():
         evidence.append(f"{name}: 충족" if met else _get_failure_reason(name))
 
-    if met_count == 5:
+    if is_stage2:
         return ComponentResult(
             signals=["Stage 2 (강력한 상승 국면)"],
             evidence=evidence,

@@ -158,9 +158,6 @@ class IndicatorCalculator:
         # Cycle RSI (cRSI)
         df = self._calculate_crsi(df)
 
-        # Stage2 detection
-        df = self._calculate_stage2(df)
-
         return df
 
     def create_snapshot(self, df: pd.DataFrame) -> IndicatorSnapshot:
@@ -295,51 +292,4 @@ class IndicatorCalculator:
         df["cRSI_LowBand"] = crsi_series.rolling(window=lookback, min_periods=10).quantile(0.10)
         df["cRSI_HighBand"] = crsi_series.rolling(window=lookback, min_periods=10).quantile(0.90)
 
-        return df
-
-    def _calculate_stage2(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Calculate Minervini Stage2 flag (상승 추세 구간).
-
-        Stage2 조건:
-        1. Price > SMA_150 > SMA_200
-        2. SMA_150, SMA_200 상승 중 (20일 lookback)
-        3. Price >= Low_52w * 1.3
-        4. Price >= High_52w * 0.75
-        """
-        df["Is_Stage2"] = False  # default
-
-        required_cols = ["SMA_150", "SMA_200", "High_52w", "Low_52w", "Close"]
-        if not all(col in df.columns for col in required_cols):
-            return df
-
-        # Check if we have any valid data for these columns
-        if (
-            df["SMA_150"].isna().all()
-            or df["SMA_200"].isna().all()
-            or df["High_52w"].isna().all()
-            or df["Low_52w"].isna().all()
-        ):
-            return df
-
-        # 조건 1: Price > SMA_150 > SMA_200 (handle NaN)
-        cond1 = (
-            df["SMA_150"].notna()
-            & df["SMA_200"].notna()
-            & (df["Close"] > df["SMA_150"])
-            & (df["SMA_150"] > df["SMA_200"])
-        )
-
-        # 조건 2: SMA_150, SMA_200 상승 중 (20일 lookback)
-        lookback = 20
-        sma150_rising = df["SMA_150"] > df["SMA_150"].shift(lookback)
-        sma200_rising = df["SMA_200"] > df["SMA_200"].shift(lookback)
-        cond2 = sma150_rising & sma200_rising
-
-        # 조건 3: Price >= Low_52w * 1.3
-        cond3 = df["Low_52w"].notna() & (df["Close"] >= (df["Low_52w"] * 1.3))
-
-        # 조건 4: Price >= High_52w * 0.75
-        cond4 = df["High_52w"].notna() & (df["Close"] >= (df["High_52w"] * 0.75))
-
-        df["Is_Stage2"] = cond1 & cond2 & cond3 & cond4
         return df
