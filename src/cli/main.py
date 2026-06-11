@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import logging
 import os
 import re
@@ -327,6 +328,37 @@ async def run_deep_dive(ticker_or_name: str, provider: str) -> dict:
     )
     flow_tool = FlowTool(kis_provider=flow_provider)
 
+    # PlaybookEngine 주입: index/fmp/kis provider 있으면 생성
+    playbook_engine = None
+    try:
+        from src.providers.index_provider import IndexProvider
+        from src.tools.playbook.engine import PlaybookEngine
+        from src.tools.playbook.holdings import load_holdings
+
+        holdings_config = load_holdings()
+        capital_usd, risk_pct_usd = holdings_config.usd_capital, holdings_config.usd_risk_pct
+        capital_krw, risk_pct_krw = holdings_config.krw_capital, holdings_config.krw_risk_pct
+
+        fmp_api_key = os.getenv("FMP_API_KEY")
+        fmp_provider = None
+        if fmp_api_key:
+            with contextlib.suppress(Exception):
+                from src.providers.fmp_provider import FmpProvider
+
+                fmp_provider = FmpProvider(api_key=fmp_api_key)
+
+        playbook_engine = PlaybookEngine(
+            index_provider=IndexProvider(),
+            fmp_provider=fmp_provider,
+            kis_provider=kis_provider,
+            usd_capital=capital_usd,
+            usd_risk_pct=risk_pct_usd or 0.01,
+            krw_capital=capital_krw,
+            krw_risk_pct=risk_pct_krw or 0.01,
+        )
+    except Exception as _e:
+        logger.debug("PlaybookEngine 초기화 실패 (플레이북 섹션 생략): %s", _e)
+
     pipeline = DeepDivePipeline(
         technical_tool=technical_tool,
         news_tool=news_tool,
@@ -334,6 +366,7 @@ async def run_deep_dive(ticker_or_name: str, provider: str) -> dict:
         fundamental_tool=fundamental_tool,
         disclosure_tool=disclosure_tool,
         flow_tool=flow_tool,
+        playbook_engine=playbook_engine,
     )
 
     return await pipeline.run(ticker)
