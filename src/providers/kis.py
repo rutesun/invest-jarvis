@@ -164,6 +164,9 @@ class KISProvider(BaseProvider):
             "change_pct": float(output["prdy_ctrt"]),
             "volume": int(output["acml_vol"]),
             "name": output.get("hts_kor_isnm", ""),
+            # 업종명 (한글) — Task 3b: 업종지수 코드와 다른 체계.
+            # bstp_kor_isnm='전기·전자' → sector_code='0013' 변환에는 KOSPI_SECTOR_CODE 매핑 필요.
+            "bstp_kor_isnm": output.get("bstp_kor_isnm", ""),
         }
 
     async def get_price_history(
@@ -643,3 +646,54 @@ class KISProvider(BaseProvider):
             ticker=ticker,
             div_cls_code=div_cls_code,
         )
+
+    async def get_sector_index_history(self, sector_code: str, period: str = "1y") -> pd.DataFrame:
+        """국내 업종지수 일별 OHLCV. sector_code 예: '0001'(코스피종합).
+
+        inquire-daily-indexchartprice (tr FHKUP03500100, FID_COND_MRKT_DIV_CODE='U').
+        Plan 5 실호출 검증 — bstp_nmix_oprc/hgpr/lwpr/prpr 필드 사용.
+        """
+        token = await self._get_access_token()
+        url = f"{self.BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-daily-indexchartprice"
+        headers = {
+            "Authorization": f"{token.token_type} {token.access_token}",
+            "appkey": self.app_key,
+            "appsecret": self.app_secret,
+            "tr_id": "FHKUP03500100",
+            "Content-Type": "application/json; charset=utf-8",
+        }
+        days_map = {"1mo": 30, "3mo": 90, "6mo": 180, "1y": 365, "2y": 730}
+        days = days_map.get(period, 365)
+        end = datetime.now()
+        start = end - timedelta(days=days)
+        params = {
+            "FID_COND_MRKT_DIV_CODE": "U",
+            "FID_INPUT_ISCD": sector_code,
+            "FID_INPUT_DATE_1": start.strftime("%Y%m%d"),
+            "FID_INPUT_DATE_2": end.strftime("%Y%m%d"),
+            "FID_PERIOD_DIV_CODE": "D",
+        }
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            r = await client.get(url, headers=headers, params=params)
+            r.raise_for_status()
+            data = r.json()
+
+        rows = []
+        for it in data.get("output2", []):
+            if not it.get("stck_bsop_date"):
+                continue
+            rows.append(
+                {
+                    "Date": pd.to_datetime(it["stck_bsop_date"]),
+                    "Open": float(it.get("bstp_nmix_oprc") or 0),
+                    "High": float(it.get("bstp_nmix_hgpr") or 0),
+                    "Low": float(it.get("bstp_nmix_lwpr") or 0),
+                    "Close": float(it.get("bstp_nmix_prpr") or 0),
+                    "Volume": int(it.get("acml_vol") or 0),
+                }
+            )
+        df = pd.DataFrame(rows)
+        if not df.empty:
+            df = df.drop_duplicates("Date").set_index("Date").sort_index()
+            df.index = df.index.tz_localize("Asia/Seoul")
+        return df
