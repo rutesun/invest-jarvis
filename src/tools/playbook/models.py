@@ -56,3 +56,45 @@ class VcpResult(BaseModel):
     pivot: float | None = None
     breakout: bool
     detail: str = Field(default="")
+
+
+class ElementVerdict(BaseModel):
+    """CAN SLIM 단일 요소 판정 결과."""
+
+    met: bool | None
+    detail: str = ""
+
+
+class CanslimResult(BaseModel):
+    """CAN SLIM 7요소 종합 판정 결과."""
+
+    c: ElementVerdict
+    a: ElementVerdict
+    n: ElementVerdict
+    s: ElementVerdict
+    l: ElementVerdict  # noqa: E741
+    i: ElementVerdict
+    m: ElementVerdict
+
+    @computed_field
+    @property
+    def score(self) -> int:
+        return sum(
+            1 for e in (self.c, self.a, self.n, self.s, self.l, self.i, self.m) if e.met is True
+        )
+
+    @computed_field
+    @property
+    def summary(self) -> str:
+        order = [
+            ("C", self.c),
+            ("A", self.a),
+            ("N", self.n),
+            ("S", self.s),
+            ("L", self.l),
+            ("I", self.i),
+            ("M", self.m),
+        ]
+        sym = {True: "✅", False: "❌", None: "—"}
+        graded = sum(1 for _, e in order if e.met is not None)
+        return " ".join(f"{k}{sym[e.met]}" for k, e in order) + f" ({self.score}/{graded})"
