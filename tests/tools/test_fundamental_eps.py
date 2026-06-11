@@ -76,14 +76,14 @@ def test_kis_quarterly_eps_returns_at_most_4():
 
 
 def _make_qis_df(periods, eps_values):
-    """Helper: build a quarterly_income_stmt-shaped DataFrame."""
+    """Helper: build a quarterly_income_stmt-shaped DataFrame.
 
+    yfinance quarterly_income_stmt shape: index=metric_name, columns=Timestamps (newest first).
+    """
     cols = [pd.Timestamp(p) for p in periods]
-    return pd.DataFrame(
-        {"Diluted EPS": eps_values},
-        index=["Diluted EPS"],
-        columns=cols,
-    ).T.T  # shape: index=metric, columns=dates
+    # Build {col: {metric: val}} then transpose to get index=metric, columns=dates
+    data = {col: {"Diluted EPS": val} for col, val in zip(cols, eps_values, strict=True)}
+    return pd.DataFrame(data)  # index=metric, columns=dates
 
 
 def test_yf_quarterly_eps_yoy():
