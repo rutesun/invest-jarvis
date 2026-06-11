@@ -799,6 +799,69 @@ def _format_raw_analysis_sections(result: dict) -> str:
     return output
 
 
+def _format_playbook_section(verdict) -> str:
+    """PlaybookVerdict를 §15 형식으로 렌더링한다."""
+    out = "## 📋 플레이북 평가\n\n"
+
+    # 판정 헤드라인
+    gate = verdict.gate
+    if gate is not None:
+        if gate.passed:
+            grade = gate.quality_grade or "?"
+            out += f"**판정**: 매수 적격 (Grade={grade})\n\n"
+        else:
+            out += "**판정**: 매수 부적격\n\n"
+            if gate.veto_reason:
+                out += f"- 사유: {gate.veto_reason}\n\n"
+
+        # 체크리스트 A·B·C·E
+        if gate.checklist:
+            out += "**체크리스트**:\n\n"
+            sym = {True: "✅", False: "❌", None: "—"}
+            for check in gate.checklist:
+                mark = sym.get(check.met, "—")
+                req_tag = "(필수)" if check.required else "(선택)"
+                out += f"- {mark} {check.name} {req_tag}: {check.reason}\n"
+            out += "\n"
+
+    # CAN SLIM 요약
+    canslim = verdict.canslim
+    if canslim is not None:
+        out += f"**CAN SLIM**: {canslim.summary}\n\n"
+
+    # 포지션 플랜 (미보유 + 게이트 통과 시)
+    position_plan = verdict.position_plan
+    if position_plan is not None and position_plan.error is None:
+        out += "**포지션 플랜**:\n\n"
+        out += f"- 진입가: {position_plan.entry:.2f}\n"
+        out += f"- 손절가: {position_plan.stop:.2f} ({position_plan.stop_basis})\n"
+        if position_plan.shares is not None:
+            out += f"- 수량: {position_plan.shares}주\n"
+        if position_plan.position_value is not None:
+            out += f"- 포지션 금액: {position_plan.position_value:,.0f}\n"
+        if position_plan.weight_pct is not None:
+            out += f"- 자본 비중: {position_plan.weight_pct:.1f}%\n"
+        for label, price in position_plan.r_targets.items():
+            out += f"- 목표 {label}: {price:.2f}\n"
+        out += "\n"
+
+    # 매도 판정 (보유 시)
+    exit_verdict = verdict.exit_verdict
+    if exit_verdict is not None:
+        action_label = {"liquidate": "청산", "reduce": "비중축소", "hold": "보유유지"}.get(
+            exit_verdict.action, exit_verdict.action
+        )
+        out += f"**보유 판정**: {action_label}\n\n"
+        out += f"- 세부사항: {exit_verdict.detail}\n"
+        if exit_verdict.current_r is not None:
+            out += f"- 현재 R: {exit_verdict.current_r:.2f}R\n"
+        if exit_verdict.trailing_stop is not None:
+            out += f"- 추적 손절가: {exit_verdict.trailing_stop:.2f}\n"
+        out += "\n"
+
+    return out
+
+
 def format_deep_dive_output(result: dict) -> str:
     """Format deep dive result as markdown."""
     ticker = result["ticker"]
@@ -811,6 +874,7 @@ def format_deep_dive_output(result: dict) -> str:
     presented_structure = result.get("presented_structure")
     structure_levels = result.get("structure_levels")
     execution_levels = result.get("execution_levels")
+    playbook_verdict = result.get("playbook_verdict")
 
     output = f"# Deep Dive Analysis: {ticker}\n\n"
     output += f"## 가격: ${snapshot.price:.2f} ({snapshot.change_pct:+.2f}%)\n\n"
@@ -828,6 +892,9 @@ def format_deep_dive_output(result: dict) -> str:
         output += "## 구조 레벨\n\n- presenter payload 누락\n\n"
     if execution_levels and not presented_structure:
         output += _format_execution_levels(execution_levels)
+
+    if playbook_verdict is not None:
+        output += _format_playbook_section(playbook_verdict)
 
     output += "\n"
     output += _format_raw_analysis_sections(result)
