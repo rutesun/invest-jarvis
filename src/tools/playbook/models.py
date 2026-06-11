@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from pydantic import BaseModel, Field, computed_field
 
 
@@ -98,3 +100,74 @@ class CanslimResult(BaseModel):
         sym = {True: "✅", False: "❌", None: "—"}
         graded = sum(1 for _, e in order if e.met is not None)
         return " ".join(f"{k}{sym[e.met]}" for k, e in order) + f" ({self.score}/{graded})"
+
+
+# ---------------------------------------------------------------------------
+# Plan 8: Gate / Sizing / Exit / Verdict models
+# ---------------------------------------------------------------------------
+
+
+class GateCheck(BaseModel):
+    """게이트 체크리스트 단일 항목."""
+
+    name: str
+    required: bool
+    met: bool | None  # True=통과, False=탈락, None=데이터 없음(보수적 FAIL)
+    reason: str
+
+
+class GateResult(BaseModel):
+    """매수 게이트 종합 판정."""
+
+    passed: bool
+    checklist: list[GateCheck]
+    quality_grade: str | None  # "A" | "B" | "C" | None (게이트 미통과 시)
+    veto_reason: str | None  # 가장 결정적 미충족 항목 설명
+
+
+class PositionPlan(BaseModel):
+    """포지션 사이징 계획."""
+
+    entry: float
+    stop: float
+    stop_basis: str  # "-8%" | "2xATR" | "zone"
+    per_share_risk: float
+    shares: int | None  # capital 없으면 None (ratio 모드)
+    position_value: float | None
+    weight_pct: float | None  # 자본 대비 비중(%)
+    r_targets: dict[str, float]  # {"+2R": price, "+3R": price}
+    capital_mode: str  # "absolute" | "ratio"
+    error: str | None  # "invalid_stop" | "risk_too_wide" | None
+
+
+class ExitSignal(BaseModel):
+    """매도 신호 단일 항목."""
+
+    code: str  # "CHARACTER_CHANGE" | "SMA_SHORT" | "DISTRIBUTION" | "RS_WEAKENING" | "SMA_LONG"
+    severity: str  # "strong" | "medium" | "weak"
+    detail: str
+
+
+class ExitVerdict(BaseModel):
+    """보유 종목 매도 판정."""
+
+    action: str  # "liquidate" | "reduce" | "hold"
+    signals: list[ExitSignal]
+    current_r: float | None  # stop_price 있을 때만
+    trailing_stop: float | None  # SMA50 기반
+    detail: str
+
+
+class PlaybookVerdict(BaseModel):
+    """플레이북 엔진 최종 판정 결과."""
+
+    ticker: str
+    holding: bool
+    market_regime: MarketRegimeResult
+    relative_strength: RelativeStrengthResult
+    sector_strength: SectorStrengthResult | None
+    canslim: CanslimResult | None
+    gate: GateResult | None  # 미보유 시
+    position_plan: PositionPlan | None  # 게이트 통과 시
+    exit_verdict: ExitVerdict | None  # 보유 시
+    headline: str
