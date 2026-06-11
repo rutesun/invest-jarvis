@@ -21,6 +21,7 @@ from src.tools.disclosure import DisclosureItem, DisclosureTool, extract_kr_code
 from src.tools.flow import FlowTool, InvestorFlow
 from src.tools.fundamental import FundamentalSnapshot, FundamentalTool
 from src.tools.news import NewsArticle, NewsTool
+from src.tools.playbook.holdings import load_holdings
 from src.tools.technical.charting import render_technical_chart
 from src.tools.technical.components.pattern_engine import PatternEngine
 from src.tools.technical.level_composer import compose_level_payload
@@ -68,6 +69,7 @@ class DeepDivePipeline:
         pattern_engine: PatternEngine | None = None,
         level_payload_composer: Callable | None = None,
         structure_presentation_adapter: Callable | None = None,
+        playbook_engine=None,
     ):
         self.technical_tool = technical_tool
         self.news_tool = news_tool
@@ -81,6 +83,7 @@ class DeepDivePipeline:
         self.structure_presentation_adapter = (
             structure_presentation_adapter or build_structure_presentation
         )
+        self.playbook_engine = playbook_engine
 
     async def run(self, ticker: str) -> dict:
         """Run deep dive analysis for a ticker.
@@ -207,6 +210,22 @@ class DeepDivePipeline:
             llm=self.llm,
         )
 
+        # PlaybookEngine evaluation (optional)
+        playbook_verdict = None
+        if self.playbook_engine is not None:
+            try:
+                holding = load_holdings().find(ticker)
+                playbook_verdict = await self.playbook_engine.evaluate(
+                    ticker=ticker,
+                    technical_result=technical_data,
+                    fundamental=fundamental_data,
+                    flow=flow_data,
+                    zone_set=zone_set,
+                    holding=holding,
+                )
+            except Exception as e:
+                logger.warning("PlaybookEngine evaluation failed for %s: %s", ticker, e)
+
         decision_bundle = build_analyze_decision_bundle(
             technical_data=technical_data,
             technical_summary=technical_summary,
@@ -257,6 +276,7 @@ class DeepDivePipeline:
             "execution_levels": execution_levels,
             "presented_structure": presented_structure,
             "chart": chart_result,
+            "playbook_verdict": playbook_verdict,
         }
 
     async def _generate_technical_summary(
