@@ -113,8 +113,9 @@ def _patch_common(monkeypatch, conn: FakeConnection) -> _Recorder:
     monkeypatch.setattr(f"{_MODULE}.apply_migrations", _fake_apply_migrations)
     monkeypatch.setattr(f"{_MODULE}.load_sources", lambda path: {})
 
-    # 기본값: get_document_by_path는 None(신규 문서), pending 없음.
+    # 기본값: get_document_by_path/content_hash는 None(신규·비중복 문서), pending 없음.
     monkeypatch.setattr(f"{_MODULE}.get_document_by_path", lambda c, sp: None)
+    monkeypatch.setattr(f"{_MODULE}.get_document_by_content_hash", lambda c, h: None)
     monkeypatch.setattr(
         f"{_MODULE}.load_pending_document_chunks",
         lambda c, include_failed=True: [],
@@ -200,7 +201,8 @@ def _patch_embed(
 
 def _make_pdf_dir(tmp_path, *names: str):
     for name in names:
-        (tmp_path / name).write_bytes(b"%PDF-fake")
+        # 파일마다 고유 바이트 → content_hash가 서로 달라 중복 차단(dedup)에 걸리지 않는다.
+        (tmp_path / name).write_bytes(b"%PDF-fake-" + name.encode())
     return str(tmp_path)
 
 
@@ -444,3 +446,52 @@ def test_source_date_falls_back_to_arg_date(tmp_path, monkeypatch) -> None:
 
     persist_call = rec.calls["persist_document_chunks"][0]
     assert persist_call["source_date"] == date(2026, 6, 2)
+
+
+def test_duplicate_content_in_batch_skipped(tmp_path, monkeypatch) -> None:
+    conn = FakeConnection()
+    rec = _patch_common(monkeypatch, conn)
+    # 두 PDF가 같은 내용(같은 content_hash) → 두 번째는 중복으로 skip.
+    (tmp_path / "hana_a.pdf").write_bytes(b"%PDF-identical")
+    (tmp_path / "shsmall_a.pdf").write_bytes(b"%PDF-identical")
+    input_dir = str(tmp_path)
+
+    docs = [_parsed(f"{input_dir}/hana_a.pdf"), _parsed(f"{input_dir}/shsmall_a.pdf")]
+    _patch_parse(monkeypatch, rec, docs)
+    _patch_meta(monkeypatch, rec, [_meta(), _meta()])
+    _patch_chunks(monkeypatch, rec, [_draft(0)])
+    _patch_db_writes(monkeypatch, rec, persist_return=1)
+    _patch_embed(monkeypatch, rec, pending=[(101, "p0")])
+
+    summary = pdf_ingest.run_ingest_pdf("2026-06-02", input_dir=input_dir)
+
+    # 첫 문서만 적재되고 두 번째는 중복 카운트.
+    assert summary.documents_upserted == 1
+    assert summary.duplicates == 1
+    assert summary.chunks_inserted == 1
+    assert rec.count("upsert_document") == 1
+
+
+def test_duplicate_content_in_db_skipped(tmp_path, monkeypatch) -> None:
+    conn = FakeConnection()
+    rec = _patch_common(monkeypatch, conn)
+    input_dir = _make_pdf_dir(tmp_path, "a.pdf")
+
+    _patch_parse(monkeypatch, rec, [_parsed(f"{input_dir}/a.pdf")])
+    _patch_meta(monkeypatch, rec, [_meta()])
+    _patch_chunks(monkeypatch, rec, [_draft(0)])
+    _patch_db_writes(monkeypatch, rec)
+    _patch_embed(monkeypatch, rec)
+
+    # DB에 다른 경로의 같은 content_hash 문서가 이미 존재 → 중복 skip.
+    monkeypatch.setattr(
+        f"{_MODULE}.get_document_by_content_hash",
+        lambda c, h: {"id": 99, "source_path": "data/files/other/dup.pdf"},
+    )
+
+    summary = pdf_ingest.run_ingest_pdf("2026-06-02", input_dir=input_dir)
+
+    assert summary.duplicates == 1
+    assert summary.documents_upserted == 0
+    assert summary.chunks_inserted == 0
+    assert rec.count("upsert_document") == 0

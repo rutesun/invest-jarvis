@@ -345,6 +345,32 @@ def get_document_by_path(conn: Any, source_path: str) -> dict | None:
     return {"id": row[0], "content_hash": row[1], "parser_version": row[2]}
 
 
+def get_document_by_content_hash(conn: Any, content_hash: str) -> dict | None:
+    """content_hash로 기존 문서를 조회한다 (중복 적재 차단용).
+
+    같은 내용(content_hash)의 PDF가 다른 source_path(다른 채널/파일명)로 이미
+    적재됐는지 판단한다. source_path 기준 멱등 체크(get_document_by_path)와 달리,
+    경로가 달라도 내용이 같으면 중복으로 본다. 반환: {"id", "source_path"} 또는 None.
+    commit은 호출자 책임.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT id, source_path
+            FROM documents
+            WHERE content_hash = %s
+            ORDER BY id
+            LIMIT 1;
+            """,
+            (content_hash,),
+        )
+        row = cur.fetchone()
+
+    if row is None:
+        return None
+    return {"id": row[0], "source_path": row[1]}
+
+
 def upsert_document(
     conn: Any,
     *,

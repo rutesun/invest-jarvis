@@ -31,6 +31,7 @@ from src.pipelines.stock_report.db import (
     apply_migrations,
     connect_db,
     delete_document_chunks,
+    get_document_by_content_hash,
     get_document_by_path,
     load_pending_document_chunks,
     persist_document_chunks,
@@ -54,7 +55,8 @@ class IngestSummary:
     documents_upserted: int
     chunks_inserted: int
     embedded: int
-    skipped: int  # 멱등 skip (content_hash + parser_version 동일)
+    skipped: int  # 멱등 skip (같은 source_path, content_hash + parser_version 동일)
+    duplicates: int  # 중복 skip (다른 source_path, content_hash 동일 — 같은 내용 재적재)
     low_confidence: int  # parse_status == 'needs_ocr'
     failed: int  # parse_status == 'failed' 또는 문서 트랜잭션 예외
 
@@ -103,6 +105,7 @@ def run_ingest_pdf(
         chunks_inserted=0,
         embedded=0,
         skipped=0,
+        duplicates=0,
         low_confidence=0,
         failed=0,
     )
@@ -136,12 +139,13 @@ def run_ingest_pdf(
 
     logger.info(
         "ingest-pdf finished: pdfs=%d documents=%d chunks=%d embedded=%d "
-        "skipped=%d low_confidence=%d failed=%d",
+        "skipped=%d duplicates=%d low_confidence=%d failed=%d",
         summary.total_pdfs,
         summary.documents_upserted,
         summary.chunks_inserted,
         summary.embedded,
         summary.skipped,
+        summary.duplicates,
         summary.low_confidence,
         summary.failed,
     )
@@ -176,6 +180,7 @@ def _run_pass1(
     )
 
     fallback_date = _date_from_str(date)
+    seen_hashes: dict[str, str] = {}  # content_hash -> 먼저 채택한 source_path (배치 내 중복 차단)
 
     for parsed in parsed_docs:
         source_path = parsed.source_path
@@ -185,6 +190,14 @@ def _run_pass1(
             summary.skipped += 1
             logger.info("ingest-pdf skip (unchanged): %s", source_path)
             continue
+
+        duplicate_of = _find_duplicate_path(conn, source_path, content_hash, seen_hashes)
+        if duplicate_of is not None:
+            summary.duplicates += 1
+            logger.info("ingest-pdf skip (duplicate of %s): %s", duplicate_of, source_path)
+            continue
+        if content_hash:
+            seen_hashes[content_hash] = source_path
 
         meta = extract_metadata(parsed, source_path, sources)
 
@@ -240,6 +253,30 @@ def _is_idempotent_skip(conn, source_path: str, content_hash: str) -> bool:
         and existing["content_hash"] == content_hash
         and existing["parser_version"] == PARSER_VERSION
     )
+
+
+def _find_duplicate_path(
+    conn,
+    source_path: str,
+    content_hash: str,
+    seen_hashes: dict[str, str],
+) -> str | None:
+    """같은 내용(content_hash)이 다른 source_path로 이미 존재하면 그 경로를 반환한다.
+
+    같은 증권사 리포트가 여러 채널(broker_key)로 들어와 파일명만 다른 경우를 막는다.
+    배치 내 먼저 채택한 문서(seen_hashes)와 DB에 적재된 다른 경로 문서를 모두 본다.
+    reembed와 무관하게 항상 적용한다(중복은 재적재 모드에서도 쌓이면 안 된다).
+    content_hash가 비면(파일 읽기 실패) 중복 판정에서 제외한다.
+    """
+    if not content_hash:
+        return None
+    batch_duplicate = seen_hashes.get(content_hash)
+    if batch_duplicate is not None:
+        return batch_duplicate
+    existing = get_document_by_content_hash(conn, content_hash)
+    if existing is not None and existing["source_path"] != source_path:
+        return existing["source_path"]
+    return None
 
 
 def _run_pass2(conn, *, summary: IngestSummary) -> None:

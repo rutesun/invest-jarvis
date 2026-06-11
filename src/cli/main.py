@@ -1436,7 +1436,7 @@ def report_ingest_pdf(
             f"[green]✓ 완료[/green] PDF {summary.total_pdfs}개 → "
             f"문서 {summary.documents_upserted} / 청크 {summary.chunks_inserted} / "
             f"임베딩 {summary.embedded} / skip {summary.skipped} / "
-            f"low_conf {summary.low_confidence} / 실패 {summary.failed}"
+            f"중복 {summary.duplicates} / low_conf {summary.low_confidence} / 실패 {summary.failed}"
         )
     except Exception as e:
         console.print(f"[red]오류: {e}[/red]")

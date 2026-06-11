@@ -6,6 +6,7 @@ from typing import Any
 
 from src.pipelines.stock_report.db import (
     delete_document_chunks,
+    get_document_by_content_hash,
     get_document_by_path,
     load_pending_document_chunks,
     persist_classified_chunks,
@@ -300,6 +301,25 @@ def test_get_document_by_path_returns_none_when_missing() -> None:
     result = get_document_by_path(conn, "missing.pdf")
 
     assert result is None
+
+
+def test_get_document_by_content_hash_returns_id_and_path() -> None:
+    conn = ConfigurableConnection(fetchone_result=(7, "data/files/2026-06-02/hana_seagate.pdf"))
+
+    result = get_document_by_content_hash(conn, "hash-abc")
+
+    assert result == {"id": 7, "source_path": "data/files/2026-06-02/hana_seagate.pdf"}
+    query, params = conn.executed[0]
+    assert "FROM documents" in query
+    assert "WHERE content_hash = %s" in query
+    assert params == ("hash-abc",)
+    assert conn.commits == 0
+
+
+def test_get_document_by_content_hash_returns_none_when_missing() -> None:
+    conn = ConfigurableConnection(fetchone_result=None)
+
+    assert get_document_by_content_hash(conn, "missing-hash") is None
 
 
 def test_upsert_document_uses_on_conflict_source_path() -> None:

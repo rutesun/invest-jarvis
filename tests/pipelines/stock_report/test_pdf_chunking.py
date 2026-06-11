@@ -473,3 +473,36 @@ def test_chart_table_mixed_with_real() -> None:
     table_chunks = [c for c in chunks if c.is_table]
     assert len(table_chunks) == 1
     assert "매출액" in table_chunks[0].content_clean
+
+
+# --- CP2 잡음 필터: 노이즈 청크 제거 -----------------------------------------
+
+
+def test_bullet_only_chunk_filtered() -> None:
+    # ▪ 기호만으로 이루어진 청크는 의미 단어가 없어 제거되어야 한다.
+    big_para = "현대위아의 멕시코 법인은 가동률 개선으로 고정비 절감 효과가 기대된다. " * 8
+    markdown = f"# 섹션A\n\n{big_para.strip()}\n\n# 섹션B\n\n▪ ▪ ▪ ▪\n"
+    chunks = _chunks(markdown)
+    joined = "\n".join(c.content_clean for c in chunks)
+    assert "▪" not in joined
+    # 의미 있는 본문은 보존된다.
+    assert any("가동률 개선" in c.content_clean for c in chunks)
+    # 노이즈만 있던 섹션은 청크를 만들지 않는다.
+    assert all(c.section_path != "섹션B" for c in chunks)
+
+
+def test_br_only_line_dropped_and_br_not_mistaken_as_word() -> None:
+    # 산문 줄의 잔여 <br>는 제거되고, 'br'이 영문 단어로 오인돼 기호 청크가 남지 않는다.
+    big_para = "현대위아의 멕시코 법인은 가동률 개선으로 고정비 절감 효과가 기대된다. " * 8
+    markdown = f"# 섹션A\n\n{big_para.strip()}\n\n# 섹션B\n\n<br><br>|\n"
+    chunks = _chunks(markdown)
+    joined = "\n".join(c.content_clean for c in chunks)
+    assert "<br>" not in joined.lower()
+    assert all(c.section_path != "섹션B" for c in chunks)
+
+
+def test_meaningful_short_prose_chunk_kept() -> None:
+    # 의미 단어가 있는 짧은 청크(예: 'Overweight')는 과삭제하지 않고 보존한다.
+    markdown = "# 투자의견\n\nOverweight\n"
+    chunks = _chunks(markdown)
+    assert any("Overweight" in c.content_clean for c in chunks)

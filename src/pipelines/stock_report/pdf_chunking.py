@@ -124,6 +124,17 @@ class _SectionContext:
         return self.stack[-1][1] if self.stack else ""
 
 
+def _filter_noise_chunks(drafts: list[PdfChunkDraft]) -> list[PdfChunkDraft]:
+    """의미 단어(2자+ 한글, 3자+ 영문)가 하나도 없는 청크를 제거한다.
+
+    차트 잔해(``▪ ▪ ▪ ▪``), 표 파편(잔여 ``|`` 기호), 마크업 찌꺼기처럼 검색을
+    오염시키는 청크를 버린다. 의미 단어가 하나라도 있으면(예: ``Overweight``)
+    보존한다(과삭제 방지). chunk_seq는 부모 복원용 정렬 키이므로 재부여하지 않는다
+    (구멍이 생겨도 순서는 유지된다 — _filter_source_chunks 병합과 동일 방침).
+    """
+    return [draft for draft in drafts if _has_meaningful_word(draft.content_clean)]
+
+
 def _filter_source_chunks(drafts: list[PdfChunkDraft]) -> list[PdfChunkDraft]:
     """출처줄로만 이루어진 tiny 청크를 앞 청크의 본문에 병합한다.
 
@@ -184,6 +195,7 @@ def build_pdf_chunks(parsed: ParsedDocument, meta: DocumentMeta) -> list[PdfChun
             )
             seq += 1
 
+    drafts = _filter_noise_chunks(drafts)
     drafts = _filter_source_chunks(drafts)
     return drafts
 
@@ -287,7 +299,9 @@ def _clean_prose_line(line: str) -> str:
 
     의미 있는 본문을 잃지 않도록, 한글/영문 단어가 하나라도 남으면 노이즈로 보지 않는다.
     """
-    stripped = _IMAGE_RE.sub("", line).strip()
+    stripped = _IMAGE_RE.sub("", line)
+    # 잔여 <br> 태그 제거: 안 지우면 'br'이 영문 단어로 오인돼 기호뿐인 줄이 본문으로 남는다.
+    stripped = _TABLE_BR_RE.sub(" ", stripped).strip()
     if not stripped:
         return ""
     # 단독 축 라벨 토큰(좌축/우축/원 ...)은 한글이어도 노이즈로 본다.
