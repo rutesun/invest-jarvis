@@ -26,6 +26,17 @@ class QuarterlyData(BaseModel):
     revenue_qoq: float | None = None
     earnings_yoy: float | None = None
     earnings_qoq: float | None = None
+    eps: float | None = None
+    eps_yoy: float | None = None
+
+
+class AnnualData(BaseModel):
+    """Annual financial data (CAN SLIM A — annual EPS time series)."""
+
+    year: str
+    eps: float | None = None
+    revenue: float | None = None
+    earnings: float | None = None
 
 
 class FundamentalSnapshot(BaseModel):
@@ -59,6 +70,9 @@ class FundamentalSnapshot(BaseModel):
 
     # Quarterly data with growth rates
     quarterly_data: list[QuarterlyData] | None = None
+
+    # Annual time series (CAN SLIM A)
+    annual_data: list[AnnualData] | None = None
 
     # Financial health
     debt_to_equity: float | None = None
