@@ -718,9 +718,10 @@ def _format_raw_analysis_sections(result: dict) -> str:
                     output += f"- {q.period}: EPS {q.eps:,.2f} (YoY {yoy_str})\n"
                 output += "\n"
 
-        if fundamental.annual_data is not None and len(fundamental.annual_data) > 0:
+        annual_data = getattr(fundamental, "annual_data", None)
+        if annual_data is not None and len(annual_data) > 0:
             output += "**연간 EPS 추이:**\n\n"
-            for a in fundamental.annual_data:
+            for a in annual_data:
                 if a.eps is not None:
                     output += f"- {a.year}: EPS {a.eps:,.2f}\n"
             output += "\n"
