@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import logging
 import os
 import re
@@ -327,6 +328,37 @@ async def run_deep_dive(ticker_or_name: str, provider: str) -> dict:
     )
     flow_tool = FlowTool(kis_provider=flow_provider)
 
+    # PlaybookEngine 주입: index/fmp/kis provider 있으면 생성
+    playbook_engine = None
+    try:
+        from src.providers.index_provider import IndexProvider
+        from src.tools.playbook.engine import PlaybookEngine
+        from src.tools.playbook.holdings import load_holdings
+
+        holdings_config = load_holdings()
+        capital_usd, risk_pct_usd = holdings_config.usd_capital, holdings_config.usd_risk_pct
+        capital_krw, risk_pct_krw = holdings_config.krw_capital, holdings_config.krw_risk_pct
+
+        fmp_api_key = os.getenv("FMP_API_KEY")
+        fmp_provider = None
+        if fmp_api_key:
+            with contextlib.suppress(Exception):
+                from src.providers.fmp_provider import FmpProvider
+
+                fmp_provider = FmpProvider(api_key=fmp_api_key)
+
+        playbook_engine = PlaybookEngine(
+            index_provider=IndexProvider(),
+            fmp_provider=fmp_provider,
+            kis_provider=kis_provider,
+            usd_capital=capital_usd,
+            usd_risk_pct=risk_pct_usd or 0.01,
+            krw_capital=capital_krw,
+            krw_risk_pct=risk_pct_krw or 0.01,
+        )
+    except Exception as _e:
+        logger.debug("PlaybookEngine 초기화 실패 (플레이북 섹션 생략): %s", _e)
+
     pipeline = DeepDivePipeline(
         technical_tool=technical_tool,
         news_tool=news_tool,
@@ -334,6 +366,7 @@ async def run_deep_dive(ticker_or_name: str, provider: str) -> dict:
         fundamental_tool=fundamental_tool,
         disclosure_tool=disclosure_tool,
         flow_tool=flow_tool,
+        playbook_engine=playbook_engine,
     )
 
     return await pipeline.run(ticker)
@@ -708,6 +741,24 @@ def _format_raw_analysis_sections(result: dict) -> str:
 
             output += "\n"
 
+        # EPS 추이 (분기 YoY + 연간 시계열)
+        if fundamental.quarterly_data is not None:
+            eps_quarters = [q for q in fundamental.quarterly_data if q.eps is not None]
+            if eps_quarters:
+                output += "**분기 EPS 추이:**\n\n"
+                for q in eps_quarters:
+                    yoy_str = _format_growth_rate(q.eps_yoy)
+                    output += f"- {q.period}: EPS {q.eps:,.2f} (YoY {yoy_str})\n"
+                output += "\n"
+
+        annual_data = getattr(fundamental, "annual_data", None)
+        if annual_data is not None and len(annual_data) > 0:
+            output += "**연간 EPS 추이:**\n\n"
+            for a in annual_data:
+                if a.eps is not None:
+                    output += f"- {a.year}: EPS {a.eps:,.2f}\n"
+            output += "\n"
+
         output += "### LLM Analysis\n\n"
         output += f"**Summary**: {fundamental_summary.summary}\n\n"
         output += f"**Valuation**: {fundamental_summary.valuation_assessment} (신뢰도: {fundamental_summary.confidence * 100:.0f}%)\n\n"
@@ -781,6 +832,84 @@ def _format_raw_analysis_sections(result: dict) -> str:
     return output
 
 
+def _format_playbook_section(verdict) -> str:
+    """PlaybookVerdict를 §15 형식으로 렌더링한다."""
+    out = "## 📋 플레이북 평가\n\n"
+
+    # 판정 헤드라인
+    gate = verdict.gate
+    if gate is not None:
+        if gate.passed:
+            grade = gate.quality_grade or "?"
+            out += f"**판정**: 매수 적격 (Grade={grade})\n\n"
+        else:
+            out += "**판정**: 매수 부적격\n\n"
+            if gate.veto_reason:
+                out += f"- 사유: {gate.veto_reason}\n\n"
+
+        # 체크리스트 A·B·C·E
+        if gate.checklist:
+            out += "**체크리스트**:\n\n"
+            sym = {True: "✅", False: "❌", None: "—"}
+            for check in gate.checklist:
+                mark = sym.get(check.met, "—")
+                req_tag = "(필수)" if check.required else "(선택)"
+                out += f"- {mark} {check.name} {req_tag}: {check.reason}\n"
+            out += "\n"
+
+    # CAN SLIM 요약 + 7요소 상세 지표
+    canslim = verdict.canslim
+    if canslim is not None:
+        out += f"**CAN SLIM**: {canslim.summary}\n\n"
+        sym = {True: "✅", False: "❌", None: "—"}
+        elements = [
+            ("C", "분기EPS", canslim.c),
+            ("A", "연간EPS+ROE", canslim.a),
+            ("N", "신고가 근접", canslim.n),
+            ("S", "거래량", canslim.s),
+            ("L", "주도주(업종+RS)", canslim.l),
+            ("I", "기관 매집", canslim.i),
+            ("M", "시장환경", canslim.m),
+        ]
+        for key, label, element in elements:
+            mark = sym.get(element.met, "—")
+            detail = f": {element.detail}" if element.detail else ""
+            out += f"- {mark} {key} ({label}){detail}\n"
+        out += "\n"
+
+    # 포지션 플랜 (미보유 + 게이트 통과 시)
+    position_plan = verdict.position_plan
+    if position_plan is not None and position_plan.error is None:
+        out += "**포지션 플랜**:\n\n"
+        out += f"- 진입가: {position_plan.entry:.2f}\n"
+        out += f"- 손절가: {position_plan.stop:.2f} ({position_plan.stop_basis})\n"
+        if position_plan.shares is not None:
+            out += f"- 수량: {position_plan.shares}주\n"
+        if position_plan.position_value is not None:
+            out += f"- 포지션 금액: {position_plan.position_value:,.0f}\n"
+        if position_plan.weight_pct is not None:
+            out += f"- 자본 비중: {position_plan.weight_pct:.1f}%\n"
+        for label, price in position_plan.r_targets.items():
+            out += f"- 목표 {label}: {price:.2f}\n"
+        out += "\n"
+
+    # 매도 판정 (보유 시)
+    exit_verdict = verdict.exit_verdict
+    if exit_verdict is not None:
+        action_label = {"liquidate": "청산", "reduce": "비중축소", "hold": "보유유지"}.get(
+            exit_verdict.action, exit_verdict.action
+        )
+        out += f"**보유 판정**: {action_label}\n\n"
+        out += f"- 세부사항: {exit_verdict.detail}\n"
+        if exit_verdict.current_r is not None:
+            out += f"- 현재 R: {exit_verdict.current_r:.2f}R\n"
+        if exit_verdict.trailing_stop is not None:
+            out += f"- 추적 손절가: {exit_verdict.trailing_stop:.2f}\n"
+        out += "\n"
+
+    return out
+
+
 def format_deep_dive_output(result: dict) -> str:
     """Format deep dive result as markdown."""
     ticker = result["ticker"]
@@ -793,6 +922,7 @@ def format_deep_dive_output(result: dict) -> str:
     presented_structure = result.get("presented_structure")
     structure_levels = result.get("structure_levels")
     execution_levels = result.get("execution_levels")
+    playbook_verdict = result.get("playbook_verdict")
 
     output = f"# Deep Dive Analysis: {ticker}\n\n"
     output += f"## 가격: ${snapshot.price:.2f} ({snapshot.change_pct:+.2f}%)\n\n"
@@ -810,6 +940,9 @@ def format_deep_dive_output(result: dict) -> str:
         output += "## 구조 레벨\n\n- presenter payload 누락\n\n"
     if execution_levels and not presented_structure:
         output += _format_execution_levels(execution_levels)
+
+    if playbook_verdict is not None:
+        output += _format_playbook_section(playbook_verdict)
 
     output += "\n"
     output += _format_raw_analysis_sections(result)

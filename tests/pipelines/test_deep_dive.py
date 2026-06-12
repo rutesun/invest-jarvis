@@ -449,3 +449,152 @@ async def test_generate_fundamental_summary_uses_rule_based_fallback_when_metric
     assert summary.summary == "핵심 재무 지표가 부족해 밸류 판단을 유보합니다."
     assert summary.valuation_assessment == "적정"
     assert summary.confidence == pytest.approx(0.2)
+
+
+@pytest.mark.asyncio
+async def test_deep_dive_pipeline_with_playbook_engine_returns_verdict(
+    mock_technical_tool, mock_news_tool, mock_llm
+):
+    """PlaybookEngine이 주입되면 run() 결과에 playbook_verdict 키가 존재해야 한다."""
+    from unittest.mock import MagicMock
+
+    from src.tools.playbook.models import (
+        CanslimResult,
+        ElementVerdict,
+        GateResult,
+        MarketRegimeResult,
+        PlaybookVerdict,
+        RelativeStrengthResult,
+    )
+
+    # PlaybookVerdict mock
+    mock_verdict = PlaybookVerdict(
+        ticker="AAPL",
+        holding=False,
+        market_regime=MarketRegimeResult(regime="상승", allow_new_buy=True, index_symbol="SPY"),
+        relative_strength=RelativeStrengthResult(
+            mansfield_rs=5.0,
+            outperform_6m=10.0,
+            rp_slope_4w=0.5,
+            index_symbol="SPY",
+        ),
+        sector_strength=None,
+        canslim=CanslimResult(
+            c=ElementVerdict(met=True),
+            a=ElementVerdict(met=True),
+            n=ElementVerdict(met=None),
+            s=ElementVerdict(met=True),
+            l=ElementVerdict(met=True),
+            i=ElementVerdict(met=None),
+            m=ElementVerdict(met=True),
+        ),
+        gate=GateResult(
+            passed=True,
+            checklist=[],
+            quality_grade="B",
+            veto_reason=None,
+        ),
+        position_plan=None,
+        exit_verdict=None,
+        headline="AAPL: 매수 적격 (grade=B) — 비율 모드",
+    )
+
+    mock_engine = AsyncMock()
+    mock_engine.evaluate.return_value = mock_verdict
+
+    with (
+        patch(
+            "src.llm.analyzer.generate_technical_summary", new_callable=AsyncMock
+        ) as mock_tech_summary,
+        patch("src.llm.analyzer.analyze_news", new_callable=AsyncMock) as mock_news_analysis,
+        patch("src.llm.analyzer.generate_actionable_signal", new_callable=AsyncMock) as mock_signal,
+        patch("src.pipelines.deep_dive.load_holdings") as mock_load_holdings,
+    ):
+        mock_tech_summary.return_value = TechnicalSummaryOutput(
+            summary="강세",
+            key_insights=[],
+            recommendation="매수",
+            confidence=0.75,
+            rationale="좋음",
+        )
+        mock_news_analysis.return_value = NewsAnalysisOutput(
+            sentiment="긍정",
+            confidence=0.85,
+            key_themes=["신제품"],
+            summary="긍정적",
+            impact_assessment="좋음",
+        )
+        mock_signal.return_value = ActionableSignalOutput(
+            action="매수",
+            timing="지금",
+            signal_strength=8,
+            headline="매수",
+            primary_reason="골든크로스",
+            supporting_reasons=[],
+            risks=[],
+            confidence=0.75,
+        )
+        mock_holdings = MagicMock()
+        mock_holdings.find.return_value = None  # 미보유
+        mock_load_holdings.return_value = mock_holdings
+
+        pipeline = DeepDivePipeline(
+            technical_tool=mock_technical_tool,
+            news_tool=mock_news_tool,
+            llm=mock_llm,
+            playbook_engine=mock_engine,
+        )
+
+        result = await pipeline.run("AAPL")
+
+    assert "playbook_verdict" in result
+    assert result["playbook_verdict"] is mock_verdict
+    mock_engine.evaluate.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_deep_dive_pipeline_without_playbook_engine_returns_none_verdict(
+    mock_technical_tool, mock_news_tool, mock_llm
+):
+    """PlaybookEngine이 없으면 playbook_verdict는 None이어야 한다 (기존 동작 보존)."""
+    with (
+        patch(
+            "src.llm.analyzer.generate_technical_summary", new_callable=AsyncMock
+        ) as mock_tech_summary,
+        patch("src.llm.analyzer.analyze_news", new_callable=AsyncMock) as mock_news_analysis,
+        patch("src.llm.analyzer.generate_actionable_signal", new_callable=AsyncMock) as mock_signal,
+    ):
+        mock_tech_summary.return_value = TechnicalSummaryOutput(
+            summary="강세",
+            key_insights=[],
+            recommendation="매수",
+            confidence=0.75,
+            rationale="좋음",
+        )
+        mock_news_analysis.return_value = NewsAnalysisOutput(
+            sentiment="긍정",
+            confidence=0.85,
+            key_themes=[],
+            summary="긍정적",
+            impact_assessment="좋음",
+        )
+        mock_signal.return_value = ActionableSignalOutput(
+            action="매수",
+            timing="지금",
+            signal_strength=8,
+            headline="매수",
+            primary_reason="골든크로스",
+            supporting_reasons=[],
+            risks=[],
+            confidence=0.75,
+        )
+
+        pipeline = DeepDivePipeline(
+            technical_tool=mock_technical_tool,
+            news_tool=mock_news_tool,
+            llm=mock_llm,
+        )
+
+        result = await pipeline.run("AAPL")
+
+    assert result.get("playbook_verdict") is None

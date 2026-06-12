@@ -16,11 +16,12 @@ from src.llm.models import (
     TechnicalSummaryInput,
     TechnicalSummaryOutput,
 )
-from src.pipelines.analyze_decision import build_analyze_decision_bundle
+from src.pipelines.analyze_decision import apply_playbook_veto, build_analyze_decision_bundle
 from src.tools.disclosure import DisclosureItem, DisclosureTool, extract_kr_code, is_korean_ticker
 from src.tools.flow import FlowTool, InvestorFlow
 from src.tools.fundamental import FundamentalSnapshot, FundamentalTool
 from src.tools.news import NewsArticle, NewsTool
+from src.tools.playbook.holdings import load_holdings
 from src.tools.technical.charting import render_technical_chart
 from src.tools.technical.components.pattern_engine import PatternEngine
 from src.tools.technical.level_composer import compose_level_payload
@@ -53,6 +54,25 @@ _FUNDAMENTAL_SIGNAL_FIELDS = (
 )
 
 
+def _compute_eps_cagr(newest: float, oldest: float, n_years: int) -> float | None:
+    """Annual EPS CAGR for a given period.
+
+    Returns None when CAGR is mathematically undefined:
+    - oldest is zero (division by zero)
+    - sign change between oldest and newest (negative base with fractional exponent → complex)
+
+    Note: both-negative (continued losses) returns a valid float, but the sign is
+    counter-intuitive — e.g. -2→-1 gives CAGR=-50% even though losses halved.
+    Callers consuming this for LLM prompts should be aware of this interpretation.
+    """
+    if oldest == 0:
+        return None
+    ratio = newest / oldest
+    if ratio <= 0:
+        return None
+    return ratio ** (1.0 / n_years) - 1
+
+
 class DeepDivePipeline:
     """Deep dive analysis pipeline with LLM integration."""
 
@@ -68,6 +88,7 @@ class DeepDivePipeline:
         pattern_engine: PatternEngine | None = None,
         level_payload_composer: Callable | None = None,
         structure_presentation_adapter: Callable | None = None,
+        playbook_engine=None,
     ):
         self.technical_tool = technical_tool
         self.news_tool = news_tool
@@ -81,6 +102,7 @@ class DeepDivePipeline:
         self.structure_presentation_adapter = (
             structure_presentation_adapter or build_structure_presentation
         )
+        self.playbook_engine = playbook_engine
 
     async def run(self, ticker: str) -> dict:
         """Run deep dive analysis for a ticker.
@@ -207,6 +229,22 @@ class DeepDivePipeline:
             llm=self.llm,
         )
 
+        # PlaybookEngine evaluation (optional)
+        playbook_verdict = None
+        if self.playbook_engine is not None:
+            try:
+                holding = load_holdings().find(ticker)
+                playbook_verdict = await self.playbook_engine.evaluate(
+                    ticker=ticker,
+                    technical_result=technical_data,
+                    fundamental=fundamental_data,
+                    flow=flow_data,
+                    zone_set=zone_set,
+                    holding=holding,
+                )
+            except Exception as e:
+                logger.warning("PlaybookEngine evaluation failed for %s: %s", ticker, e)
+
         decision_bundle = build_analyze_decision_bundle(
             technical_data=technical_data,
             technical_summary=technical_summary,
@@ -217,6 +255,11 @@ class DeepDivePipeline:
             flow_data=flow_data,
             chart_patterns=chart_patterns,
             price_levels=price_levels,
+        )
+        decision_bundle = decision_bundle.model_copy(
+            update={
+                "summary": apply_playbook_veto(decision_bundle.summary, playbook_verdict),
+            }
         )
 
         # Render technical chart
@@ -257,6 +300,7 @@ class DeepDivePipeline:
             "execution_levels": execution_levels,
             "presented_structure": presented_structure,
             "chart": chart_result,
+            "playbook_verdict": playbook_verdict,
         }
 
     async def _generate_technical_summary(
@@ -362,6 +406,23 @@ class DeepDivePipeline:
                 confidence=0.2,
             )
 
+        # Derive EPS growth metrics from quarterly/annual data
+        eps_growth_quarterly: float | None = None
+        if fundamental_data.quarterly_data:
+            for q in fundamental_data.quarterly_data:
+                if q.eps_yoy is not None:
+                    eps_growth_quarterly = q.eps_yoy
+                    break
+
+        eps_cagr_annual: float | None = None
+        if fundamental_data.annual_data and len(fundamental_data.annual_data) >= 2:
+            ann = fundamental_data.annual_data
+            newest = ann[0].eps
+            oldest = ann[-1].eps
+            n_years = len(ann) - 1
+            if newest is not None and oldest is not None and n_years > 0:
+                eps_cagr_annual = _compute_eps_cagr(newest, oldest, n_years)
+
         input_data = FundamentalSummaryInput(
             ticker=ticker,
             sector=fundamental_data.sector,
@@ -379,6 +440,8 @@ class DeepDivePipeline:
             fcf_yield=fundamental_data.fcf_yield,
             gross_margin=fundamental_data.gross_margin,
             operating_margin=fundamental_data.operating_margin,
+            eps_growth_quarterly=eps_growth_quarterly,
+            eps_cagr_annual=eps_cagr_annual,
         )
 
         return await generate_fundamental_summary(input_data, self.llm)

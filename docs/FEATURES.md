@@ -12,7 +12,7 @@ LLM 없이 기술적 분석만 수행하는 빠른 진단 기능.
 
 **입출력:**
 - 입력: 티커 또는 종목명 (TickerResolver로 자동 변환)
-- 출력: 8개 컴포넌트 점수, 시그널, 경고, 20+ 원시 지표
+- 출력: 8개 컴포넌트 점수, 시그널, 경고, 20+ 원시 지표, 퍼포먼스 (1M/3M/6M/1Y)
 
 **8개 기술적 컴포넌트:**
 
@@ -92,6 +92,11 @@ LLM 없이 기술적 분석만 수행하는 빠른 진단 기능.
 - 한국 주식 재무 API 5종은 엔드포인트별 재시도(최대 3회) 적용
 - 일부 엔드포인트 실패 시에도 성공한 엔드포인트 데이터로 펀더멘털 스냅샷 생성
 - 전체 엔드포인트가 모두 실패한 경우에만 펀더멘털 섹션을 실패 처리
+
+**KIS Provider 확장 (Plan 1):**
+- 재무 API 메서드 6종에 `div_cls_code` 인자 추가: `"0"`=연간(기본), `"1"`=분기
+- `get_growth_ratio` 신규: `/finance/growth-ratio` (tr_id FHKST66430800) — 매출/영업이익/순이익 증가율
+- `get_price_history` 기본값을 수정주가(`ADJUSTED="0"`)로 변경 — 액면분할 왜곡 방지 (2026-06 실호출로 `"0"`=수정주가 확정)
 
 **차트 패턴 감지 (Phase 2):**
 
@@ -218,6 +223,7 @@ Deep Dive 분석 실행 시 자동으로 기술적 차트를 생성하여 `chart
 | **패널 구조** | 4개 패널 (비율 6:2:2:2) - Price, Volume, MACD, cRSI |
 | **기간** | 최근 63일 (약 3개월) |
 | **한글 지원** | 한국어 폰트 자동 감지 (Noto Sans KR, AppleGothic 등) |
+| **자동 열기** | macOS/Linux에서 차트 자동 표시 (open/xdg-open) |
 
 **가격 패널 (Panel 0):**
 - 캔들스틱
@@ -493,6 +499,32 @@ Daily Report 및 Screener 리포트를 Notion Database에 자동 업로드.
 
 ---
 
+## 10. Playbook Engine (`jarvis analyze` 통합)
+
+5대 추세추종·모멘텀 대가(리버모어·터틀·오닐·와인스타인·미너비니) 규칙 기반 **매수 자격 게이트(veto) + 포지션 사이징 + 보유 매도 판정** 엔진. `analyze`의 `decision_summary`에 veto를 반영하고 "📋 플레이북 평가" 섹션을 출력. 설계: `docs/superpowers/specs/2026-06-10-playbook-engine-design.md`.
+
+**구성 (`src/tools/playbook/`):**
+| 모듈 | 역할 |
+|------|------|
+| `market_regime` | 지수(^GSPC/^KS11/^KQ11) 추세 게이트 (★A) |
+| `minervini` Stage2 | 미너비니 추세 템플릿 7조건 (★B, 단일 출처) |
+| `relative_strength` | 맨스필드식 종목 RS (★C, RS≠RSI) |
+| `sector_strength` | 업종 강도: FMP(미국) + KIS 업종지수(한국) (★C 업종 / L) |
+| `vcp` | VCP 피벗 돌파 (★E) |
+| `accumulation` | 오닐식 매집/분산일 (I) |
+| `canslim` | CAN SLIM 7요소 종합 (C·A·I 계산 + N·S·L·M 참조); CLI에서 7요소 각각 detail 출력 — S: vol_ratio(20일평균비), L: 업종명·순위·Mansfield·6M초과·4주기울기, M: 국면·지수심볼·판정근거 |
+| `gate` | ★ A·B·C·E 필수(veto) + D·I·수급 가점 + 품질등급; B veto 사유에 `(N/7, 미충족: 조건명)` 형태로 Stage2 근접도 노출 |
+| `sizing` | 손절 3후보(−8%/2×ATR/구조) + 위험% → 수량/R |
+| `exit_rules` | 추세 종료 5신호 (보유 종목) |
+| `engine` | 오케스트레이션 → `PlaybookVerdict` |
+| `holdings` | `playbook.yaml` (account + holdings) |
+
+**데이터:** 한국 분기/연간 EPS = `get_profit_ratio`(tr FHKST66430300, div=1/0), 가격 수정주가(`ADJUSTED="0"`), 업종 = FMP 업종 perf / KIS 업종지수. veto는 `apply_playbook_veto`로 `decision_summary` 후처리.
+
+**의존성:** httpx, yfinance, FMP API, KIS API. **환경 변수:** `FMP_API_KEY`(미국 업종 강도; 없으면 업종은 graceful None).
+
+---
+
 ## 환경 변수
 
 | 변수 | 필수 | 용도 |
@@ -503,3 +535,4 @@ Daily Report 및 Screener 리포트를 Notion Database에 자동 업로드.
 | `TELEGRAM_API_ID` / `TELEGRAM_API_HASH` | 선택 | 텔레그램 수집 |
 | `OPENDART_API_KEY` | 선택 | 한국 공시 |
 | `NOTION_TOKEN` / `NOTION_DATABASE_ID` | 선택 | 리포트 업로드 |
+| `FMP_API_KEY` | 선택 | 미국 업종 강도 (FMP) |
