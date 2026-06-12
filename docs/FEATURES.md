@@ -512,8 +512,8 @@ Daily Report 및 Screener 리포트를 Notion Database에 자동 업로드.
 | `sector_strength` | 업종 강도: FMP(미국) + KIS 업종지수(한국) (★C 업종 / L) |
 | `vcp` | VCP 피벗 돌파 (★E) |
 | `accumulation` | 오닐식 매집/분산일 (I) |
-| `canslim` | CAN SLIM 7요소 종합 (C·A·I 계산 + N·S·L·M 참조) |
-| `gate` | ★ A·B·C·E 필수(veto) + D·I·수급 가점 + 품질등급 |
+| `canslim` | CAN SLIM 7요소 종합 (C·A·I 계산 + N·S·L·M 참조); CLI에서 7요소 각각 detail 출력 — S: vol_ratio(20일평균비), L: 업종명·순위·Mansfield·6M초과·4주기울기, M: 국면·지수심볼·판정근거 |
+| `gate` | ★ A·B·C·E 필수(veto) + D·I·수급 가점 + 품질등급; B veto 사유에 `(N/7, 미충족: 조건명)` 형태로 Stage2 근접도 노출 |
 | `sizing` | 손절 3후보(−8%/2×ATR/구조) + 위험% → 수량/R |
 | `exit_rules` | 추세 종료 5신호 (보유 종목) |
 | `engine` | 오케스트레이션 → `PlaybookVerdict` |
