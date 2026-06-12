@@ -64,9 +64,11 @@ _DATE_RE = re.compile(r"(\d{4})-(\d{2})-(\d{2})")
 
 # 한국 종목: "종목명 (123456)" -> 6자리 코드.
 _KR_TICKER_RE = re.compile(r"^(?P<name>.+?)\s*\((?P<code>\d{6})\)\s*$")
-# 해외 종목: "회사명 (HPE.US)" / "(VWS.DC)" -> TICKER.EX (영문 티커 + 거래소 접미사).
+# 해외 종목: "회사명 (HPE.US)" / "(VWS.DC)" / "(300308.CH)" -> TICKER.EX.
+# 티커는 영문/숫자로 시작할 수 있다(중국 코드 300308.CH 등 숫자 시작 포함). 거래소
+# 접미사(.US/.CH ...)가 반드시 있어야 한국 6자리 코드(_KR_TICKER_RE 담당)와 구분된다.
 _FOREIGN_TICKER_RE = re.compile(
-    r"^(?P<name>.+?)\s*\((?P<code>[A-Za-z][A-Za-z0-9.\-]*\.[A-Za-z]{2,4})\)\s*$"
+    r"^(?P<name>.+?)\s*\((?P<code>[A-Za-z0-9][A-Za-z0-9.\-]*\.[A-Za-z]{2,4})\)\s*$"
 )
 
 _HEADING_RE = re.compile(r"^#{1,6}\s+(?P<text>.+?)\s*$")

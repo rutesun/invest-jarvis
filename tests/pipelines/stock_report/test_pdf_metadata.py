@@ -107,6 +107,13 @@ def test_ticker_us_suffix() -> None:
     assert meta.title == "H.P. Enterprise Co."
 
 
+def test_ticker_foreign_numeric_china_code() -> None:
+    # 숫자로 시작하는 해외 코드(중국 300308.CH)도 거래소 접미사로 인식해야 한다.
+    meta = _meta(markdown="# 중지쉬창 (300308.CH)\n\n## 광트랜시버\n본문")
+    assert meta.target_ticker == "300308.CH"
+    assert meta.title == "중지쉬창"
+
+
 def test_ticker_none_for_macro_report() -> None:
     meta = _meta(markdown="# 2분기 주식시장 전망\n\n### Yellow Flag\n매크로 본문")
     assert meta.target_ticker is None

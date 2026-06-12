@@ -120,6 +120,12 @@ def _patch_common(monkeypatch, conn: FakeConnection) -> _Recorder:
         f"{_MODULE}.load_pending_document_chunks",
         lambda c, include_failed=True: [],
     )
+    # 분류는 실제 LLM/taxonomy 로드를 막고 기본 no-op으로 둔다(개별 테스트가 override).
+    monkeypatch.setattr(f"{_MODULE}.load_taxonomy_registry", lambda path: object())
+    monkeypatch.setattr(
+        f"{_MODULE}.classify_document",
+        lambda parsed, *, title, taxonomy, provider: (None, None),
+    )
 
     return rec
 
@@ -166,7 +172,13 @@ def _patch_db_writes(monkeypatch, rec: _Recorder, *, persist_return: int = 2) ->
     ):
         rec.record(
             "persist_document_chunks",
-            {"document_id": document_id, "source_date": source_date, "drafts": drafts},
+            {
+                "document_id": document_id,
+                "source_date": source_date,
+                "category_key": category_key,
+                "main_theme": main_theme,
+                "drafts": drafts,
+            },
         )
         return persist_return
 
@@ -495,3 +507,26 @@ def test_duplicate_content_in_db_skipped(tmp_path, monkeypatch) -> None:
     assert summary.documents_upserted == 0
     assert summary.chunks_inserted == 0
     assert rec.count("upsert_document") == 0
+
+
+def test_classify_fills_category_and_theme(tmp_path, monkeypatch) -> None:
+    conn = FakeConnection()
+    rec = _patch_common(monkeypatch, conn)
+    input_dir = _make_pdf_dir(tmp_path, "a.pdf")
+
+    _patch_parse(monkeypatch, rec, [_parsed(f"{input_dir}/a.pdf")])
+    _patch_meta(monkeypatch, rec, [_meta()])
+    _patch_chunks(monkeypatch, rec, [_draft(0)])
+    _patch_db_writes(monkeypatch, rec, persist_return=1)
+    _patch_embed(monkeypatch, rec, pending=[(101, "p0")])
+    # LLM 분류 결과가 meta를 거쳐 persist_document_chunks까지 전파되는지 검증.
+    monkeypatch.setattr(
+        f"{_MODULE}.classify_document",
+        lambda parsed, *, title, taxonomy, provider: ("이차전지", "양극재"),
+    )
+
+    pdf_ingest.run_ingest_pdf("2026-06-02", input_dir=input_dir)
+
+    persist_call = rec.calls["persist_document_chunks"][0]
+    assert persist_call["category_key"] == "이차전지"
+    assert persist_call["main_theme"] == "양극재"

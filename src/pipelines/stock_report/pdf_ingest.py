@@ -40,8 +40,10 @@ from src.pipelines.stock_report.db import (
 )
 from src.pipelines.stock_report.embed import embed_payloads, upsert_embeddings
 from src.pipelines.stock_report.pdf_chunking import build_pdf_chunks
+from src.pipelines.stock_report.pdf_classify import classify_document
 from src.pipelines.stock_report.pdf_metadata import extract_metadata, load_sources
 from src.pipelines.stock_report.pdf_parser import PARSER_VERSION, parse_pdfs
+from src.pipelines.stock_report.taxonomy import load_taxonomy_registry
 
 
 logger = logging.getLogger(__name__)
@@ -85,6 +87,8 @@ def run_ingest_pdf(
     dsn: str | None = None,
     migrations_dir: str = "migrations/stock_report",
     sources_path: str = "config/stock_report_pdf_sources.yaml",
+    taxonomy_path: str = "config/stock_report_vocabulary.yaml",
+    provider: str = "openai",
     use_hybrid: bool = False,
     ocr_lang: str | None = None,
     reembed: bool = False,
@@ -129,6 +133,8 @@ def run_ingest_pdf(
                 date=date,
                 input_dir=input_dir,
                 sources_path=sources_path,
+                taxonomy_path=taxonomy_path,
+                provider=provider,
                 use_hybrid=use_hybrid,
                 ocr_lang=ocr_lang,
                 reembed=reembed,
@@ -158,13 +164,16 @@ def _run_pass1(
     date: str,
     input_dir: str,
     sources_path: str,
+    taxonomy_path: str,
+    provider: str,
     use_hybrid: bool,
     ocr_lang: str | None,
     reembed: bool,
     summary: IngestSummary,
 ) -> None:
-    """패스 1 — 파스→메타→upsert→청킹. 문서 단위로 commit/rollback한다."""
+    """패스 1 — 파스→메타→분류→upsert→청킹. 문서 단위로 commit/rollback한다."""
     sources = load_sources(sources_path)
+    taxonomy = load_taxonomy_registry(taxonomy_path)
 
     pdf_paths = sorted(Path(input_dir).glob("*.pdf"))
     summary.total_pdfs = len(pdf_paths)
@@ -200,6 +209,14 @@ def _run_pass1(
             seen_hashes[content_hash] = source_path
 
         meta = extract_metadata(parsed, source_path, sources)
+        # LLM 분류로 category_key/main_theme을 채운다(extract_metadata는 None만 남김).
+        # OpenAI 호출이라 upsert 트랜잭션 밖이며, parse 실패/OCR 문서는 본문이 없어 건너뛴다.
+        if meta.parse_status == "ok":
+            category_key, main_theme = classify_document(
+                parsed, title=meta.title, taxonomy=taxonomy, provider=provider
+            )
+            meta.category_key = category_key
+            meta.main_theme = main_theme
 
         try:
             document_id = upsert_document(

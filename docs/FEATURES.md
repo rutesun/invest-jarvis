@@ -407,15 +407,17 @@ TelegramMessage → MappedIssue → ShuffleResult → ThemeAnalysis/NewsItem →
 - 멱등성: 같은 경로의 `content_hash` + `parser_version`이 동일하면 재파싱 skip
 - 중복 차단: 같은 내용(`content_hash`)이 다른 경로로 들어오면 skip (배치 내·DB 모두, `--reembed`와 무관하게 항상 적용)
 - 노이즈 필터: 차트 파이프블록·잔여 `<br>`·의미 단어 0개 청크 제거
+- 문서 분류: taxonomy 기반 LLM 분류로 `category_key`/`main_theme` 부여(텔레그램과 같은 카테고리 체계). LLM 실패/미정 시 alias 규칙 매칭 fallback
+- 티커 추출: 제목 헤딩에서 한국 6자리·해외 `TICKER.EX`(숫자 시작 중국 코드 `300308.CH` 포함) 추출
 
 **인증/엔드포인트 분리:**
 - chat(분류/합성)은 사내 게이트웨이(`OPENAI_BASE_URL`)를 경유하지만, 게이트웨이가 임베딩 provider를 막는 경우가 있어 임베딩은 `OPEN_AI_EMBEDDING_KEY`(또는 `STOCK_REPORT_EMBED_API_KEY`)로 OpenAI 공식 엔드포인트를 직접 사용
 
 **옵션:**
-- `--input-dir`, `--use-hybrid`, `--ocr-lang`, `--embed-missing`(pending/failed 청크만 임베딩하는 backfill 경로), `--reembed`(멱등 skip 무시하고 전체 재적재)
+- `--input-dir`, `--provider`(분류 LLM, 기본 openai), `--use-hybrid`, `--ocr-lang`, `--embed-missing`(pending/failed 청크만 임베딩하는 backfill 경로), `--reembed`(멱등 skip 무시하고 전체 재적재)
 
 **제약:**
-- `category_key/main_theme/ticker_tags` 메타데이터 전파와 Telegram-PDF cross-link(retrieval 확장)는 후속 작업(T16)
+- category 필터 검색은 가능하나, Telegram-PDF 통합 retrieval/cross-link(knowledge_chunks ∪ document_chunks)는 후속 작업(T16)
 - hybrid(docling) 통합은 `needs_hybrid=True` 문서 재처리 경로로 예정
 
 ---

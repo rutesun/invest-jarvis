@@ -1412,6 +1412,9 @@ def report_ingest_pdf(
         False, "--embed-missing", help="패스2만: pending/failed 임베딩 재시도"
     ),
     reembed: bool = typer.Option(False, "--reembed", help="재파스+재청킹+재임베딩(전체 재적재)"),
+    provider: str = typer.Option(
+        "openai", "--provider", help="분류 LLM provider (openai/anthropic)"
+    ),
 ):
     """증권사 PDF를 documents/document_chunks에 적재하고 임베딩한다 (Phase 2)."""
     from datetime import datetime as dt
@@ -1427,6 +1430,7 @@ def report_ingest_pdf(
         summary = run_ingest_pdf(
             date=date,
             input_dir=input_dir,
+            provider=provider,
             use_hybrid=use_hybrid,
             ocr_lang=ocr_lang,
             embed_missing=embed_missing,
