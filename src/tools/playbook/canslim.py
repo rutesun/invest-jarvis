@@ -112,7 +112,16 @@ def _judge_s(components) -> ElementVerdict:
         return _v(None, "components 없음")
     vol = components.get("volume", {}) if isinstance(components, dict) else {}
     score = vol.get("score", 0)
-    return _v(bool(score and score > 0), f"volume score {score}")
+    metrics = vol.get("metrics", {}) if isinstance(vol, dict) else {}
+    vol_ratio = metrics.get("vol_ratio")
+    signals = vol.get("signals", []) if isinstance(vol, dict) else []
+    parts = []
+    if vol_ratio is not None:
+        parts.append(f"거래량 {vol_ratio:.2f}x(20일평균 대비)")
+    parts.append(f"score {score}")
+    if signals:
+        parts.append("/".join(signals))
+    return _v(bool(score and score > 0), ", ".join(parts))
 
 
 def _judge_l(sector_strength, relative_strength) -> ElementVerdict:  # noqa: E741
@@ -121,7 +130,33 @@ def _judge_l(sector_strength, relative_strength) -> ElementVerdict:  # noqa: E74
         return _v(None, "업종+RS 데이터 없음")
     sector_ok = bool(getattr(sector_strength, "is_strong", None))
     rs_ok = bool(getattr(relative_strength, "is_strong", None))
-    return _v(sector_ok and rs_ok, "업종+RS")
+
+    sec_detail = f"업종강세={sector_ok}"
+    industry = getattr(sector_strength, "industry", None)
+    rank_pct = getattr(sector_strength, "rank_pct", None)
+    sec_extras = []
+    if industry:
+        sec_extras.append(industry)
+    if rank_pct is not None:
+        sec_extras.append(f"상위{rank_pct:.0%}")
+    if sec_extras:
+        sec_detail += f"({', '.join(sec_extras)})"
+
+    rs_detail = f"RS강세={rs_ok}"
+    mansfield = getattr(relative_strength, "mansfield_rs", None)
+    outperform = getattr(relative_strength, "outperform_6m", None)
+    slope = getattr(relative_strength, "rp_slope_4w", None)
+    rs_extras = []
+    if mansfield is not None:
+        rs_extras.append(f"Mansfield {mansfield:.1f}")
+    if outperform is not None:
+        rs_extras.append(f"6M초과 {outperform:+.1f}%p")
+    if slope is not None:
+        rs_extras.append(f"4주기울기 {slope:+.2f}")
+    if rs_extras:
+        rs_detail += f"({', '.join(rs_extras)})"
+
+    return _v(sector_ok and rs_ok, f"{sec_detail}, {rs_detail}")
 
 
 def _judge_i(accumulation, components) -> ElementVerdict:  # noqa: E741
@@ -144,4 +179,11 @@ def _judge_m(market_regime) -> ElementVerdict:
         return _v(None, "시장환경 데이터 없음")
     allow = getattr(market_regime, "allow_new_buy", None)
     regime = getattr(market_regime, "regime", "")
-    return _v(allow, regime)
+    index_symbol = getattr(market_regime, "index_symbol", "")
+    basis = getattr(market_regime, "detail", "")
+    text = regime
+    if index_symbol:
+        text += f" [{index_symbol}]"
+    if basis:
+        text += f" ({basis})"
+    return _v(allow, text)

@@ -519,6 +519,10 @@ def test_format_deep_dive_output_renders_playbook_section_with_gate_pass():
     assert "100주" in output  # position plan
     assert "178.50" in output  # entry price
     assert "170.0" in output  # stop price
+    # CAN SLIM 7요소 상세 지표(detail) 출력
+    assert "EPS +25%" in output  # C detail
+    assert "RS 상위" in output  # L detail
+    assert "시장 상승" in output  # M detail
 
 
 def test_format_deep_dive_output_renders_playbook_section_with_gate_fail():

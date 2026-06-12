@@ -857,10 +857,25 @@ def _format_playbook_section(verdict) -> str:
                 out += f"- {mark} {check.name} {req_tag}: {check.reason}\n"
             out += "\n"
 
-    # CAN SLIM 요약
+    # CAN SLIM 요약 + 7요소 상세 지표
     canslim = verdict.canslim
     if canslim is not None:
         out += f"**CAN SLIM**: {canslim.summary}\n\n"
+        sym = {True: "✅", False: "❌", None: "—"}
+        elements = [
+            ("C", "분기EPS", canslim.c),
+            ("A", "연간EPS+ROE", canslim.a),
+            ("N", "신고가 근접", canslim.n),
+            ("S", "거래량", canslim.s),
+            ("L", "주도주(업종+RS)", canslim.l),
+            ("I", "기관 매집", canslim.i),
+            ("M", "시장환경", canslim.m),
+        ]
+        for key, label, element in elements:
+            mark = sym.get(element.met, "—")
+            detail = f": {element.detail}" if element.detail else ""
+            out += f"- {mark} {key} ({label}){detail}\n"
+        out += "\n"
 
     # 포지션 플랜 (미보유 + 게이트 통과 시)
     position_plan = verdict.position_plan

@@ -203,3 +203,77 @@ def test_compute_canslim_weak_eps_c_not_met():
     )
 
     assert result.c.met is False
+
+
+def test_compute_canslim_l_detail_shows_sector_and_rs_status():
+    """L detail에 업종강세·RS강세 상태가 각각 드러난다 (met=False 근거 명확화)."""
+    from src.tools.playbook.canslim import compute_canslim
+    from src.tools.playbook.models import RelativeStrengthResult, SectorStrengthResult
+
+    sector_strong = SectorStrengthResult(
+        industry="Semiconductors", rank_pct=0.05, trend="up", is_strong=True, source="FMP"
+    )
+    rs_weak = RelativeStrengthResult(
+        mansfield_rs=-5.0, outperform_6m=-10.0, rp_slope_4w=-0.5, index_symbol="SPY"
+    )
+
+    result = compute_canslim(
+        snapshot=None,
+        components=None,
+        fundamental=None,
+        accumulation=None,
+        sector_strength=sector_strong,
+        relative_strength=rs_weak,
+        market_regime=None,
+    )
+
+    assert result.l.met is False
+    assert "업종강세=True" in result.l.detail
+    assert "RS강세=False" in result.l.detail
+    assert "Semiconductors" in result.l.detail  # 업종명
+    assert "Mansfield" in result.l.detail  # 종목 RS 수치
+    assert "기울기" in result.l.detail  # 4주 RP 기울기 (RS강세 판정의 결정 요인)
+
+
+def test_compute_canslim_s_detail_shows_volume_ratio():
+    """S detail에 거래량 비율(vol_ratio, 20일평균 대비)이 드러난다."""
+    from src.tools.playbook.canslim import compute_canslim
+
+    components = {"volume": {"score": 0, "signals": [], "metrics": {"vol_ratio": 0.86}}}
+
+    result = compute_canslim(
+        snapshot=None,
+        components=components,
+        fundamental=None,
+        accumulation=None,
+        sector_strength=None,
+        relative_strength=None,
+        market_regime=None,
+    )
+
+    assert result.s.met is False
+    assert "0.86" in result.s.detail
+
+
+def test_compute_canslim_m_detail_shows_regime_and_basis():
+    """M detail에 시장 국면 + 근거(지수/판정 근거)가 드러난다."""
+    from src.tools.playbook.canslim import compute_canslim
+    from src.tools.playbook.models import MarketRegimeResult
+
+    regime = MarketRegimeResult(
+        regime="상승", allow_new_buy=True, index_symbol="^GSPC", detail="close>SMA200"
+    )
+
+    result = compute_canslim(
+        snapshot=None,
+        components=None,
+        fundamental=None,
+        accumulation=None,
+        sector_strength=None,
+        relative_strength=None,
+        market_regime=regime,
+    )
+
+    assert result.m.met is True
+    assert "상승" in result.m.detail
+    assert "close>SMA200" in result.m.detail or "^GSPC" in result.m.detail
