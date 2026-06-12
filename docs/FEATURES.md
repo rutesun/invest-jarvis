@@ -395,6 +395,31 @@ TelegramMessage → MappedIssue → ShuffleResult → ThemeAnalysis/NewsItem →
 
 ---
 
+## 5-2. Stock Report V2 - PDF Ingest (`jarvis report ingest-pdf`)
+
+증권사 PDF 리포트를 파싱·청킹·임베딩하여 `documents`/`document_chunks`에 적재하는 RAG 인제스트 파이프라인 (V2 Phase 2).
+
+**현재 범위:**
+- `opendataloader-pdf`(Java) 기반 PDF → Markdown 파싱, local/hybrid 2개 모드 + 재무 라벨 융합 증상 시 `needs_hybrid` 승격 라우팅
+- small-to-big 청킹: 산문은 작은 청크, 표는 원자 청크, `section_path`로 부모 섹션 복원
+- 2-패스 적재: 청크를 `embed_status='pending'`으로 먼저 커밋한 뒤 임베딩을 DB 트랜잭션 밖에서 별도 처리 (임베딩 실패 시 pending 보존·재시도)
+- `text-embedding-3-small`(1536차원) 임베딩 → pgvector HNSW cosine 검색
+- 멱등성: 같은 경로의 `content_hash` + `parser_version`이 동일하면 재파싱 skip
+- 중복 차단: 같은 내용(`content_hash`)이 다른 경로로 들어오면 skip (배치 내·DB 모두, `--reembed`와 무관하게 항상 적용)
+- 노이즈 필터: 차트 파이프블록·잔여 `<br>`·의미 단어 0개 청크 제거
+
+**인증/엔드포인트 분리:**
+- chat(분류/합성)은 사내 게이트웨이(`OPENAI_BASE_URL`)를 경유하지만, 게이트웨이가 임베딩 provider를 막는 경우가 있어 임베딩은 `OPEN_AI_EMBEDDING_KEY`(또는 `STOCK_REPORT_EMBED_API_KEY`)로 OpenAI 공식 엔드포인트를 직접 사용
+
+**옵션:**
+- `--input-dir`, `--use-hybrid`, `--ocr-lang`, `--embed-missing`(pending/failed 청크만 임베딩하는 backfill 경로), `--reembed`(멱등 skip 무시하고 전체 재적재)
+
+**제약:**
+- `category_key/main_theme/ticker_tags` 메타데이터 전파와 Telegram-PDF cross-link(retrieval 확장)는 후속 작업(T16)
+- hybrid(docling) 통합은 `needs_hybrid=True` 문서 재처리 경로로 예정
+
+---
+
 ## 6. Ticker Report (`jarvis report ticker`)
 
 지정 티커의 매크로 + 기술적 분석 스냅샷.
