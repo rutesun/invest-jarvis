@@ -158,3 +158,37 @@ def test_fundamental_summary_input_eps_fields_default_none():
     inp = FundamentalSummaryInput(ticker="AAPL")
     assert inp.eps_growth_quarterly is None
     assert inp.eps_cagr_annual is None
+
+
+# ---------------------------------------------------------------------------
+# EPS CAGR 계산 헬퍼
+# ---------------------------------------------------------------------------
+
+
+def test_compute_eps_cagr_normal_growth():
+    """정상 성장: 2년간 1.0 → 1.44 → CAGR 20%."""
+    from src.pipelines.deep_dive import _compute_eps_cagr
+
+    assert _compute_eps_cagr(newest=1.44, oldest=1.0, n_years=2) == pytest.approx(0.2, abs=1e-4)
+
+
+def test_compute_eps_cagr_sign_change_returns_none():
+    """손실→흑자 전환(sign change) 시 CAGR 수식이 성립하지 않으므로 None 반환."""
+    from src.pipelines.deep_dive import _compute_eps_cagr
+
+    assert _compute_eps_cagr(newest=1.0, oldest=-3.0, n_years=2) is None
+
+
+def test_compute_eps_cagr_zero_oldest_returns_none():
+    """이전 EPS=0 이면 나눗셈 불가 → None."""
+    from src.pipelines.deep_dive import _compute_eps_cagr
+
+    assert _compute_eps_cagr(newest=2.0, oldest=0.0, n_years=1) is None
+
+
+def test_compute_eps_cagr_both_negative_returns_value():
+    """둘 다 음수(계속 적자)는 비율이 양수이므로 의미 있는 CAGR 반환."""
+    from src.pipelines.deep_dive import _compute_eps_cagr
+
+    result = _compute_eps_cagr(newest=-1.0, oldest=-2.0, n_years=1)
+    assert result == pytest.approx(-0.5, abs=1e-4)

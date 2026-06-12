@@ -54,6 +54,21 @@ _FUNDAMENTAL_SIGNAL_FIELDS = (
 )
 
 
+def _compute_eps_cagr(newest: float, oldest: float, n_years: int) -> float | None:
+    """Annual EPS CAGR for a given period.
+
+    Returns None when CAGR is mathematically undefined:
+    - oldest is zero (division by zero)
+    - sign change between oldest and newest (negative base with fractional exponent → complex)
+    """
+    if oldest == 0:
+        return None
+    ratio = newest / oldest
+    if ratio <= 0:
+        return None
+    return ratio ** (1.0 / n_years) - 1
+
+
 class DeepDivePipeline:
     """Deep dive analysis pipeline with LLM integration."""
 
@@ -401,8 +416,8 @@ class DeepDivePipeline:
             newest = ann[0].eps
             oldest = ann[-1].eps
             n_years = len(ann) - 1
-            if newest is not None and oldest not in (None, 0) and n_years > 0:
-                eps_cagr_annual = (newest / oldest) ** (1 / n_years) - 1
+            if newest is not None and oldest is not None and n_years > 0:
+                eps_cagr_annual = _compute_eps_cagr(newest, oldest, n_years)
 
         input_data = FundamentalSummaryInput(
             ticker=ticker,
