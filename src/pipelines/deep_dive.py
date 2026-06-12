@@ -60,6 +60,10 @@ def _compute_eps_cagr(newest: float, oldest: float, n_years: int) -> float | Non
     Returns None when CAGR is mathematically undefined:
     - oldest is zero (division by zero)
     - sign change between oldest and newest (negative base with fractional exponent → complex)
+
+    Note: both-negative (continued losses) returns a valid float, but the sign is
+    counter-intuitive — e.g. -2→-1 gives CAGR=-50% even though losses halved.
+    Callers consuming this for LLM prompts should be aware of this interpretation.
     """
     if oldest == 0:
         return None

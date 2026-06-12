@@ -131,16 +131,19 @@ def _judge_l(sector_strength, relative_strength) -> ElementVerdict:  # noqa: E74
     sector_ok = bool(getattr(sector_strength, "is_strong", None))
     rs_ok = bool(getattr(relative_strength, "is_strong", None))
 
-    sec_detail = f"업종강세={sector_ok}"
-    industry = getattr(sector_strength, "industry", None)
-    rank_pct = getattr(sector_strength, "rank_pct", None)
-    sec_extras = []
-    if industry:
-        sec_extras.append(industry)
-    if rank_pct is not None:
-        sec_extras.append(f"상위{rank_pct:.0%}")
-    if sec_extras:
-        sec_detail += f"({', '.join(sec_extras)})"
+    if sector_strength is None:
+        sec_detail = "업종강세=None(데이터없음)"
+    else:
+        sec_detail = f"업종강세={sector_ok}"
+        industry = getattr(sector_strength, "industry", None)
+        rank_pct = getattr(sector_strength, "rank_pct", None)
+        sec_extras = []
+        if industry:
+            sec_extras.append(industry)
+        if rank_pct is not None:
+            sec_extras.append(f"상위{rank_pct:.0%}")
+        if sec_extras:
+            sec_detail += f"({', '.join(sec_extras)})"
 
     rs_detail = f"RS강세={rs_ok}"
     mansfield = getattr(relative_strength, "mansfield_rs", None)

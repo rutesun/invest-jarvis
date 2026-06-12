@@ -205,6 +205,29 @@ def test_compute_canslim_weak_eps_c_not_met():
     assert result.c.met is False
 
 
+def test_compute_canslim_l_detail_sector_none_shows_no_data():
+    """sector_strength=None이지만 RS 데이터가 있으면 업종 부분은 '데이터없음'으로 표시된다."""
+    from src.tools.playbook.canslim import compute_canslim
+    from src.tools.playbook.models import RelativeStrengthResult
+
+    rs = RelativeStrengthResult(
+        mansfield_rs=5.0, outperform_6m=10.0, rp_slope_4w=0.3, index_symbol="SPY"
+    )
+
+    result = compute_canslim(
+        snapshot=None,
+        components=None,
+        fundamental=None,
+        accumulation=None,
+        sector_strength=None,
+        relative_strength=rs,
+        market_regime=None,
+    )
+
+    assert "데이터없음" in result.l.detail
+    assert "업종강세=False" not in result.l.detail
+
+
 def test_compute_canslim_l_detail_shows_sector_and_rs_status():
     """L detail에 업종강세·RS강세 상태가 각각 드러난다 (met=False 근거 명확화)."""
     from src.tools.playbook.canslim import compute_canslim
