@@ -39,6 +39,7 @@ from src.tools.playbook.sector_strength import (
 )
 from src.tools.playbook.sizing import plan_position
 from src.tools.playbook.vcp import detect_vcp_breakout
+from src.tools.technical.components.minervini import STAGE2_CONDITION_LABELS
 
 
 logger = logging.getLogger(__name__)
@@ -93,12 +94,21 @@ class PlaybookEngine:
 
         accumulation = analyze_accumulation(stock_df)
 
-        # is_stage2: technical_result.components["minervini"]["metrics"]
+        # is_stage2 + 근접도(충족 개수·미충족 조건 라벨): minervini metrics
         is_stage2: float = 0.0
+        stage2_met_count: float | None = None
+        stage2_failed_labels: list[str] | None = None
         with contextlib.suppress(KeyError, TypeError, AttributeError):
-            is_stage2 = float(
-                technical_result.components["minervini"]["metrics"].get("is_stage2", 0.0)
-            )
+            mv_metrics = technical_result.components["minervini"]["metrics"]
+            is_stage2 = float(mv_metrics.get("is_stage2", 0.0))
+            stage2_met_count = mv_metrics.get("conditions_met")
+            stage2_failed_labels = [
+                STAGE2_CONDITION_LABELS[name]
+                for key, val in mv_metrics.items()
+                if key.startswith("cond_")
+                and val == 0.0
+                and (name := key[len("cond_") :]) in STAGE2_CONDITION_LABELS
+            ]
 
         vcp = detect_vcp_breakout(stock_df)
 
@@ -138,6 +148,8 @@ class PlaybookEngine:
                 vcp=vcp,
                 canslim=canslim,
                 flow=flow,
+                stage2_met_count=stage2_met_count,
+                stage2_failed_labels=stage2_failed_labels,
             )
 
             position_plan = None

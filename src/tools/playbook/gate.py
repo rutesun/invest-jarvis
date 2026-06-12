@@ -27,6 +27,8 @@ def evaluate_gate(
     vcp,
     canslim,
     flow,
+    stage2_met_count: float | None = None,
+    stage2_failed_labels: list[str] | None = None,
 ) -> GateResult:
     """매수 게이트 평가. 순수 함수 — I/O 없음."""
     checklist: list[GateCheck] = []
@@ -40,9 +42,14 @@ def evaluate_gate(
         a_reason = f"시장환경={market_regime.regime}"
     checklist.append(GateCheck(name="A", required=True, met=a_met, reason=a_reason))
 
-    # ── B: Stage 2 ────────────────────────────────────────────────────────────
+    # ── B: Stage 2 (미충족 시 충족 개수 + 미충족 조건 노출) ───────────────────
     b_met: bool | None = bool(is_stage2 == 1.0) if is_stage2 is not None else None
     b_reason = f"is_stage2={is_stage2}"
+    if stage2_met_count is not None:
+        detail = f"{int(stage2_met_count)}/7"
+        if not b_met and stage2_failed_labels:
+            detail += f", 미충족: {', '.join(stage2_failed_labels)}"
+        b_reason += f" ({detail})"
     checklist.append(GateCheck(name="B", required=True, met=b_met, reason=b_reason))
 
     # ── C: RS 강세 AND 업종 강세 (sector None → RS만) ────────────────────────

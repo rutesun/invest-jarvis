@@ -313,3 +313,51 @@ async def test_engine_korean_ticker_uses_kis_sector():
     )
     assert result.ticker == "005930.KS"
     assert isinstance(result.headline, str)
+
+
+@pytest.mark.asyncio
+async def test_engine_gate_veto_shows_stage2_proximity():
+    """미보유 + Stage2 미충족(6/7) → gate veto_reason에 충족 개수·미충족 조건 라벨 노출."""
+    from src.tools.playbook.engine import PlaybookEngine
+
+    stock_df = _make_stock_df(300, close=100.0)
+    index_df = _make_index_df(300)
+    technical_result = _make_technical_result(stock_df)
+    # 6/7 충족, above_50(종가>50일선)만 미충족
+    technical_result.components["minervini"]["metrics"] = {
+        "is_stage2": 0.0,
+        "conditions_met": 6.0,
+        "cond_ma_stack": 1.0,
+        "cond_ma_50_stack": 1.0,
+        "cond_sma_150_rising": 1.0,
+        "cond_sma_200_rising": 1.0,
+        "cond_above_50": 0.0,
+        "cond_above_52w_low_30pct": 1.0,
+        "cond_within_52w_high_25pct": 1.0,
+    }
+
+    index_provider = MagicMock()
+    index_provider.get_index_history = AsyncMock(return_value=("^GSPC", index_df))
+    fmp_provider = MagicMock()
+    fmp_provider.industry_snapshot = AsyncMock(return_value={})
+    fmp_provider.historical_industry = AsyncMock(return_value=[])
+    kis_provider = MagicMock()
+
+    engine = PlaybookEngine(
+        index_provider=index_provider,
+        fmp_provider=fmp_provider,
+        kis_provider=kis_provider,
+    )
+
+    result = await engine.evaluate(
+        ticker="AAPL",
+        technical_result=technical_result,
+        fundamental=None,
+        flow=None,
+        zone_set=None,
+        holding=None,
+    )
+    assert result.gate is not None
+    assert result.gate.veto_reason is not None
+    assert "6/7" in result.gate.veto_reason
+    assert "종가>50일선" in result.gate.veto_reason

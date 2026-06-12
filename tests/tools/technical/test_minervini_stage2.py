@@ -64,3 +64,31 @@ def test_conditions_met_count_7_when_stage2():
     result = analyze_minervini(df)
     if result.metrics["is_stage2"] == 1.0:
         assert result.metrics["conditions_met"] == 7.0
+
+
+def test_minervini_exposes_per_condition_metrics():
+    """metrics에 각 조건 결과가 cond_<name>: 1.0/0.0으로 노출된다."""
+    df_up = _make_df(260, 100.0, 200.0)  # 상승 → 전부 충족
+    result_up = analyze_minervini(df_up)
+    assert result_up.metrics["cond_above_50"] == 1.0
+    assert result_up.metrics["cond_ma_stack"] == 1.0
+
+    df_down = _make_df(260, 200.0, 100.0)  # 하락 → 종가 < SMA50
+    result_down = analyze_minervini(df_down)
+    assert result_down.metrics["cond_above_50"] == 0.0
+
+
+def test_minervini_condition_labels_korean():
+    """STAGE2_CONDITION_LABELS가 7조건의 한글 라벨을 제공한다."""
+    from src.tools.technical.components.minervini import STAGE2_CONDITION_LABELS
+
+    assert STAGE2_CONDITION_LABELS["above_50"] == "종가>50일선"
+    assert set(STAGE2_CONDITION_LABELS) == {
+        "ma_stack",
+        "ma_50_stack",
+        "sma_150_rising",
+        "sma_200_rising",
+        "above_50",
+        "above_52w_low_30pct",
+        "within_52w_high_25pct",
+    }

@@ -332,3 +332,46 @@ def test_gate_flow_bonus_does_not_fail_gate():
         flow=None,
     )
     assert result_no_flow.passed is True
+
+
+# ---------------------------------------------------------------------------
+# B 근접도 노출: Stage2 미충족 시 충족 개수 + 미충족 조건 라벨
+# ---------------------------------------------------------------------------
+
+
+def test_gate_b_reason_shows_stage2_proximity():
+    """B 미충족 시 reason에 충족 개수(6/7)와 미충족 조건 라벨이 노출된다."""
+    from src.tools.playbook.gate import evaluate_gate
+
+    result = evaluate_gate(
+        market_regime=_regime(True),
+        is_stage2=0.0,
+        relative_strength=_rs(True),
+        sector_strength=_sector(True),
+        vcp=_vcp(True),
+        canslim=_canslim(5),
+        flow=None,
+        stage2_met_count=6.0,
+        stage2_failed_labels=["종가>50일선"],
+    )
+    b_check = next(c for c in result.checklist if c.name == "B")
+    assert "6/7" in b_check.reason
+    assert "종가>50일선" in b_check.reason
+    assert result.veto_reason is not None and "6/7" in result.veto_reason
+
+
+def test_gate_b_reason_omits_proximity_when_no_detail():
+    """met_count 미제공 시 기존 동작 유지 — 하위호환(개수 정보 없음)."""
+    from src.tools.playbook.gate import evaluate_gate
+
+    result = evaluate_gate(
+        market_regime=_regime(True),
+        is_stage2=0.0,
+        relative_strength=_rs(True),
+        sector_strength=_sector(True),
+        vcp=_vcp(True),
+        canslim=_canslim(5),
+        flow=None,
+    )
+    b_check = next(c for c in result.checklist if c.name == "B")
+    assert "/7" not in b_check.reason

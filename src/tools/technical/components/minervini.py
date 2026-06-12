@@ -3,6 +3,17 @@ import pandas as pd
 from src.tools.technical.models import ComponentResult
 
 
+STAGE2_CONDITION_LABELS: dict[str, str] = {
+    "ma_stack": "종가>150·200선",
+    "ma_50_stack": "50>150>200 정배열",
+    "sma_150_rising": "150일선 상승",
+    "sma_200_rising": "200일선 상승",
+    "above_50": "종가>50일선",
+    "above_52w_low_30pct": "52주저점+30%↑",
+    "within_52w_high_25pct": "52주고점-25%이내",
+}
+
+
 def analyze_minervini(df: pd.DataFrame) -> ComponentResult:
     """Analyze Minervini Stage 2 conditions (7 conditions)."""
     if df.empty or len(df) < 200:
@@ -71,6 +82,8 @@ def analyze_minervini(df: pd.DataFrame) -> ComponentResult:
         "sma_150": sma_150,
         "sma_200": sma_200,
     }
+    for _name, _met in conditions.items():
+        metrics[f"cond_{_name}"] = 1.0 if _met else 0.0
 
     def _get_failure_reason(name: str) -> str:
         if name == "ma_stack":
