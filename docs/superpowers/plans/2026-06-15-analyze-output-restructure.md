@@ -860,6 +860,7 @@ Expected: FAIL with "No module named 'src.cli.analyze_render'"
    - `_format_playbook_section`, `_format_raw_analysis_sections`
    - 이들이 쓰는 표시 헬퍼: `_format_metric_value`, `_format_disclosure_title`, `_format_growth_rate`, `_format_factor_label`, `_format_timing_label`, `_get_metric_display_name`
    - **제외(삭제)**: `_format_top_summary` — 옮기지 않고 main.py에서 삭제(판단요약 제거, R4)
+   - ⚠️ **`_format_playbook_section` 이동 시 내부 수정 필요**: 게이트 체크리스트 블록(현 main.py:849-858)과 CAN SLIM 블록(현 main.py:860-878)을 **제거**한다 — 각각 Task 10 Summary 섹션, Task 11 CAN SLIM 섹션으로 역할 이동. 포지션 플랜(880-894)과 매도 판정(896-910)만 남기고 함수 헤더를 `## 📋 포지션 플랜 / 청산 판단`으로 변경. 이렇게 해야 Task 16의 `_format_playbook_section(playbook_verdict)` 호출이 증거 상세에서 이중 렌더를 일으키지 않는다.
 2. analyze_render.py 상단에 필요한 import를 옮긴다 (`SectorMetrics` 등 이 함수들이 쓰던 것).
 3. main.py 끝에 호환용 re-export 추가:
 

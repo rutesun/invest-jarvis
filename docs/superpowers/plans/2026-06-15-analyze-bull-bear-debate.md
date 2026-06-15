@@ -454,10 +454,18 @@ def test_bear_market_entry_only_watch():
     assert compute_action_space(_v(regime_allow=False), "entry") == ["관망"]
 
 
-def test_two_medium_not_more_permissive_than_one():
+def test_medium_signal_allows_reduce_or_hold():
+    one = [ExitSignal(code="SMA_SHORT", severity="medium", detail="d")]
+    # 실제 엔진: medium 1개 → action="reduce". compute_action_space 독립 단위 테스트.
+    assert compute_action_space(_v(exit_signals=one, exit_action="reduce", holding=True), "holding") == ["비중축소", "보유"]
+
+
+def test_two_medium_same_bucket_as_one():
+    """medium >= 1 이므로 2개도 1개와 같은 버킷 — 역전 방지 확인. (실 엔진에서 medium 2개는
+    action='liquidate'로 세팅되지만, 여기서는 compute_action_space 카운트 로직만 독립 검증.)"""
     two = [ExitSignal(code="SMA_SHORT", severity="medium", detail="d"),
            ExitSignal(code="DISTRIBUTION", severity="medium", detail="d")]
-    assert compute_action_space(_v(exit_signals=two, holding=True), "holding") == ["비중축소", "보유"]
+    assert compute_action_space(_v(exit_signals=two, exit_action="reduce", holding=True), "holding") == ["비중축소", "보유"]
 
 
 def test_strong_exit_no_add():
@@ -581,13 +589,24 @@ async def run_debate_judge(input_data: DebateJudgeInput, llm) -> DebateVerdictOu
     })
 ```
 
-import 추가 (기존 `from src.llm.models import (...)` 블록에 병합):
+기존 `from src.llm.models import (...)` 블록에 4개 이름을 **병합**한다 (새 import 문 추가 금지 — ruff E401 중복 import):
 
 ```python
+from src.llm.models import (
+    ActionableSignalOutput,       # Task 10에서 제거 예정
     DebateAdvocacyInput,
     DebateAdvocacyOutput,
     DebateJudgeInput,
     DebateVerdictOutput,
+    FundamentalSummaryInput,
+    FundamentalSummaryOutput,
+    IntegratedAnalysisInput,      # Task 10에서 제거 예정
+    IntegratedAnalysisOutput,     # Task 10에서 제거 예정
+    NewsAnalysisInput,
+    NewsAnalysisOutput,
+    TechnicalSummaryInput,
+    TechnicalSummaryOutput,
+)
 ```
 
 - [ ] **Step 4: Run** → PASS  **Step 5: Commit** `feat(llm): add debate advocacy and judge calls`
@@ -748,8 +767,10 @@ async def test_build_debate_returns_bundle_and_ledger(monkeypatch):
     async def _judge(_i, _l):
         return DebateVerdictOutput(action="관망", confidence=0.5, swing_factor="x", reconciliation="y")
 
-    monkeypatch.setattr(deep_dive, "run_debate_advocacy", _adv, raising=False)
-    monkeypatch.setattr(deep_dive, "run_debate_judge", _judge, raising=False)
+    # _build_debate → run_debate(engine) → analyzer.run_debate_advocacy 경로.
+    # deep_dive 네임스페이스 패치는 실 호출경로에 닿지 않으므로 원본 모듈을 직접 패치한다.
+    monkeypatch.setattr("src.llm.analyzer.run_debate_advocacy", _adv)
+    monkeypatch.setattr("src.llm.analyzer.run_debate_judge", _judge)
 
     bundle, ledger = await deep_dive._build_debate(
         playbook_verdict=None, factor_assessments=[], snapshot=None, flow=None,
@@ -971,6 +992,7 @@ grep -rn "apply_playbook_veto\|generate_integrated_analysis\|generate_actionable
 2. `llm/models.py` — `IntegratedAnalysisInput/Output`, `ActionableSignalOutput` 삭제.
 3. `llm/analyzer.py` — `generate_integrated_analysis`, `generate_actionable_signal` 삭제 + 이제 안 쓰는 import 정리.
 4. `deep_dive.py` — `_generate_integrated_analysis`/`_format_flow_for_llm`(integrated 전용이면) 삭제; integrated/actionable/veto 호출 블록 삭제(**내용으로 찾기** — 플랜 A 후 라인 시프트); `IntegratedAnalysis*`/`apply_playbook_veto` import 제거. return dict의 `integrated_analysis`/`actionable_signal` 키 제거.
+   - ⚠️ **`apply_playbook_veto` call(현재 deep_dive.py:261)과 import(현재 deep_dive.py:19)를 반드시 동시에 제거.** call만 지우면 ruff E401 dead-import, import만 지우면 NameError 발생.
 5. `cli/analyze_render.py` — `_format_raw_analysis_sections` 안의 `integrated = result.get("integrated_analysis")` 렌더 블록 삭제(리뷰 C2: 플랜 A 이동분에 잔존).
 6. `cli/main.py` — `display_actionable_signal` 삭제; `analyze` 커맨드의 actionable 패널 출력 블록 삭제; `ActionableSignalOutput` import 제거.
 
