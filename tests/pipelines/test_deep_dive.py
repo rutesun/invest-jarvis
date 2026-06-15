@@ -458,7 +458,7 @@ async def test_deep_dive_pipeline_with_playbook_engine_returns_verdict(
     """PlaybookEngine이 주입되면 run() 결과에 playbook_verdict 키가 존재해야 한다."""
     from unittest.mock import MagicMock
 
-    from src.tools.playbook.models import (
+    from src.tools.criteria.models import (
         CanslimResult,
         ElementVerdict,
         GateResult,

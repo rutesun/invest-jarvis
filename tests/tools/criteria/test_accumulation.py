@@ -1,7 +1,7 @@
 import pandas as pd
 
-from src.tools.playbook.accumulation import analyze_accumulation
-from src.tools.playbook.models import AccumulationResult
+from src.tools.criteria.accumulation import analyze_accumulation
+from src.tools.criteria.models import AccumulationResult
 
 
 def test_accumulation_result_model():

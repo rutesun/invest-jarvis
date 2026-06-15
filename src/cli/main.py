@@ -332,8 +332,8 @@ async def run_deep_dive(ticker_or_name: str, provider: str) -> dict:
     playbook_engine = None
     try:
         from src.providers.index_provider import IndexProvider
-        from src.tools.playbook.engine import PlaybookEngine
-        from src.tools.playbook.holdings import load_holdings
+        from src.tools.criteria.engine import PlaybookEngine
+        from src.tools.criteria.holdings import load_holdings
 
         holdings_config = load_holdings()
         capital_usd, risk_pct_usd = holdings_config.usd_capital, holdings_config.usd_risk_pct

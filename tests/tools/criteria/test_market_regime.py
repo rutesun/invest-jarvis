@@ -1,8 +1,8 @@
 import numpy as np
 import pandas as pd
 
-from src.tools.playbook.market_regime import assess_market_regime
-from src.tools.playbook.models import MarketRegimeResult
+from src.tools.criteria.market_regime import assess_market_regime
+from src.tools.criteria.models import MarketRegimeResult
 
 
 def _df(closes):

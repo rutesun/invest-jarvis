@@ -47,7 +47,7 @@ def _snapshot(close: float, high_52w: float | None = None, swing_low: float | No
 
 
 def _rs(strong: bool):
-    from src.tools.playbook.models import RelativeStrengthResult
+    from src.tools.criteria.models import RelativeStrengthResult
 
     return RelativeStrengthResult(
         mansfield_rs=5.0 if strong else -5.0,
@@ -58,7 +58,7 @@ def _rs(strong: bool):
 
 
 def _acc(ratio: float):
-    from src.tools.playbook.models import AccumulationResult
+    from src.tools.criteria.models import AccumulationResult
 
     acc_days = int(ratio * 10)
     dist_days = 10 - acc_days
@@ -87,7 +87,7 @@ def _holding(avg: float, stop: float | None = None, qty: int = 100):
 
 
 def test_exit_no_signals_hold():
-    from src.tools.playbook.exit_rules import evaluate_exit
+    from src.tools.criteria.exit_rules import evaluate_exit
 
     # 종가가 모든 이평 위, 매집 우세, RS 강세
     df = _make_df(n=250, close_last=120.0, trend="up")
@@ -114,7 +114,7 @@ def test_exit_no_signals_hold():
 
 
 def test_exit_sma_short_below_sma20():
-    from src.tools.playbook.exit_rules import evaluate_exit
+    from src.tools.criteria.exit_rules import evaluate_exit
 
     df = _make_df(n=60, close_last=80.0)
     df["SMA20"] = 95.0  # close(80) < SMA20(95)
@@ -141,7 +141,7 @@ def test_exit_sma_short_below_sma20():
 
 
 def test_exit_distribution_signal():
-    from src.tools.playbook.exit_rules import evaluate_exit
+    from src.tools.criteria.exit_rules import evaluate_exit
 
     df = _make_df(n=60, close_last=100.0)
     df["SMA20"] = 80.0
@@ -166,7 +166,7 @@ def test_exit_distribution_signal():
 
 
 def test_exit_rs_weakening_signal():
-    from src.tools.playbook.exit_rules import evaluate_exit
+    from src.tools.criteria.exit_rules import evaluate_exit
 
     df = _make_df(n=60, close_last=100.0)
     df["SMA20"] = 80.0
@@ -193,7 +193,7 @@ def test_exit_rs_weakening_signal():
 
 
 def test_exit_sma_long_below_sma150():
-    from src.tools.playbook.exit_rules import evaluate_exit
+    from src.tools.criteria.exit_rules import evaluate_exit
 
     df = _make_df(n=250, close_last=60.0)
     df["SMA20"] = 70.0
@@ -221,7 +221,7 @@ def test_exit_sma_long_below_sma150():
 
 def test_exit_liquidate_on_strong_signal():
     """SMA_LONG(강) → 청산."""
-    from src.tools.playbook.exit_rules import evaluate_exit
+    from src.tools.criteria.exit_rules import evaluate_exit
 
     df = _make_df(n=250, close_last=60.0)
     df["SMA20"] = 70.0
@@ -246,7 +246,7 @@ def test_exit_liquidate_on_strong_signal():
 
 def test_exit_reduce_on_single_medium_signal():
     """medium 신호 1개(SMA_SHORT만) → 비중축소."""
-    from src.tools.playbook.exit_rules import evaluate_exit
+    from src.tools.criteria.exit_rules import evaluate_exit
 
     df = _make_df(n=60, close_last=80.0)
     df["SMA20"] = 95.0  # close < SMA20 → SMA_SHORT(medium)
@@ -274,7 +274,7 @@ def test_exit_reduce_on_single_medium_signal():
 
 def test_exit_liquidate_on_two_medium_signals():
     """medium 신호 2개 → 청산."""
-    from src.tools.playbook.exit_rules import evaluate_exit
+    from src.tools.criteria.exit_rules import evaluate_exit
 
     df = _make_df(n=60, close_last=80.0)
     df["SMA20"] = 95.0  # SMA_SHORT(medium)
@@ -301,7 +301,7 @@ def test_exit_liquidate_on_two_medium_signals():
 
 def test_exit_current_r_with_stop():
     """stop_price 있으면 current_r = (close-avg)/(avg-stop_price)."""
-    from src.tools.playbook.exit_rules import evaluate_exit
+    from src.tools.criteria.exit_rules import evaluate_exit
 
     df = _make_df(n=60, close_last=115.0)
     df["SMA20"] = 80.0
@@ -327,7 +327,7 @@ def test_exit_current_r_with_stop():
 
 
 def test_exit_current_r_without_stop():
-    from src.tools.playbook.exit_rules import evaluate_exit
+    from src.tools.criteria.exit_rules import evaluate_exit
 
     df = _make_df(n=60, close_last=115.0)
     df["SMA20"] = 80.0
@@ -352,7 +352,7 @@ def test_exit_current_r_without_stop():
 
 
 def test_exit_trailing_stop_is_sma50():
-    from src.tools.playbook.exit_rules import evaluate_exit
+    from src.tools.criteria.exit_rules import evaluate_exit
 
     df = _make_df(n=60, close_last=115.0)
     sma50_last = float(df["SMA50"].iloc[-1])

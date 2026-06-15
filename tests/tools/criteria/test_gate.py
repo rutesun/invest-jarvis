@@ -2,7 +2,7 @@
 
 
 def _regime(allow: bool):
-    from src.tools.playbook.models import MarketRegimeResult
+    from src.tools.criteria.models import MarketRegimeResult
 
     return MarketRegimeResult(
         regime="상승" if allow else "하락",
@@ -12,7 +12,7 @@ def _regime(allow: bool):
 
 
 def _rs(strong: bool):
-    from src.tools.playbook.models import RelativeStrengthResult
+    from src.tools.criteria.models import RelativeStrengthResult
 
     return RelativeStrengthResult(
         mansfield_rs=5.0 if strong else -5.0,
@@ -23,7 +23,7 @@ def _rs(strong: bool):
 
 
 def _sector(strong: bool | None):
-    from src.tools.playbook.models import SectorStrengthResult
+    from src.tools.criteria.models import SectorStrengthResult
 
     if strong is None:
         return None
@@ -37,13 +37,13 @@ def _sector(strong: bool | None):
 
 
 def _vcp(breakout: bool):
-    from src.tools.playbook.models import VcpResult
+    from src.tools.criteria.models import VcpResult
 
     return VcpResult(in_vcp=True, pivot=100.0, breakout=breakout)
 
 
 def _canslim(score: int):
-    from src.tools.playbook.models import CanslimResult, ElementVerdict
+    from src.tools.criteria.models import CanslimResult, ElementVerdict
 
     bools = [True] * score + [False] * (7 - score)
     e = [ElementVerdict(met=b) for b in bools]
@@ -56,7 +56,7 @@ def _canslim(score: int):
 
 
 def test_gate_passed_all_required():
-    from src.tools.playbook.gate import evaluate_gate
+    from src.tools.criteria.gate import evaluate_gate
 
     result = evaluate_gate(
         market_regime=_regime(True),
@@ -78,7 +78,7 @@ def test_gate_passed_all_required():
 
 
 def test_gate_fail_market_regime():
-    from src.tools.playbook.gate import evaluate_gate
+    from src.tools.criteria.gate import evaluate_gate
 
     result = evaluate_gate(
         market_regime=_regime(False),
@@ -100,7 +100,7 @@ def test_gate_fail_market_regime():
 
 
 def test_gate_fail_stage2():
-    from src.tools.playbook.gate import evaluate_gate
+    from src.tools.criteria.gate import evaluate_gate
 
     result = evaluate_gate(
         market_regime=_regime(True),
@@ -124,7 +124,7 @@ def test_gate_fail_stage2():
 
 
 def test_gate_fail_rs_weak():
-    from src.tools.playbook.gate import evaluate_gate
+    from src.tools.criteria.gate import evaluate_gate
 
     result = evaluate_gate(
         market_regime=_regime(True),
@@ -146,7 +146,7 @@ def test_gate_fail_rs_weak():
 
 def test_gate_sector_none_graceful_rs_strong():
     """sector_strength=None이어도 종목 RS 강세면 C 통과."""
-    from src.tools.playbook.gate import evaluate_gate
+    from src.tools.criteria.gate import evaluate_gate
 
     result = evaluate_gate(
         market_regime=_regime(True),
@@ -162,7 +162,7 @@ def test_gate_sector_none_graceful_rs_strong():
 
 def test_gate_sector_none_rs_weak_fails():
     """sector_strength=None + RS 약세 → C 탈락."""
-    from src.tools.playbook.gate import evaluate_gate
+    from src.tools.criteria.gate import evaluate_gate
 
     result = evaluate_gate(
         market_regime=_regime(True),
@@ -182,7 +182,7 @@ def test_gate_sector_none_rs_weak_fails():
 
 
 def test_gate_fail_no_breakout():
-    from src.tools.playbook.gate import evaluate_gate
+    from src.tools.criteria.gate import evaluate_gate
 
     result = evaluate_gate(
         market_regime=_regime(True),
@@ -204,7 +204,7 @@ def test_gate_fail_no_breakout():
 
 def test_gate_fail_regime_none():
     """market_regime=None → 보수적 FAIL."""
-    from src.tools.playbook.gate import evaluate_gate
+    from src.tools.criteria.gate import evaluate_gate
 
     result = evaluate_gate(
         market_regime=None,
@@ -221,7 +221,7 @@ def test_gate_fail_regime_none():
 
 def test_gate_fail_rs_none():
     """relative_strength=None → 보수적 FAIL (C 항목)."""
-    from src.tools.playbook.gate import evaluate_gate
+    from src.tools.criteria.gate import evaluate_gate
 
     result = evaluate_gate(
         market_regime=_regime(True),
@@ -237,7 +237,7 @@ def test_gate_fail_rs_none():
 
 def test_gate_fail_vcp_none():
     """vcp=None → 보수적 FAIL (E 항목)."""
-    from src.tools.playbook.gate import evaluate_gate
+    from src.tools.criteria.gate import evaluate_gate
 
     result = evaluate_gate(
         market_regime=_regime(True),
@@ -258,7 +258,7 @@ def test_gate_fail_vcp_none():
 
 def test_gate_quality_grade_a_high_score():
     """canslim 높은 점수 → grade A."""
-    from src.tools.playbook.gate import evaluate_gate
+    from src.tools.criteria.gate import evaluate_gate
 
     result = evaluate_gate(
         market_regime=_regime(True),
@@ -275,7 +275,7 @@ def test_gate_quality_grade_a_high_score():
 
 def test_gate_quality_grade_c_low_score():
     """canslim 낮은 점수 → grade C."""
-    from src.tools.playbook.gate import evaluate_gate
+    from src.tools.criteria.gate import evaluate_gate
 
     result = evaluate_gate(
         market_regime=_regime(True),
@@ -296,7 +296,7 @@ def test_gate_quality_grade_c_low_score():
 
 
 def test_gate_checklist_has_all_required_items():
-    from src.tools.playbook.gate import evaluate_gate
+    from src.tools.criteria.gate import evaluate_gate
 
     result = evaluate_gate(
         market_regime=_regime(True),
@@ -320,7 +320,7 @@ def test_gate_checklist_has_all_required_items():
 
 def test_gate_flow_bonus_does_not_fail_gate():
     """flow가 None이어도 가점 0으로 처리, 통과에 영향 없음."""
-    from src.tools.playbook.gate import evaluate_gate
+    from src.tools.criteria.gate import evaluate_gate
 
     result_no_flow = evaluate_gate(
         market_regime=_regime(True),
@@ -341,7 +341,7 @@ def test_gate_flow_bonus_does_not_fail_gate():
 
 def test_gate_b_reason_shows_stage2_proximity():
     """B 미충족 시 reason에 충족 개수(6/7)와 미충족 조건 라벨이 노출된다."""
-    from src.tools.playbook.gate import evaluate_gate
+    from src.tools.criteria.gate import evaluate_gate
 
     result = evaluate_gate(
         market_regime=_regime(True),
@@ -362,7 +362,7 @@ def test_gate_b_reason_shows_stage2_proximity():
 
 def test_gate_b_reason_omits_proximity_when_no_detail():
     """met_count 미제공 시 기존 동작 유지 — 하위호환(개수 정보 없음)."""
-    from src.tools.playbook.gate import evaluate_gate
+    from src.tools.criteria.gate import evaluate_gate
 
     result = evaluate_gate(
         market_regime=_regime(True),

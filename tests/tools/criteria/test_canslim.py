@@ -1,6 +1,6 @@
 """Tests for CAN SLIM aggregation (Plan 7)."""
 
-from src.tools.playbook.models import CanslimResult, ElementVerdict
+from src.tools.criteria.models import CanslimResult, ElementVerdict
 
 
 def _ev(met) -> ElementVerdict:
@@ -92,14 +92,14 @@ def test_element_verdict_detail_optional():
 
 def test_compute_canslim_strong_stock_high_score():
     """부품 결과 주입 → 강한 종목은 높은 score."""
-    from src.tools.fundamental import AnnualData, FundamentalSnapshot, QuarterlyData
-    from src.tools.playbook.canslim import compute_canslim
-    from src.tools.playbook.models import (
+    from src.tools.criteria.canslim import compute_canslim
+    from src.tools.criteria.models import (
         AccumulationResult,
         MarketRegimeResult,
         RelativeStrengthResult,
         SectorStrengthResult,
     )
+    from src.tools.fundamental import AnnualData, FundamentalSnapshot, QuarterlyData
 
     # C/A: 강한 EPS 성장
     fundamental = FundamentalSnapshot(
@@ -160,7 +160,7 @@ def test_compute_canslim_strong_stock_high_score():
 
 def test_compute_canslim_no_data_returns_none():
     """데이터 없으면 met=None."""
-    from src.tools.playbook.canslim import compute_canslim
+    from src.tools.criteria.canslim import compute_canslim
 
     result = compute_canslim(
         snapshot=None,
@@ -181,8 +181,8 @@ def test_compute_canslim_no_data_returns_none():
 
 def test_compute_canslim_weak_eps_c_not_met():
     """분기 EPS YoY < 25% → C = False."""
+    from src.tools.criteria.canslim import compute_canslim
     from src.tools.fundamental import FundamentalSnapshot, QuarterlyData
-    from src.tools.playbook.canslim import compute_canslim
 
     fundamental = FundamentalSnapshot(
         roe=0.10,
@@ -207,8 +207,8 @@ def test_compute_canslim_weak_eps_c_not_met():
 
 def test_compute_canslim_l_detail_sector_none_shows_no_data():
     """sector_strength=None이지만 RS 데이터가 있으면 업종 부분은 '데이터없음'으로 표시된다."""
-    from src.tools.playbook.canslim import compute_canslim
-    from src.tools.playbook.models import RelativeStrengthResult
+    from src.tools.criteria.canslim import compute_canslim
+    from src.tools.criteria.models import RelativeStrengthResult
 
     rs = RelativeStrengthResult(
         mansfield_rs=5.0, outperform_6m=10.0, rp_slope_4w=0.3, index_symbol="SPY"
@@ -230,8 +230,8 @@ def test_compute_canslim_l_detail_sector_none_shows_no_data():
 
 def test_compute_canslim_l_detail_shows_sector_and_rs_status():
     """L detail에 업종강세·RS강세 상태가 각각 드러난다 (met=False 근거 명확화)."""
-    from src.tools.playbook.canslim import compute_canslim
-    from src.tools.playbook.models import RelativeStrengthResult, SectorStrengthResult
+    from src.tools.criteria.canslim import compute_canslim
+    from src.tools.criteria.models import RelativeStrengthResult, SectorStrengthResult
 
     sector_strong = SectorStrengthResult(
         industry="Semiconductors", rank_pct=0.05, trend="up", is_strong=True, source="FMP"
@@ -260,7 +260,7 @@ def test_compute_canslim_l_detail_shows_sector_and_rs_status():
 
 def test_compute_canslim_s_detail_shows_volume_ratio():
     """S detail에 거래량 비율(vol_ratio, 20일평균 대비)이 드러난다."""
-    from src.tools.playbook.canslim import compute_canslim
+    from src.tools.criteria.canslim import compute_canslim
 
     components = {"volume": {"score": 0, "signals": [], "metrics": {"vol_ratio": 0.86}}}
 
@@ -280,8 +280,8 @@ def test_compute_canslim_s_detail_shows_volume_ratio():
 
 def test_compute_canslim_m_detail_shows_regime_and_basis():
     """M detail에 시장 국면 + 근거(지수/판정 근거)가 드러난다."""
-    from src.tools.playbook.canslim import compute_canslim
-    from src.tools.playbook.models import MarketRegimeResult
+    from src.tools.criteria.canslim import compute_canslim
+    from src.tools.criteria.models import MarketRegimeResult
 
     regime = MarketRegimeResult(
         regime="상승", allow_new_buy=True, index_symbol="^GSPC", detail="close>SMA200"

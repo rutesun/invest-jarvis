@@ -7,7 +7,7 @@
 
 
 def test_gate_check_required_met():
-    from src.tools.playbook.models import GateCheck
+    from src.tools.criteria.models import GateCheck
 
     g = GateCheck(name="A", required=True, met=True, reason="시장 상승")
     assert g.name == "A"
@@ -17,14 +17,14 @@ def test_gate_check_required_met():
 
 
 def test_gate_check_met_none():
-    from src.tools.playbook.models import GateCheck
+    from src.tools.criteria.models import GateCheck
 
     g = GateCheck(name="C", required=True, met=None, reason="데이터 없음")
     assert g.met is None
 
 
 def test_gate_result_passed():
-    from src.tools.playbook.models import GateCheck, GateResult
+    from src.tools.criteria.models import GateCheck, GateResult
 
     checklist = [
         GateCheck(name="A", required=True, met=True, reason=""),
@@ -38,7 +38,7 @@ def test_gate_result_passed():
 
 
 def test_gate_result_vetoed():
-    from src.tools.playbook.models import GateCheck, GateResult
+    from src.tools.criteria.models import GateCheck, GateResult
 
     checklist = [
         GateCheck(name="A", required=True, met=False, reason="시장 하락"),
@@ -55,7 +55,7 @@ def test_gate_result_vetoed():
 
 
 def test_position_plan_full():
-    from src.tools.playbook.models import PositionPlan
+    from src.tools.criteria.models import PositionPlan
 
     p = PositionPlan(
         entry=50000.0,
@@ -75,7 +75,7 @@ def test_position_plan_full():
 
 
 def test_position_plan_error_state():
-    from src.tools.playbook.models import PositionPlan
+    from src.tools.criteria.models import PositionPlan
 
     p = PositionPlan(
         entry=50000.0,
@@ -94,7 +94,7 @@ def test_position_plan_error_state():
 
 
 def test_position_plan_ratio_mode():
-    from src.tools.playbook.models import PositionPlan
+    from src.tools.criteria.models import PositionPlan
 
     p = PositionPlan(
         entry=200.0,
@@ -119,7 +119,7 @@ def test_position_plan_ratio_mode():
 
 
 def test_exit_signal_structure():
-    from src.tools.playbook.models import ExitSignal
+    from src.tools.criteria.models import ExitSignal
 
     s = ExitSignal(code="CHARACTER_CHANGE", severity="strong", detail="신고가 실패")
     assert s.code == "CHARACTER_CHANGE"
@@ -127,7 +127,7 @@ def test_exit_signal_structure():
 
 
 def test_exit_verdict_liquidate():
-    from src.tools.playbook.models import ExitSignal, ExitVerdict
+    from src.tools.criteria.models import ExitSignal, ExitVerdict
 
     signals = [ExitSignal(code="SMA_SHORT", severity="medium", detail="종가<SMA20")]
     v = ExitVerdict(
@@ -143,7 +143,7 @@ def test_exit_verdict_liquidate():
 
 
 def test_exit_verdict_hold():
-    from src.tools.playbook.models import ExitVerdict
+    from src.tools.criteria.models import ExitVerdict
 
     v = ExitVerdict(
         action="hold",
@@ -162,7 +162,7 @@ def test_exit_verdict_hold():
 
 
 def test_playbook_verdict_not_holding():
-    from src.tools.playbook.models import (
+    from src.tools.criteria.models import (
         GateCheck,
         GateResult,
         MarketRegimeResult,
@@ -213,7 +213,7 @@ def test_playbook_verdict_not_holding():
 
 
 def test_playbook_verdict_holding_with_exit():
-    from src.tools.playbook.models import (
+    from src.tools.criteria.models import (
         ExitSignal,
         ExitVerdict,
         MarketRegimeResult,

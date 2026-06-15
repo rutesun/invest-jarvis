@@ -1,6 +1,6 @@
 import pandas as pd
 
-from src.tools.playbook.models import VcpResult
+from src.tools.criteria.models import VcpResult
 from src.tools.technical.components.patterns import _detect_vcp
 
 

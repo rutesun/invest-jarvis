@@ -16,7 +16,7 @@ def test_sizing_golden_case():
       ② atr_stop=47500 (손절폭 5%) ← 가장 타이트, 3% 이상
     → 47500 선택, per_share_risk=2500, shares=floor(100000/2500)=40
     """
-    from src.tools.playbook.sizing import plan_position
+    from src.tools.criteria.sizing import plan_position
 
     result = plan_position(
         entry=50_000.0,
@@ -33,7 +33,7 @@ def test_sizing_golden_case():
 
 def test_sizing_golden_explicit():
     """골든: 진입 50000, ATR stop = 47500 (수동), 위험1%, 자본 1000만."""
-    from src.tools.playbook.sizing import plan_position
+    from src.tools.criteria.sizing import plan_position
 
     result = plan_position(
         entry=50_000.0,
@@ -56,7 +56,7 @@ def test_sizing_golden_explicit():
 
 def test_sizing_pick_tightest_stop():
     """atr_stop > -8% 후보 중 entry와 가장 가까운(타이트) 선택."""
-    from src.tools.playbook.sizing import plan_position
+    from src.tools.criteria.sizing import plan_position
 
     entry = 100.0
     # 후보 ①: -8% = 92.0
@@ -76,7 +76,7 @@ def test_sizing_pick_tightest_stop():
 
 def test_sizing_skip_too_tight_stop():
     """손절폭 < 3% → 다음 후보로 넘김."""
-    from src.tools.playbook.sizing import plan_position
+    from src.tools.criteria.sizing import plan_position
 
     entry = 100.0
     # invalidation_low=99.0 → (100-99)/100=1% < 3% → 스킵
@@ -103,7 +103,7 @@ def test_sizing_all_too_wide_error():
     기본 -8% 후보(92.0)는 항상 8%이므로 유효 후보로 남음.
     → error 없음, stop=92.0으로 계산.
     """
-    from src.tools.playbook.sizing import plan_position
+    from src.tools.criteria.sizing import plan_position
 
     entry = 100.0
     # atr_stop = 88 (12% 초과 → 상한 가드 제거)
@@ -123,7 +123,7 @@ def test_sizing_all_too_wide_error():
 
 def test_sizing_8pct_exact_boundary_allowed():
     """정확히 -8% → 허용 (초과가 아니라 같음 → 통과)."""
-    from src.tools.playbook.sizing import plan_position
+    from src.tools.criteria.sizing import plan_position
 
     entry = 100.0
     result = plan_position(
@@ -145,7 +145,7 @@ def test_sizing_8pct_exact_boundary_allowed():
 
 def test_sizing_per_share_risk_zero():
     """stop >= entry → per_share_risk <= 0 → error='invalid_stop'."""
-    from src.tools.playbook.sizing import plan_position
+    from src.tools.criteria.sizing import plan_position
 
     # atr_stop = entry (같음) → per_share_risk = 0
     result = plan_position(
@@ -163,7 +163,7 @@ def test_sizing_per_share_risk_zero():
 
 def test_sizing_all_stops_above_entry():
     """stop > entry인 후보만 있으면 per_share_risk < 0 → error='invalid_stop'."""
-    from src.tools.playbook.sizing import plan_position
+    from src.tools.criteria.sizing import plan_position
 
     # atr_stop=105 (entry보다 높음 → 이상한 케이스)
     # -8% = 92 → 유효 후보 존재 → error 없음
@@ -183,7 +183,7 @@ def test_sizing_all_stops_above_entry():
 
 
 def test_sizing_no_capital_ratio_mode():
-    from src.tools.playbook.sizing import plan_position
+    from src.tools.criteria.sizing import plan_position
 
     result = plan_position(
         entry=100.0,
@@ -205,7 +205,7 @@ def test_sizing_no_capital_ratio_mode():
 
 
 def test_sizing_r_targets():
-    from src.tools.playbook.sizing import plan_position
+    from src.tools.criteria.sizing import plan_position
 
     entry = 100.0
     stop = 94.0  # per_share_risk = 6.0
@@ -226,7 +226,7 @@ def test_sizing_r_targets():
 
 
 def test_sizing_weight_pct():
-    from src.tools.playbook.sizing import plan_position
+    from src.tools.criteria.sizing import plan_position
 
     result = plan_position(
         entry=50_000.0,

@@ -7,8 +7,8 @@ _detect_vcp(수축 판정)를 재사용하고, 마지막 봉이 직전 N일 고�
 import numpy as np
 import pandas as pd
 
-from src.tools.playbook.models import VcpResult
-from src.tools.playbook.vcp import detect_vcp_breakout
+from src.tools.criteria.models import VcpResult
+from src.tools.criteria.vcp import detect_vcp_breakout
 
 
 def _base_df(n: int = 60) -> pd.DataFrame:

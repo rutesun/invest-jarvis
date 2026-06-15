@@ -3,7 +3,7 @@
 import pandas as pd
 import pytest
 
-from src.tools.playbook.models import SectorStrengthResult
+from src.tools.criteria.models import SectorStrengthResult
 
 
 # ---------------------------------------------------------------------------
@@ -52,7 +52,7 @@ def test_sector_strength_detail_defaults_empty():
 
 def test_rank_pct_top_industry():
     """가장 높은 등락의 업종은 rank_pct=0."""
-    from src.tools.playbook.sector_strength import _rank_pct
+    from src.tools.criteria.sector_strength import _rank_pct
 
     snap = {"A": 5.0, "B": 3.0, "C": 1.0}
     assert _rank_pct(snap, "A") == pytest.approx(0.0)
@@ -60,7 +60,7 @@ def test_rank_pct_top_industry():
 
 def test_rank_pct_bottom_industry():
     """가장 낮은 등락의 업종은 rank_pct=1."""
-    from src.tools.playbook.sector_strength import _rank_pct
+    from src.tools.criteria.sector_strength import _rank_pct
 
     snap = {"A": 5.0, "B": 3.0, "C": 1.0}
     assert _rank_pct(snap, "C") == pytest.approx(1.0)
@@ -68,7 +68,7 @@ def test_rank_pct_bottom_industry():
 
 def test_rank_pct_missing_industry():
     """스냅샷에 없는 업종은 None 반환."""
-    from src.tools.playbook.sector_strength import _rank_pct
+    from src.tools.criteria.sector_strength import _rank_pct
 
     snap = {"A": 5.0}
     assert _rank_pct(snap, "Z") is None
@@ -76,7 +76,7 @@ def test_rank_pct_missing_industry():
 
 def test_trend_from_hist_up():
     """히스토리 합산이 양수면 up."""
-    from src.tools.playbook.sector_strength import _trend_from_hist
+    from src.tools.criteria.sector_strength import _trend_from_hist
 
     hist = [{"averageChange": 1.0}, {"averageChange": 2.0}]
     assert _trend_from_hist(hist) == "up"
@@ -84,7 +84,7 @@ def test_trend_from_hist_up():
 
 def test_trend_from_hist_down():
     """히스토리 합산이 음수면 down."""
-    from src.tools.playbook.sector_strength import _trend_from_hist
+    from src.tools.criteria.sector_strength import _trend_from_hist
 
     hist = [{"averageChange": -1.0}, {"averageChange": -2.0}]
     assert _trend_from_hist(hist) == "down"
@@ -92,7 +92,7 @@ def test_trend_from_hist_down():
 
 def test_trend_from_hist_empty():
     """데이터 없으면 unknown."""
-    from src.tools.playbook.sector_strength import _trend_from_hist
+    from src.tools.criteria.sector_strength import _trend_from_hist
 
     assert _trend_from_hist([]) == "unknown"
 
@@ -104,7 +104,7 @@ def test_trend_from_hist_empty():
 
 def test_fmp_evaluate_strong():
     """rank_pct 낮고 trend=up → is_strong=True."""
-    from src.tools.playbook.sector_strength import FmpSectorStrength
+    from src.tools.criteria.sector_strength import FmpSectorStrength
 
     snapshot = {"Semiconductors": 3.0, "Airlines": 0.5, "Banks": -1.0}
     hist = [{"averageChange": 2.0}, {"averageChange": 1.0}]
@@ -124,7 +124,7 @@ def test_fmp_evaluate_strong():
 
 def test_fmp_evaluate_weak():
     """rank_pct 높고 trend=down → is_strong=False."""
-    from src.tools.playbook.sector_strength import FmpSectorStrength
+    from src.tools.criteria.sector_strength import FmpSectorStrength
 
     snapshot = {"Semiconductors": 3.0, "Airlines": 0.5, "Banks": -1.0}
     hist = [{"averageChange": -2.0}, {"averageChange": -1.0}]
@@ -142,7 +142,7 @@ def test_fmp_evaluate_weak():
 
 def test_fmp_evaluate_unmapped():
     """yfinance industry → FMP에 없으면 is_strong=None, source=none."""
-    from src.tools.playbook.sector_strength import FmpSectorStrength
+    from src.tools.criteria.sector_strength import FmpSectorStrength
 
     snapshot = {"Semiconductors": 3.0}
     provider = FmpSectorStrength(
@@ -158,7 +158,7 @@ def test_fmp_evaluate_unmapped():
 
 def test_fmp_evaluate_uses_normalize_map():
     """normalize_map을 통해 yfinance industry → FMP industry 변환."""
-    from src.tools.playbook.sector_strength import FmpSectorStrength
+    from src.tools.criteria.sector_strength import FmpSectorStrength
 
     snapshot = {"Auto - Manufacturers": 2.5, "Banks": -0.5}
     hist = [{"averageChange": 1.0}, {"averageChange": 0.5}]
@@ -195,7 +195,7 @@ def _make_df(closes: list[float]) -> pd.DataFrame:
 
 def test_kis_evaluate_strong():
     """업종지수가 코스피 대비 우상향 → is_strong=True."""
-    from src.tools.playbook.sector_strength import KisSectorStrength
+    from src.tools.criteria.sector_strength import KisSectorStrength
 
     # 업종: +20% 상승 / 코스피: +5% 상승 → 업종이 더 강함
     sector_df = _make_df([100, 110, 120])
@@ -211,7 +211,7 @@ def test_kis_evaluate_strong():
 
 def test_kis_evaluate_weak():
     """업종지수가 코스피 대비 하락 → is_strong=False."""
-    from src.tools.playbook.sector_strength import KisSectorStrength
+    from src.tools.criteria.sector_strength import KisSectorStrength
 
     # 업종: -10% 하락 / 코스피: +5% 상승
     sector_df = _make_df([100, 95, 90])
@@ -225,7 +225,7 @@ def test_kis_evaluate_weak():
 
 def test_kis_evaluate_empty_data():
     """데이터 없으면 is_strong=None."""
-    from src.tools.playbook.sector_strength import KisSectorStrength
+    from src.tools.criteria.sector_strength import KisSectorStrength
 
     provider = KisSectorStrength()
     result = provider.evaluate_sector_df(

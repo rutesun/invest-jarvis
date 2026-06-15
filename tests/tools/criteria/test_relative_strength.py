@@ -1,8 +1,8 @@
 import numpy as np
 import pandas as pd
 
-from src.tools.playbook.models import RelativeStrengthResult
-from src.tools.playbook.relative_strength import compute_relative_strength
+from src.tools.criteria.models import RelativeStrengthResult
+from src.tools.criteria.relative_strength import compute_relative_strength
 
 
 def test_rs_result_model():

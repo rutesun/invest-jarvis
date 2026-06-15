@@ -13,7 +13,7 @@ CAN SLIM mapping:
   M = Market regime allows new buy — reference
 """
 
-from src.tools.playbook.models import CanslimResult, ElementVerdict
+from src.tools.criteria.models import CanslimResult, ElementVerdict
 
 
 _MIN_GROWTH = 0.25

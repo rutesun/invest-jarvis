@@ -9,7 +9,7 @@ import textwrap
 
 
 def test_load_holdings_no_file_returns_empty(tmp_path):
-    from src.tools.playbook.holdings import load_holdings
+    from src.tools.criteria.holdings import load_holdings
 
     config = load_holdings(tmp_path / "nonexistent.yaml")
     assert config.krw_capital is None
@@ -41,7 +41,7 @@ SAMPLE_YAML = textwrap.dedent("""
 
 
 def test_load_holdings_full_yaml(tmp_path):
-    from src.tools.playbook.holdings import load_holdings
+    from src.tools.criteria.holdings import load_holdings
 
     p = tmp_path / "playbook.yaml"
     p.write_text(SAMPLE_YAML)
@@ -60,7 +60,7 @@ def test_load_holdings_full_yaml(tmp_path):
 
 
 def test_holding_currency_korean(tmp_path):
-    from src.tools.playbook.holdings import load_holdings
+    from src.tools.criteria.holdings import load_holdings
 
     p = tmp_path / "playbook.yaml"
     p.write_text(SAMPLE_YAML)
@@ -71,7 +71,7 @@ def test_holding_currency_korean(tmp_path):
 
 
 def test_holding_currency_us(tmp_path):
-    from src.tools.playbook.holdings import load_holdings
+    from src.tools.criteria.holdings import load_holdings
 
     p = tmp_path / "playbook.yaml"
     p.write_text(SAMPLE_YAML)
@@ -87,7 +87,7 @@ def test_holding_currency_us(tmp_path):
 
 
 def test_holding_stop_price_optional(tmp_path):
-    from src.tools.playbook.holdings import load_holdings
+    from src.tools.criteria.holdings import load_holdings
 
     p = tmp_path / "playbook.yaml"
     p.write_text(SAMPLE_YAML)
@@ -98,7 +98,7 @@ def test_holding_stop_price_optional(tmp_path):
 
 
 def test_holding_stop_price_present(tmp_path):
-    from src.tools.playbook.holdings import load_holdings
+    from src.tools.criteria.holdings import load_holdings
 
     p = tmp_path / "playbook.yaml"
     p.write_text(SAMPLE_YAML)
@@ -114,7 +114,7 @@ def test_holding_stop_price_present(tmp_path):
 
 
 def test_find_existing_ticker(tmp_path):
-    from src.tools.playbook.holdings import load_holdings
+    from src.tools.criteria.holdings import load_holdings
 
     p = tmp_path / "playbook.yaml"
     p.write_text(SAMPLE_YAML)
@@ -126,7 +126,7 @@ def test_find_existing_ticker(tmp_path):
 
 
 def test_find_missing_ticker(tmp_path):
-    from src.tools.playbook.holdings import load_holdings
+    from src.tools.criteria.holdings import load_holdings
 
     p = tmp_path / "playbook.yaml"
     p.write_text(SAMPLE_YAML)
@@ -136,7 +136,7 @@ def test_find_missing_ticker(tmp_path):
 
 
 def test_find_case_insensitive(tmp_path):
-    from src.tools.playbook.holdings import load_holdings
+    from src.tools.criteria.holdings import load_holdings
 
     p = tmp_path / "playbook.yaml"
     p.write_text(SAMPLE_YAML)
@@ -159,7 +159,7 @@ MINIMAL_YAML = textwrap.dedent("""
 
 
 def test_load_minimal_yaml_no_account(tmp_path):
-    from src.tools.playbook.holdings import load_holdings
+    from src.tools.criteria.holdings import load_holdings
 
     p = tmp_path / "playbook.yaml"
     p.write_text(MINIMAL_YAML)
@@ -177,7 +177,7 @@ def test_load_minimal_yaml_no_account(tmp_path):
 
 
 def test_get_account_for_us_ticker(tmp_path):
-    from src.tools.playbook.holdings import load_holdings
+    from src.tools.criteria.holdings import load_holdings
 
     p = tmp_path / "playbook.yaml"
     p.write_text(SAMPLE_YAML)
@@ -189,7 +189,7 @@ def test_get_account_for_us_ticker(tmp_path):
 
 
 def test_get_account_for_kr_ticker(tmp_path):
-    from src.tools.playbook.holdings import load_holdings
+    from src.tools.criteria.holdings import load_holdings
 
     p = tmp_path / "playbook.yaml"
     p.write_text(SAMPLE_YAML)
@@ -201,7 +201,7 @@ def test_get_account_for_kr_ticker(tmp_path):
 
 
 def test_get_account_for_no_account_returns_none(tmp_path):
-    from src.tools.playbook.holdings import load_holdings
+    from src.tools.criteria.holdings import load_holdings
 
     p = tmp_path / "playbook.yaml"
     p.write_text(MINIMAL_YAML)

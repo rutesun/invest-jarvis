@@ -1,6 +1,6 @@
 import pandas as pd
 
-from src.tools.playbook.models import RelativeStrengthResult
+from src.tools.criteria.models import RelativeStrengthResult
 
 
 _RP_SMA = 252  # 맨스필드 기준선 (≈1년)

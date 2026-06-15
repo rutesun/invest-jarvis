@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from src.tools.playbook.models import ExitSignal, ExitVerdict
+from src.tools.criteria.models import ExitSignal, ExitVerdict
 
 
 def evaluate_exit(

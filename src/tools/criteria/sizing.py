@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import math
 
-from src.tools.playbook.models import PositionPlan
+from src.tools.criteria.models import PositionPlan
 
 
 _MIN_STOP_PCT = 0.03  # 최소 3% 손절폭

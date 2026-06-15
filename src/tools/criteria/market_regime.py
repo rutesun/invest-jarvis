@@ -1,6 +1,6 @@
 import pandas as pd
 
-from src.tools.playbook.models import MarketRegimeResult
+from src.tools.criteria.models import MarketRegimeResult
 
 
 def assess_market_regime(index_df: pd.DataFrame, index_symbol: str) -> MarketRegimeResult:

@@ -409,7 +409,7 @@ def test_format_deep_dive_output_shows_na_for_missing_fundamental_metrics():
 
 def test_format_deep_dive_output_renders_playbook_section_with_gate_pass():
     """playbook_verdict가 있으면 플레이북 평가 섹션이 렌더돼야 한다 (게이트 통과)."""
-    from src.tools.playbook.models import (
+    from src.tools.criteria.models import (
         CanslimResult,
         ElementVerdict,
         GateCheck,
@@ -527,7 +527,7 @@ def test_format_deep_dive_output_renders_playbook_section_with_gate_pass():
 
 def test_format_deep_dive_output_renders_playbook_section_with_gate_fail():
     """gate FAIL이면 부적격 + veto_reason이 출력돼야 한다."""
-    from src.tools.playbook.models import (
+    from src.tools.criteria.models import (
         GateCheck,
         GateResult,
         MarketRegimeResult,

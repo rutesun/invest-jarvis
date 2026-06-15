@@ -503,7 +503,7 @@ Daily Report 및 Screener 리포트를 Notion Database에 자동 업로드.
 
 5대 추세추종·모멘텀 대가(리버모어·터틀·오닐·와인스타인·미너비니) 규칙 기반 **매수 자격 게이트(veto) + 포지션 사이징 + 보유 매도 판정** 엔진. `analyze`의 `decision_summary`에 veto를 반영하고 "📋 플레이북 평가" 섹션을 출력. 설계: `docs/superpowers/specs/2026-06-10-playbook-engine-design.md`.
 
-**구성 (`src/tools/playbook/`):**
+**구성 (`src/tools/criteria/`):**
 | 모듈 | 역할 |
 |------|------|
 | `market_regime` | 지수(^GSPC/^KS11/^KQ11) 추세 게이트 (★A) |

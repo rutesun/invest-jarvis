@@ -17,11 +17,11 @@ from src.llm.models import (
     TechnicalSummaryOutput,
 )
 from src.pipelines.analyze_decision import apply_playbook_veto, build_analyze_decision_bundle
+from src.tools.criteria.holdings import load_holdings
 from src.tools.disclosure import DisclosureItem, DisclosureTool, extract_kr_code, is_korean_ticker
 from src.tools.flow import FlowTool, InvestorFlow
 from src.tools.fundamental import FundamentalSnapshot, FundamentalTool
 from src.tools.news import NewsArticle, NewsTool
-from src.tools.playbook.holdings import load_holdings
 from src.tools.technical.charting import render_technical_chart
 from src.tools.technical.components.pattern_engine import PatternEngine
 from src.tools.technical.level_composer import compose_level_payload

@@ -60,7 +60,7 @@ def _make_technical_result(stock_df: pd.DataFrame) -> MagicMock:
 
 
 def _make_sector_strong() -> MagicMock:
-    from src.tools.playbook.models import SectorStrengthResult
+    from src.tools.criteria.models import SectorStrengthResult
 
     return SectorStrengthResult(
         industry="Technology",
@@ -79,8 +79,8 @@ def _make_sector_strong() -> MagicMock:
 @pytest.mark.asyncio
 async def test_engine_not_holding_gate_pass_returns_verdict():
     """미보유 + 게이트 통과 → PlaybookVerdict(gate=passed, position_plan 있음)."""
-    from src.tools.playbook.engine import PlaybookEngine
-    from src.tools.playbook.models import PlaybookVerdict
+    from src.tools.criteria.engine import PlaybookEngine
+    from src.tools.criteria.models import PlaybookVerdict
 
     stock_df = _make_stock_df(300, close=100.0)
     index_df = _make_index_df(300)
@@ -123,9 +123,9 @@ async def test_engine_not_holding_gate_pass_returns_verdict():
 @pytest.mark.asyncio
 async def test_engine_holding_returns_exit_verdict():
     """보유 → PlaybookVerdict(exit_verdict 있음, gate=None)."""
-    from src.tools.playbook.engine import PlaybookEngine
-    from src.tools.playbook.holdings import HoldingEntry
-    from src.tools.playbook.models import PlaybookVerdict
+    from src.tools.criteria.engine import PlaybookEngine
+    from src.tools.criteria.holdings import HoldingEntry
+    from src.tools.criteria.models import PlaybookVerdict
 
     stock_df = _make_stock_df(300, close=110.0)
     index_df = _make_index_df(300)
@@ -170,7 +170,7 @@ async def test_engine_holding_returns_exit_verdict():
 @pytest.mark.asyncio
 async def test_engine_gate_pass_with_position_plan():
     """게이트 통과 + capital 있음 → position_plan.shares 계산됨."""
-    from src.tools.playbook.engine import PlaybookEngine
+    from src.tools.criteria.engine import PlaybookEngine
 
     stock_df = _make_stock_df(300, close=100.0)
     index_df = _make_index_df(300)
@@ -209,7 +209,7 @@ async def test_engine_gate_pass_with_position_plan():
 @pytest.mark.asyncio
 async def test_engine_headline_not_empty():
     """PlaybookVerdict.headline은 비어있으면 안 됨."""
-    from src.tools.playbook.engine import PlaybookEngine
+    from src.tools.criteria.engine import PlaybookEngine
 
     stock_df = _make_stock_df(300, close=100.0)
     index_df = _make_index_df(300)
@@ -243,7 +243,7 @@ async def test_engine_headline_not_empty():
 @pytest.mark.asyncio
 async def test_engine_is_stage2_from_components():
     """is_stage2를 technical_result.components['minervini']['metrics']['is_stage2']에서 추출."""
-    from src.tools.playbook.engine import PlaybookEngine
+    from src.tools.criteria.engine import PlaybookEngine
 
     stock_df = _make_stock_df(300, close=100.0)
     index_df = _make_index_df(300)
@@ -280,7 +280,7 @@ async def test_engine_is_stage2_from_components():
 @pytest.mark.asyncio
 async def test_engine_korean_ticker_uses_kis_sector():
     """한국 티커 → sector provider가 KIS 관련 경로 사용."""
-    from src.tools.playbook.engine import PlaybookEngine
+    from src.tools.criteria.engine import PlaybookEngine
 
     stock_df = _make_stock_df(300, close=70000.0)
     index_df = _make_index_df(300)
@@ -318,7 +318,7 @@ async def test_engine_korean_ticker_uses_kis_sector():
 @pytest.mark.asyncio
 async def test_engine_gate_veto_shows_stage2_proximity():
     """미보유 + Stage2 미충족(6/7) → gate veto_reason에 충족 개수·미충족 조건 라벨 노출."""
-    from src.tools.playbook.engine import PlaybookEngine
+    from src.tools.criteria.engine import PlaybookEngine
 
     stock_df = _make_stock_df(300, close=100.0)
     index_df = _make_index_df(300)

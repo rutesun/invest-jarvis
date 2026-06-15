@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 
 import pandas as pd
 
-from src.tools.playbook.models import SectorStrengthResult
+from src.tools.criteria.models import SectorStrengthResult
 
 
 # ---------------------------------------------------------------------------

@@ -15,7 +15,7 @@ quality_grade: 통과 시 가점 충족 비율 → A/B/C.
 
 from __future__ import annotations
 
-from src.tools.playbook.models import GateCheck, GateResult
+from src.tools.criteria.models import GateCheck, GateResult
 
 
 def evaluate_gate(

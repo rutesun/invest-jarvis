@@ -1,6 +1,6 @@
 import pandas as pd
 
-from src.tools.playbook.models import AccumulationResult
+from src.tools.criteria.models import AccumulationResult
 
 
 # 오닐 분산일 임계: 전일 대비 종가 하락폭 (>= 0.2%)
