@@ -42,6 +42,11 @@
 - exact tag = 필터(정밀도), vector = recall. per-doc dedup은 기존 `search_document_chunks`가 보장.
 - 대안 B(티커 정확매칭 우선)·C(필터 없는 융합 스코어)는 보류. 사용자가 "결과를 보면서 텔레그램까지 차후 확장"을 선택 → 가장 단순·관찰 가능한 A로 시작.
 
+**provisional/unclassified 카테고리 처리 (필수 — taxonomy 어휘 비대칭 방어):**
+- `CategoryBucket.category_key`/`ThemeBucket.category_key`는 `display_category`로 채워지며(`retrieval.py:164,174,131`), 이는 `category_key=="unclassified"`일 때 **정규화되지 않은 자유텍스트 `provisional_category`** 또는 리터럴 `"unclassified"`로 대체된다(`retrieval.py:38-42`). PDF `documents.category_key`는 taxonomy로 **정규화된 값**(`pdf_classify.py:206-214`)이라, provisional 자유텍스트로 PDF를 필터하면 글자가 안 맞아 **그 테마 링크가 항상 0건**이 된다.
+- **규칙**: 테마 레벨 카테고리 링크는 **정규화된 taxonomy key를 가진 버킷에만** 적용한다. `CategoryBucket.is_provisional == True`이거나 `category_key == "unclassified"`인 버킷은 **테마 링크에서 skip**(category_filter로 쓸 정식 key가 없으므로).
+- **focus 티커 링크는 영향 없음** — `ticker_filter`는 category가 아니라 `ticker_tags`로만 거르므로, provisional/unclassified 테마라도 티커가 있으면 PDF가 걸린다. provisional 테마의 recall은 티커 경로로 일부 보존된다.
+
 ### 2. 텔레그램은 태그 기반 유지 (T11 보류)
 
 - knowledge_chunks 임베딩(신규 마이그레이션 + 코퍼스 전체 backfill)은 비용·범위가 커서 보류.
@@ -128,7 +133,8 @@ def cross_link_documents(
 ```
 
 - `embed_fn`/`search_fn`은 `None` 기본 → **함수 내부 지연 import**로 실제 구현 해석. 테스트는 가짜 주입(Michael Feathers seam).
-- **순환 import 회피(필수)**: `db.py`가 `synthesize.ReportEvidenceRef`를, `synthesize`가 `retrieval`을 import하므로, `retrieval.py` 최상단에서 `db`를 import하면 `retrieval → db → synthesize → retrieval` 순환이 생긴다. `search_document_chunks`는 **반드시 함수 내부에서 지연 import**한다(모듈 최상단 import 금지). `embed_payloads`도 동일 패턴으로 통일(retrieval 모듈 import를 가볍게 유지).
+- **순환 import 회피(필수)**: `db.py`가 `synthesize.ReportEvidenceRef`를, `synthesize`가 `retrieval`을 import하므로, `retrieval.py` 최상단에서 `db`를 import하면 `retrieval → db → synthesize → retrieval` 순환이 생긴다. `search_document_chunks`는 **반드시 함수 내부에서 지연 import**한다(모듈 최상단 import 금지). 이 지연 import는 신규 예외가 아니라 기존 관례다(`_load_psycopg` `db.py:42`, `OpenAIEmbeddings` `embed.py:97`, `tiktoken` `embed.py:62`).
+- **임베딩 키 부재 선제 가드(필수)**: `_resolve_embed_auth`는 키가 없어도 예외 없이 `api_key=None`으로 진행하다 OpenAI 호출에서 인증 실패한다(`embed.py:116-120`). daily-v2 **매 실행 경고**를 막기 위해 진입부에서 임베딩 키 존재를 확인하고(embed 모듈 인증 해석 재사용), **없으면 호출 없이 빈 맵 + 단발 info 로그**로 빠진다.
 
 ### `db.py` 변경 — `search_document_chunks`에 `ticker_filter` 추가
 
@@ -153,20 +159,22 @@ def _stage_cross_link_documents(conn, bundle):
 ```
 
 - `run_daily_v2`의 `load_same_day_bundle` 직후 호출 → 건수/평균 유사도 로그. **synthesis는 여전히 `same_day_bundle` 사용**(출력 불변).
-- `enable_cross_link: bool = True` 파라미터 + CLI `--no-cross-link`. `DailyV2RunResult`에 `cross_link_summary`(테마/티커 연결 건수) 추가(markdown 리포트엔 미반영).
+- **`@traceable` redaction**: 기존 final-report 스테이지처럼(`pipeline.py:133-148`의 `process_inputs` 관례) `conn`과 거대한 `bundle`을 그대로 직렬화하지 않도록 입력을 redact한다(연결 객체 trace 비용·노이즈 방지).
+- `enable_cross_link: bool = True`는 `run_daily_v2` 시그니처에 추가하고 **CLI 호출부(`main.py:1379-1386`)와 `daily-v2` 옵션(`--no-cross-link`)까지 함께 배선**한다. `DailyV2RunResult`에 `cross_link_summary`(테마/티커 연결 건수) 추가(markdown 리포트엔 미반영).
 
 ---
 
 ## 데이터 흐름 / 쿼리 구성
 
-1. **쿼리 수집**: 모든 `ThemeBucket`(카테고리 버킷 하위) + `focus_ticker_buckets`를 순회.
-   - 테마 쿼리: `"{theme_key}\n{상위 max_summaries개 canonical_summary를 ' / '로 연결}"`.
-   - 티커 쿼리: `"{ticker}\n{해당 티커 청크 요약들}"`.
+1. **쿼리 수집**: `ThemeBucket`(카테고리 버킷 하위) + `focus_ticker_buckets` 순회.
+   - **테마 버킷 skip 규칙**: `CategoryBucket.is_provisional == True`이거나 `category_key == "unclassified"`인 버킷은 **테마 링크 대상에서 제외**(정규화된 category_filter가 없어 PDF가 안 걸리거나 unclassified끼리 잡음 매칭됨). 티커 버킷은 category 무관이라 제외하지 않음.
+   - 테마 쿼리: `"{theme_key}\n{상위 max_summaries개 canonical_summary를 ' / '로 연결}"`. 요약은 **비어있지 않은 것만** 모은다(`synthesize._join_summaries`의 "근거 없음" filler는 임베딩에 넣지 않음). 요약 0개면 `theme_key`만 임베딩, `theme_key`마저 비면 그 버킷 skip.
+   - 티커 쿼리: `"{ticker}\n{해당 티커 청크 요약들}"` (동일 규칙).
    - 테마명만으론 신호가 빈약해 그날 앵글을 요약으로 보강(임베딩 모듈이 8000토큰 자동 절단).
 2. **배치 임베딩**: 테마+티커 쿼리를 한 리스트로 `embed_fn` **1회** 호출 → 인덱스로 되매핑.
 3. **검색**: 테마는 `category_filter`, 티커는 `ticker_filter`로 `search_fn` 호출(각 top_k).
-4. **품질 게이트**: `similarity < min_similarity`(기본 0.30) 링크 제거 — 벡터 검색은 무관해도 top-K를 채우므로 바닥값으로 잡음 컷. **이 값이 관찰 후 튜닝할 핵심 손잡이.**
-5. **매핑**: `theme_links[theme_key]`, `ticker_links[ticker]` 구성. 같은 theme_key가 복수 카테고리에 나오면 link를 합치고 `document_id`로 재dedup.
+4. **품질 게이트**: `similarity < min_similarity` 링크 제거 — 벡터 검색은 무관해도 top-K를 채우므로 바닥값으로 잡음 컷. `min_similarity=0.30`/`top_k=3`은 **경험적 초기 추정값**(분포 측정 전)이며, 관찰 훅 수치를 보고 튜닝할 핵심 손잡이.
+5. **매핑**: `theme_links[theme_key]`, `ticker_links[ticker]` 구성. 같은 theme_key가 복수 카테고리에 나오면 link를 합치되 **같은 `document_id`는 similarity 높은 쪽만 남긴다**(max-similarity dedup).
 
 ---
 
@@ -174,7 +182,8 @@ def _stage_cross_link_documents(conn, bundle):
 
 | 상황 | 처리 |
 |---|---|
-| 임베딩 실패 / `langchain` 미설치 / 차원 불일치 | 경고 로그 + **빈 링크 맵** 반환 |
+| 임베딩 키 미설정(별도 키 부재) | **호출 전 감지** → 빈 링크 맵 + 단발 info 로그 (매 실행 경고 방지) |
+| 임베딩/검색 호출 실패(미설치 `RuntimeError`, 차원 `ValueError`, 네트워크/타임아웃 등) | **`except Exception` 광역 catch** + `logger.warning(..., exc_info=True)` (pdf_ingest.py:320 관례) → 빈 링크 맵 |
 | 임베딩 결과 개수 ≠ 쿼리 개수 | 경고 로그 + 빈 링크 맵 |
 | 특정 카테고리/티커에 PDF 없음 | 그 키 링크만 `[]` |
 | 빈 번들(테마/티커 0개) | 빈 링크 맵, embed_fn 미호출 |
@@ -184,18 +193,22 @@ def _stage_cross_link_documents(conn, bundle):
 
 ## 테스트 계획
 
-### `test_retrieval.py` (신규, 네트워크·DB 0)
+### `test_retrieval.py` (**기존 파일에 append — Create 아님**, 네트워크·DB 0)
+
+⚠️ 이 파일은 이미 존재한다(`load_same_day_chunks`/`build_same_day_bundle` 테스트 6개 + `FakeCursor`/`FakeConnection(rows)` mock). **덮어쓰지 말고 cross-link 테스트를 추가**한다. cross-link 테스트는 conn을 거의 안 쓰고 seam(`embed_fn`/`search_fn`)만 쓰므로 기존 `FakeConnection` 재사용(또는 `conn=None`), 가짜 `search_fn`은 별도 helper로 둬 기존 mock 시그니처와 충돌 금지.
 
 가짜 `embed_fn`(결정적 벡터) + 가짜 `search_fn`(카테고리/티커별 canned dict 행) 주입.
 
 - 테마 링크가 올바른 theme_key에 매핑
 - focus 티커 링크가 올바른 ticker에 매핑
+- **provisional/unclassified 테마 버킷은 테마 링크에서 skip**(category_filter 미적용)
 - `embed_fn`이 **정확히 1회**(배치 효율) 호출, 쿼리 텍스트에 테마명+요약 포함
 - `category_filter`/`ticker_filter` 인자가 각 호출에 정확히 전달
 - `similarity < min_similarity` 링크 제거
-- 임베딩 예외 → 빈 맵 반환, 예외 전파 안 함
+- 임베딩 예외 → 빈 맵 반환, 예외 전파 안 함 (`except Exception` 경로)
+- 임베딩 키 미설정 → 호출 없이 빈 맵
 - 빈 번들 → embed_fn 미호출, 빈 맵
-- 같은 theme_key 복수 카테고리 → document_id 재dedup
+- 같은 theme_key 복수 카테고리 → max-similarity로 document_id 재dedup
 
 ### `test_db.py` (확장)
 
@@ -220,6 +233,24 @@ def _stage_cross_link_documents(conn, bundle):
 | `src/pipelines/stock_report/db.py` | Modify | `search_document_chunks`에 `ticker_filter` 추가 |
 | `src/pipelines/stock_report/pipeline.py` | Modify | `_stage_cross_link_documents` 훅 + 로그 + `cross_link_summary` |
 | `src/cli/main.py` | Modify | `daily-v2`에 `--no-cross-link` 플래그 |
-| `tests/pipelines/stock_report/test_retrieval.py` | Create | cross-link 오케스트레이션 단위 테스트 |
+| `tests/pipelines/stock_report/test_retrieval.py` | **Modify (append)** | cross-link 테스트 추가 (기존 번들 테스트·mock 보존, 덮어쓰기 금지) |
 | `tests/pipelines/stock_report/test_db.py` | Modify | `ticker_filter` SQL 테스트 |
 | `docs/FEATURES.md` | Modify | 5-2 PDF Ingest 섹션에 cross-link 검색 항목 |
+
+---
+
+## 리뷰 반영 (2026-06-15, system-architect 서브에이전트)
+
+설계 직후 별도 서브에이전트 리뷰에서 발견한 사항을 반영했다.
+
+| 등급 | 발견 | 반영 |
+|---|---|---|
+| 🔴 Blocker | `test_retrieval.py`가 이미 존재(스펙은 "Create") | 파일 변경 목록·테스트 계획을 **Modify(append)**로 정정, mock 충돌 방지 명시 |
+| 🔴 Blocker | provisional/`unclassified` 카테고리는 PDF `documents.category_key`(정규화)와 어휘 비대칭 → 필터 0건/잡음 | Key Decision 1에 **provisional/unclassified 테마 버킷 skip + 티커 경로 보존** 규칙 추가 |
+| 🟡 Major | `LinkedDocumentChunk.chunk_id` ↔ search 반환 키 `id` 불일치 | `chunk_id=row["id"]` 수동 매핑 명시 |
+| 🟡 Major | 임베딩 예외 타입 열거가 광역 catch 관례와 어긋남 | 에러 표를 `except Exception` + `exc_info=True`로 정정 |
+| 🟡 Major | 임베딩 키 미설정 시 매 실행 경고 발생 | 진입부 **키 부재 선제 가드**(호출 전 빈 맵+info) 추가 |
+| 🟢 Minor | theme_key 복수 카테고리 dedup 기준 모호 | **max-similarity dedup** 명시 |
+| 🟢 Minor | 빈 요약 시 filler 임베딩 위험 | 비어있지 않은 요약만, theme_key fallback 규칙 명시 |
+| 🟢 Minor | `@traceable`가 conn/bundle 직렬화 | `process_inputs` redaction 관례 적용 명시 |
+| ✅ 확인 | 지연 import는 기존 관례(`_load_psycopg` 등), 순환 import 주장 정확, GIN `@>` 가능, 시그니처 하위호환 | 변경 없음 (근거 보강) |
