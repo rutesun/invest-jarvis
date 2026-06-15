@@ -491,6 +491,48 @@ def test_bullet_only_chunk_filtered() -> None:
     assert all(c.section_path != "섹션B" for c in chunks)
 
 
+# --- CP3 잡음 필터: 섹션·표 경계 짧은 조각 병합 -------------------------------
+
+
+def test_short_caption_before_table_merges_into_table() -> None:
+    # 표 바로 앞 짧은 prose 캡션은 단독 청크로 남지 않고 표 청크에 흡수된다.
+    markdown = (
+        "# 섹션\n\nHBM vs SOCAMM 비교\n\n|구분|HBM|SOCAMM|\n|---|---|---|\n|메모리|DRAM|LPDDR|\n"
+    )
+    chunks = _chunks(markdown)
+    table_chunks = [c for c in chunks if c.is_table]
+    assert len(table_chunks) == 1
+    # 캡션이 표 청크 본문에 흡수된다.
+    assert "HBM vs SOCAMM 비교" in table_chunks[0].content_clean
+    # 캡션이 단독 prose 청크로 남지 않는다.
+    assert not any((not c.is_table) and "HBM vs SOCAMM 비교" in c.content_clean for c in chunks)
+    # embed_payload(검색 신호)에도 캡션 키워드가 반영된다.
+    assert "HBM vs SOCAMM 비교" in table_chunks[0].embed_payload
+
+
+def test_short_title_at_section_boundary_merges_into_next() -> None:
+    # 섹션 경계의 짧은 제목은 다음 섹션 본문에 흡수되어 단독으로 남지 않는다.
+    big = "뒤따르는 본문 문단으로 단독 청크가 되기 충분한 길이의 산문이다. " * 12
+    markdown = f"# 파트1\n\n샴푸의 요정이 온다\n\n# 파트2\n\n{big.strip()}\n"
+    chunks = _chunks(markdown)
+    # 제목이 단독 청크로 남지 않는다.
+    assert not any(c.content_clean.strip() == "샴푸의 요정이 온다" for c in chunks)
+    # 다음 본문 청크에 흡수된다.
+    assert any("샴푸의 요정이 온다" in c.content_clean for c in chunks)
+    # 흡수 결과 어떤 청크도 MIN_CHARS 미만으로 남지 않는다.
+    assert all(len(c.content_clean) >= MIN_CHARS for c in chunks)
+
+
+def test_short_fragment_pulls_seq_forward() -> None:
+    # 병합 시 흡수 청크의 chunk_seq는 더 앞선(작은) 조각 위치로 당겨진다.
+    big = "뒤따르는 본문 문단으로 단독 청크가 되기 충분한 길이의 산문이다. " * 12
+    markdown = f"# 파트1\n\n짧은 머리말 제목\n\n# 파트2\n\n{big.strip()}\n"
+    chunks = _chunks(markdown)
+    merged = next(c for c in chunks if "짧은 머리말 제목" in c.content_clean)
+    # 머리말(seq=0)을 흡수했으므로 흡수 청크의 seq도 0이 된다.
+    assert merged.chunk_seq == 0
+
+
 def test_br_only_line_dropped_and_br_not_mistaken_as_word() -> None:
     # 산문 줄의 잔여 <br>는 제거되고, 'br'이 영문 단어로 오인돼 기호 청크가 남지 않는다.
     big_para = "현대위아의 멕시코 법인은 가동률 개선으로 고정비 절감 효과가 기대된다. " * 8

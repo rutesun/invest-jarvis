@@ -567,3 +567,65 @@ def load_pending_document_chunks(
         rows = cur.fetchall()
 
     return [(row[0], row[1]) for row in rows]
+
+
+def search_document_chunks(
+    conn: Any,
+    query_vec: list[float],
+    *,
+    category_filter: str | None = None,
+    top_k: int = 5,
+) -> list[dict[str, Any]]:
+    """벡터 유사도 검색. 문서당 최고 점수 청크 1개만 반환(per-document dedup).
+
+    같은 문서에서 여러 청크가 높은 점수를 받아도 top-1만 노출한다. 투자의견 이력
+    테이블처럼 동일 문서 내 반복 패턴이 검색 결과를 독점하는 문제를 방지한다.
+
+    category_filter: 지정 시 해당 카테고리 문서만 검색(T16 cross-link 시 활용).
+    query_vec: 1536차원 OpenAI text-embedding-3-small 벡터.
+    """
+    vec_lit = "[" + ",".join(repr(float(x)) for x in query_vec) + "]"
+    cat_clause = "AND d.category_key = %(category)s" if category_filter else ""
+    params: dict[str, Any] = {"category": category_filter}
+
+    sql = f"""
+    WITH ranked AS (
+        SELECT
+            dc.id,
+            dc.document_id,
+            dc.chunk_seq,
+            dc.is_table,
+            dc.section_path,
+            dc.content_clean,
+            dc.category_key,
+            dc.main_theme,
+            dc.ticker_tags,
+            d.title            AS doc_title,
+            d.source_path,
+            d.broker_key,
+            d.published_date,
+            1 - (dc.embedding <=> '{vec_lit}'::vector) AS similarity,
+            ROW_NUMBER() OVER (
+                PARTITION BY dc.document_id
+                ORDER BY dc.embedding <=> '{vec_lit}'::vector
+            ) AS rn
+        FROM document_chunks dc
+        JOIN documents d ON d.id = dc.document_id
+        WHERE dc.embed_status = 'done'
+          {cat_clause}
+    )
+    SELECT
+        id, document_id, chunk_seq, is_table, section_path,
+        content_clean, category_key, main_theme, ticker_tags,
+        doc_title, source_path, broker_key, published_date, similarity
+    FROM ranked
+    WHERE rn = 1
+    ORDER BY similarity DESC
+    LIMIT %(top_k)s;
+    """
+    params["top_k"] = top_k
+
+    with conn.cursor() as cur:
+        cur.execute(sql, params)
+        cols = [desc.name for desc in cur.description]
+        return [dict(zip(cols, row, strict=True)) for row in cur.fetchall()]

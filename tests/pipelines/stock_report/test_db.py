@@ -11,6 +11,7 @@ from src.pipelines.stock_report.db import (
     load_pending_document_chunks,
     persist_classified_chunks,
     persist_document_chunks,
+    search_document_chunks,
     upsert_document,
 )
 from src.pipelines.stock_report.models import (
@@ -198,6 +199,13 @@ def test_persist_report_artifact_writes_run_and_evidence() -> None:
 # --- PDF ingest write-path tests (T15) -------------------------------------
 
 
+class _FakeColumn:
+    """psycopg cursor.description의 Column 최소 구현."""
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+
 class ConfigurableCursor:
     """fetchone/fetchall 반환값을 테스트에서 제어할 수 있는 cursor."""
 
@@ -222,6 +230,10 @@ class ConfigurableCursor:
     def fetchall(self) -> list[Any]:
         return self.conn.fetchall_result
 
+    @property
+    def description(self) -> list[_FakeColumn]:
+        return self.conn.description_result or []
+
 
 class ConfigurableConnection:
     def __init__(
@@ -229,12 +241,14 @@ class ConfigurableConnection:
         *,
         fetchone_result: Any = None,
         fetchall_result: list[Any] | None = None,
+        description_result: list[_FakeColumn] | None = None,
     ) -> None:
         self.executed: list[tuple[str, tuple[Any, ...] | None]] = []
         self.executemany_calls: list[tuple[str, list[tuple[Any, ...]]]] = []
         self.commits = 0
         self.fetchone_result = fetchone_result
         self.fetchall_result = fetchall_result or []
+        self.description_result = description_result
 
     def cursor(self) -> ConfigurableCursor:
         return ConfigurableCursor(self)
@@ -450,3 +464,84 @@ def test_load_pending_document_chunks_filters_status() -> None:
     assert "document_id = %s" in query_doc
     assert params_doc == ("pending", 7)
     assert conn_doc.commits == 0
+
+
+# --- search_document_chunks -------------------------------------------------
+
+_SEARCH_COLS = [
+    "id",
+    "document_id",
+    "chunk_seq",
+    "is_table",
+    "section_path",
+    "content_clean",
+    "category_key",
+    "main_theme",
+    "ticker_tags",
+    "doc_title",
+    "source_path",
+    "broker_key",
+    "published_date",
+    "similarity",
+]
+
+
+def _search_conn(rows: list[tuple[Any, ...]]) -> ConfigurableConnection:
+    return ConfigurableConnection(
+        fetchall_result=rows,
+        description_result=[_FakeColumn(c) for c in _SEARCH_COLS],
+    )
+
+
+def test_search_document_chunks_maps_rows_to_dicts() -> None:
+    row = (
+        1,
+        10,
+        3,
+        False,
+        "intro",
+        "HBM 관련 본문",
+        "반도체",
+        "HBM",
+        [],
+        "소부장 리포트",
+        "data/files/doc.pdf",
+        "shinhan",
+        None,
+        0.87,
+    )
+    conn = _search_conn([row])
+    results = search_document_chunks(conn, [0.1] * 1536, top_k=5)
+    assert len(results) == 1
+    assert results[0]["doc_title"] == "소부장 리포트"
+    assert results[0]["similarity"] == 0.87
+    assert results[0]["category_key"] == "반도체"
+
+
+def test_search_document_chunks_sql_contains_cte_and_dedup() -> None:
+    conn = _search_conn([])
+    search_document_chunks(conn, [0.0] * 1536, top_k=3)
+    query, _ = conn.executed[0]
+    assert "WITH ranked AS" in query
+    assert "ROW_NUMBER() OVER" in query
+    assert "PARTITION BY dc.document_id" in query
+    assert "WHERE rn = 1" in query
+    assert "LIMIT" in query
+
+
+def test_search_document_chunks_category_filter_injected() -> None:
+    conn = _search_conn([])
+    search_document_chunks(conn, [0.0] * 1536, category_filter="반도체", top_k=3)
+    query, params = conn.executed[0]
+    assert "d.category_key" in query
+    assert isinstance(params, dict)
+    assert params.get("category") == "반도체"
+
+
+def test_search_document_chunks_no_category_clause_when_none() -> None:
+    conn = _search_conn([])
+    search_document_chunks(conn, [0.0] * 1536, category_filter=None, top_k=5)
+    query, params = conn.executed[0]
+    assert "d.category_key" not in query
+    assert isinstance(params, dict)
+    assert params.get("category") is None

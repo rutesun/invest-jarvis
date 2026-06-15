@@ -55,6 +55,11 @@ _SOURCE_LINE_RE = re.compile(
     re.IGNORECASE,
 )
 
+# 문장 종결 부호로 끝나는 텍스트(완결 문장). 짧아도 제목/캡션이 아닌 본문으로 본다.
+# 증권사 PDF에서 제목·캡션은 마침표 없는 명사구("종목별 업데이트")인 반면, 본문은
+# "~이다.", "~성장.", "growth."처럼 종결 부호로 끝난다.
+_SENTENCE_END_RE = re.compile(r"[.!?。…][)\]\"'」』】]*$")
+
 
 def _has_meaningful_word(text: str) -> bool:
     """셀 텍스트에 의미 있는 단어(2자+ 한글, 3자+ 영문)가 있으면 True."""
@@ -135,6 +140,66 @@ def _filter_noise_chunks(drafts: list[PdfChunkDraft]) -> list[PdfChunkDraft]:
     return [draft for draft in drafts if _has_meaningful_word(draft.content_clean)]
 
 
+def _first_line(text: str) -> str:
+    lines = text.splitlines()
+    return lines[0] if lines else ""
+
+
+def _merge_short_chunks(
+    drafts: list[PdfChunkDraft],
+    *,
+    channel_name: str,
+    category_key: str,
+    main_theme: str | None,
+    ticker_tags: list[str],
+) -> list[PdfChunkDraft]:
+    """MIN_CHARS 미만 산문 조각을 바로 다음 청크 앞에 병합한다(파편 방지).
+
+    짧은 산문 조각은 대개 뒤따르는 본문/표의 제목·캡션이다(예: "샴푸의 요정이
+    온다" → 본문, "2026년 하반기 뷰티 산업" → 표). 단독 청크로 두면 키워드만 있고
+    내용이 없어 검색 상위를 오염시키므로, 다음 청크 앞에 prepend해 흡수시킨다.
+    제목 키워드가 검색에 반영되도록 content_clean·embed_payload를 함께 갱신하고,
+    reading order 보존을 위해 chunk_seq는 더 앞선(작은) 값으로 당긴다.
+
+    제외 대상:
+    - 표 조각(is_table=True): 정보 밀도가 높아 병합하지 않는다.
+    - 출처줄(_SOURCE_LINE_RE): 앞 그림의 꼬리이므로 _filter_source_chunks가 앞에
+      병합한다(여기서 다음에 붙이면 방향이 어긋난다).
+    - 완결 문장(_SENTENCE_END_RE): 마침표 등으로 끝나는 짧은 본문은 제목이 아니라
+      독립 본문이므로 병합하지 않는다(길이만으로 제목과 본문을 가르지 않기 위함).
+
+    다음 청크가 없는 문서 끝 조각은 그대로 둔다(흔치 않고 내용 손실도 없다).
+    """
+
+    def is_fragment(draft: PdfChunkDraft) -> bool:
+        if draft.is_table or len(draft.content_clean) >= MIN_CHARS:
+            return False
+        text = draft.content_clean.strip()
+        if _SOURCE_LINE_RE.match(_first_line(text)):
+            return False
+        return not _SENTENCE_END_RE.search(text)
+
+    # 뒤→앞 순회: result[-1]은 항상 현재 draft의 원래-다음 청크다.
+    result: list[PdfChunkDraft] = []
+    for draft in reversed(drafts):
+        if is_fragment(draft) and result:
+            nxt = result[-1]
+            nxt.content_clean = f"{draft.content_clean}\n\n{nxt.content_clean}"
+            nxt.chunk_seq = draft.chunk_seq
+            nxt.embed_payload = build_embed_payload(
+                canonical_summary=nxt.canonical_summary,
+                clean_text=nxt.content_clean,
+                channel_name=channel_name,
+                category_key=category_key,
+                main_theme=main_theme,
+                ticker_tags=ticker_tags,
+            )
+        else:
+            result.append(draft)
+    result.reverse()
+    return result
+
+
 def _filter_source_chunks(drafts: list[PdfChunkDraft]) -> list[PdfChunkDraft]:
     """출처줄로만 이루어진 tiny 청크를 앞 청크의 본문에 병합한다.
 
@@ -196,6 +261,13 @@ def build_pdf_chunks(parsed: ParsedDocument, meta: DocumentMeta) -> list[PdfChun
             seq += 1
 
     drafts = _filter_noise_chunks(drafts)
+    drafts = _merge_short_chunks(
+        drafts,
+        channel_name=channel_name,
+        category_key=category_key,
+        main_theme=meta.main_theme,
+        ticker_tags=ticker_tags,
+    )
     drafts = _filter_source_chunks(drafts)
     return drafts
 
