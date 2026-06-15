@@ -30,7 +30,7 @@
 | `src/pipelines/deep_dive.py` | debate 배선, veto/integrated/actionable 제거 | 수정 |
 | `src/cli/analyze_render.py` | 종합 판정 섹션 (debate 삽입 + ledger fallback) | 수정 |
 | `src/cli/main.py` | actionable 패널 제거 | 수정 |
-| `src/pipelines/analyze_decision.py` | apply_playbook_veto 삭제 | 수정 |
+| `src/pipelines/analyze_decision.py` | apply_criteria_veto 삭제 | 수정 |
 | `tests/pipelines/debate/*`, `tests/llm/test_debate_analyzer.py` | 테스트 | 신규 |
 
 **중복 제거 (확정 — spec §4.2, §7):**
@@ -215,19 +215,19 @@ class DebateBundle(BaseModel):
 # tests/pipelines/debate/test_ledger_entry.py
 from src.pipelines.analyze_decision import FactorAssessment
 from src.tools.criteria.models import (
-    CanslimResult, ElementVerdict, GateCheck, GateResult,
-    MarketRegimeResult, PlaybookVerdict, RelativeStrengthResult,
+    CanslimResult, ElementVerdict, CriteriaCheck, _GateEvaluation,
+    MarketRegimeResult, CriteriaVerdict, RelativeStrengthResult,
 )
 
 
 def _verdict(mansfield=2.1):
-    gate = GateResult(
+    gate = _GateEvaluation(
         passed=True,
         checklist=[
-            GateCheck(name="A", required=True, met=True, reason="시장환경=상승"),
-            GateCheck(name="B", required=True, met=True, reason="is_stage2=1.0"),
-            GateCheck(name="C", required=True, met=True, reason="RS=True, 업종강세=True"),
-            GateCheck(name="E", required=True, met=False, reason="breakout=False"),
+            CriteriaCheck(name="A", required=True, met=True, reason="시장환경=상승"),
+            CriteriaCheck(name="B", required=True, met=True, reason="is_stage2=1.0"),
+            CriteriaCheck(name="C", required=True, met=True, reason="RS=True, 업종강세=True"),
+            CriteriaCheck(name="E", required=True, met=False, reason="breakout=False"),
         ],
         quality_grade="B", veto_reason=None,
     )
@@ -237,7 +237,7 @@ def _verdict(mansfield=2.1):
         l=ElementVerdict(met=True, detail="RS 강세"), i=ElementVerdict(met=False, detail="분산 우세"),
         m=ElementVerdict(met=True, detail="상승장"),
     )
-    return PlaybookVerdict(
+    return CriteriaVerdict(
         ticker="TEST", holding=False,
         market_regime=MarketRegimeResult(regime="상승", allow_new_buy=True, index_symbol="^GSPC"),
         relative_strength=RelativeStrengthResult(mansfield_rs=mansfield, outperform_6m=10.0, rp_slope_4w=0.5, index_symbol="^GSPC"),
@@ -255,7 +255,7 @@ def test_entry_ledger_routing_and_exclusions():
                          actionability_score=4, total_score=12, summary="s", role_reason="r", evidence=[], bias="bullish"),
     ]
     ledger = build_evidence_ledger(
-        playbook_verdict=_verdict(), factor_assessments=factors, snapshot=None, flow=None, mode="entry",
+        criteria_verdict=_verdict(), factor_assessments=factors, snapshot=None, flow=None, mode="entry",
     )
     keys = {e.key for e in ledger.bull + ledger.bear + ledger.neutral}
     assert "gate_A" in keys and "gate_E" in keys
@@ -287,14 +287,14 @@ def _add(buckets: dict, ev: Evidence) -> None:
     buckets[ev.side].append(ev)
 
 
-def build_evidence_ledger(*, playbook_verdict, factor_assessments, snapshot, flow, mode: str) -> BullBearLedger:
+def build_evidence_ledger(*, criteria_verdict, factor_assessments, snapshot, flow, mode: str) -> BullBearLedger:
     """기존 판정 결과를 bull/bear/neutral 로 분류·채점. 순수 함수, 새 데이터 안 만듦.
     momentum_events 는 증거가 아니다(Event 섹션 표시용)."""
     buckets: dict[str, list[Evidence]] = {"bull": [], "bear": [], "neutral": []}
 
     # 게이트 (entry 전용)
-    if mode == "entry" and playbook_verdict is not None and playbook_verdict.gate is not None:
-        for check in playbook_verdict.gate.checklist:
+    if mode == "entry" and criteria_verdict is not None and criteria_verdict.gate is not None:
+        for check in criteria_verdict.checks:
             if check.name not in _GATE_WEIGHTS:
                 continue
             _add(buckets, Evidence(
@@ -304,9 +304,9 @@ def build_evidence_ledger(*, playbook_verdict, factor_assessments, snapshot, flo
             ))
 
     # CAN SLIM (mode 별 라벨셋 — L 항상 제외, M은 holding 만)
-    if playbook_verdict is not None and playbook_verdict.canslim is not None:
+    if criteria_verdict is not None and criteria_verdict.canslim is not None:
         labels = _CANSLIM_ENTRY if mode == "entry" else _CANSLIM_HOLDING
-        cs = playbook_verdict.canslim
+        cs = criteria_verdict.canslim
         for attr, label in labels.items():
             v = getattr(cs, attr)
             side = "bull" if v.met is True else "bear" if v.met is False else "neutral"
@@ -314,8 +314,8 @@ def build_evidence_ledger(*, playbook_verdict, factor_assessments, snapshot, flo
                                    headline=f"CAN SLIM {attr.upper()} {label}", detail=v.detail or "—", source="playbook"))
 
     # rs_magnitude (연속값)
-    if playbook_verdict is not None and playbook_verdict.relative_strength is not None:
-        rs = playbook_verdict.relative_strength.mansfield_rs
+    if criteria_verdict is not None and criteria_verdict.relative_strength is not None:
+        rs = criteria_verdict.relative_strength.mansfield_rs
         if rs != 0:
             _add(buckets, Evidence(side="bull" if rs > 0 else "bear", key="rs_magnitude",
                                    weight=min(abs(rs) / 10.0, 3.0), headline="상대강도 크기",
@@ -346,8 +346,8 @@ def build_evidence_ledger(*, playbook_verdict, factor_assessments, snapshot, flo
                                    headline="RSI 과매수", detail=f"RSI={rsi:.1f} ≥ 80", source="technical"))
 
     # holding: exit signals + r_cushion
-    if mode == "holding" and playbook_verdict is not None:
-        ev = getattr(playbook_verdict, "exit_verdict", None)
+    if mode == "holding" and criteria_verdict is not None:
+        ev = getattr(criteria_verdict, "exit_verdict", None)
         if ev is not None:
             sw = {"strong": 5.0, "medium": 3.0, "weak": 1.0}
             for sig in ev.signals:
@@ -362,20 +362,20 @@ def build_evidence_ledger(*, playbook_verdict, factor_assessments, snapshot, flo
         mode=mode, bull=buckets["bull"], bear=buckets["bear"], neutral=buckets["neutral"],
         bull_weight=round(sum(e.weight for e in buckets["bull"]), 2),
         bear_weight=round(sum(e.weight for e in buckets["bear"]), 2),
-        action_space=compute_action_space(playbook_verdict, mode),
+        action_space=compute_action_space(criteria_verdict, mode),
     )
 
 
-def compute_action_space(playbook_verdict, mode: str) -> list[str]:
+def compute_action_space(criteria_verdict, mode: str) -> list[str]:
     """하드 리스크 가드레일 — 판사의 허용 액션 제한."""
-    if playbook_verdict is None:
+    if criteria_verdict is None:
         return ["매수", "관망"] if mode == "entry" else ["보유", "비중축소", "청산"]
     if mode == "entry":
-        regime = getattr(playbook_verdict, "market_regime", None)
+        regime = getattr(criteria_verdict, "market_regime", None)
         if regime is not None and regime.allow_new_buy is False:
             return ["관망"]
         return ["매수", "관망"]
-    ev = getattr(playbook_verdict, "exit_verdict", None)
+    ev = getattr(criteria_verdict, "exit_verdict", None)
     if ev is not None:
         if any(s.severity == "strong" for s in ev.signals) or ev.action == "liquidate":
             return ["청산", "비중축소"]
@@ -399,7 +399,7 @@ def compute_action_space(playbook_verdict, mode: str) -> list[str]:
 # tests/pipelines/debate/test_ledger_holding.py
 from src.tools.criteria.models import (
     CanslimResult, ElementVerdict, ExitSignal, ExitVerdict,
-    MarketRegimeResult, PlaybookVerdict, RelativeStrengthResult,
+    MarketRegimeResult, CriteriaVerdict, RelativeStrengthResult,
 )
 
 
@@ -407,7 +407,7 @@ def _holding(signals, action="hold", current_r=None):
     cs = CanslimResult(c=ElementVerdict(met=True), a=ElementVerdict(met=True), n=ElementVerdict(met=True),
                        s=ElementVerdict(met=True), l=ElementVerdict(met=True), i=ElementVerdict(met=True),
                        m=ElementVerdict(met=True))
-    return PlaybookVerdict(
+    return CriteriaVerdict(
         ticker="T", holding=True,
         market_regime=MarketRegimeResult(regime="상승", allow_new_buy=True, index_symbol="^GSPC"),
         relative_strength=RelativeStrengthResult(mansfield_rs=1.0, outperform_6m=5.0, rp_slope_4w=0.1, index_symbol="^GSPC"),
@@ -421,7 +421,7 @@ def test_holding_routes_exit_and_keeps_canslim_m():
     from src.pipelines.debate.ledger import build_evidence_ledger
 
     signals = [ExitSignal(code="SMA_LONG", severity="strong", detail="종가<SMA200")]
-    ledger = build_evidence_ledger(playbook_verdict=_holding(signals, action="liquidate"),
+    ledger = build_evidence_ledger(criteria_verdict=_holding(signals, action="liquidate"),
                                    factor_assessments=[], snapshot=None, flow=None, mode="holding")
     keys = {e.key for e in ledger.bull + ledger.bear}
     assert "exit_SMA_LONG" in keys
@@ -434,13 +434,13 @@ def test_holding_routes_exit_and_keeps_canslim_m():
 ```python
 # tests/pipelines/debate/test_action_space.py
 from src.tools.criteria.models import (
-    ExitSignal, ExitVerdict, MarketRegimeResult, PlaybookVerdict, RelativeStrengthResult,
+    ExitSignal, ExitVerdict, MarketRegimeResult, CriteriaVerdict, RelativeStrengthResult,
 )
 from src.pipelines.debate.ledger import compute_action_space
 
 
 def _v(regime_allow=True, exit_signals=None, exit_action="hold", holding=False):
-    return PlaybookVerdict(
+    return CriteriaVerdict(
         ticker="T", holding=holding,
         market_regime=MarketRegimeResult(regime="상승" if regime_allow else "하락", allow_new_buy=regime_allow, index_symbol="^GSPC"),
         relative_strength=RelativeStrengthResult(mansfield_rs=1.0, outperform_6m=5.0, rp_slope_4w=0.1, index_symbol="^GSPC"),
@@ -773,7 +773,7 @@ async def test_build_debate_returns_bundle_and_ledger(monkeypatch):
     monkeypatch.setattr("src.llm.analyzer.run_debate_judge", _judge)
 
     bundle, ledger = await deep_dive._build_debate(
-        playbook_verdict=None, factor_assessments=[], snapshot=None, flow=None,
+        criteria_verdict=None, factor_assessments=[], snapshot=None, flow=None,
         holding=False, llm=object(), ticker="TEST")
     assert ledger is not None
     assert bundle is not None
@@ -789,7 +789,7 @@ async def test_build_debate_graceful_on_llm_failure(monkeypatch):
 
     monkeypatch.setattr(deep_dive, "run_debate_advocacy", _boom, raising=False)
     bundle, ledger = await deep_dive._build_debate(
-        playbook_verdict=None, factor_assessments=[], snapshot=None, flow=None,
+        criteria_verdict=None, factor_assessments=[], snapshot=None, flow=None,
         holding=False, llm=object(), ticker="TEST")
     assert bundle is None
     assert ledger is not None  # 실패해도 증거 장부는 표시 가능
@@ -810,10 +810,10 @@ from src.llm.analyzer import run_debate_advocacy, run_debate_judge  # monkeypatc
 모듈 헬퍼:
 
 ```python
-async def _build_debate(*, playbook_verdict, factor_assessments, snapshot, flow, holding, llm, ticker):
+async def _build_debate(*, criteria_verdict, factor_assessments, snapshot, flow, holding, llm, ticker):
     """증거 장부 생성 후 논쟁 실행. (bundle|None, ledger) 반환 — 실패해도 ledger 는 보존."""
     mode = "holding" if holding else "entry"
-    ledger = build_evidence_ledger(playbook_verdict=playbook_verdict, factor_assessments=factor_assessments,
+    ledger = build_evidence_ledger(criteria_verdict=criteria_verdict, factor_assessments=factor_assessments,
                                    snapshot=snapshot, flow=flow, mode=mode)
     try:
         bundle = await run_debate(ledger, llm, ticker=ticker)
@@ -823,11 +823,11 @@ async def _build_debate(*, playbook_verdict, factor_assessments, snapshot, flow,
         return None, ledger
 ```
 
-`run()` 내부 — momentum_events 생성(플랜 A Task 8) 이후. **playbook_verdict 계산 시 이미 구한 `holding`을 재사용**한다(중복 `load_holdings()` 금지):
+`run()` 내부 — momentum_events 생성(플랜 A Task 8) 이후. **criteria_verdict 계산 시 이미 구한 `holding`을 재사용**한다(중복 `load_holdings()` 금지):
 
 ```python
         debate_bundle, debate_ledger = await _build_debate(
-            playbook_verdict=playbook_verdict,
+            criteria_verdict=criteria_verdict,
             factor_assessments=decision_bundle.factor_assessments,
             snapshot=technical_data.snapshot, flow=flow_data,
             holding=holding is not None, llm=self.llm, ticker=ticker,
@@ -843,7 +843,7 @@ return dict에 키 추가:
             "debate_ledger": debate_ledger,
 ```
 
-> `holding` 변수: playbook_verdict 계산 블록(`holding = load_holdings().find(ticker)`)을 try 밖으로 끌어올려 재사용한다.
+> `holding` 변수: criteria_verdict 계산 블록(`holding = load_holdings().find(ticker)`)을 try 밖으로 끌어올려 재사용한다.
 
 - [ ] **Step 4: Run** → PASS  **Step 5: Commit** `feat(deep_dive): wire debate, preserve ledger on failure`
 
@@ -907,7 +907,7 @@ def test_deep_dive_output_includes_verdict():
         summary = "s"; recommendation = "보유"; confidence = 0.5; rationale = "r"; key_insights = []
 
     result = {"ticker": "T", "technical": tech, "technical_summary": _Sum(),
-              "momentum_events": MomentumEvents(), "playbook_verdict": None,
+              "momentum_events": MomentumEvents(), "criteria_verdict": None,
               "chart_patterns": {}, "factor_assessments": [], "scenarios": [],
               "debate": _bundle(), "debate_ledger": _bundle().ledger}
     out = format_deep_dive_output(result)
@@ -983,22 +983,22 @@ def _format_ledger_fallback(ledger) -> str:
 
 Run:
 ```bash
-grep -rn "apply_playbook_veto\|generate_integrated_analysis\|generate_actionable_signal\|IntegratedAnalysis\|ActionableSignalOutput\|_format_top_summary\|display_actionable_signal\|veto_applied\|action_original\|integrated_analysis\|actionable_signal" src/ tests/
+grep -rn "apply_criteria_veto\|generate_integrated_analysis\|generate_actionable_signal\|IntegratedAnalysis\|ActionableSignalOutput\|_format_top_summary\|display_actionable_signal\|veto_applied\|action_original\|integrated_analysis\|actionable_signal" src/ tests/
 ```
 
 - [ ] **Step 2: Remove source**
 
-1. `analyze_decision.py` — `apply_playbook_veto` 삭제; `AnalyzeDecisionSummary.veto_applied`/`action_original` 필드 삭제(grep 확인 후).
+1. `analyze_decision.py` — `apply_criteria_veto` 삭제; `AnalyzeDecisionSummary.veto_applied`/`action_original` 필드 삭제(grep 확인 후).
 2. `llm/models.py` — `IntegratedAnalysisInput/Output`, `ActionableSignalOutput` 삭제.
 3. `llm/analyzer.py` — `generate_integrated_analysis`, `generate_actionable_signal` 삭제 + 이제 안 쓰는 import 정리.
-4. `deep_dive.py` — `_generate_integrated_analysis`/`_format_flow_for_llm`(integrated 전용이면) 삭제; integrated/actionable/veto 호출 블록 삭제(**내용으로 찾기** — 플랜 A 후 라인 시프트); `IntegratedAnalysis*`/`apply_playbook_veto` import 제거. return dict의 `integrated_analysis`/`actionable_signal` 키 제거.
-   - ⚠️ **`apply_playbook_veto` call(현재 deep_dive.py:261)과 import(현재 deep_dive.py:19)를 반드시 동시에 제거.** call만 지우면 ruff E401 dead-import, import만 지우면 NameError 발생.
+4. `deep_dive.py` — `_generate_integrated_analysis`/`_format_flow_for_llm`(integrated 전용이면) 삭제; integrated/actionable/veto 호출 블록 삭제(**내용으로 찾기** — 플랜 A 후 라인 시프트); `IntegratedAnalysis*`/`apply_criteria_veto` import 제거. return dict의 `integrated_analysis`/`actionable_signal` 키 제거.
+   - ⚠️ **`apply_criteria_veto` call(현재 deep_dive.py:261)과 import(현재 deep_dive.py:19)를 반드시 동시에 제거.** call만 지우면 ruff E401 dead-import, import만 지우면 NameError 발생.
 5. `cli/analyze_render.py` — `_format_raw_analysis_sections` 안의 `integrated = result.get("integrated_analysis")` 렌더 블록 삭제(리뷰 C2: 플랜 A 이동분에 잔존).
 6. `cli/main.py` — `display_actionable_signal` 삭제; `analyze` 커맨드의 actionable 패널 출력 블록 삭제; `ActionableSignalOutput` import 제거.
 
 - [ ] **Step 3: Migrate tests** (리뷰 C3 — 7개 파일)
 
-- `tests/pipelines/test_apply_playbook_veto.py` → 파일 삭제
+- `tests/pipelines/test_apply_criteria_veto.py` → 파일 삭제
 - `tests/llm/test_analyzer.py` → `generate_actionable_signal`/`generate_integrated_analysis` import·테스트 삭제
 - `tests/llm/test_models.py` → `ActionableSignalOutput` import·테스트 삭제
 - `tests/pipelines/test_deep_dive.py` → actionable mock 7곳: `run_debate_advocacy`/`run_debate_judge` mock으로 재배선하거나 해당 단언 삭제. result dict 단언에서 `actionable_signal`/`integrated_analysis` 제거, `debate`/`debate_ledger` 추가
@@ -1008,7 +1008,7 @@ grep -rn "apply_playbook_veto\|generate_integrated_analysis\|generate_actionable
 
 - [ ] **Step 4: Verify**
 
-Run: `grep -rn "apply_playbook_veto\|generate_integrated_analysis\|generate_actionable_signal\|IntegratedAnalysis\|ActionableSignalOutput\|_format_top_summary\|display_actionable_signal\|integrated_analysis" src/ tests/`
+Run: `grep -rn "apply_criteria_veto\|generate_integrated_analysis\|generate_actionable_signal\|IntegratedAnalysis\|ActionableSignalOutput\|_format_top_summary\|display_actionable_signal\|integrated_analysis" src/ tests/`
 Expected: 빈 결과
 
 Run: `uv run pytest -q`
@@ -1033,7 +1033,7 @@ def test_ledger_no_playbook_factors_only():
 
     factors = [FactorAssessment(factor_type="technical", role="주도", freshness_score=4, magnitude_score=4,
                                 actionability_score=4, total_score=12, summary="강세", role_reason="r", evidence=[], bias="bullish")]
-    ledger = build_evidence_ledger(playbook_verdict=None, factor_assessments=factors,
+    ledger = build_evidence_ledger(criteria_verdict=None, factor_assessments=factors,
                                    snapshot=None, flow=None, mode="entry")
     assert ledger.action_space == ["매수", "관망"]
     assert any(e.key == "factor_technical" for e in ledger.bull)
@@ -1042,7 +1042,7 @@ def test_ledger_no_playbook_factors_only():
 
 def test_empty_ledger():
     from src.pipelines.debate.ledger import build_evidence_ledger
-    ledger = build_evidence_ledger(playbook_verdict=None, factor_assessments=[],
+    ledger = build_evidence_ledger(criteria_verdict=None, factor_assessments=[],
                                    snapshot=None, flow=None, mode="entry")
     assert ledger.bull == [] and ledger.bull_weight == 0.0
 ```

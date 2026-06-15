@@ -16,7 +16,7 @@ from src.llm.models import (
     TechnicalSummaryInput,
     TechnicalSummaryOutput,
 )
-from src.pipelines.analyze_decision import apply_playbook_veto, build_analyze_decision_bundle
+from src.pipelines.analyze_decision import apply_criteria_veto, build_analyze_decision_bundle
 from src.tools.criteria.holdings import load_holdings
 from src.tools.disclosure import DisclosureItem, DisclosureTool, extract_kr_code, is_korean_ticker
 from src.tools.flow import FlowTool, InvestorFlow
@@ -88,7 +88,7 @@ class DeepDivePipeline:
         pattern_engine: PatternEngine | None = None,
         level_payload_composer: Callable | None = None,
         structure_presentation_adapter: Callable | None = None,
-        playbook_engine=None,
+        criteria_engine=None,
     ):
         self.technical_tool = technical_tool
         self.news_tool = news_tool
@@ -102,7 +102,7 @@ class DeepDivePipeline:
         self.structure_presentation_adapter = (
             structure_presentation_adapter or build_structure_presentation
         )
-        self.playbook_engine = playbook_engine
+        self.criteria_engine = criteria_engine
 
     async def run(self, ticker: str) -> dict:
         """Run deep dive analysis for a ticker.
@@ -229,12 +229,12 @@ class DeepDivePipeline:
             llm=self.llm,
         )
 
-        # PlaybookEngine evaluation (optional)
-        playbook_verdict = None
-        if self.playbook_engine is not None:
+        # CriteriaEngine evaluation (optional)
+        criteria_verdict = None
+        if self.criteria_engine is not None:
             try:
                 holding = load_holdings().find(ticker)
-                playbook_verdict = await self.playbook_engine.evaluate(
+                criteria_verdict = await self.criteria_engine.evaluate(
                     ticker=ticker,
                     technical_result=technical_data,
                     fundamental=fundamental_data,
@@ -243,7 +243,7 @@ class DeepDivePipeline:
                     holding=holding,
                 )
             except Exception as e:
-                logger.warning("PlaybookEngine evaluation failed for %s: %s", ticker, e)
+                logger.warning("CriteriaEngine evaluation failed for %s: %s", ticker, e)
 
         decision_bundle = build_analyze_decision_bundle(
             technical_data=technical_data,
@@ -258,7 +258,7 @@ class DeepDivePipeline:
         )
         decision_bundle = decision_bundle.model_copy(
             update={
-                "summary": apply_playbook_veto(decision_bundle.summary, playbook_verdict),
+                "summary": apply_criteria_veto(decision_bundle.summary, criteria_verdict),
             }
         )
 
@@ -300,7 +300,7 @@ class DeepDivePipeline:
             "execution_levels": execution_levels,
             "presented_structure": presented_structure,
             "chart": chart_result,
-            "playbook_verdict": playbook_verdict,
+            "criteria_verdict": criteria_verdict,
         }
 
     async def _generate_technical_summary(

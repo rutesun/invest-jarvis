@@ -408,14 +408,13 @@ def test_format_deep_dive_output_shows_na_for_missing_fundamental_metrics():
 
 
 def test_format_deep_dive_output_renders_playbook_section_with_gate_pass():
-    """playbook_verdict가 있으면 플레이북 평가 섹션이 렌더돼야 한다 (게이트 통과)."""
+    """criteria_verdict가 있으면 플레이북 평가 섹션이 렌더돼야 한다 (게이트 통과)."""
     from src.tools.criteria.models import (
         CanslimResult,
+        CriteriaCheck,
+        CriteriaVerdict,
         ElementVerdict,
-        GateCheck,
-        GateResult,
         MarketRegimeResult,
-        PlaybookVerdict,
         PositionPlan,
         RelativeStrengthResult,
     )
@@ -435,7 +434,7 @@ def test_format_deep_dive_output_renders_playbook_section_with_gate_pass():
         warnings=[],
     )
 
-    verdict = PlaybookVerdict(
+    verdict = CriteriaVerdict(
         ticker="AAPL",
         holding=False,
         market_regime=MarketRegimeResult(
@@ -457,17 +456,14 @@ def test_format_deep_dive_output_renders_playbook_section_with_gate_pass():
             i=ElementVerdict(met=None, detail="업종 데이터 없음"),
             m=ElementVerdict(met=True, detail="시장 상승"),
         ),
-        gate=GateResult(
-            passed=True,
-            checklist=[
-                GateCheck(name="시장환경(A)", required=True, met=True, reason="SPY 상승추세"),
-                GateCheck(name="Stage2(B)", required=True, met=True, reason="Stage2 확인"),
-                GateCheck(name="업종강도(C)", required=False, met=None, reason="데이터 없음"),
-                GateCheck(name="수급(E)", required=False, met=None, reason="해당없음"),
-            ],
-            quality_grade="B",
-            veto_reason=None,
-        ),
+        checks=[
+            CriteriaCheck(name="시장환경(A)", required=True, met=True, reason="SPY 상승추세"),
+            CriteriaCheck(name="Stage2(B)", required=True, met=True, reason="Stage2 확인"),
+            CriteriaCheck(name="업종강도(C)", required=False, met=None, reason="데이터 없음"),
+            CriteriaCheck(name="수급(E)", required=False, met=None, reason="해당없음"),
+        ],
+        quality_grade="B",
+        veto_reason=None,
         position_plan=PositionPlan(
             entry=178.50,
             stop=170.0,
@@ -507,12 +503,12 @@ def test_format_deep_dive_output_renders_playbook_section_with_gate_pass():
         ),
         "factor_assessments": [],
         "scenarios": [],
-        "playbook_verdict": verdict,
+        "criteria_verdict": verdict,
     }
 
     output = format_deep_dive_output(result)
 
-    assert "📋 플레이북 평가" in output
+    assert "📋 기준 평가" in output
     assert "매수 적격" in output
     assert "시장환경(A)" in output
     assert "C✅" in verdict.canslim.summary  # canslim summary 검증
@@ -528,10 +524,9 @@ def test_format_deep_dive_output_renders_playbook_section_with_gate_pass():
 def test_format_deep_dive_output_renders_playbook_section_with_gate_fail():
     """gate FAIL이면 부적격 + veto_reason이 출력돼야 한다."""
     from src.tools.criteria.models import (
-        GateCheck,
-        GateResult,
+        CriteriaCheck,
+        CriteriaVerdict,
         MarketRegimeResult,
-        PlaybookVerdict,
         RelativeStrengthResult,
     )
 
@@ -550,7 +545,7 @@ def test_format_deep_dive_output_renders_playbook_section_with_gate_fail():
         warnings=[],
     )
 
-    verdict = PlaybookVerdict(
+    verdict = CriteriaVerdict(
         ticker="XYZ",
         holding=False,
         market_regime=MarketRegimeResult(regime="하락", allow_new_buy=False, index_symbol="SPY"),
@@ -562,14 +557,11 @@ def test_format_deep_dive_output_renders_playbook_section_with_gate_fail():
         ),
         sector_strength=None,
         canslim=None,
-        gate=GateResult(
-            passed=False,
-            checklist=[
-                GateCheck(name="시장환경(A)", required=True, met=False, reason="SPY 하락추세"),
-            ],
-            quality_grade=None,
-            veto_reason="시장 환경 불량: 하락 국면",
-        ),
+        checks=[
+            CriteriaCheck(name="시장환경(A)", required=True, met=False, reason="SPY 하락추세"),
+        ],
+        quality_grade=None,
+        veto_reason="시장 환경 불량: 하락 국면",
         position_plan=None,
         exit_verdict=None,
         headline="XYZ: 매수 거부 — 시장 환경 불량: 하락 국면",
@@ -598,18 +590,18 @@ def test_format_deep_dive_output_renders_playbook_section_with_gate_fail():
         ),
         "factor_assessments": [],
         "scenarios": [],
-        "playbook_verdict": verdict,
+        "criteria_verdict": verdict,
     }
 
     output = format_deep_dive_output(result)
 
-    assert "📋 플레이북 평가" in output
+    assert "📋 기준 평가" in output
     assert "매수 부적격" in output
     assert "시장 환경 불량" in output
 
 
 def test_format_deep_dive_output_no_playbook_section_when_verdict_is_none():
-    """playbook_verdict=None이면 플레이북 섹션이 없어야 한다."""
+    """criteria_verdict=None이면 플레이북 섹션이 없어야 한다."""
     snapshot = IndicatorSnapshot(price=100.0, change_pct=0.5)
     technical = TechnicalResult(
         ticker="AAPL",
@@ -648,8 +640,8 @@ def test_format_deep_dive_output_no_playbook_section_when_verdict_is_none():
         ),
         "factor_assessments": [],
         "scenarios": [],
-        "playbook_verdict": None,
+        "criteria_verdict": None,
     }
 
     output = format_deep_dive_output(result)
-    assert "📋 플레이북 평가" not in output
+    assert "📋 기준 평가" not in output

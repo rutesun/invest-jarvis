@@ -1,15 +1,15 @@
-"""Plan 8 모델 TDD — GateCheck/GateResult/PositionPlan/ExitSignal/ExitVerdict/PlaybookVerdict."""
+"""Plan 8 모델 TDD — CriteriaCheck/PositionPlan/ExitSignal/ExitVerdict/CriteriaVerdict."""
 
 
 # ---------------------------------------------------------------------------
-# GateCheck / GateResult
+# CriteriaCheck
 # ---------------------------------------------------------------------------
 
 
 def test_gate_check_required_met():
-    from src.tools.criteria.models import GateCheck
+    from src.tools.criteria.models import CriteriaCheck
 
-    g = GateCheck(name="A", required=True, met=True, reason="시장 상승")
+    g = CriteriaCheck(name="A", required=True, met=True, reason="시장 상승")
     assert g.name == "A"
     assert g.required is True
     assert g.met is True
@@ -17,36 +17,78 @@ def test_gate_check_required_met():
 
 
 def test_gate_check_met_none():
-    from src.tools.criteria.models import GateCheck
+    from src.tools.criteria.models import CriteriaCheck
 
-    g = GateCheck(name="C", required=True, met=None, reason="데이터 없음")
+    g = CriteriaCheck(name="C", required=True, met=None, reason="데이터 없음")
     assert g.met is None
 
 
-def test_gate_result_passed():
-    from src.tools.criteria.models import GateCheck, GateResult
+def test_criteria_verdict_gate_passed_computed():
+    """CriteriaVerdict.gate_passed: 모든 required check가 True이면 True."""
+    from src.tools.criteria.models import (
+        CriteriaCheck,
+        CriteriaVerdict,
+        MarketRegimeResult,
+        RelativeStrengthResult,
+    )
 
+    regime = MarketRegimeResult(regime="상승", allow_new_buy=True, index_symbol="^GSPC")
+    rs = RelativeStrengthResult(
+        mansfield_rs=5.0, outperform_6m=10.0, rp_slope_4w=0.5, index_symbol="^GSPC"
+    )
     checklist = [
-        GateCheck(name="A", required=True, met=True, reason=""),
-        GateCheck(name="B", required=True, met=True, reason=""),
+        CriteriaCheck(name="A", required=True, met=True, reason=""),
+        CriteriaCheck(name="B", required=True, met=True, reason=""),
     ]
-    r = GateResult(passed=True, checklist=checklist, quality_grade="A", veto_reason=None)
-    assert r.passed is True
-    assert r.quality_grade == "A"
-    assert r.veto_reason is None
-    assert len(r.checklist) == 2
+    v = CriteriaVerdict(
+        ticker="AAPL",
+        holding=False,
+        market_regime=regime,
+        relative_strength=rs,
+        sector_strength=None,
+        canslim=None,
+        checks=checklist,
+        quality_grade="A",
+        veto_reason=None,
+        headline="통과",
+    )
+    assert v.gate_passed is True
+    assert v.quality_grade == "A"
+    assert v.veto_reason is None
+    assert len(v.checks) == 2
 
 
-def test_gate_result_vetoed():
-    from src.tools.criteria.models import GateCheck, GateResult
+def test_criteria_verdict_gate_passed_vetoed():
+    """CriteriaVerdict.gate_passed: required check가 False이면 False."""
+    from src.tools.criteria.models import (
+        CriteriaCheck,
+        CriteriaVerdict,
+        MarketRegimeResult,
+        RelativeStrengthResult,
+    )
 
+    regime = MarketRegimeResult(regime="하락", allow_new_buy=False, index_symbol="^GSPC")
+    rs = RelativeStrengthResult(
+        mansfield_rs=-1.0, outperform_6m=-3.0, rp_slope_4w=-0.1, index_symbol="^GSPC"
+    )
     checklist = [
-        GateCheck(name="A", required=True, met=False, reason="시장 하락"),
+        CriteriaCheck(name="A", required=True, met=False, reason="시장 하락"),
     ]
-    r = GateResult(passed=False, checklist=checklist, quality_grade=None, veto_reason="시장 하락")
-    assert r.passed is False
-    assert r.veto_reason == "시장 하락"
-    assert r.quality_grade is None
+    v = CriteriaVerdict(
+        ticker="AAPL",
+        holding=False,
+        market_regime=regime,
+        relative_strength=rs,
+        sector_strength=None,
+        canslim=None,
+        checks=checklist,
+        quality_grade=None,
+        veto_reason="시장 하락",
+        headline="거부",
+    )
+    assert v.gate_passed is False
+    assert v.veto_reason == "시장 하락"
+    assert v.quality_grade is None
 
 
 # ---------------------------------------------------------------------------
@@ -157,16 +199,15 @@ def test_exit_verdict_hold():
 
 
 # ---------------------------------------------------------------------------
-# PlaybookVerdict
+# CriteriaVerdict
 # ---------------------------------------------------------------------------
 
 
-def test_playbook_verdict_not_holding():
+def test_criteria_verdict_not_holding():
     from src.tools.criteria.models import (
-        GateCheck,
-        GateResult,
+        CriteriaCheck,
+        CriteriaVerdict,
         MarketRegimeResult,
-        PlaybookVerdict,
         PositionPlan,
         RelativeStrengthResult,
     )
@@ -174,12 +215,6 @@ def test_playbook_verdict_not_holding():
     regime = MarketRegimeResult(regime="상승", allow_new_buy=True, index_symbol="^GSPC")
     rs = RelativeStrengthResult(
         mansfield_rs=5.0, outperform_6m=10.0, rp_slope_4w=0.5, index_symbol="^GSPC"
-    )
-    gate = GateResult(
-        passed=True,
-        checklist=[GateCheck(name="A", required=True, met=True, reason="")],
-        quality_grade="A",
-        veto_reason=None,
     )
     plan = PositionPlan(
         entry=200.0,
@@ -193,31 +228,33 @@ def test_playbook_verdict_not_holding():
         capital_mode="absolute",
         error=None,
     )
-    v = PlaybookVerdict(
+    v = CriteriaVerdict(
         ticker="AAPL",
         holding=False,
         market_regime=regime,
         relative_strength=rs,
         sector_strength=None,
         canslim=None,
-        gate=gate,
+        checks=[CriteriaCheck(name="A", required=True, met=True, reason="")],
+        quality_grade="A",
+        veto_reason=None,
         position_plan=plan,
         exit_verdict=None,
-        headline="매수 적격: 게이트 통과",
+        headline="매수 적격: 기준 통과",
     )
     assert v.ticker == "AAPL"
     assert v.holding is False
-    assert v.gate.passed is True
+    assert v.gate_passed is True
     assert v.exit_verdict is None
-    assert v.headline == "매수 적격: 게이트 통과"
+    assert v.headline == "매수 적격: 기준 통과"
 
 
-def test_playbook_verdict_holding_with_exit():
+def test_criteria_verdict_holding_with_exit():
     from src.tools.criteria.models import (
+        CriteriaVerdict,
         ExitSignal,
         ExitVerdict,
         MarketRegimeResult,
-        PlaybookVerdict,
         RelativeStrengthResult,
     )
 
@@ -233,19 +270,17 @@ def test_playbook_verdict_holding_with_exit():
         trailing_stop=175.0,
         detail="경고: RS 약화",
     )
-    v = PlaybookVerdict(
+    v = CriteriaVerdict(
         ticker="005930.KS",
         holding=True,
         market_regime=regime,
         relative_strength=rs,
         sector_strength=None,
         canslim=None,
-        gate=None,
-        position_plan=None,
         exit_verdict=ev,
         headline="보유 경고: RS 음전환",
     )
     assert v.holding is True
-    assert v.gate is None
+    assert v.checks == []
     assert v.exit_verdict.action == "hold"
     assert v.exit_verdict.current_r == 1.5

@@ -455,20 +455,20 @@ async def test_generate_fundamental_summary_uses_rule_based_fallback_when_metric
 async def test_deep_dive_pipeline_with_playbook_engine_returns_verdict(
     mock_technical_tool, mock_news_tool, mock_llm
 ):
-    """PlaybookEngine이 주입되면 run() 결과에 playbook_verdict 키가 존재해야 한다."""
+    """CriteriaEngine이 주입되면 run() 결과에 criteria_verdict 키가 존재해야 한다."""
     from unittest.mock import MagicMock
 
     from src.tools.criteria.models import (
         CanslimResult,
+        CriteriaCheck,
+        CriteriaVerdict,
         ElementVerdict,
-        GateResult,
         MarketRegimeResult,
-        PlaybookVerdict,
         RelativeStrengthResult,
     )
 
-    # PlaybookVerdict mock
-    mock_verdict = PlaybookVerdict(
+    # CriteriaVerdict mock
+    mock_verdict = CriteriaVerdict(
         ticker="AAPL",
         holding=False,
         market_regime=MarketRegimeResult(regime="상승", allow_new_buy=True, index_symbol="SPY"),
@@ -488,12 +488,9 @@ async def test_deep_dive_pipeline_with_playbook_engine_returns_verdict(
             i=ElementVerdict(met=None),
             m=ElementVerdict(met=True),
         ),
-        gate=GateResult(
-            passed=True,
-            checklist=[],
-            quality_grade="B",
-            veto_reason=None,
-        ),
+        checks=[CriteriaCheck(name="A", required=True, met=True, reason="상승 국면")],
+        quality_grade="B",
+        veto_reason=None,
         position_plan=None,
         exit_verdict=None,
         headline="AAPL: 매수 적격 (grade=B) — 비율 모드",
@@ -542,13 +539,13 @@ async def test_deep_dive_pipeline_with_playbook_engine_returns_verdict(
             technical_tool=mock_technical_tool,
             news_tool=mock_news_tool,
             llm=mock_llm,
-            playbook_engine=mock_engine,
+            criteria_engine=mock_engine,
         )
 
         result = await pipeline.run("AAPL")
 
-    assert "playbook_verdict" in result
-    assert result["playbook_verdict"] is mock_verdict
+    assert "criteria_verdict" in result
+    assert result["criteria_verdict"] is mock_verdict
     mock_engine.evaluate.assert_awaited_once()
 
 
@@ -556,7 +553,7 @@ async def test_deep_dive_pipeline_with_playbook_engine_returns_verdict(
 async def test_deep_dive_pipeline_without_playbook_engine_returns_none_verdict(
     mock_technical_tool, mock_news_tool, mock_llm
 ):
-    """PlaybookEngine이 없으면 playbook_verdict는 None이어야 한다 (기존 동작 보존)."""
+    """CriteriaEngine이 없으면 criteria_verdict는 None이어야 한다 (기존 동작 보존)."""
     with (
         patch(
             "src.llm.analyzer.generate_technical_summary", new_callable=AsyncMock
@@ -597,4 +594,4 @@ async def test_deep_dive_pipeline_without_playbook_engine_returns_none_verdict(
 
         result = await pipeline.run("AAPL")
 
-    assert result.get("playbook_verdict") is None
+    assert result.get("criteria_verdict") is None

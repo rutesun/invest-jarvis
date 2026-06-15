@@ -1,4 +1,4 @@
-"""매수 게이트 평가 (Plan 8).
+"""매수 기준 평가 (Plan 8).
 
 A = market_regime.allow_new_buy
 B = is_stage2 == 1.0
@@ -15,7 +15,19 @@ quality_grade: 통과 시 가점 충족 비율 → A/B/C.
 
 from __future__ import annotations
 
-from src.tools.criteria.models import GateCheck, GateResult
+from dataclasses import dataclass
+
+from src.tools.criteria.models import CriteriaCheck
+
+
+@dataclass
+class _GateEvaluation:
+    """evaluate_gate() 내부 반환값. CriteriaVerdict 생성 시 flatten된다."""
+
+    passed: bool
+    checklist: list[CriteriaCheck]
+    quality_grade: str | None
+    veto_reason: str | None
 
 
 def evaluate_gate(
@@ -29,9 +41,9 @@ def evaluate_gate(
     flow,
     stage2_met_count: float | None = None,
     stage2_failed_labels: list[str] | None = None,
-) -> GateResult:
-    """매수 게이트 평가. 순수 함수 — I/O 없음."""
-    checklist: list[GateCheck] = []
+) -> _GateEvaluation:
+    """매수 기준 평가. 순수 함수 — I/O 없음."""
+    checklist: list[CriteriaCheck] = []
 
     # ── A: 시장 환경 ──────────────────────────────────────────────────────────
     if market_regime is None:
@@ -40,7 +52,7 @@ def evaluate_gate(
     else:
         a_met = bool(market_regime.allow_new_buy)
         a_reason = f"시장환경={market_regime.regime}"
-    checklist.append(GateCheck(name="A", required=True, met=a_met, reason=a_reason))
+    checklist.append(CriteriaCheck(name="A", required=True, met=a_met, reason=a_reason))
 
     # ── B: Stage 2 (미충족 시 충족 개수 + 미충족 조건 노출) ───────────────────
     b_met: bool | None = bool(is_stage2 == 1.0) if is_stage2 is not None else None
@@ -50,7 +62,7 @@ def evaluate_gate(
         if not b_met and stage2_failed_labels:
             detail += f", 미충족: {', '.join(stage2_failed_labels)}"
         b_reason += f" ({detail})"
-    checklist.append(GateCheck(name="B", required=True, met=b_met, reason=b_reason))
+    checklist.append(CriteriaCheck(name="B", required=True, met=b_met, reason=b_reason))
 
     # ── C: RS 강세 AND 업종 강세 (sector None → RS만) ────────────────────────
     if relative_strength is None:
@@ -71,7 +83,7 @@ def evaluate_gate(
             else:
                 c_met = rs_ok and bool(sec_ok)
                 c_reason = f"RS={rs_ok}, 업종강세={sec_ok}"
-    checklist.append(GateCheck(name="C", required=True, met=c_met, reason=c_reason))
+    checklist.append(CriteriaCheck(name="C", required=True, met=c_met, reason=c_reason))
 
     # ── E: VCP 돌파 ───────────────────────────────────────────────────────────
     if vcp is None:
@@ -82,23 +94,23 @@ def evaluate_gate(
         e_reason = f"breakout={vcp.breakout}"
         if vcp.pivot is not None:
             e_reason += f", pivot={vcp.pivot:.2f}"
-    checklist.append(GateCheck(name="E", required=True, met=e_met, reason=e_reason))
+    checklist.append(CriteriaCheck(name="E", required=True, met=e_met, reason=e_reason))
 
     # ── 가점: D(canslim.score) · I(canslim.i.met) · 수급(flow) ──────────────
-    bonus_checks: list[GateCheck] = []
+    bonus_checks: list[CriteriaCheck] = []
 
     if canslim is not None:
         # D: canslim score >= 4 (7점 중 4점 이상 → 가점)
         d_score = canslim.score
         d_met = d_score >= 4
         bonus_checks.append(
-            GateCheck(name="D", required=False, met=d_met, reason=f"canslim.score={d_score}")
+            CriteriaCheck(name="D", required=False, met=d_met, reason=f"canslim.score={d_score}")
         )
         # I: 매집 우세
         i_verdict = canslim.i
         i_met = i_verdict.met
         bonus_checks.append(
-            GateCheck(
+            CriteriaCheck(
                 name="I",
                 required=False,
                 met=bool(i_met) if i_met is not None else None,
@@ -106,8 +118,12 @@ def evaluate_gate(
             )
         )
     else:
-        bonus_checks.append(GateCheck(name="D", required=False, met=None, reason="canslim 없음"))
-        bonus_checks.append(GateCheck(name="I", required=False, met=None, reason="canslim 없음"))
+        bonus_checks.append(
+            CriteriaCheck(name="D", required=False, met=None, reason="canslim 없음")
+        )
+        bonus_checks.append(
+            CriteriaCheck(name="I", required=False, met=None, reason="canslim 없음")
+        )
 
     # 수급(Flow): 한국 외인/기관 매수 여부
     if flow is not None:
@@ -116,11 +132,11 @@ def evaluate_gate(
             or getattr(flow, "institution_direction_5d", "N/A") == "매수"
         )
         bonus_checks.append(
-            GateCheck(name="수급", required=False, met=flow_ok, reason="외인/기관 5일 방향")
+            CriteriaCheck(name="수급", required=False, met=flow_ok, reason="외인/기관 5일 방향")
         )
     else:
         bonus_checks.append(
-            GateCheck(name="수급", required=False, met=None, reason="수급 데이터 없음")
+            CriteriaCheck(name="수급", required=False, met=None, reason="수급 데이터 없음")
         )
 
     checklist.extend(bonus_checks)
@@ -151,7 +167,7 @@ def evaluate_gate(
         else:
             quality_grade = "C"
 
-    return GateResult(
+    return _GateEvaluation(
         passed=passed,
         checklist=checklist,
         quality_grade=quality_grade,

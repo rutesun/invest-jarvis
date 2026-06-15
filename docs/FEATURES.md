@@ -499,27 +499,29 @@ Daily Report 및 Screener 리포트를 Notion Database에 자동 업로드.
 
 ---
 
-## 10. Playbook Engine (`jarvis analyze` 통합)
+## 10. Criteria Engine (`jarvis analyze` 통합)
 
-5대 추세추종·모멘텀 대가(리버모어·터틀·오닐·와인스타인·미너비니) 규칙 기반 **매수 자격 게이트(veto) + 포지션 사이징 + 보유 매도 판정** 엔진. `analyze`의 `decision_summary`에 veto를 반영하고 "📋 플레이북 평가" 섹션을 출력. 설계: `docs/superpowers/specs/2026-06-10-playbook-engine-design.md`.
+5대 추세추종·모멘텀 대가(리버모어·터틀·오닐·와인스타인·미너비니) 규칙 기반 **매수 자격 기준(veto) + 포지션 사이징 + 보유 매도 판정** 엔진. `analyze`의 `decision_summary`에 veto를 반영하고 "📋 기준 평가" 섹션을 출력. 설계: `docs/superpowers/specs/2026-06-10-playbook-engine-design.md`.
 
 **구성 (`src/tools/criteria/`):**
 | 모듈 | 역할 |
 |------|------|
-| `market_regime` | 지수(^GSPC/^KS11/^KQ11) 추세 게이트 (★A) |
+| `market_regime` | 지수(^GSPC/^KS11/^KQ11) 추세 기준 (★A) |
 | `minervini` Stage2 | 미너비니 추세 템플릿 7조건 (★B, 단일 출처) |
 | `relative_strength` | 맨스필드식 종목 RS (★C, RS≠RSI) |
 | `sector_strength` | 업종 강도: FMP(미국) + KIS 업종지수(한국) (★C 업종 / L) |
 | `vcp` | VCP 피벗 돌파 (★E) |
 | `accumulation` | 오닐식 매집/분산일 (I) |
 | `canslim` | CAN SLIM 7요소 종합 (C·A·I 계산 + N·S·L·M 참조); CLI에서 7요소 각각 detail 출력 — S: vol_ratio(20일평균비), L: 업종명·순위·Mansfield·6M초과·4주기울기, M: 국면·지수심볼·판정근거 |
-| `gate` | ★ A·B·C·E 필수(veto) + D·I·수급 가점 + 품질등급; B veto 사유에 `(N/7, 미충족: 조건명)` 형태로 Stage2 근접도 노출 |
+| `gate` | ★ A·B·C·E 필수(required=True) + D·I·수급 가점(required=False) + 품질등급; B veto 사유에 `(N/7, 미충족: 조건명)` 형태로 Stage2 근접도 노출 |
 | `sizing` | 손절 3후보(−8%/2×ATR/구조) + 위험% → 수량/R |
 | `exit_rules` | 추세 종료 5신호 (보유 종목) |
-| `engine` | 오케스트레이션 → `PlaybookVerdict` |
+| `engine` | 오케스트레이션 → `CriteriaVerdict` |
 | `holdings` | `playbook.yaml` (account + holdings) |
 
-**데이터:** 한국 분기/연간 EPS = `get_profit_ratio`(tr FHKST66430300, div=1/0), 가격 수정주가(`ADJUSTED="0"`), 업종 = FMP 업종 perf / KIS 업종지수. veto는 `apply_playbook_veto`로 `decision_summary` 후처리.
+**모델 구조 (`CriteriaVerdict`):** `GateResult`를 별도 중첩 객체로 두지 않고 `checks: list[CriteriaCheck]` (required=True가 구 게이트 항목), `quality_grade`, `veto_reason`, `gate_passed` (computed) 필드로 flatten. `apply_criteria_veto`로 `decision_summary` 후처리.
+
+**데이터:** 한국 분기/연간 EPS = `get_profit_ratio`(tr FHKST66430300, div=1/0), 가격 수정주가(`ADJUSTED="0"`), 업종 = FMP 업종 perf / KIS 업종지수.
 
 **의존성:** httpx, yfinance, FMP API, KIS API. **환경 변수:** `FMP_API_KEY`(미국 업종 강도; 없으면 업종은 graceful None).
 

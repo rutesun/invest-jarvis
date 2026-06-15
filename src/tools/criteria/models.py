@@ -32,18 +32,18 @@ class AccumulationResult(BaseModel):
 
 
 class SectorStrengthResult(BaseModel):
-    """업종 강도 (게이트 C★ 업종 조건 + CAN SLIM L)."""
+    """업종 강도 (기준 C★ 업종 조건 + CAN SLIM L)."""
 
     industry: str | None
     rank_pct: float | None  # 미국: 전체 업종 중 백분위(0=최강). 한국: None(코스피 대비로 대체)
     trend: str  # "up" | "down" | "flat" | "unknown"
-    is_strong: bool | None  # None = 매핑 실패/데이터 없음 → 게이트는 종목 RS만(graceful)
+    is_strong: bool | None  # None = 매핑 실패/데이터 없음 → 종목 RS만(graceful)
     source: str  # "FMP" | "KIS" | "none"
     detail: str = ""
 
 
 class MarketRegimeResult(BaseModel):
-    """시장환경 게이트 결과 (지수 추세 기반)."""
+    """시장환경 판정 결과 (지수 추세 기반)."""
 
     regime: str  # "상승" | "조정" | "하락" | "unknown"
     allow_new_buy: bool
@@ -103,26 +103,17 @@ class CanslimResult(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Plan 8: Gate / Sizing / Exit / Verdict models
+# Criteria / Sizing / Exit / Verdict models
 # ---------------------------------------------------------------------------
 
 
-class GateCheck(BaseModel):
-    """게이트 체크리스트 단일 항목."""
+class CriteriaCheck(BaseModel):
+    """기준 체크리스트 단일 항목. required=True 항목이 모두 통과해야 매수 적격."""
 
     name: str
     required: bool
     met: bool | None  # True=통과, False=탈락, None=데이터 없음(보수적 FAIL)
     reason: str
-
-
-class GateResult(BaseModel):
-    """매수 게이트 종합 판정."""
-
-    passed: bool
-    checklist: list[GateCheck]
-    quality_grade: str | None  # "A" | "B" | "C" | None (게이트 미통과 시)
-    veto_reason: str | None  # 가장 결정적 미충족 항목 설명
 
 
 class PositionPlan(BaseModel):
@@ -158,8 +149,8 @@ class ExitVerdict(BaseModel):
     detail: str
 
 
-class PlaybookVerdict(BaseModel):
-    """플레이북 엔진 최종 판정 결과."""
+class CriteriaVerdict(BaseModel):
+    """기준 엔진 최종 판정 결과."""
 
     ticker: str
     holding: bool
@@ -167,7 +158,16 @@ class PlaybookVerdict(BaseModel):
     relative_strength: RelativeStrengthResult
     sector_strength: SectorStrengthResult | None
     canslim: CanslimResult | None
-    gate: GateResult | None  # 미보유 시
-    position_plan: PositionPlan | None  # 게이트 통과 시
-    exit_verdict: ExitVerdict | None  # 보유 시
+    checks: list[CriteriaCheck] = Field(default_factory=list)  # required=True → hard filter
+    quality_grade: str | None = None  # "A" | "B" | "C" | None (미보유 게이트 통과 시만)
+    veto_reason: str | None = None  # 가장 결정적 미충족 항목 설명
+    position_plan: PositionPlan | None = None  # 모든 required checks 통과 시
+    exit_verdict: ExitVerdict | None = None  # 보유 시
     headline: str
+
+    @computed_field
+    @property
+    def gate_passed(self) -> bool:
+        """모든 required check가 통과됐으면 True (= 구 GateResult.passed)."""
+        required = [c for c in self.checks if c.required]
+        return bool(required) and all(c.met is True for c in required)

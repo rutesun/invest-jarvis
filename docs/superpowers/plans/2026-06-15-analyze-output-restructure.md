@@ -31,7 +31,7 @@
 | `tests/cli/test_analyze_output.py` | 기존 출력 테스트 → 새 레이아웃 마이그레이션 | 수정 | — |
 | `docs/FEATURES.md` | 기능 문서 | 수정 | — |
 
-**데이터 출처 (재계산 금지, 읽기만):** 게이트/CAN SLIM/포지션플랜 → `result["playbook_verdict"]`; SMA·RSI·MACD·ADX·Supertrend·52주고저·Pivot·ATR·vol_sma → `result["technical"].snapshot`; Mansfield RS → `playbook_verdict.relative_strength`; 차트패턴 → `result["chart_patterns"]`; 구조 zone → `result["structure_levels"]`/`presented_structure`.
+**데이터 출처 (재계산 금지, 읽기만):** 게이트/CAN SLIM/포지션플랜 → `result["criteria_verdict"]`; SMA·RSI·MACD·ADX·Supertrend·52주고저·Pivot·ATR·vol_sma → `result["technical"].snapshot`; Mansfield RS → `criteria_verdict.relative_strength`; 차트패턴 → `result["chart_patterns"]`; 구조 zone → `result["structure_levels"]`/`presented_structure`.
 
 ---
 
@@ -775,7 +775,7 @@ from src.tools.technical.events_models import MomentumEvents, RsEvent
 
 ```python
 def _rs_event_from_verdict(relative_strength) -> RsEvent | None:
-    """playbook_verdict.relative_strength 의 전환 필드 → RsEvent."""
+    """criteria_verdict.relative_strength 의 전환 필드 → RsEvent."""
     if relative_strength is None:
         return None
     cross_type = getattr(relative_strength, "rs_cross_type", None)
@@ -789,15 +789,15 @@ def _rs_event_from_verdict(relative_strength) -> RsEvent | None:
     )
 ```
 
-`run()` 내부 — playbook_verdict 계산 이후, return dict 직전:
+`run()` 내부 — criteria_verdict 계산 이후, return dict 직전:
 
 ```python
         snapshot = technical_data.snapshot
         momentum_events: MomentumEvents = build_momentum_events(
             df, vol_sma_20=snapshot.vol_sma_20, vol_sma_50=snapshot.vol_sma_50
         )
-        if playbook_verdict is not None:
-            momentum_events.rs_event = _rs_event_from_verdict(playbook_verdict.relative_strength)
+        if criteria_verdict is not None:
+            momentum_events.rs_event = _rs_event_from_verdict(criteria_verdict.relative_strength)
 ```
 
 return dict에 키 추가:
@@ -857,10 +857,10 @@ Expected: FAIL with "No module named 'src.cli.analyze_render'"
    - `format_deep_dive_output`
    - `_format_factor_section`, `_format_scenario_section`, `_format_pattern_section`
    - `_format_structure_levels`, `_format_presented_structure`, `_format_execution_levels`, `_format_zone_bounds`, `_split_supply_zones_by_price`, `_to_payload_dict`
-   - `_format_playbook_section`, `_format_raw_analysis_sections`
+   - `_format_criteria_section`, `_format_raw_analysis_sections`
    - 이들이 쓰는 표시 헬퍼: `_format_metric_value`, `_format_disclosure_title`, `_format_growth_rate`, `_format_factor_label`, `_format_timing_label`, `_get_metric_display_name`
    - **제외(삭제)**: `_format_top_summary` — 옮기지 않고 main.py에서 삭제(판단요약 제거, R4)
-   - ⚠️ **`_format_playbook_section` 이동 시 내부 수정 필요**: 게이트 체크리스트 블록(현 main.py:849-858)과 CAN SLIM 블록(현 main.py:860-878)을 **제거**한다 — 각각 Task 10 Summary 섹션, Task 11 CAN SLIM 섹션으로 역할 이동. 포지션 플랜(880-894)과 매도 판정(896-910)만 남기고 함수 헤더를 `## 📋 포지션 플랜 / 청산 판단`으로 변경. 이렇게 해야 Task 16의 `_format_playbook_section(playbook_verdict)` 호출이 증거 상세에서 이중 렌더를 일으키지 않는다.
+   - ⚠️ **`_format_criteria_section` 이동 시 내부 수정 필요**: 게이트 체크리스트 블록(현 main.py:849-858)과 CAN SLIM 블록(현 main.py:860-878)을 **제거**한다 — 각각 Task 10 Summary 섹션, Task 11 CAN SLIM 섹션으로 역할 이동. 포지션 플랜(880-894)과 매도 판정(896-910)만 남기고 함수 헤더를 `## 📋 포지션 플랜 / 청산 판단`으로 변경. 이렇게 해야 Task 16의 `_format_criteria_section(criteria_verdict)` 호출이 증거 상세에서 이중 렌더를 일으키지 않는다.
 2. analyze_render.py 상단에 필요한 import를 옮긴다 (`SectorMetrics` 등 이 함수들이 쓰던 것).
 3. main.py 끝에 호환용 re-export 추가:
 
@@ -895,17 +895,17 @@ git commit -m "refactor(cli): extract deep dive render into analyze_render.py"
 
 ```python
 # tests/cli/test_analyze_render.py (append)
-from src.tools.criteria.models import GateCheck, GateResult, RelativeStrengthResult
+from src.tools.criteria.models import CriteriaCheck, _GateEvaluation, RelativeStrengthResult
 
 
 def _gate():
-    return GateResult(
+    return _GateEvaluation(
         passed=True,
         checklist=[
-            GateCheck(name="A", required=True, met=True, reason="시장환경=상승"),
-            GateCheck(name="B", required=True, met=True, reason="is_stage2=1.0 (7/7)"),
-            GateCheck(name="C", required=True, met=True, reason="RS=True, 업종강세=True"),
-            GateCheck(name="E", required=True, met=True, reason="breakout=True"),
+            CriteriaCheck(name="A", required=True, met=True, reason="시장환경=상승"),
+            CriteriaCheck(name="B", required=True, met=True, reason="is_stage2=1.0 (7/7)"),
+            CriteriaCheck(name="C", required=True, met=True, reason="RS=True, 업종강세=True"),
+            CriteriaCheck(name="E", required=True, met=True, reason="breakout=True"),
         ],
         quality_grade="A", veto_reason=None,
     )
@@ -936,10 +936,10 @@ def _format_summary_section(*, gate, relative_strength, high_52w, price,
     lines = ["## 📊 Summary", ""]
     if gate is not None:
         sym = {True: "✅", False: "❌", None: "—"}
-        gate_parts = [f"{c.name}{sym[c.met]}" for c in gate.checklist if c.required]
-        grade = f" · 등급 {gate.quality_grade}" if gate.quality_grade else ""
+        gate_parts = [f"{c.name}{sym[c.met]}" for c in checks if c.required]
+        grade = f" · 등급 {quality_grade}" if quality_grade else ""
         lines.append(f"**게이트**: {' '.join(gate_parts)}{grade}")
-        for c in gate.checklist:
+        for c in checks:
             if c.required:
                 lines.append(f"- {c.name}: {c.reason}")
         lines.append("")
@@ -1257,7 +1257,7 @@ def test_format_deep_dive_output_section_order_no_verdict():
 
     result = {
         "ticker": "TEST", "technical": tech, "technical_summary": _Sum(),
-        "momentum_events": MomentumEvents(), "playbook_verdict": None,
+        "momentum_events": MomentumEvents(), "criteria_verdict": None,
         "chart_patterns": {}, "factor_assessments": [], "scenarios": [],
     }
     out = format_deep_dive_output(result)
@@ -1279,7 +1279,7 @@ def format_deep_dive_output(result: dict) -> str:
     technical = result["technical"]
     snapshot = technical.indicators or technical.snapshot
     snapshot_dict = snapshot.model_dump()
-    playbook_verdict = result.get("playbook_verdict")
+    criteria_verdict = result.get("criteria_verdict")
     events = result.get("momentum_events")
     chart_patterns = result.get("chart_patterns")
     presented_structure = result.get("presented_structure")
@@ -1290,19 +1290,19 @@ def format_deep_dive_output(result: dict) -> str:
 
     # [플랜 B가 여기에 종합 판정(debate) 섹션을 삽입한다 — 가격 줄과 Summary 사이]
 
-    gate = playbook_verdict.gate if playbook_verdict else None
-    rs = playbook_verdict.relative_strength if playbook_verdict else None
+    gate = criteria_verdict.gate if criteria_verdict else None
+    rs = criteria_verdict.relative_strength if criteria_verdict else None
     output += _format_summary_section(
         gate=gate, relative_strength=rs, high_52w=snapshot.high_52w, price=snapshot.price,
         ud_volume_ratio=events.ud_volume_ratio if events else None,
         atr=snapshot.atr, perf_3m=snapshot.perf_3m, perf_1y=snapshot.perf_1y,
     )
-    if playbook_verdict and playbook_verdict.canslim:
-        output += _format_canslim_section(playbook_verdict.canslim)
+    if criteria_verdict and criteria_verdict.canslim:
+        output += _format_canslim_section(criteria_verdict.canslim)
 
     gate_b_reason = None
     if gate is not None:
-        gb = next((c for c in gate.checklist if c.name == "B"), None)
+        gb = next((c for c in checks if c.name == "B"), None)
         gate_b_reason = gb.reason if gb else None
     supertrend_value = None
     if technical.components and "supertrend" in technical.components:
@@ -1317,8 +1317,8 @@ def format_deep_dive_output(result: dict) -> str:
     factor_assessments = result.get("factor_assessments", [])
     scenarios = result.get("scenarios", [])
     output += "## 📊 증거 상세\n\n"
-    if playbook_verdict is not None:
-        output += _format_playbook_section(playbook_verdict)
+    if criteria_verdict is not None:
+        output += _format_criteria_section(criteria_verdict)
     if factor_assessments:
         output += _format_factor_section(factor_assessments) + "\n"
     if scenarios:

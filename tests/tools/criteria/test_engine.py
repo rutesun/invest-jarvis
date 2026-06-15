@@ -1,4 +1,4 @@
-"""TDD: engine.py — PlaybookEngine.evaluate 오케스트레이션."""
+"""TDD: engine.py — CriteriaEngine.evaluate 오케스트레이션."""
 
 from unittest.mock import AsyncMock, MagicMock
 
@@ -78,9 +78,9 @@ def _make_sector_strong() -> MagicMock:
 
 @pytest.mark.asyncio
 async def test_engine_not_holding_gate_pass_returns_verdict():
-    """미보유 + 게이트 통과 → PlaybookVerdict(gate=passed, position_plan 있음)."""
-    from src.tools.criteria.engine import PlaybookEngine
-    from src.tools.criteria.models import PlaybookVerdict
+    """미보유 + 게이트 통과 → CriteriaVerdict(gate=passed, position_plan 있음)."""
+    from src.tools.criteria.engine import CriteriaEngine
+    from src.tools.criteria.models import CriteriaVerdict
 
     stock_df = _make_stock_df(300, close=100.0)
     index_df = _make_index_df(300)
@@ -96,7 +96,7 @@ async def test_engine_not_holding_gate_pass_returns_verdict():
 
     kis_provider = MagicMock()
 
-    engine = PlaybookEngine(
+    engine = CriteriaEngine(
         index_provider=index_provider,
         fmp_provider=fmp_provider,
         kis_provider=kis_provider,
@@ -111,10 +111,10 @@ async def test_engine_not_holding_gate_pass_returns_verdict():
         holding=None,
     )
 
-    assert isinstance(result, PlaybookVerdict)
+    assert isinstance(result, CriteriaVerdict)
     assert result.ticker == "AAPL"
     assert result.holding is False
-    assert result.gate is not None
+    assert result.checks  # 미보유 → checks 필드가 채워져야 함
     assert result.exit_verdict is None
     assert result.market_regime is not None
     assert result.relative_strength is not None
@@ -122,10 +122,10 @@ async def test_engine_not_holding_gate_pass_returns_verdict():
 
 @pytest.mark.asyncio
 async def test_engine_holding_returns_exit_verdict():
-    """보유 → PlaybookVerdict(exit_verdict 있음, gate=None)."""
-    from src.tools.criteria.engine import PlaybookEngine
+    """보유 → CriteriaVerdict(exit_verdict 있음, gate=None)."""
+    from src.tools.criteria.engine import CriteriaEngine
     from src.tools.criteria.holdings import HoldingEntry
-    from src.tools.criteria.models import PlaybookVerdict
+    from src.tools.criteria.models import CriteriaVerdict
 
     stock_df = _make_stock_df(300, close=110.0)
     index_df = _make_index_df(300)
@@ -146,7 +146,7 @@ async def test_engine_holding_returns_exit_verdict():
     fmp_provider.historical_industry = AsyncMock(return_value=[])
     kis_provider = MagicMock()
 
-    engine = PlaybookEngine(
+    engine = CriteriaEngine(
         index_provider=index_provider,
         fmp_provider=fmp_provider,
         kis_provider=kis_provider,
@@ -161,16 +161,16 @@ async def test_engine_holding_returns_exit_verdict():
         holding=holding,
     )
 
-    assert isinstance(result, PlaybookVerdict)
+    assert isinstance(result, CriteriaVerdict)
     assert result.holding is True
     assert result.exit_verdict is not None
-    assert result.gate is None
+    assert result.checks == []  # 보유 → checks 없음
 
 
 @pytest.mark.asyncio
 async def test_engine_gate_pass_with_position_plan():
     """게이트 통과 + capital 있음 → position_plan.shares 계산됨."""
-    from src.tools.criteria.engine import PlaybookEngine
+    from src.tools.criteria.engine import CriteriaEngine
 
     stock_df = _make_stock_df(300, close=100.0)
     index_df = _make_index_df(300)
@@ -183,7 +183,7 @@ async def test_engine_gate_pass_with_position_plan():
     fmp_provider.historical_industry = AsyncMock(return_value=[])
     kis_provider = MagicMock()
 
-    engine = PlaybookEngine(
+    engine = CriteriaEngine(
         index_provider=index_provider,
         fmp_provider=fmp_provider,
         kis_provider=kis_provider,
@@ -200,16 +200,16 @@ async def test_engine_gate_pass_with_position_plan():
         holding=None,
     )
 
-    # gate가 통과했으면 position_plan이 있어야 함
-    if result.gate and result.gate.passed:
+    # 모든 required check가 통과했으면 position_plan이 있어야 함
+    if result.gate_passed:
         assert result.position_plan is not None
         assert result.position_plan.error is None or result.position_plan.shares is not None
 
 
 @pytest.mark.asyncio
 async def test_engine_headline_not_empty():
-    """PlaybookVerdict.headline은 비어있으면 안 됨."""
-    from src.tools.criteria.engine import PlaybookEngine
+    """CriteriaVerdict.headline은 비어있으면 안 됨."""
+    from src.tools.criteria.engine import CriteriaEngine
 
     stock_df = _make_stock_df(300, close=100.0)
     index_df = _make_index_df(300)
@@ -222,7 +222,7 @@ async def test_engine_headline_not_empty():
     fmp_provider.historical_industry = AsyncMock(return_value=[])
     kis_provider = MagicMock()
 
-    engine = PlaybookEngine(
+    engine = CriteriaEngine(
         index_provider=index_provider,
         fmp_provider=fmp_provider,
         kis_provider=kis_provider,
@@ -243,7 +243,7 @@ async def test_engine_headline_not_empty():
 @pytest.mark.asyncio
 async def test_engine_is_stage2_from_components():
     """is_stage2를 technical_result.components['minervini']['metrics']['is_stage2']에서 추출."""
-    from src.tools.criteria.engine import PlaybookEngine
+    from src.tools.criteria.engine import CriteriaEngine
 
     stock_df = _make_stock_df(300, close=100.0)
     index_df = _make_index_df(300)
@@ -259,7 +259,7 @@ async def test_engine_is_stage2_from_components():
     fmp_provider.historical_industry = AsyncMock(return_value=[])
     kis_provider = MagicMock()
 
-    engine = PlaybookEngine(
+    engine = CriteriaEngine(
         index_provider=index_provider,
         fmp_provider=fmp_provider,
         kis_provider=kis_provider,
@@ -273,14 +273,14 @@ async def test_engine_is_stage2_from_components():
         zone_set=None,
         holding=None,
     )
-    assert result.gate is not None
-    assert result.gate.passed is False  # is_stage2=0.0 → B 탈락
+    assert result.gate_passed is False  # is_stage2=0.0 → B 탈락
+    assert any(c.name == "B" and c.met is False for c in result.checks)
 
 
 @pytest.mark.asyncio
 async def test_engine_korean_ticker_uses_kis_sector():
     """한국 티커 → sector provider가 KIS 관련 경로 사용."""
-    from src.tools.criteria.engine import PlaybookEngine
+    from src.tools.criteria.engine import CriteriaEngine
 
     stock_df = _make_stock_df(300, close=70000.0)
     index_df = _make_index_df(300)
@@ -297,7 +297,7 @@ async def test_engine_korean_ticker_uses_kis_sector():
     # KIS sector: get_sector_index_history 호출
     kis_provider.get_sector_index_history = AsyncMock(return_value=pd.DataFrame())
 
-    engine = PlaybookEngine(
+    engine = CriteriaEngine(
         index_provider=index_provider,
         fmp_provider=fmp_provider,
         kis_provider=kis_provider,
@@ -318,7 +318,7 @@ async def test_engine_korean_ticker_uses_kis_sector():
 @pytest.mark.asyncio
 async def test_engine_gate_veto_shows_stage2_proximity():
     """미보유 + Stage2 미충족(6/7) → gate veto_reason에 충족 개수·미충족 조건 라벨 노출."""
-    from src.tools.criteria.engine import PlaybookEngine
+    from src.tools.criteria.engine import CriteriaEngine
 
     stock_df = _make_stock_df(300, close=100.0)
     index_df = _make_index_df(300)
@@ -343,7 +343,7 @@ async def test_engine_gate_veto_shows_stage2_proximity():
     fmp_provider.historical_industry = AsyncMock(return_value=[])
     kis_provider = MagicMock()
 
-    engine = PlaybookEngine(
+    engine = CriteriaEngine(
         index_provider=index_provider,
         fmp_provider=fmp_provider,
         kis_provider=kis_provider,
@@ -357,7 +357,7 @@ async def test_engine_gate_veto_shows_stage2_proximity():
         zone_set=None,
         holding=None,
     )
-    assert result.gate is not None
-    assert result.gate.veto_reason is not None
-    assert "6/7" in result.gate.veto_reason
-    assert "종가>50일선" in result.gate.veto_reason
+    assert result.gate_passed is False
+    assert result.veto_reason is not None
+    assert "6/7" in result.veto_reason
+    assert "종가>50일선" in result.veto_reason

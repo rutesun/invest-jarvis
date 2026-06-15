@@ -1,16 +1,16 @@
-"""TDD: apply_playbook_veto — decision_summary 후처리 순수 함수 (Plan 9 Task 3)."""
+"""TDD: apply_criteria_veto — decision_summary 후처리 순수 함수 (Plan 9 Task 3)."""
 
 from src.pipelines.analyze_decision import (
     AnalyzeDecisionSummary,
-    apply_playbook_veto,
+    apply_criteria_veto,
 )
 from src.tools.criteria.models import (
     CanslimResult,
+    CriteriaCheck,
+    CriteriaVerdict,
     ElementVerdict,
     ExitVerdict,
-    GateResult,
     MarketRegimeResult,
-    PlaybookVerdict,
     RelativeStrengthResult,
 )
 
@@ -25,9 +25,9 @@ def _make_summary(action: str = "매수") -> AnalyzeDecisionSummary:
     )
 
 
-def _make_verdict_gate_fail() -> PlaybookVerdict:
+def _make_verdict_gate_fail() -> CriteriaVerdict:
     """미보유 + 게이트 FAIL verdict."""
-    return PlaybookVerdict(
+    return CriteriaVerdict(
         ticker="AAPL",
         holding=False,
         market_regime=MarketRegimeResult(regime="하락", allow_new_buy=False, index_symbol="SPY"),
@@ -39,21 +39,18 @@ def _make_verdict_gate_fail() -> PlaybookVerdict:
         ),
         sector_strength=None,
         canslim=None,
-        gate=GateResult(
-            passed=False,
-            checklist=[],
-            quality_grade=None,
-            veto_reason="시장 환경 불량: 하락 국면",
-        ),
+        checks=[CriteriaCheck(name="A", required=True, met=False, reason="하락 국면")],
+        quality_grade=None,
+        veto_reason="시장 환경 불량: 하락 국면",
         position_plan=None,
         exit_verdict=None,
         headline="AAPL: 매수 거부 — 시장 환경 불량: 하락 국면",
     )
 
 
-def _make_verdict_gate_pass() -> PlaybookVerdict:
+def _make_verdict_gate_pass() -> CriteriaVerdict:
     """미보유 + 게이트 PASS verdict."""
-    return PlaybookVerdict(
+    return CriteriaVerdict(
         ticker="AAPL",
         holding=False,
         market_regime=MarketRegimeResult(regime="상승", allow_new_buy=True, index_symbol="SPY"),
@@ -73,21 +70,18 @@ def _make_verdict_gate_pass() -> PlaybookVerdict:
             i=ElementVerdict(met=None),
             m=ElementVerdict(met=True),
         ),
-        gate=GateResult(
-            passed=True,
-            checklist=[],
-            quality_grade="B",
-            veto_reason=None,
-        ),
+        checks=[CriteriaCheck(name="A", required=True, met=True, reason="상승 국면")],
+        quality_grade="B",
+        veto_reason=None,
         position_plan=None,
         exit_verdict=None,
         headline="AAPL: 매수 적격 (grade=B) — 비율 모드",
     )
 
 
-def _make_verdict_holding_liquidate() -> PlaybookVerdict:
+def _make_verdict_holding_liquidate() -> CriteriaVerdict:
     """보유 + 청산 exit_verdict."""
-    return PlaybookVerdict(
+    return CriteriaVerdict(
         ticker="AAPL",
         holding=True,
         market_regime=MarketRegimeResult(regime="하락", allow_new_buy=False, index_symbol="SPY"),
@@ -99,7 +93,6 @@ def _make_verdict_holding_liquidate() -> PlaybookVerdict:
         ),
         sector_strength=None,
         canslim=None,
-        gate=None,
         position_plan=None,
         exit_verdict=ExitVerdict(
             action="청산",
@@ -112,9 +105,9 @@ def _make_verdict_holding_liquidate() -> PlaybookVerdict:
     )
 
 
-def _make_verdict_holding_reduce() -> PlaybookVerdict:
+def _make_verdict_holding_reduce() -> CriteriaVerdict:
     """보유 + 비중축소 exit_verdict."""
-    return PlaybookVerdict(
+    return CriteriaVerdict(
         ticker="AAPL",
         holding=True,
         market_regime=MarketRegimeResult(regime="조정", allow_new_buy=False, index_symbol="SPY"),
@@ -126,7 +119,6 @@ def _make_verdict_holding_reduce() -> PlaybookVerdict:
         ),
         sector_strength=None,
         canslim=None,
-        gate=None,
         position_plan=None,
         exit_verdict=ExitVerdict(
             action="비중축소",
@@ -139,9 +131,9 @@ def _make_verdict_holding_reduce() -> PlaybookVerdict:
     )
 
 
-def _make_verdict_holding_hold() -> PlaybookVerdict:
+def _make_verdict_holding_hold() -> CriteriaVerdict:
     """보유 + 보유유지 exit_verdict."""
-    return PlaybookVerdict(
+    return CriteriaVerdict(
         ticker="AAPL",
         holding=True,
         market_regime=MarketRegimeResult(regime="상승", allow_new_buy=True, index_symbol="SPY"),
@@ -153,7 +145,6 @@ def _make_verdict_holding_hold() -> PlaybookVerdict:
         ),
         sector_strength=None,
         canslim=None,
-        gate=None,
         position_plan=None,
         exit_verdict=ExitVerdict(
             action="hold",
@@ -171,19 +162,19 @@ def _make_verdict_holding_hold() -> PlaybookVerdict:
 # ---------------------------------------------------------------------------
 
 
-def test_apply_playbook_veto_none_verdict_returns_original():
+def test_apply_criteria_veto_none_verdict_returns_original():
     """verdict=None이면 summary를 그대로 반환해야 한다."""
     summary = _make_summary("매수")
-    result = apply_playbook_veto(summary, None)
+    result = apply_criteria_veto(summary, None)
     assert result is summary  # 동일 객체
 
 
-def test_apply_playbook_veto_not_holding_gate_fail_overrides_action():
+def test_apply_criteria_veto_not_holding_gate_fail_overrides_action():
     """미보유 + gate FAIL → action='관망', veto_applied=True, action_original 보존."""
     summary = _make_summary("매수")
     verdict = _make_verdict_gate_fail()
 
-    result = apply_playbook_veto(summary, verdict)
+    result = apply_criteria_veto(summary, verdict)
 
     assert result.action == "관망"
     assert result.veto_applied is True
@@ -191,59 +182,59 @@ def test_apply_playbook_veto_not_holding_gate_fail_overrides_action():
     assert "시장 환경 불량" in result.action_sentence
 
 
-def test_apply_playbook_veto_not_holding_gate_pass_no_change():
+def test_apply_criteria_veto_not_holding_gate_pass_no_change():
     """미보유 + gate PASS → veto 없음, 원래 action 유지."""
     summary = _make_summary("매수")
     verdict = _make_verdict_gate_pass()
 
-    result = apply_playbook_veto(summary, verdict)
+    result = apply_criteria_veto(summary, verdict)
 
     assert result.action == "매수"
     assert result.veto_applied is False
     assert result.action_original is None
 
 
-def test_apply_playbook_veto_holding_liquidate_adds_sentence():
+def test_apply_criteria_veto_holding_liquidate_adds_sentence():
     """보유 + 청산 → veto_applied=True, action_original 보존, action_sentence에 청산 포함."""
     summary = _make_summary("관망")
     verdict = _make_verdict_holding_liquidate()
 
-    result = apply_playbook_veto(summary, verdict)
+    result = apply_criteria_veto(summary, verdict)
 
     assert result.veto_applied is True
     assert result.action_original == "관망"
     assert "청산" in result.action_sentence
 
 
-def test_apply_playbook_veto_holding_reduce_adds_sentence():
+def test_apply_criteria_veto_holding_reduce_adds_sentence():
     """보유 + 비중축소 → veto_applied=True."""
     summary = _make_summary("관망")
     verdict = _make_verdict_holding_reduce()
 
-    result = apply_playbook_veto(summary, verdict)
+    result = apply_criteria_veto(summary, verdict)
 
     assert result.veto_applied is True
     assert "비중축소" in result.action_sentence
 
 
-def test_apply_playbook_veto_holding_hold_no_change():
+def test_apply_criteria_veto_holding_hold_no_change():
     """보유 + hold → veto 없음."""
     summary = _make_summary("매수")
     verdict = _make_verdict_holding_hold()
 
-    result = apply_playbook_veto(summary, verdict)
+    result = apply_criteria_veto(summary, verdict)
 
     assert result.veto_applied is False
     assert result.action_original is None
     assert result.action == "매수"
 
 
-def test_apply_playbook_veto_preserves_immutability():
-    """apply_playbook_veto는 원본 summary를 변경하지 않는다."""
+def test_apply_criteria_veto_preserves_immutability():
+    """apply_criteria_veto는 원본 summary를 변경하지 않는다."""
     summary = _make_summary("매수")
     verdict = _make_verdict_gate_fail()
 
-    result = apply_playbook_veto(summary, verdict)
+    result = apply_criteria_veto(summary, verdict)
 
     # 원본 변경 없음
     assert summary.action == "매수"

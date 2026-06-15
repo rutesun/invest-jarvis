@@ -13,7 +13,7 @@
 
 ### 1.1 문제: 세 엔진이 따로 논다
 
-현재 `analyze`는 **세 독립 판정 엔진**(팩터 스코어링·플레이북·LLM 종합)이 각자 결론을 내고, 출력에서 따로 섹션으로 찍힌다. 사용자는 여러 섹션을 머릿속에서 합쳐야 한다. 게다가 펀더멘털·RS·수급 신호가 여러 엔진에서 **중복 계산**되고, 엇갈림(예: 팩터=관망 vs 게이트=A등급)은 `apply_playbook_veto`의 조용한 덮어쓰기로 **숨겨진다**.
+현재 `analyze`는 **세 독립 판정 엔진**(팩터 스코어링·플레이북·LLM 종합)이 각자 결론을 내고, 출력에서 따로 섹션으로 찍힌다. 사용자는 여러 섹션을 머릿속에서 합쳐야 한다. 게다가 펀더멘털·RS·수급 신호가 여러 엔진에서 **중복 계산**되고, 엇갈림(예: 팩터=관망 vs 게이트=A등급)은 `apply_criteria_veto`의 조용한 덮어쓰기로 **숨겨진다**.
 
 ### 1.2 목표 — 두 축
 
@@ -79,15 +79,15 @@
 deep_dive.run(ticker)
   │
   ├─ [기존] technical · fundamental · flow · disclosure · news
-  ├─ [기존] playbook_verdict   (PlaybookEngine.evaluate → PlaybookVerdict)
+  ├─ [기존] criteria_verdict   (CriteriaEngine.evaluate → CriteriaVerdict)
   ├─ [기존] decision_bundle    (build_analyze_decision_bundle → factor_assessments + scenarios)
   │
   ├─ [신규] build_momentum_events(df, vol_sma)        ← tools/technical/events.py (순수)
   │         MACD크로스 · RSI다이버전스 · 신고가/스윙로우 · U/D Volume · 거래량추세
-  │         RS 전환은 relative_strength 확장 → playbook_verdict 경유로 주입
+  │         RS 전환은 relative_strength 확장 → criteria_verdict 경유로 주입
   │
   ├─ [신규] build_evidence_ledger(...)                ← pipelines/debate/ledger.py (순수)
-  │         playbook_verdict + factor_assessments + snapshot + flow
+  │         criteria_verdict + factor_assessments + snapshot + flow
   │         → BullBearLedger { bull[], bear[], neutral[], weights, action_space }
   │         · momentum_events 는 증거 아님(R2). Event 섹션 표시용
   │
@@ -126,7 +126,7 @@ deep_dive.run(ticker)
 | 시장레짐 | `market_regime` | 게이트 A, CAN SLIM M, 청산 |
 | SMA 체계 | `is_stage2` / SMA20·50·150·200 | 게이트 B, exit_SMA_* |
 | 상대강도 | `relative_strength.mansfield_rs` (+sector) | 게이트 C, CAN SLIM L, exit_RS, rs_magnitude |
-| VCP 돌파 | `gate.checklist[E]` | 게이트 E |
+| VCP 돌파 | `checks[E]` | 게이트 E |
 | EPS 분기/연간 | `canslim.c` / `canslim.a` | CAN SLIM C·A |
 | 촉매 | `canslim.n` | CAN SLIM N |
 | 거래량 수요 | `canslim.s` / U/D Volume | CAN SLIM S, 모멘텀 거래량 |
@@ -190,7 +190,7 @@ deep_dive.run(ticker)
 | `detect_price_events(df)` | 신고가 돌파/실패, 스윙로우 이탈/유지 + 날짜 | High_52w·Swing_Low 컬럼 |
 | `build_momentum_events(df, vol_sma_20, vol_sma_50)` | 위를 묶은 `MomentumEvents` | RS 전환은 deep_dive가 주입 |
 
-**RS 전환** (`relative_strength.py` 확장): `compute_relative_strength`가 mansfield 시계열로 음↔양 전환을 감지해 `RelativeStrengthResult.rs_cross_type/date/days_ago`에 담는다. 진짜 부호 전환(−1↔+1)만 잡고, 0(동률)에서의 출발은 제외한다. `playbook_verdict.relative_strength` 경유로 deep_dive에 전달된다.
+**RS 전환** (`relative_strength.py` 확장): `compute_relative_strength`가 mansfield 시계열로 음↔양 전환을 감지해 `RelativeStrengthResult.rs_cross_type/date/days_ago`에 담는다. 진짜 부호 전환(−1↔+1)만 잡고, 0(동률)에서의 출발은 제외한다. `criteria_verdict.relative_strength` 경유로 deep_dive에 전달된다.
 
 ---
 
@@ -202,10 +202,10 @@ deep_dive.run(ticker)
 
 | 증거 key | 출처 | 진영 | 가중치 |
 |---|---|---|---|
-| `gate_A` | `gate.checklist[A].met` | met→bull / else→bear | 4 |
-| `gate_B` | `gate.checklist[B].met` | met→bull / else→bear | 4 |
-| `gate_C` | `gate.checklist[C].met` (RS+업종) | met→bull / else→bear | 4 |
-| `gate_E` | `gate.checklist[E].met` (VCP) | met→bull / else→bear | 3 |
+| `gate_A` | `checks[A].met` | met→bull / else→bear | 4 |
+| `gate_B` | `checks[B].met` | met→bull / else→bear | 4 |
+| `gate_C` | `checks[C].met` (RS+업종) | met→bull / else→bear | 4 |
+| `gate_E` | `checks[E].met` (VCP) | met→bull / else→bear | 3 |
 | `canslim_C·A·N·S·I` | `canslim.{c,a,n,s,i}.met` | met→bull / False→bear / None→neutral | 1 |
 | `rs_magnitude` | `relative_strength.mansfield_rs` | >0→bull / <0→bear | min(\|rs\|/10, 3) |
 | `flow` | `flow.*_direction_5d` | 매수→bull | 2 |
@@ -262,7 +262,7 @@ strict-schema 가드: 출력 모델(`DebateAdvocacyOutput`/`DebateVerdictOutput`
 | holding | medium 신호 **≥1** (2개 이상도 동일 버킷) | `["비중축소", "보유"]` |
 | holding | 그 외 | `["보유", "비중축소"]` |
 
-> 리뷰 반영: medium 신호 2개 이상이 1개보다 관대해지던 역전을 `>= 1`로 수정. `playbook_verdict is None`이면 무제약(graceful).
+> 리뷰 반영: medium 신호 2개 이상이 1개보다 관대해지던 역전을 `>= 1`로 수정. `criteria_verdict is None`이면 무제약(graceful).
 
 ---
 
@@ -270,7 +270,7 @@ strict-schema 가드: 출력 모델(`DebateAdvocacyOutput`/`DebateVerdictOutput`
 
 | 대상 | 위치 | 조치 |
 |---|---|---|
-| `apply_playbook_veto` | `analyze_decision.py` | 삭제 + `veto_applied`/`action_original` 필드 제거 |
+| `apply_criteria_veto` | `analyze_decision.py` | 삭제 + `veto_applied`/`action_original` 필드 제거 |
 | `_generate_integrated_analysis` | `deep_dive.py` | 제거 |
 | integrated_analysis 렌더 | `main.py:817-830` | **삭제** (리뷰 지적 — 죽은 코드) |
 | `IntegratedAnalysisInput/Output` | `llm/models.py` | 삭제 |
@@ -281,7 +281,7 @@ strict-schema 가드: 출력 모델(`DebateAdvocacyOutput`/`DebateVerdictOutput`
 | `display_actionable_signal` | `main.py` | 삭제 |
 | deep_dive 렌더 함수 전체 | `main.py` → `analyze_render.py` | **플랜 A에서 이동** (R6): `_format_*`, `format_deep_dive_output` |
 
-**테스트 마이그레이션 (리뷰 지적):** 제거 심볼을 import/mock 하는 테스트 파일(`test_apply_playbook_veto.py`, `test_analyzer.py`, `test_models.py`, `test_deep_dive.py`, `test_deep_dive_structure_contract.py`, `test_cli.py`, `test_analyze_output.py`)을 각각 삭제 또는 새 debate 함수로 재배선한다. `build_analyze_decision_bundle`은 **유지**(factor_assessments·scenarios 산출).
+**테스트 마이그레이션 (리뷰 지적):** 제거 심볼을 import/mock 하는 테스트 파일(`test_apply_criteria_veto.py`, `test_analyzer.py`, `test_models.py`, `test_deep_dive.py`, `test_deep_dive_structure_contract.py`, `test_cli.py`, `test_analyze_output.py`)을 각각 삭제 또는 새 debate 함수로 재배선한다. `build_analyze_decision_bundle`은 **유지**(factor_assessments·scenarios 산출).
 
 ---
 

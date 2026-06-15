@@ -328,11 +328,11 @@ async def run_deep_dive(ticker_or_name: str, provider: str) -> dict:
     )
     flow_tool = FlowTool(kis_provider=flow_provider)
 
-    # PlaybookEngine 주입: index/fmp/kis provider 있으면 생성
-    playbook_engine = None
+    # CriteriaEngine 주입: index/fmp/kis provider 있으면 생성
+    criteria_engine = None
     try:
         from src.providers.index_provider import IndexProvider
-        from src.tools.criteria.engine import PlaybookEngine
+        from src.tools.criteria.engine import CriteriaEngine
         from src.tools.criteria.holdings import load_holdings
 
         holdings_config = load_holdings()
@@ -347,7 +347,7 @@ async def run_deep_dive(ticker_or_name: str, provider: str) -> dict:
 
                 fmp_provider = FmpProvider(api_key=fmp_api_key)
 
-        playbook_engine = PlaybookEngine(
+        criteria_engine = CriteriaEngine(
             index_provider=IndexProvider(),
             fmp_provider=fmp_provider,
             kis_provider=kis_provider,
@@ -357,7 +357,7 @@ async def run_deep_dive(ticker_or_name: str, provider: str) -> dict:
             krw_risk_pct=risk_pct_krw or 0.01,
         )
     except Exception as _e:
-        logger.debug("PlaybookEngine 초기화 실패 (플레이북 섹션 생략): %s", _e)
+        logger.debug("CriteriaEngine 초기화 실패 (기준 평가 섹션 생략): %s", _e)
 
     pipeline = DeepDivePipeline(
         technical_tool=technical_tool,
@@ -366,7 +366,7 @@ async def run_deep_dive(ticker_or_name: str, provider: str) -> dict:
         fundamental_tool=fundamental_tool,
         disclosure_tool=disclosure_tool,
         flow_tool=flow_tool,
-        playbook_engine=playbook_engine,
+        criteria_engine=criteria_engine,
     )
 
     return await pipeline.run(ticker)
@@ -832,26 +832,25 @@ def _format_raw_analysis_sections(result: dict) -> str:
     return output
 
 
-def _format_playbook_section(verdict) -> str:
-    """PlaybookVerdict를 §15 형식으로 렌더링한다."""
-    out = "## 📋 플레이북 평가\n\n"
+def _format_criteria_section(verdict) -> str:
+    """CriteriaVerdict를 §15 형식으로 렌더링한다."""
+    out = "## 📋 기준 평가\n\n"
 
-    # 판정 헤드라인
-    gate = verdict.gate
-    if gate is not None:
-        if gate.passed:
-            grade = gate.quality_grade or "?"
+    # 판정 헤드라인 (미보유 시에만)
+    if not verdict.holding:
+        if verdict.gate_passed:
+            grade = verdict.quality_grade or "?"
             out += f"**판정**: 매수 적격 (Grade={grade})\n\n"
         else:
             out += "**판정**: 매수 부적격\n\n"
-            if gate.veto_reason:
-                out += f"- 사유: {gate.veto_reason}\n\n"
+            if verdict.veto_reason:
+                out += f"- 사유: {verdict.veto_reason}\n\n"
 
         # 체크리스트 A·B·C·E
-        if gate.checklist:
+        if verdict.checks:
             out += "**체크리스트**:\n\n"
             sym = {True: "✅", False: "❌", None: "—"}
-            for check in gate.checklist:
+            for check in verdict.checks:
                 mark = sym.get(check.met, "—")
                 req_tag = "(필수)" if check.required else "(선택)"
                 out += f"- {mark} {check.name} {req_tag}: {check.reason}\n"
@@ -922,7 +921,7 @@ def format_deep_dive_output(result: dict) -> str:
     presented_structure = result.get("presented_structure")
     structure_levels = result.get("structure_levels")
     execution_levels = result.get("execution_levels")
-    playbook_verdict = result.get("playbook_verdict")
+    criteria_verdict = result.get("criteria_verdict")
 
     output = f"# Deep Dive Analysis: {ticker}\n\n"
     output += f"## 가격: ${snapshot.price:.2f} ({snapshot.change_pct:+.2f}%)\n\n"
@@ -941,8 +940,8 @@ def format_deep_dive_output(result: dict) -> str:
     if execution_levels and not presented_structure:
         output += _format_execution_levels(execution_levels)
 
-    if playbook_verdict is not None:
-        output += _format_playbook_section(playbook_verdict)
+    if criteria_verdict is not None:
+        output += _format_criteria_section(criteria_verdict)
 
     output += "\n"
     output += _format_raw_analysis_sections(result)

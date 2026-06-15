@@ -1,4 +1,4 @@
-"""PlaybookEngine — 플레이북 평가 오케스트레이터 (Plan 8).
+"""CriteriaEngine — 기준 평가 오케스트레이터 (Plan 8).
 
 데이터 흐름:
   1. index_provider.get_index_history(ticker) → (sym, index_df)
@@ -30,7 +30,7 @@ from src.tools.criteria.canslim import compute_canslim
 from src.tools.criteria.exit_rules import evaluate_exit
 from src.tools.criteria.gate import evaluate_gate
 from src.tools.criteria.market_regime import assess_market_regime
-from src.tools.criteria.models import PlaybookVerdict
+from src.tools.criteria.models import CriteriaVerdict
 from src.tools.criteria.relative_strength import compute_relative_strength
 from src.tools.criteria.sector_strength import (
     FmpSectorStrength,
@@ -45,8 +45,8 @@ from src.tools.technical.components.minervini import STAGE2_CONDITION_LABELS
 logger = logging.getLogger(__name__)
 
 
-class PlaybookEngine:
-    """플레이북 평가 엔진. 미보유→게이트+사이징 / 보유→매도 판정."""
+class CriteriaEngine:
+    """기준 평가 엔진. 미보유→기준체크+사이징 / 보유→매도 판정."""
 
     def __init__(
         self,
@@ -74,8 +74,8 @@ class PlaybookEngine:
         flow,
         zone_set,
         holding,
-    ) -> PlaybookVerdict:
-        """PlaybookVerdict 생성. holding=None이면 미보유 분기."""
+    ) -> CriteriaVerdict:
+        """CriteriaVerdict 생성. holding=None이면 미보유 분기."""
         stock_df: pd.DataFrame = technical_result.raw_dataframe
 
         # ── 1. 시장지수 fetch ─────────────────────────────────────────────────
@@ -170,14 +170,16 @@ class PlaybookEngine:
             exit_verdict = None
             headline = _build_gate_headline(ticker, gate_result, position_plan)
 
-        return PlaybookVerdict(
+        return CriteriaVerdict(
             ticker=ticker,
             holding=is_holding,
             market_regime=market_regime,
             relative_strength=relative_strength,
             sector_strength=sector_strength,
             canslim=canslim,
-            gate=gate_result,
+            checks=gate_result.checklist if gate_result else [],
+            quality_grade=gate_result.quality_grade if gate_result else None,
+            veto_reason=gate_result.veto_reason if gate_result else None,
             position_plan=position_plan,
             exit_verdict=exit_verdict,
             headline=headline,
@@ -281,7 +283,7 @@ def _extract_invalidation_low(zone_set, entry: float) -> float | None:
     return closest.lower_bound
 
 
-def _resolve_account(ticker: str, engine: PlaybookEngine) -> tuple[float | None, float]:
+def _resolve_account(ticker: str, engine: CriteriaEngine) -> tuple[float | None, float]:
     """티커 통화에 맞는 (capital, risk_pct) 반환."""
     if is_korean_ticker(ticker):
         return engine._krw_capital, engine._krw_risk_pct

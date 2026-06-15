@@ -731,11 +731,11 @@ def build_analyze_decision_bundle(
     )
 
 
-def apply_playbook_veto(
+def apply_criteria_veto(
     summary: AnalyzeDecisionSummary,
     verdict,
 ) -> AnalyzeDecisionSummary:
-    """PlaybookVerdict를 기반으로 decision_summary를 후처리하는 순수 함수.
+    """CriteriaVerdict를 기반으로 decision_summary를 후처리하는 순수 함수.
 
     - verdict=None → summary 원본 반환 (기존 동작 보존)
     - 미보유 + gate FAIL → action='관망', veto_applied=True
@@ -745,13 +745,13 @@ def apply_playbook_veto(
     if verdict is None:
         return summary
 
-    if not verdict.holding and verdict.gate is not None and not verdict.gate.passed:
+    if not verdict.holding and not verdict.gate_passed:
         return summary.model_copy(
             update={
                 "action_original": summary.action,
                 "veto_applied": True,
                 "action": "관망",
-                "action_sentence": f"신규진입 부적격: {verdict.gate.veto_reason}",
+                "action_sentence": f"신규진입 부적격: {verdict.veto_reason}",
             }
         )
 
