@@ -24,6 +24,8 @@ from src.tools.fundamental import FundamentalSnapshot, FundamentalTool
 from src.tools.news import NewsArticle, NewsTool
 from src.tools.technical.charting import render_technical_chart
 from src.tools.technical.components.pattern_engine import PatternEngine
+from src.tools.technical.events import build_momentum_events
+from src.tools.technical.events_models import MomentumEvents, RsEvent
 from src.tools.technical.level_composer import compose_level_payload
 from src.tools.technical.models import TechnicalResult
 from src.tools.technical.price_levels import get_fibonacci_base_points, identify_key_levels
@@ -52,6 +54,21 @@ _FUNDAMENTAL_SIGNAL_FIELDS = (
     "dividend_yield",
     "payout_ratio",
 )
+
+
+def _rs_event_from_verdict(relative_strength) -> RsEvent | None:
+    """criteria_verdict.relative_strength 의 전환 필드 → RsEvent."""
+    if relative_strength is None:
+        return None
+    cross_type = getattr(relative_strength, "rs_cross_type", None)
+    if cross_type is None:
+        return None
+    return RsEvent(
+        cross_type=cross_type,
+        date=getattr(relative_strength, "rs_cross_date", "") or "",
+        days_ago=getattr(relative_strength, "rs_cross_days_ago", 0) or 0,
+        detail=f"Mansfield RS {relative_strength.mansfield_rs:+.1f} ({cross_type})",
+    )
 
 
 def _compute_eps_cagr(newest: float, oldest: float, n_years: int) -> float | None:
@@ -245,6 +262,13 @@ class DeepDivePipeline:
             except Exception as e:
                 logger.warning("CriteriaEngine evaluation failed for %s: %s", ticker, e)
 
+        snapshot = technical_data.snapshot
+        momentum_events: MomentumEvents = build_momentum_events(
+            df, vol_sma_20=snapshot.vol_sma_20, vol_sma_50=snapshot.vol_sma_50
+        )
+        if criteria_verdict is not None:
+            momentum_events.rs_event = _rs_event_from_verdict(criteria_verdict.relative_strength)
+
         decision_bundle = build_analyze_decision_bundle(
             technical_data=technical_data,
             technical_summary=technical_summary,
@@ -284,6 +308,7 @@ class DeepDivePipeline:
             "ticker": ticker,
             "technical": technical_data,
             "technical_summary": technical_summary,
+            "momentum_events": momentum_events,
             "decision_summary": decision_bundle.summary,
             "factor_assessments": decision_bundle.factor_assessments,
             "scenarios": decision_bundle.scenarios,
