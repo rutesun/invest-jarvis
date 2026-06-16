@@ -83,6 +83,7 @@ class DocumentSearchHit:
     chunk_id: int           # search_document_chunks 반환 key "id"를 매핑
     document_id: int
     doc_title: str | None
+    source_path: str | None  # T17 PDF 출처 인용용 (검색 결과 dict에 이미 있음)
     broker_key: str | None
     published_date: date | None
     section_path: str
