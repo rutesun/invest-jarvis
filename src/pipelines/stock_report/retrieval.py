@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import logging
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
 
 from src.pipelines.stock_report.chunking import KNOWLEDGE_CHUNK_SOURCE_TYPE
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -269,3 +274,88 @@ def load_same_day_chunks(
 def load_same_day_bundle(conn: Any, report_date: str) -> SameDayBundle:
     chunks = load_same_day_chunks(conn, report_date)
     return build_same_day_bundle(date.fromisoformat(report_date), chunks)
+
+
+@dataclass(slots=True)
+class DocumentSearchHit:
+    chunk_id: int
+    document_id: int
+    doc_title: str | None
+    broker_key: str | None
+    published_date: date | None
+    section_path: str
+    is_table: bool
+    content_clean: str
+    category_key: str | None
+    main_theme: str | None
+    ticker_tags: list[str]
+    similarity: float
+
+
+def _to_document_search_hit(row: dict[str, Any]) -> DocumentSearchHit:
+    return DocumentSearchHit(
+        chunk_id=row["id"],
+        document_id=row["document_id"],
+        doc_title=row.get("doc_title"),
+        broker_key=row.get("broker_key"),
+        published_date=row.get("published_date"),
+        section_path=row["section_path"],
+        is_table=row["is_table"],
+        content_clean=row["content_clean"],
+        category_key=row.get("category_key"),
+        main_theme=row.get("main_theme"),
+        ticker_tags=row.get("ticker_tags") or [],
+        similarity=row["similarity"],
+    )
+
+
+def search_documents(
+    conn: Any,
+    query_text: str,
+    *,
+    category: str | None = None,
+    ticker: str | None = None,
+    top_k: int = 5,
+    embed_fn: Callable[[list[str]], list[list[float]]] | None = None,
+    search_fn: Callable[..., list[dict[str, Any]]] | None = None,
+) -> list[DocumentSearchHit]:
+    """PDF document_chunks 의미검색. query_text를 임베딩해 벡터검색하고 hit 리스트 반환.
+
+    T17 synthesis LLM 툴이 그대로 감싸 쓰는 검색 함수. category/ticker는 exact 필터,
+    의미 랭킹은 벡터. 모든 실패는 graceful(빈 리스트) — 호출 경로를 깨지 않는다.
+
+    embed_fn/search_fn은 테스트 주입용 seam(기본 None → 실제 구현을 함수 내부에서
+    지연 import). 지연 import는 순환(retrieval→db→synthesize→retrieval) 회피용이며
+    기존 관례(_load_psycopg 등)와 동일하다.
+    """
+    if not query_text or not query_text.strip():
+        return []
+
+    if embed_fn is None:
+        from src.pipelines.stock_report.embed import embed_payloads, has_embed_auth
+
+        if not has_embed_auth():
+            logger.info("임베딩 키 미설정 → PDF 검색 skip (query=%.40s)", query_text)
+            return []
+        embed_fn = embed_payloads
+    if search_fn is None:
+        from src.pipelines.stock_report.db import search_document_chunks
+
+        search_fn = search_document_chunks
+
+    try:
+        vectors = embed_fn([query_text])
+        if not vectors:
+            return []
+        rows = search_fn(
+            conn,
+            vectors[0],
+            category_filter=category,
+            ticker_filter=ticker,
+            top_k=top_k,
+        )
+    except Exception:
+        logger.warning("PDF 검색 실패 (query=%.40s)", query_text, exc_info=True)
+        return []
+
+    return [_to_document_search_hit(row) for row in rows]

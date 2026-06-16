@@ -3,10 +3,14 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
+import pytest
+
 from src.pipelines.stock_report.retrieval import (
+    DocumentSearchHit,
     SameDayChunk,
     build_same_day_bundle,
     load_same_day_chunks,
+    search_documents,
 )
 
 
@@ -245,3 +249,116 @@ def test_build_same_day_bundle_marks_unclassified_without_overlay_as_low_confide
     bundle = build_same_day_bundle(date(2026, 5, 26), chunks)
 
     assert [chunk.id for chunk in bundle.low_confidence_chunks] == [1]
+
+
+# --- search_documents (T16 PDF semantic search) ----------------------------
+
+
+def _doc_row(chunk_id: int = 1, *, similarity: float = 0.87) -> dict[str, Any]:
+    return {
+        "id": chunk_id,
+        "document_id": 10,
+        "chunk_seq": 3,
+        "is_table": False,
+        "section_path": "intro",
+        "content_clean": "HBM 관련 본문",
+        "category_key": "반도체",
+        "main_theme": "HBM",
+        "ticker_tags": ["000660.KS"],
+        "doc_title": "소부장 리포트",
+        "source_path": "data/files/doc.pdf",
+        "broker_key": "shinhan",
+        "published_date": date(2026, 6, 2),
+        "similarity": similarity,
+    }
+
+
+class _RecordingEmbed:
+    def __init__(self) -> None:
+        self.calls: list[list[str]] = []
+
+    def __call__(self, payloads: list[str]) -> list[list[float]]:
+        self.calls.append(payloads)
+        return [[0.0] * 1536 for _ in payloads]
+
+
+class _RecordingSearch:
+    def __init__(self, rows: list[dict[str, Any]]) -> None:
+        self.rows = rows
+        self.calls: list[dict[str, Any]] = []
+
+    def __call__(
+        self,
+        conn: Any,
+        query_vec: list[float],
+        *,
+        category_filter: str | None = None,
+        ticker_filter: str | None = None,
+        top_k: int = 5,
+    ) -> list[dict[str, Any]]:
+        self.calls.append(
+            {
+                "category_filter": category_filter,
+                "ticker_filter": ticker_filter,
+                "top_k": top_k,
+                "vec_len": len(query_vec),
+            }
+        )
+        return self.rows
+
+
+def test_search_documents_embeds_query_once_and_maps_hits() -> None:
+    embed = _RecordingEmbed()
+    search = _RecordingSearch([_doc_row(1)])
+
+    hits = search_documents(
+        None,
+        "HBM 메모리 수요",
+        category="반도체",
+        ticker="000660.KS",
+        top_k=3,
+        embed_fn=embed,
+        search_fn=search,
+    )
+
+    assert embed.calls == [["HBM 메모리 수요"]]
+    assert search.calls == [
+        {"category_filter": "반도체", "ticker_filter": "000660.KS", "top_k": 3, "vec_len": 1536}
+    ]
+    assert len(hits) == 1
+    assert isinstance(hits[0], DocumentSearchHit)
+    assert hits[0].chunk_id == 1
+    assert hits[0].doc_title == "소부장 리포트"
+    assert hits[0].similarity == 0.87
+    assert hits[0].ticker_tags == ["000660.KS"]
+
+
+def test_search_documents_blank_query_returns_empty_without_calls() -> None:
+    embed = _RecordingEmbed()
+    search = _RecordingSearch([_doc_row()])
+
+    assert search_documents(None, "   ", embed_fn=embed, search_fn=search) == []
+    assert embed.calls == []
+    assert search.calls == []
+
+
+def test_search_documents_embed_failure_returns_empty() -> None:
+    def boom(_payloads: list[str]) -> list[list[float]]:
+        raise RuntimeError("embed down")
+
+    search = _RecordingSearch([_doc_row()])
+    hits = search_documents(None, "HBM", embed_fn=boom, search_fn=search)
+
+    assert hits == []
+    assert search.calls == []
+
+
+def test_search_documents_no_embed_key_skips(monkeypatch: pytest.MonkeyPatch) -> None:
+    for key in ("STOCK_REPORT_EMBED_API_KEY", "OPEN_AI_EMBEDDING_KEY", "OPENAI_API_KEY"):
+        monkeypatch.delenv(key, raising=False)
+    search = _RecordingSearch([_doc_row()])
+
+    hits = search_documents(None, "HBM", search_fn=search)
+
+    assert hits == []
+    assert search.calls == []
