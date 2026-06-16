@@ -555,3 +555,9 @@ Summary / CAN SLIM / Stage 2 / 모멘텀 / Event / 구조레벨 / 원시데이�
 - `compute_volume_trend`: 20일 vs 50일 평균 거래량으로 증가/감소/횡보 판단
 - `build_momentum_events`: 위 사건 감지 일괄 조립, RS 전환은 deep_dive에서 주입
 - `src/tools/criteria/relative_strength.py`: Mansfield RS 음↔양 전환 날짜 감지 (`rs_cross_type`, `rs_cross_date`, `rs_cross_days_ago` 필드 추가)
+
+**구현 완료 (Task 7–9):**
+- `src/pipelines/deep_dive.py`: `build_momentum_events` 호출 + `_rs_event_from_verdict` 헬퍼 추가 — RS 전환 이벤트를 `MomentumEvents.rs_event`로 주입, 결과 dict에 `momentum_events` 포함
+- `src/cli/analyze_render.py` (신규): 렌더 로직 전체를 `src/cli/main.py`에서 분리 — `format_deep_dive_output`, `_format_criteria_section`, 7개 섹션 포매터(`_format_summary_section`, `_format_canslim_section`, `_format_stage2_section`, `_format_momentum_section`, `_format_event_section`, `_format_structure_section`) 포함
+- `src/cli/main.py`: 렌더 로직 제거 후 `analyze_render.format_deep_dive_output` re-export로 하위 호환 유지
+- `_format_criteria_section`: 기존 게이트 체크리스트·CAN SLIM 상세 블록 제거, 포지션 플랜/청산 판단만 표시 — 헤더 `📋 포지션 플랜 / 청산 판단`으로 변경

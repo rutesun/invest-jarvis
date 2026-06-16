@@ -1,9 +1,8 @@
 from datetime import datetime
 
-from src.cli.main import (
+from src.cli.analyze_render import (
     _format_disclosure_title,
     _format_factor_section,
-    _format_top_summary,
     format_deep_dive_output,
 )
 from src.pipelines.analyze_decision import (
@@ -14,7 +13,8 @@ from src.pipelines.analyze_decision import (
 from src.tools.technical.models import ChartPatternResult, IndicatorSnapshot, TechnicalResult
 
 
-def test_format_deep_dive_output_shows_top_summary_and_factor_reasons():
+def test_format_deep_dive_output_shows_summary_and_factor_reasons():
+    """플랜 A 레이아웃: Summary/Event 섹션 + 팩터 분류 포함."""
     snapshot = IndicatorSnapshot(price=91500.0, change_pct=29.97, rsi=89.1)
     technical = TechnicalResult(
         ticker="033100.KQ",
@@ -44,13 +44,6 @@ def test_format_deep_dive_output_shows_top_summary_and_factor_reasons():
                 "rationale": "기술적 강세",
             },
         )(),
-        "decision_summary": AnalyzeDecisionSummary(
-            leader="혼합",
-            core_variables=["신고가 구간", "RSI 과열"],
-            action="관망",
-            timing="조정_대기",
-            action_sentence="지금 추격보다 눌림 확인이 유리",
-        ),
         "factor_assessments": [
             FactorAssessment(
                 factor_type="technical",
@@ -88,14 +81,6 @@ def test_format_deep_dive_output_shows_top_summary_and_factor_reasons():
                 description="이중 바닥 완성 후 넥라인 재확인",
                 key_levels={"target": 98000.0},
             ),
-            "cup_handle": ChartPatternResult(
-                pattern_name="Cup & Handle",
-                detected=False,
-                confidence=0.0,
-                current_price=91500.0,
-                description="미완성",
-                key_levels={},
-            ),
         },
         "scenarios": [
             AnalyzeScenario(
@@ -114,15 +99,8 @@ def test_format_deep_dive_output_shows_top_summary_and_factor_reasons():
             "cli_blocks": [
                 "## 구조 레벨",
                 "- **요약**: 핵심 지지 존 우위",
-                "- **근거**: 최근 지지 반응 우세",
-                "- **박스 존**: 없음",
                 "- **지지 존**: 88000.00~89500.00",
                 "- **저항 존**: 96000.00~97500.00",
-                "- **전환 레벨**: 없음",
-                "- **무효화 기준**: 88000.00~89500.00 하향 이탈",
-                "",
-                "## 실행 레벨",
-                "- **핵심 실행 레벨**: 피봇 S1 $90000.00 (-1.6%), 50일선 $88500.00 (-3.3%)",
                 "",
             ],
             "llm_context": "구조 레벨",
@@ -131,34 +109,25 @@ def test_format_deep_dive_output_shows_top_summary_and_factor_reasons():
 
     output = format_deep_dive_output(result)
 
-    assert "주도 팩터" in output
-    assert "핵심 변수" in output
-    assert "액션" in output
-    assert "## 판단 요약" in output
+    assert "## 📊 Summary" in output
     assert "## 구조 레벨" in output
-    assert "## 실행 레벨" in output
-    assert "## 패턴 분석" in output
+    assert "## Event" in output
     assert "## 원시 데이터" in output
-    assert output.index("## 판단 요약") < output.index("## 원시 데이터")
-    assert "- **주도 팩터**: 혼합" in output
+    assert "판단 요약" not in output  # 삭제됨
+    assert output.index("## 📊 Summary") < output.index("## 원시 데이터")
     assert "- **가격**: 신고가 돌파" in output
     assert "- **이벤트**: 반복 기대 기사" in output
     assert "Double Bottom" in output
     assert "10일 전 완성" in output
     assert "지지 존" in output
     assert "저항 존" in output
-    assert "전환 레벨" in output
     assert "88000.00~89500.00" in output
-    assert "피봇 S1" in output
-    assert "조정 대기" in output
     assert "RSI 과열로 추격 부담" in output
     assert "신규 정보가 부족해 actionability가 낮음" in output
-    assert "technical" not in output
-    assert "event" not in output
-    assert "조정_대기" not in output
 
 
-def test_format_deep_dive_output_warns_when_presented_structure_missing():
+def test_format_deep_dive_output_shows_structure_section():
+    """presented_structure 없이 structure_levels만 있으면 ## 구조 레벨 섹션을 출력한다."""
     snapshot = IndicatorSnapshot(price=100.0, change_pct=1.0)
     technical = TechnicalResult(
         ticker="ALAB",
@@ -187,13 +156,6 @@ def test_format_deep_dive_output_warns_when_presented_structure_missing():
                 "rationale": "구조 레벨 확인 필요",
             },
         )(),
-        "decision_summary": AnalyzeDecisionSummary(
-            leader="혼합",
-            core_variables=["구조 레벨 혼재"],
-            action="관망",
-            timing="보류",
-            action_sentence="핵심 레벨 확인 전 대기",
-        ),
         "factor_assessments": [],
         "scenarios": [],
         "structure_levels": {"summary_label": "support_zone"},
@@ -202,38 +164,7 @@ def test_format_deep_dive_output_warns_when_presented_structure_missing():
 
     output = format_deep_dive_output(result)
 
-    assert "presenter payload 누락" in output
-
-
-def test_format_deep_dive_output_shows_defer_reason():
-    summary = AnalyzeDecisionSummary(
-        leader="판단 보류",
-        core_variables=["계산 가능한 팩터 부족"],
-        action="관망",
-        timing="보류",
-        action_sentence="지금은 관망이 낫다",
-        defer_reason="수급 데이터 부재 + event 신호 약함",
-    )
-
-    output = _format_top_summary(summary)
-
-    assert "판단 보류" in output
-    assert "수급 데이터 부재 + event 신호 약함" in output
-
-
-def test_format_deep_dive_output_uses_headline_in_top_summary_only():
-    summary = AnalyzeDecisionSummary(
-        leader="혼합",
-        core_variables=["고평가 부담", "기관 매수 우위"],
-        action="관망",
-        timing="조정_대기",
-        action_sentence="지금 추격보다 핵심 레벨 확인 후 접근이 유리",
-    )
-
-    output = _format_top_summary(summary)
-
-    assert "고평가 부담" in output
-    assert "기관 매수 우위" in output
+    assert "## 구조 레벨" in output
 
 
 def test_format_deep_dive_output_marks_event_as_reference_with_reason():
@@ -508,17 +439,11 @@ def test_format_deep_dive_output_renders_playbook_section_with_gate_pass():
 
     output = format_deep_dive_output(result)
 
-    assert "📋 기준 평가" in output
-    assert "매수 적격" in output
-    assert "시장환경(A)" in output
+    assert "📋 포지션 플랜 / 청산 판단" in output
     assert "C✅" in verdict.canslim.summary  # canslim summary 검증
     assert "100주" in output  # position plan
     assert "178.50" in output  # entry price
     assert "170.0" in output  # stop price
-    # CAN SLIM 7요소 상세 지표(detail) 출력
-    assert "EPS +25%" in output  # C detail
-    assert "RS 상위" in output  # L detail
-    assert "시장 상승" in output  # M detail
 
 
 def test_format_deep_dive_output_renders_playbook_section_with_gate_fail():
@@ -595,9 +520,10 @@ def test_format_deep_dive_output_renders_playbook_section_with_gate_fail():
 
     output = format_deep_dive_output(result)
 
-    assert "📋 기준 평가" in output
-    assert "매수 부적격" in output
-    assert "시장 환경 불량" in output
+    # 포지션 플랜 없어도 섹션 헤더는 렌더됨 (비어있음)
+    assert "📋 포지션 플랜 / 청산 판단" in output
+    # 판단요약은 플랜 A에서 제거됨
+    assert "판단 요약" not in output
 
 
 def test_format_deep_dive_output_no_playbook_section_when_verdict_is_none():
@@ -644,4 +570,4 @@ def test_format_deep_dive_output_no_playbook_section_when_verdict_is_none():
     }
 
     output = format_deep_dive_output(result)
-    assert "📋 기준 평가" not in output
+    assert "📋 포지션 플랜 / 청산 판단" not in output
