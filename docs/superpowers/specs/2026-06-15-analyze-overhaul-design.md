@@ -32,10 +32,10 @@
 | 종합 메커니즘 | Bull vs Bear 논쟁 | 엇갈림을 결과물로 |
 | 논쟁 엔진 | 규칙이 증거 분류·채점, LLM 판사가 평결 | 사실은 결정적, 평결은 유연 |
 | 통합 범위 | 논쟁이 유일한 결론 (기존 결론 제거) | "따로 논다" 정면 해결 |
-| 안전 가드레일 | 하드 리스크룰이 판사의 액션 공간 제한 | 투명한 리스크 통제 |
+| 안전 가드레일 | 승격된 게이트만 액션 공간 제한 (entry 0 / holding 2: SMA200 이탈·-10% 스톱) | 투명한 리스크 통제 |
 | actionable_signal | 은퇴 | 평결·포지션플랜·시나리오가 대체 |
 | LLM 콜 구조 | 2콜 (변론 + 독립 판사) | 판사가 자기 변론 합리화 방지 |
-| 지표 구조 | **3계층 레지스트리** (프리미티브→게이트/점수/설명) | 재계산·이중계상 제거 |
+| 지표 구조 | **단일 Signal 통일** (프리미티브→매수/매도 신호) + 게이트 승격제 | 재계산·이중계상 제거 |
 | 모멘텀 섹션 | RSI·MACD·거래량·ADX를 독립 섹션으로 | 추세(Stage2)와 다른 축 |
 | 보조지표 | cRSI·Fast MACD·Stochastic·CCI는 원시 데이터로 | 핵심 메시지 보호 |
 | 퍼포먼스 | 3M·1Y를 Summary에 (6M은 RS와 겹쳐 제외) | 절대수익 ≠ 상대강도 |
@@ -52,6 +52,7 @@
 | R6 | 렌더링 위치 | **`src/cli/analyze_render.py`로 분리** | main.py는 Typer 커맨드·오케스트레이션만. 섹션 포맷·조립은 별도 모듈 |
 | R7 | 모듈 경계 | Tool=도메인 계산 / Pipeline=조율 / CLI=렌더. 사건감지=Tool | 레이어 책임 명확화 (§3.0) |
 | R8 | 가중치·논쟁·평가 | **플랜 A에서 일절 배제** (전부 플랜 B) | 플랜 A는 수집→가공→렌더만 |
+| R9 | 게이트 vs 신호 | **A·B·C·E 포함 전 항목을 매수/매도 신호로. entry 게이트 0개, holding 게이트 2개(SMA200 이탈·매입가 -10% 스톱)** | veto 잔재 제거 → 논쟁이 유일 결론자(§1.2). `kind`로 검증된 룰만 게이트 승격 — 손절룰이 1순위 |
 
 ---
 
@@ -110,23 +111,24 @@ deep_dive.run(ticker)
 
 ## 4. 3계층 지표 레지스트리
 
-**핵심 원칙: 프레임워크는 통째로 보존하되, 역할(계층)을 분리해 이중계상을 막는다. 같은 원천값(프리미티브)은 한 번만 계산하고 여러 프레임워크가 공유한다.**
+**핵심 원칙: 모든 판정을 단일 `Signal`(매수/매도/중립)로 통일해 표현하고, 같은 원천값(프리미티브)은 한 번만 계산해 공유한다. 게이트는 신호의 한 속성(`kind=gate`)일 뿐 — 확신을 얻은 룰만 승격한다. 현재 게이트 0개.**
 
 ```text
 [프리미티브] 원천값 1회 계산 (single source of truth)
-        ├─ [게이트 계층]  Stage2/Minervini Trend Template → 통과/탈락 (점수 0)
-        ├─ [점수 계층]    CAN SLIM 7요소 + factor_valuation → 가중합
-        └─ [설명·청산]    factor_*(bias 설명) · exit_verdict(보유 청산) · momentum_events(사건 표시)
+        ├─ [신호 계층]   A·B·C·E + CAN SLIM 7요소 + factor + flow + exit
+        │                → 전부 매수/매도 가중 신호 (kind=signal)
+        ├─ [게이트 계층] (현재 0개) 신호가 확신을 얻으면 kind=gate로 승격 → action_space 제약
+        └─ [표시 계층]   momentum_events (사건 표시, 증거 아님 — R2)
 ```
 
 ### 4.1 프리미티브
 
 | 프리미티브 | 원천 | 공유 프레임워크 |
 |---|---|---|
-| 시장레짐 | `market_regime` | 게이트 A, CAN SLIM M, 청산 |
-| SMA 체계 | `is_stage2` / SMA20·50·150·200 | 게이트 B, exit_SMA_* |
-| 상대강도 | `relative_strength.mansfield_rs` (+sector) | 게이트 C, CAN SLIM L, exit_RS, rs_magnitude |
-| VCP 돌파 | `checks[E]` | 게이트 E |
+| 시장레짐 | `market_regime` | A 신호, CAN SLIM M, 청산 |
+| SMA 체계 | `is_stage2` / SMA20·50·150·200 | B 신호, exit_SMA_* |
+| 상대강도 | `relative_strength.mansfield_rs` (+sector) | C 신호, CAN SLIM L, exit_RS, rs_magnitude |
+| VCP 돌파 | `checks[E]` | E 신호 (vcp_trigger) |
 | EPS 분기/연간 | `canslim.c` / `canslim.a` | CAN SLIM C·A |
 | 촉매 | `canslim.n` | CAN SLIM N |
 | 거래량 수요 | `canslim.s` / U/D Volume | CAN SLIM S, 모멘텀 거래량 |
@@ -138,11 +140,11 @@ deep_dive.run(ticker)
 
 | 신호 | 점수 계상 위치 | 제거 대상 |
 |---|---|---|
-| 상대강도(RS) | `gate_C`(boolean) + `rs_magnitude`(연속값) | `canslim_L` 제거 (gate_C 중복) |
-| 시장레짐 | `gate_A` | `canslim_M` entry 제거 (R1) |
+| 상대강도(RS) | `rs_leadership`(C, boolean) + `rs_magnitude`(연속값) | `canslim_L` 제거 (`rs_leadership` 중복) |
+| 시장레짐 | `market_regime`(A) | `canslim_M` entry 제거 (R1) |
 | 수급 | `flow` 행 | `factor_flow` 제거 |
 | 매집 | `canslim_I` (weight 1) | 별도 accumulation 행 안 둠 (R3) |
-| 차트 사건 | 게이트/팩터가 기저 점수화 | momentum_events 증거 제외, 표시만 (R2) |
+| 차트 사건 | 신호/팩터가 기저 점수화 | momentum_events 증거 제외, 표시만 (R2) |
 
 ---
 
@@ -188,6 +190,7 @@ deep_dive.run(ticker)
 | `detect_macd_cross(df, lookback=60)` | 골든/데드 크로스 + 날짜 + days_ago | MACD vs Signal 부호 전환 |
 | `detect_rsi_divergence(df, window=20)` | 상승/하락 다이버전스 + 날짜 + 수치 | plateau 대응 위해 `>=` 한쪽 허용 |
 | `detect_price_events(df)` | 신고가 돌파/실패, 스윙로우 이탈/유지 + 날짜 | High_52w·Swing_Low 컬럼 |
+| `compute_disparity(price, sma50)` | (종가/SMA50)×100 = 50일 이격도 | 과열 sell 신호 `disparity_50` (>200 = SMA50의 2배) |
 | `build_momentum_events(df, vol_sma_20, vol_sma_50)` | 위를 묶은 `MomentumEvents` | RS 전환은 deep_dive가 주입 |
 
 **RS 전환** (`relative_strength.py` 확장): `compute_relative_strength`가 mansfield 시계열로 음↔양 전환을 감지해 `RelativeStrengthResult.rs_cross_type/date/days_ago`에 담는다. 진짜 부호 전환(−1↔+1)만 잡고, 0(동률)에서의 출발은 제외한다. `criteria_verdict.relative_strength` 경유로 deep_dive에 전달된다.
@@ -198,34 +201,64 @@ deep_dive.run(ticker)
 
 순수 함수. 기존 판정 결과를 bull/bear/neutral로 분류·채점. **새 데이터 안 만듦.**
 
+**증거 단위 — 단일 `Signal` 모델 (표현 통일):**
+
+```text
+Signal {
+  code:   str                    # "market_regime", "stage2", "rs_leadership", "vcp_trigger",
+                                  #  "canslim_C", "flow", "rs_magnitude", "exit_SMA_LONG", ...
+  side:   "buy" | "sell" | "neutral"   # 런타임 부호 판정 (R쿠션·rs_magnitude 양방향 대응)
+  kind:   "signal" | "gate"      # 현 단계 전부 signal. 확신 얻은 룰만 gate로 승격
+  weight: float
+  met:    bool | None            # None → neutral (모름)
+  detail: str
+}
+```
+
+게이트(`kind=gate`)도 매수/매도 신호로 동일하게 표시·가중되고, **추가로** action_space를 제약한다(§9). 현재는 전부 `kind=signal`.
+
 ### 7.1 라우팅 규칙 — entry (미보유)
 
-| 증거 key | 출처 | 진영 | 가중치 |
-|---|---|---|---|
-| `gate_A` | `checks[A].met` | met→bull / else→bear | 4 |
-| `gate_B` | `checks[B].met` | met→bull / else→bear | 4 |
-| `gate_C` | `checks[C].met` (RS+업종) | met→bull / else→bear | 4 |
-| `gate_E` | `checks[E].met` (VCP) | met→bull / else→bear | 3 |
-| `canslim_C·A·N·S·I` | `canslim.{c,a,n,s,i}.met` | met→bull / False→bear / None→neutral | 1 |
-| `rs_magnitude` | `relative_strength.mansfield_rs` | >0→bull / <0→bear | min(\|rs\|/10, 3) |
-| `flow` | `flow.*_direction_5d` | 매수→bull | 2 |
-| `factor_technical·valuation·event` | `factor_assessments[].bias` | bullish→bull / bearish→bear / neutral→neutral | total_score/3 (≤5) |
-| `rsi_overbought` | `snapshot.rsi >= 80` | bear | 2 |
+전부 `kind=signal` (게이트 0개). 코드명의 A·B·C·E는 구 게이트 항목 — 이제 가중 신호다.
 
-**제외 (이중계상):** `canslim_L`(gate_C), `canslim_M`(gate_A, entry만), `factor_flow`(flow 행). `accumulation`은 `canslim_I`로만(weight 1).
+| 증거 code | kind | 출처 | 진영 | 가중치 |
+|---|---|---|---|---|
+| `market_regime` (A) | signal | `checks[A].met` | met→bull / else→bear | 4 |
+| `stage2` (B) | signal | `checks[B].met` | met→bull / else→bear | 4 |
+| `rs_leadership` (C) | signal | `checks[C].met` (RS+업종) | met→bull / else→bear | 4 |
+| `vcp_trigger` (E) | signal | `checks[E].met` (VCP) | met→bull / else→bear | 3 |
+| `canslim_C·A·N·S·I` | signal | `canslim.{c,a,n,s,i}.met` | met→bull / False→bear / None→neutral | 1 |
+| `rs_magnitude` | signal | `relative_strength.mansfield_rs` | >0→bull / <0→bear | min(\|rs\|/10, 3) |
+| `flow` | signal | `flow.*_direction_5d` | 매수→bull | 2 |
+| `factor_technical·valuation·event` | signal | `factor_assessments[].bias` | bullish→bull / bearish→bear / neutral→neutral | total_score/3 (≤5) |
+| `rsi_overbought` | signal | `snapshot.rsi >= 80` | bear | 2 |
+
+**제외 (이중계상):** `canslim_L`(`rs_leadership` 중복), `canslim_M`(`market_regime` 중복, entry만), `factor_flow`(flow 행). `accumulation`은 `canslim_I`로만(weight 1).
+**게이트 승격 시:** 해당 code의 `kind`를 `gate`로 바꾸면 진영·가중은 그대로, 추가로 §9 action_space를 제약.
 
 ### 7.2 라우팅 규칙 — holding (보유)
 
-게이트 제외, `canslim_M` 포함(게이트 없으므로 중복 아님), 추가:
+A·B·C·E 신호 미생성(보유는 진입 신호 없음), `canslim_M` 포함(`market_regime` 신호가 없어 중복 아님), 추가:
 
-| 증거 key | 출처 | 진영 | 가중치 |
-|---|---|---|---|
-| `exit_{code}` | `exit_verdict.signals[]` | bear | strong=5 / medium=3 / weak=1 |
-| `r_cushion` | `exit_verdict.current_r` | >0→bull / <0→bear | min(\|r\|, 3) |
+| 증거 code | kind | 출처 | 진영 | 가중치 |
+|---|---|---|---|---|
+| `exit_sma200` | **gate** | 종가 < SMA200 (추세 붕괴) | bear | 5 |
+| `stop_loss_10pct` | **gate** | 종가 < avg_price × 0.9 (매입가 -10%) | bear | 5 |
+| `exit_sma150` | signal | 종가 < SMA150 (눌림 경고 — 게이트 아님) | bear | 3 |
+| `exit_sma_short` | signal | 종가 < SMA20 또는 SMA50 | bear | 3 |
+| `exit_distribution` | signal | 매집비율 < 0.4 | bear | 3 |
+| `exit_character_change` | signal | 신고가 -15% 이탈 / 스윙로우 이탈 | bear | 1 |
+| `exit_rs_weakening` | signal | RS 음전환 | bear | 1 |
+| `rsi_div_down` | signal | RSI 하락 다이버전스 (가격↑·RSI↓) | bear | 2 |
+| `disparity_50` | signal | 50일 이격도 > 200 (종가 ≥ SMA50×2, 과열) | bear | 1 |
+| `r_cushion` | signal | `exit_verdict.current_r` | >0→bull / <0→bear | min(\|r\|, 3) |
+| `canslim_M` | signal | `canslim.m.met` | met→bull / False→bear / None→neutral | 1 |
+
+`exit_sma200`·`stop_loss_10pct`(=gate)는 bear 증거로 표시·가중되면서 추가로 §9 action_space를 제약한다. 나머지는 가중 신호 — 액션은 judge가 결정. (`exit_sma150`·`rsi_div_down`·`disparity_50`은 조기/노이즈 특성상 낮은 가중 — §13 캘리브레이션 대상)
 
 ### 7.3 momentum_events 처리 (R2)
 
-momentum_events(MACD크로스·RSI다이버전스·RS전환·가격사건)는 **장부 증거에 넣지 않는다.** Event 섹션 표시용으로만 사용한다. 게이트·CAN SLIM·팩터가 같은 기저 신호를 이미 점수화하기 때문이다. (후속: RS 전환 등 고유 사건을 선별 투입할 여지는 캘리브레이션 단계에서 재검토)
+momentum_events 중 **MACD크로스·RS전환·가격사건**은 장부 증거에 넣지 않고 Event 섹션 표시용으로만 쓴다(신호·CAN SLIM·팩터가 기저 신호를 이미 점수화). 단 **RSI 하락 다이버전스(`rsi_div_down`)와 50일 이격도 과열(`disparity_50`)은 다른 곳에서 점수화되지 않는 고유 sell 신호라 ledger에 포함**한다(R2 예외). (후속: RS 전환 등 추가 사건의 선별 투입은 캘리브레이션 단계에서 재검토)
 
 ---
 
@@ -252,17 +285,19 @@ strict-schema 가드: 출력 모델(`DebateAdvocacyOutput`/`DebateVerdictOutput`
 
 ## 9. 안전 가드레일 (`compute_action_space`)
 
-규칙이 판사의 액션 공간을 제한한다(옛 veto의 조용한 덮어쓰기와 다름 — bull 논거는 그대로 표시·변론되고 제한 이유는 판결문에 명시).
+`kind="gate"`로 승격된 신호만 판사의 액션 공간을 제한한다(옛 veto의 조용한 덮어쓰기와 다름 — 모든 신호는 그대로 표시·변론되고, 게이트가 액션을 제한할 때만 그 이유를 판결문에 명시).
+
+**entry 게이트 0개** → entry는 항상 `["매수", "관망"]`(아래 entry 행은 승격 시 발동하는 휴면 규칙). **holding 게이트 2개** = `exit_sma200`(SMA200 이탈 = 추세 붕괴)·`stop_loss_10pct`(매입가 -10%) — 시스템 첫 게이트(가장 검증된 손절룰).
 
 | 모드 | 조건 | 허용 액션 |
 |---|---|---|
-| entry | `market_regime.allow_new_buy is False` | `["관망"]` |
-| entry | 그 외 | `["매수", "관망"]` |
-| holding | strong 매도신호 또는 `exit_verdict.action=="liquidate"` | `["청산", "비중축소"]` |
-| holding | medium 신호 **≥1** (2개 이상도 동일 버킷) | `["비중축소", "보유"]` |
-| holding | 그 외 | `["보유", "비중축소"]` |
+| entry | 게이트 0개 (현 단계) | `["매수", "관망"]` |
+| entry | `market_regime`(A) 게이트 승격 시, allow_new_buy=False | `["관망"]` |
+| holding | `exit_sma200` 또는 `stop_loss_10pct` 충족 (게이트) | `["청산", "비중축소"]` |
+| holding | 게이트 0개 | `["청산", "비중축소", "보유"]` (judge가 sell 신호 가중으로 결정) |
 
-> 리뷰 반영: medium 신호 2개 이상이 1개보다 관대해지던 역전을 `>= 1`로 수정. `criteria_verdict is None`이면 무제약(graceful).
+> holding의 나머지 청산 신호(SMA150·SMA_SHORT·DISTRIBUTION·RS_WEAKENING·rsi_div_down·disparity_50)는 가중 bear 신호 — 액션 강제 없이 judge가 종합. 확신이 쌓이면 추가 승격.
+> `criteria_verdict is None`이면 무제약(graceful).
 
 ---
 
