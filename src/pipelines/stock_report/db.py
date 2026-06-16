@@ -574,6 +574,7 @@ def search_document_chunks(
     query_vec: list[float],
     *,
     category_filter: str | None = None,
+    ticker_filter: str | None = None,
     top_k: int = 5,
 ) -> list[dict[str, Any]]:
     """벡터 유사도 검색. 문서당 최고 점수 청크 1개만 반환(per-document dedup).
@@ -582,11 +583,17 @@ def search_document_chunks(
     테이블처럼 동일 문서 내 반복 패턴이 검색 결과를 독점하는 문제를 방지한다.
 
     category_filter: 지정 시 해당 카테고리 문서만 검색(T16 cross-link 시 활용).
+    ticker_filter: 지정 시 ticker_tags @> [ticker] (GIN 인덱스) exact 태그 필터. category와 AND.
     query_vec: 1536차원 OpenAI text-embedding-3-small 벡터.
     """
     vec_lit = "[" + ",".join(repr(float(x)) for x in query_vec) + "]"
     cat_clause = "AND d.category_key = %(category)s" if category_filter else ""
     params: dict[str, Any] = {"category": category_filter}
+
+    ticker_clause = ""
+    if ticker_filter:
+        ticker_clause = "AND dc.ticker_tags @> %(ticker)s::jsonb"
+        params["ticker"] = json.dumps([ticker_filter])
 
     sql = f"""
     WITH ranked AS (
@@ -613,6 +620,7 @@ def search_document_chunks(
         JOIN documents d ON d.id = dc.document_id
         WHERE dc.embed_status = 'done'
           {cat_clause}
+          {ticker_clause}
     )
     SELECT
         id, document_id, chunk_seq, is_table, section_path,

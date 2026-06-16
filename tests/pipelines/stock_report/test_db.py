@@ -545,3 +545,33 @@ def test_search_document_chunks_no_category_clause_when_none() -> None:
     assert "d.category_key" not in query
     assert isinstance(params, dict)
     assert params.get("category") is None
+
+
+def test_search_document_chunks_ticker_filter_injected() -> None:
+    conn = _search_conn([])
+    search_document_chunks(conn, [0.0] * 1536, ticker_filter="005930.KS", top_k=3)
+    query, params = conn.executed[0]
+    assert "dc.ticker_tags @> %(ticker)s::jsonb" in query
+    assert isinstance(params, dict)
+    assert params.get("ticker") == json.dumps(["005930.KS"])
+
+
+def test_search_document_chunks_no_ticker_clause_when_none() -> None:
+    conn = _search_conn([])
+    search_document_chunks(conn, [0.0] * 1536, ticker_filter=None, top_k=5)
+    query, params = conn.executed[0]
+    assert "@>" not in query
+    assert isinstance(params, dict)
+    assert "ticker" not in params
+
+
+def test_search_document_chunks_category_and_ticker_both_anded() -> None:
+    conn = _search_conn([])
+    search_document_chunks(
+        conn, [0.0] * 1536, category_filter="반도체", ticker_filter="005930.KS", top_k=3
+    )
+    query, params = conn.executed[0]
+    assert "d.category_key = %(category)s" in query
+    assert "dc.ticker_tags @> %(ticker)s::jsonb" in query
+    assert params.get("category") == "반도체"
+    assert params.get("ticker") == json.dumps(["005930.KS"])
