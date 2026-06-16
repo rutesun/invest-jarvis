@@ -43,3 +43,21 @@ def test_rs_handles_misaligned_dates():
     index = index.iloc[5:]
     r = compute_relative_strength(stock, index, index_symbol="^GSPC")
     assert isinstance(r.mansfield_rs, float)
+
+
+def test_rs_cross_positive_detected():
+    n = 320
+    idx = pd.date_range("2025-01-01", periods=n, freq="D")
+    index = [100.0] * n
+    # 전반부 종목이 지수보다 약함(언더퍼폼) → mansfield<0, 후반부 급등 → mansfield>0
+    stock = [100.0 - i * 0.1 for i in range(n - 60)] + [
+        (100.0 - (n - 60) * 0.1) + j * 1.5 for j in range(60)
+    ]
+    result = compute_relative_strength(
+        pd.DataFrame({"Close": stock}, index=idx),
+        pd.DataFrame({"Close": index}, index=idx),
+        "^GSPC",
+    )
+    assert result.rs_cross_type == "양전환"
+    assert result.rs_cross_date is not None
+    assert result.rs_cross_days_ago is not None

@@ -6,6 +6,27 @@ from src.tools.criteria.models import RelativeStrengthResult
 _RP_SMA = 252  # 맨스필드 기준선 (≈1년)
 _SLOPE_DAYS = 20  # 4주
 _PERF_DAYS = 126  # 6개월
+_RS_CROSS_LOOKBACK = 60  # RS 전환 탐색 윈도우
+
+
+def _detect_rs_cross(mansfield_series: pd.Series, lookback: int = _RS_CROSS_LOOKBACK):
+    """최근 lookback 내 mansfield 부호 전환. (type, ISO date, days_ago). 진짜 -1↔+1 만."""
+    s = mansfield_series.dropna()
+    if len(s) < 2:
+        return None, None, None
+    recent = s.tail(lookback)
+    sign = recent.apply(lambda x: 1 if x > 0 else (-1 if x < 0 else 0))
+    for i in range(len(sign) - 1, 0, -1):
+        cur, prev = sign.iloc[i], sign.iloc[i - 1]
+        if cur != 0 and prev != 0 and cur != prev:
+            cross_date = recent.index[i]
+            days_ago = len(s) - 1 - s.index.get_loc(cross_date)
+            return (
+                "양전환" if cur > 0 else "음전환",
+                cross_date.strftime("%Y-%m-%d"),
+                int(days_ago),
+            )
+    return None, None, None
 
 
 def compute_relative_strength(
@@ -34,6 +55,9 @@ def compute_relative_strength(
     last_sma = float(rp_sma.iloc[-1])
     mansfield = ((last_rp / last_sma) - 1.0) * 100.0 if last_sma else 0.0
 
+    mansfield_series = ((rp / rp_sma) - 1.0) * 100.0
+    cross_type, cross_date, cross_days_ago = _detect_rs_cross(mansfield_series)
+
     slope_n = min(_SLOPE_DAYS, len(rp) - 1)
     rp_slope = float(rp.iloc[-1] - rp.iloc[-1 - slope_n])
 
@@ -49,4 +73,7 @@ def compute_relative_strength(
         outperform_6m=round(outperform, 2),
         rp_slope_4w=round(rp_slope, 6),
         index_symbol=index_symbol,
+        rs_cross_type=cross_type,
+        rs_cross_date=cross_date,
+        rs_cross_days_ago=cross_days_ago,
     )

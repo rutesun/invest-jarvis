@@ -554,3 +554,4 @@ Summary / CAN SLIM / Stage 2 / 모멘텀 / Event / 구조레벨 / 원시데이�
 - `compute_ud_volume_ratio`: 50일 상승일/하락일 거래량 압력 비율 (U/D Volume Ratio)
 - `compute_volume_trend`: 20일 vs 50일 평균 거래량으로 증가/감소/횡보 판단
 - `build_momentum_events`: 위 사건 감지 일괄 조립, RS 전환은 deep_dive에서 주입
+- `src/tools/criteria/relative_strength.py`: Mansfield RS 음↔양 전환 날짜 감지 (`rs_cross_type`, `rs_cross_date`, `rs_cross_days_ago` 필드 추가)

@@ -10,6 +10,10 @@ class RelativeStrengthResult(BaseModel):
     outperform_6m: float  # 종목 6M 수익률 - 지수 6M 수익률 (%p)
     rp_slope_4w: float  # 상대가격선 4주(20거래일) 변화
     index_symbol: str
+    # RS 음↔양 전환 사건 (최근 lookback 내). 없으면 None.
+    rs_cross_type: str | None = None  # "양전환" | "음전환"
+    rs_cross_date: str | None = None  # ISO date
+    rs_cross_days_ago: int | None = None
 
     @computed_field
     @property
