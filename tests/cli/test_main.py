@@ -1,4 +1,4 @@
-from src.cli.main import _format_metric_value, _get_metric_display_name
+from src.cli.analyze_render import _format_metric_value, _get_metric_display_name
 
 
 def test_format_metric_value_percent():

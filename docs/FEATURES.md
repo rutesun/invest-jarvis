@@ -561,3 +561,9 @@ Summary / CAN SLIM / Stage 2 / 모멘텀 / Event / 구조레벨 / 원시데이�
 - `src/cli/analyze_render.py` (신규): 렌더 로직 전체를 `src/cli/main.py`에서 분리 — `format_deep_dive_output`, `_format_criteria_section`, 7개 섹션 포매터(`_format_summary_section`, `_format_canslim_section`, `_format_stage2_section`, `_format_momentum_section`, `_format_event_section`, `_format_structure_section`) 포함
 - `src/cli/main.py`: 렌더 로직 제거 후 `analyze_render.format_deep_dive_output` re-export로 하위 호환 유지
 - `_format_criteria_section`: 기존 게이트 체크리스트·CAN SLIM 상세 블록 제거, 포지션 플랜/청산 판단만 표시 — 헤더 `📋 포지션 플랜 / 청산 판단`으로 변경
+
+**구현 완료 (Task 10–19):**
+- 섹션 포매터 6종: `_format_summary_section`, `_format_canslim_section`, `_format_stage2_section`, `_format_momentum_section`, `_format_event_section`, `_format_structure_section` — 각각 단독 단위 테스트 추가
+- `format_deep_dive_output` 재구성: Summary→CAN SLIM→Stage2→모멘텀→Event→구조레벨→증거상세→원시데이터 순서, 판단 요약 섹션 제거 확인 테스트 추가
+- `tests/cli/test_main.py`: `_format_metric_value`·`_get_metric_display_name` import 경로를 `analyze_render`로 수정
+- `tests/cli/test_cli.py`: `test_cli_analyze_command` — 플랜 A 레이아웃 assertion으로 마이그레이션, `decision_summary` mock 제거

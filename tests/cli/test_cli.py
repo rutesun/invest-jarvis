@@ -6,7 +6,7 @@ from typer.testing import CliRunner
 
 from src.cli.main import app, run_deep_dive
 from src.llm.models import ActionableSignalOutput, NewsAnalysisOutput, TechnicalSummaryOutput
-from src.pipelines.analyze_decision import AnalyzeDecisionSummary, AnalyzeScenario, FactorAssessment
+from src.pipelines.analyze_decision import AnalyzeScenario, FactorAssessment
 from src.tools.macro import TickerMacroSnapshot
 from src.tools.technical.models import IndicatorSnapshot, TechnicalResult
 
@@ -82,13 +82,6 @@ def test_cli_analyze_command():
         "ticker": "AAPL",
         "technical": mock_technical,
         "technical_summary": mock_tech_summary,
-        "decision_summary": AnalyzeDecisionSummary(
-            leader="technical",
-            core_variables=["20일선 위 유지", "거래량 유지"],
-            action="관망",
-            timing="조정_대기",
-            action_sentence="조정 확인 후 접근이 유리",
-        ),
         "factor_assessments": [
             FactorAssessment(
                 factor_type="technical",
@@ -137,11 +130,10 @@ def test_cli_analyze_command():
     assert result.exit_code == 0
     assert "AAPL" in result.stdout
     assert "178.50" in result.stdout
-    assert "판단 요약" in result.stdout
-    assert "주도 팩터" in result.stdout
+    assert "Summary" in result.stdout  # 플랜 A 레이아웃
     assert "가격" in result.stdout
-    assert "조정 대기" in result.stdout
-    assert "실행 가능한 투자 시그널" not in result.stdout
+    assert "판단 요약" not in result.stdout  # 플랜 A에서 제거됨
+    # actionable_signal 패널은 플랜 B Task 10에서 제거 예정 — 현재는 있어도 무방
 
 
 def test_cli_report_command():
