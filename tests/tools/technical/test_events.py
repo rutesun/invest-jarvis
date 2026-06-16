@@ -154,3 +154,22 @@ def test_build_momentum_events_assembles():
     assert ev.ud_volume_ratio is not None
     assert ev.volume_trend == "증가"
     assert ev.rs_event is None  # RS 전환은 deep_dive 가 주입
+
+
+def test_price_events_use_last_valid_close_when_trailing_nan():
+    """당일 미완성 봉(마지막 행 Close=NaN)이 섞여도 pct가 NaN이면 안 된다."""
+    from src.tools.technical.events import detect_price_events
+
+    n = 30
+    closes = [100.0 + i for i in range(n - 1)] + [float("nan")]  # 마지막 봉 미완성
+    swing_low = [float("nan")] * n
+    swing_low[20] = 90.0  # 스윙로우 90 → 마지막 유효 종가 128 대비 +42.2%
+    df = pd.DataFrame(
+        {"Close": closes, "Swing_Low": swing_low},
+        index=pd.date_range("2026-04-01", periods=n, freq="D"),
+    )
+    events = detect_price_events(df)
+    held = [e for e in events if e.code == "SWING_LOW_HELD"]
+    assert held, "스윙로우 유지 이벤트가 있어야 함"
+    assert "nan" not in held[0].detail.lower()
+    assert "+42" in held[0].detail  # 마지막 유효 종가(128) 기준 pct

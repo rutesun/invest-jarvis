@@ -769,3 +769,23 @@ def test_support_level_test_weak_rebounds():
 
     assert result.detected is False
     assert "반등 부족" in result.description
+
+
+def test_bullish_flag_handles_trailing_nan_close():
+    """당일 미완성 봉(마지막 Close=NaN)이어도 description/지표에 NaN이 없어야 한다."""
+    import numpy as np
+
+    from src.tools.technical.components.chart_patterns import detect_bullish_flag
+
+    pole = list(np.linspace(100.0, 145.0, 15))  # 강한 상승 (+45%)
+    flag = list(np.linspace(144.0, 138.0, 14))  # 약한 눌림
+    closes = pole + flag + [float("nan")]  # 30 rows, 마지막 봉 미완성
+    df = pd.DataFrame(
+        {"Close": closes},
+        index=pd.date_range("2026-04-01", periods=len(closes), freq="D"),
+    )
+
+    result = detect_bullish_flag(df)
+
+    assert "nan" not in result.description.lower()
+    assert not np.isnan(result.current_price)

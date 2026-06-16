@@ -62,7 +62,12 @@ def detect_macd_cross(df: pd.DataFrame, lookback: int = 60) -> MacdCross | None:
 def detect_price_events(df: pd.DataFrame) -> list[PriceEvent]:
     """신고가 돌파/실패 + 스윙로우 이탈/유지 사건. raw_dataframe 컬럼 사용."""
     events: list[PriceEvent] = []
-    if "Close" not in df.columns or len(df) < 2:
+    if "Close" not in df.columns:
+        return events
+
+    # 당일 미완성 봉(마지막 행 Close=NaN)이 섞일 수 있어 마지막 유효 봉 기준으로 본다.
+    df = df[df["Close"].notna()]
+    if len(df) < 2:
         return events
 
     last_close = float(df["Close"].iloc[-1])

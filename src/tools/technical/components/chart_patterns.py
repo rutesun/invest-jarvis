@@ -748,7 +748,7 @@ def detect_bullish_flag(df: pd.DataFrame) -> ChartPatternResult:
     import numpy as np
     from scipy.stats import linregress
 
-    prices = df["Close"].values
+    prices = df["Close"].dropna().values
 
     # Flagpole 감지: 최근 20일 중 강한 상승 구간 찾기
     if len(df) < 20:
@@ -832,7 +832,7 @@ def detect_bearish_flag(df: pd.DataFrame) -> ChartPatternResult:
     import numpy as np
     from scipy.stats import linregress
 
-    prices = df["Close"].values
+    prices = df["Close"].dropna().values
 
     # Flagpole 감지: 최근 20일 중 강한 하락 구간 찾기
     if len(df) < 20:

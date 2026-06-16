@@ -567,3 +567,9 @@ Summary / CAN SLIM / Stage 2 / 모멘텀 / Event / 구조레벨 / 원시데이�
 - `format_deep_dive_output` 재구성: Summary→CAN SLIM→Stage2→모멘텀→Event→구조레벨→증거상세→원시데이터 순서, 판단 요약 섹션 제거 확인 테스트 추가
 - `tests/cli/test_main.py`: `_format_metric_value`·`_get_metric_display_name` import 경로를 `analyze_render`로 수정
 - `tests/cli/test_cli.py`: `test_cli_analyze_command` — 플랜 A 레이아웃 assertion으로 마이그레이션, `decision_summary` mock 제거
+
+**버그 수정 (실데이터 검증):**
+- **2026-06-16: 당일 미완성 봉(트레일링 NaN) NaN 전파 수정** — 미국장 개장/마감 시점에 데이터 마지막 행 Close가 NaN으로 들어와 발생.
+  - `events.py` `detect_price_events`: 마지막 유효 봉 기준으로 보도록 `df["Close"].notna()` 필터 추가. NaN last_close가 `+nan%`를 만들고 신고가/스윙로우 사건 감지를 조용히 무력화하던 문제 해소.
+  - `chart_patterns.py` `detect_bullish_flag`·`detect_bearish_flag`: `prices`를 `df["Close"].dropna()`로 — `Flag 조정 nan%/day` 및 NaN 기울기가 검증(`>0.1`)을 우회해 생기던 flag 오탐 제거.
+  - 트레일링 NaN 회귀 테스트 2종 추가. raw_dataframe의 `iloc[-1]`/`.values`를 쓰는 다른 패턴 함수도 동일 노출 가능 — 데이터 로드 단계 가드는 후속 과제.
