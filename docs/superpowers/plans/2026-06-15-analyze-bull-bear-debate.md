@@ -16,6 +16,26 @@
 
 ---
 
+## ⚠️ 실행 범위 & 설계 sync (반드시 먼저 읽기 — 2026-06-16 갱신)
+
+> 본문 Task의 옛 코드 블록은 구 모델 기준이라 일부 깨져 있다. **이 섹션이 본문보다 우선**하며, 충돌 시 여기 규칙으로 바꿔 구현한다.
+
+**범위: 코어 토론 엔진만 (scope B).** 아래 신규 신호/게이트는 **이번 범위에서 제외 → 후속 "Plan B 2단계"**:
+- `stop_loss_10pct`(매입가 -10% 게이트), `exit_sma200`/`exit_sma150` 분리, `disparity_50`(이격도 과열), `rsi_div_down`(RSI 하락 다이버전스 라우팅).
+- holding `compute_action_space`는 **기존 strong/medium 로직을 근사로 유지**(정밀 게이트는 후속). momentum_events는 이번에도 ledger 제외(rsi_div/disparity가 후속이므로).
+
+**현행 코드 심볼 (본문의 `criteria_verdict.gate`·`_GateEvaluation`은 더 이상 없음):**
+- `CriteriaVerdict`에 `gate` 필드 없음 → `checks: list[CriteriaCheck]`, `gate_passed`(computed), `quality_grade`, `veto_reason`. 픽스처는 `gate=...`/`_GateEvaluation` 대신 `checks=[CriteriaCheck(name=..., required=True, met=..., reason=...)]`, `quality_grade=...`, `veto_reason=...`로 구성.
+- `CriteriaCheck`: `name`("A"/"B"/"C"/"E"), `required: bool`, `met: bool|None`, `reason: str`.
+
+**게이트→신호 통일 (spec §2.1 R9, §7):** entry 게이트 0개. A·B·C·E는 전부 **신호**다.
+- `Evidence`에 `kind: str = "signal"` 필드 추가("signal"|"gate"; 현재 전부 "signal").
+- ledger는 `criteria_verdict.checks`를 순회(`.gate` 아님). `check.name → (code, weight)`: A→`market_regime`(4) / B→`stage2`(4) / C→`rs_leadership`(4) / E→`vcp_trigger`(3). `kind="signal"`, `met is True`→bull / else→bear.
+- 테스트 key 단언도 이 code로(예: `market_regime`/`vcp_trigger`). dedup: `canslim_L` 제외(rs_leadership 중복), `canslim_M` entry 제외(market_regime 중복), `factor_flow` 제외.
+- **`compute_action_space` entry: 항상 `["매수", "관망"]`** (게이트 0개; 시장환경은 하드 차단이 아니라 가중 bear 신호일 뿐). 따라서 본문의 "하락장→`["관망"]`" 단언 테스트는 **`["매수","관망"]` 기대로 수정**.
+
+---
+
 ## File Structure
 
 | 파일 | 역할 | 신규/수정 |
