@@ -5,7 +5,9 @@ from collections.abc import Callable
 from langchain_core.language_models import BaseChatModel
 
 from src.llm import analyzer
-from src.llm.analyzer import generate_fundamental_summary
+from src.llm.analyzer import (  # monkeypatch 대상
+    generate_fundamental_summary,
+)
 from src.llm.models import (
     FundamentalSummaryInput,
     FundamentalSummaryOutput,
@@ -17,6 +19,8 @@ from src.llm.models import (
     TechnicalSummaryOutput,
 )
 from src.pipelines.analyze_decision import apply_criteria_veto, build_analyze_decision_bundle
+from src.pipelines.debate.engine import run_debate
+from src.pipelines.debate.ledger import build_evidence_ledger
 from src.tools.criteria.holdings import load_holdings
 from src.tools.disclosure import DisclosureItem, DisclosureTool, extract_kr_code, is_korean_ticker
 from src.tools.flow import FlowTool, InvestorFlow
@@ -54,6 +58,33 @@ _FUNDAMENTAL_SIGNAL_FIELDS = (
     "dividend_yield",
     "payout_ratio",
 )
+
+
+async def _build_debate(
+    *,
+    criteria_verdict,
+    factor_assessments,
+    snapshot,
+    flow,
+    holding,
+    llm,
+    ticker,
+):
+    """증거 장부 생성 후 논쟁 실행. (bundle|None, ledger) 반환 — 실패해도 ledger 는 보존."""
+    mode = "holding" if holding else "entry"
+    ledger = build_evidence_ledger(
+        criteria_verdict=criteria_verdict,
+        factor_assessments=factor_assessments,
+        snapshot=snapshot,
+        flow=flow,
+        mode=mode,
+    )
+    try:
+        bundle = await run_debate(ledger, llm, ticker=ticker)
+        return bundle, ledger
+    except Exception as e:
+        logger.warning("Debate engine failed: %s", e)
+        return None, ledger
 
 
 def _rs_event_from_verdict(relative_strength) -> RsEvent | None:
@@ -248,6 +279,7 @@ class DeepDivePipeline:
 
         # CriteriaEngine evaluation (optional)
         criteria_verdict = None
+        holding = None
         if self.criteria_engine is not None:
             try:
                 holding = load_holdings().find(ticker)
@@ -284,6 +316,16 @@ class DeepDivePipeline:
             update={
                 "summary": apply_criteria_veto(decision_bundle.summary, criteria_verdict),
             }
+        )
+
+        debate_bundle, debate_ledger = await _build_debate(
+            criteria_verdict=criteria_verdict,
+            factor_assessments=decision_bundle.factor_assessments,
+            snapshot=technical_data.snapshot,
+            flow=flow_data,
+            holding=holding is not None,
+            llm=self.llm,
+            ticker=ticker,
         )
 
         # Render technical chart
@@ -326,6 +368,8 @@ class DeepDivePipeline:
             "presented_structure": presented_structure,
             "chart": chart_result,
             "criteria_verdict": criteria_verdict,
+            "debate": debate_bundle,
+            "debate_ledger": debate_ledger,
         }
 
     async def _generate_technical_summary(
