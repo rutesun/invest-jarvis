@@ -415,9 +415,10 @@ TelegramMessage → MappedIssue → ShuffleResult → ThemeAnalysis/NewsItem →
 - 병합 후 `embed_payload` 재생성: 제목·캡션 키워드가 임베딩에 반영되도록 보장
 - 노이즈 필터와 소스줄 필터 사이에 실행되어 단편 흡수 → 출처줄 필터 순서 유지
 
-**검색 (`search_document_chunks`):**
+**검색 (`search_document_chunks` / `search_documents`):**
 - CTE + `ROW_NUMBER() OVER (PARTITION BY document_id)` per-document dedup: 동일 문서가 top-K를 독점하지 않도록 문서당 최고 유사도 1개만 반환
-- `category_filter`로 카테고리 내 검색 범위 한정 가능
+- `category_filter`(카테고리)·`ticker_filter`(`ticker_tags @>` exact 태그)로 검색 범위 한정, AND 결합
+- `search_documents(query_text, ...)`: 텍스트 쿼리를 임베딩해 검색하는 래퍼(T17 synthesis LLM 툴이 그대로 호출). 임베딩 키 부재/호출 실패 시 graceful 빈 결과
 - `similarity` = `1 - (embedding <=> query_vec)` cosine 유사도 반환
 
 **인증/엔드포인트 분리:**
@@ -427,7 +428,7 @@ TelegramMessage → MappedIssue → ShuffleResult → ThemeAnalysis/NewsItem →
 - `--input-dir`, `--provider`(분류 LLM, 기본 openai), `--use-hybrid`, `--ocr-lang`, `--embed-missing`(pending/failed 청크만 임베딩하는 backfill 경로), `--reembed`(멱등 skip 무시하고 전체 재적재)
 
 **제약:**
-- Telegram-PDF 통합 retrieval/cross-link(knowledge_chunks ∪ document_chunks)는 후속 작업(T16)
+- PDF 의미검색(`search_documents`)은 제공하나, synthesis LLM이 이를 툴로 소비해 텔레그램 리포트에 PDF 근거를 넣는 것은 후속 작업(T17)
 - hybrid(docling) 통합은 `needs_hybrid=True` 문서 재처리 경로로 예정
 
 ---
