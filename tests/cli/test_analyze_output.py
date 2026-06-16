@@ -191,63 +191,6 @@ def test_format_disclosure_title_normalizes_sec_primary_document_name():
     assert title == "SEC 10-Q 공시"
 
 
-def test_format_deep_dive_output_hides_integrated_recommendation_labels():
-    snapshot = IndicatorSnapshot(price=100.0, change_pct=1.0, rsi=55.0)
-    technical = TechnicalResult(
-        ticker="AAPL",
-        timestamp=datetime.now(),
-        snapshot=snapshot,
-        indicators=snapshot,
-        components={},
-        total_score=75,
-        strategies=[],
-        overall_assessment="매수",
-        confidence_score=75.0,
-        key_insights=[],
-        warnings=[],
-    )
-
-    result = {
-        "ticker": "AAPL",
-        "technical": technical,
-        "technical_summary": type(
-            "TechSummary",
-            (),
-            {
-                "summary": "강세",
-                "key_insights": [],
-                "recommendation": "매수",
-                "confidence": 0.75,
-                "rationale": "기술적 강세",
-            },
-        )(),
-        "decision_summary": AnalyzeDecisionSummary(
-            leader="technical",
-            core_variables=["20일선 위 유지"],
-            action="관망",
-            timing="조정_대기",
-            action_sentence="조정 확인 후 접근이 유리",
-        ),
-        "factor_assessments": [],
-        "scenarios": [],
-        "integrated_analysis": type(
-            "Integrated",
-            (),
-            {
-                "recommendation": "매수",
-                "action_summary": "기존 LLM 요약",
-                "rationale": ["기술적: 강세"],
-                "risks": [],
-            },
-        )(),
-    }
-
-    output = format_deep_dive_output(result)
-
-    assert "## 종합 인사이트 참고" in output
-    assert "투자 추천" not in output
-
-
 def test_format_deep_dive_output_shows_na_for_missing_fundamental_metrics():
     snapshot = IndicatorSnapshot(price=100.0, change_pct=1.0, rsi=55.0)
     technical = TechnicalResult(

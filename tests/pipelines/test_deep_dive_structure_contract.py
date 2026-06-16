@@ -5,14 +5,15 @@ import pandas as pd
 import pytest
 
 from src.core.models import ToolResult
-from src.llm.models import ActionableSignalOutput, TechnicalSummaryOutput
+from src.llm.models import TechnicalSummaryOutput
 from src.pipelines.deep_dive import DeepDivePipeline
 from src.tools.news import NewsArticle
 from src.tools.technical.models import IndicatorSnapshot, StrategyResult, TechnicalResult
 
 
 @pytest.mark.asyncio
-async def test_deep_dive_pipeline_passes_presented_structure_context_to_actionable_signal():
+async def test_deep_dive_pipeline_builds_presented_structure():
+    """presented_structure 가 pipeline 결과에 채워지고 llm_context 필드를 갖는다."""
     technical_tool = AsyncMock()
     news_tool = AsyncMock()
     llm = AsyncMock()
@@ -63,7 +64,6 @@ async def test_deep_dive_pipeline_passes_presented_structure_context_to_actionab
     with (
         patch("src.llm.analyzer.generate_technical_summary", new_callable=AsyncMock) as mock_tech,
         patch("src.llm.analyzer.analyze_news", new_callable=AsyncMock) as mock_news,
-        patch("src.llm.analyzer.generate_actionable_signal", new_callable=AsyncMock) as mock_signal,
     ):
         mock_tech.return_value = TechnicalSummaryOutput(
             summary="강세",
@@ -73,16 +73,6 @@ async def test_deep_dive_pipeline_passes_presented_structure_context_to_actionab
             rationale="r",
         )
         mock_news.return_value = None
-        mock_signal.return_value = ActionableSignalOutput(
-            action="관망",
-            timing="보류",
-            signal_strength=5,
-            headline="h",
-            primary_reason="p",
-            supporting_reasons=[],
-            risks=[],
-            confidence=0.5,
-        )
 
         result = await DeepDivePipeline(
             technical_tool=technical_tool,
@@ -92,5 +82,3 @@ async def test_deep_dive_pipeline_passes_presented_structure_context_to_actionab
 
     assert result["presented_structure"] is not None
     assert "llm_context" in result["presented_structure"].model_dump()
-    assert mock_signal.await_args.kwargs["structure_context"]
-    assert "구조 레벨" in mock_signal.await_args.kwargs["structure_context"]

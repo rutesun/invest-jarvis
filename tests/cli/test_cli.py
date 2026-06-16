@@ -5,7 +5,7 @@ import pytest
 from typer.testing import CliRunner
 
 from src.cli.main import app, run_deep_dive
-from src.llm.models import ActionableSignalOutput, NewsAnalysisOutput, TechnicalSummaryOutput
+from src.llm.models import NewsAnalysisOutput, TechnicalSummaryOutput
 from src.pipelines.analyze_decision import AnalyzeScenario, FactorAssessment
 from src.tools.macro import TickerMacroSnapshot
 from src.tools.technical.models import IndicatorSnapshot, TechnicalResult
@@ -107,16 +107,6 @@ def test_cli_analyze_command():
         ],
         "news": [],
         "news_analysis": mock_news_analysis,
-        "actionable_signal": ActionableSignalOutput(
-            action="매수",
-            timing="지금",
-            signal_strength=8,
-            headline="매수",
-            primary_reason="골든크로스",
-            supporting_reasons=[],
-            risks=[],
-            confidence=0.75,
-        ),
     }
 
     with (
@@ -133,7 +123,6 @@ def test_cli_analyze_command():
     assert "Summary" in result.stdout  # 플랜 A 레이아웃
     assert "가격" in result.stdout
     assert "판단 요약" not in result.stdout  # 플랜 A에서 제거됨
-    # actionable_signal 패널은 플랜 B Task 10에서 제거 예정 — 현재는 있어도 무방
 
 
 def test_cli_report_command():

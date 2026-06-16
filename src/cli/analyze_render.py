@@ -455,21 +455,6 @@ def _format_raw_analysis_sections(result: dict) -> str:
         )
         output += "\n"
 
-    integrated = result.get("integrated_analysis")
-    if integrated:
-        output += "## 종합 인사이트 참고\n\n"
-        output += f"**요약 메모**: {integrated.action_summary}\n\n"
-        if integrated.rationale:
-            output += "**근거**:\n"
-            for r in integrated.rationale:
-                output += f"- {r}\n"
-            output += "\n"
-        if integrated.risks:
-            output += "**리스크**:\n"
-            for r in integrated.risks:
-                output += f"- {r}\n"
-            output += "\n"
-
     return output
 
 

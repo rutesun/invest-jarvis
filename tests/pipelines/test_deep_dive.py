@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 
 from src.core.models import ToolResult
-from src.llm.models import ActionableSignalOutput, NewsAnalysisOutput, TechnicalSummaryOutput
+from src.llm.models import NewsAnalysisOutput, TechnicalSummaryOutput
 from src.pipelines.analyze_decision import (
     AnalyzeDecisionBundle,
     AnalyzeDecisionSummary,
@@ -102,7 +102,6 @@ async def test_deep_dive_pipeline_success(mock_technical_tool, mock_news_tool, m
             "src.llm.analyzer.generate_technical_summary", new_callable=AsyncMock
         ) as mock_tech_summary,
         patch("src.llm.analyzer.analyze_news", new_callable=AsyncMock) as mock_news_analysis,
-        patch("src.llm.analyzer.generate_actionable_signal", new_callable=AsyncMock) as mock_signal,
         patch("src.pipelines.deep_dive.StructureZoneDetector") as mock_zone_detector_cls,
         patch("src.pipelines.deep_dive.compose_level_payload") as mock_compose_levels,
     ):
@@ -120,16 +119,6 @@ async def test_deep_dive_pipeline_success(mock_technical_tool, mock_news_tool, m
             key_themes=["신제품"],
             summary="긍정적",
             impact_assessment="좋음",
-        )
-        mock_signal.return_value = ActionableSignalOutput(
-            action="매수",
-            timing="지금",
-            signal_strength=8,
-            headline="매수. 지금. 이유: 골든크로스",
-            primary_reason="골든크로스 발생",
-            supporting_reasons=["상승 추세"],
-            risks=["변동성"],
-            confidence=0.75,
         )
         mock_zone_detector = mock_zone_detector_cls.return_value
         mock_zone_detector.detect.return_value = object()
@@ -199,9 +188,6 @@ async def test_deep_dive_pipeline_success(mock_technical_tool, mock_news_tool, m
         assert result["technical_summary"].summary == "강세"
         assert result["news"] is not None
         assert result["news_analysis"].sentiment == "긍정"
-        assert result["actionable_signal"] is not None
-        assert result["actionable_signal"].action == "매수"
-        assert result["actionable_signal"].timing == "지금"
         assert result["structure_levels"].support_zones[0].lower_bound == 170.0
         assert result["execution_levels"][0].description == "피봇 S1"
         assert result["presented_structure"].headline == "핵심 지지 존 우위"
@@ -209,7 +195,6 @@ async def test_deep_dive_pipeline_success(mock_technical_tool, mock_news_tool, m
         assert result["factor_assessments"]
         assert result["scenarios"]
         assert result["chart_patterns"]
-        assert "170.00~172.00" in mock_signal.await_args.kwargs["structure_context"]
 
 
 @pytest.mark.asyncio
@@ -221,7 +206,6 @@ async def test_deep_dive_pipeline_returns_decision_bundle(
             "src.llm.analyzer.generate_technical_summary", new_callable=AsyncMock
         ) as mock_tech_summary,
         patch("src.llm.analyzer.analyze_news", new_callable=AsyncMock) as mock_news_analysis,
-        patch("src.llm.analyzer.generate_actionable_signal", new_callable=AsyncMock) as mock_signal,
         patch("src.pipelines.deep_dive.build_analyze_decision_bundle") as mock_bundle,
     ):
         mock_tech_summary.return_value = TechnicalSummaryOutput(
@@ -237,16 +221,6 @@ async def test_deep_dive_pipeline_returns_decision_bundle(
             key_themes=["신제품"],
             summary="긍정적",
             impact_assessment="좋음",
-        )
-        mock_signal.return_value = ActionableSignalOutput(
-            action="매수",
-            timing="지금",
-            signal_strength=8,
-            headline="매수",
-            primary_reason="골든크로스",
-            supporting_reasons=[],
-            risks=[],
-            confidence=0.75,
         )
         mock_bundle.return_value = AnalyzeDecisionBundle(
             summary=AnalyzeDecisionSummary(
@@ -345,7 +319,6 @@ async def test_deep_dive_pipeline_empty_news(mock_technical_tool, mock_llm):
         patch(
             "src.llm.analyzer.generate_technical_summary", new_callable=AsyncMock
         ) as mock_tech_summary,
-        patch("src.llm.analyzer.generate_actionable_signal", new_callable=AsyncMock) as mock_signal,
     ):
         mock_tech_summary.return_value = TechnicalSummaryOutput(
             summary="강세",
@@ -353,16 +326,6 @@ async def test_deep_dive_pipeline_empty_news(mock_technical_tool, mock_llm):
             recommendation="매수",
             confidence=0.75,
             rationale="좋음",
-        )
-        mock_signal.return_value = ActionableSignalOutput(
-            action="매수",
-            timing="지금",
-            signal_strength=8,
-            headline="매수. 지금.",
-            primary_reason="골든크로스",
-            supporting_reasons=[],
-            risks=[],
-            confidence=0.75,
         )
 
         pipeline = DeepDivePipeline(
@@ -375,7 +338,6 @@ async def test_deep_dive_pipeline_empty_news(mock_technical_tool, mock_llm):
 
         assert result["ticker"] == "AAPL"
         assert result["news_analysis"] is None  # No news analysis when news is empty
-        assert result["actionable_signal"] is not None
         assert result["decision_summary"].leader == "판단 보류"
         assert result["decision_summary"].action == "관망"
         assert result["decision_summary"].timing == "보류"
@@ -393,7 +355,6 @@ async def test_deep_dive_pipeline_uses_defer_state_when_news_and_flow_are_missin
         patch(
             "src.llm.analyzer.generate_technical_summary", new_callable=AsyncMock
         ) as mock_tech_summary,
-        patch("src.llm.analyzer.generate_actionable_signal", new_callable=AsyncMock) as mock_signal,
     ):
         mock_tech_summary.return_value = TechnicalSummaryOutput(
             summary="강세",
@@ -401,16 +362,6 @@ async def test_deep_dive_pipeline_uses_defer_state_when_news_and_flow_are_missin
             recommendation="매수",
             confidence=0.75,
             rationale="좋음",
-        )
-        mock_signal.return_value = ActionableSignalOutput(
-            action="관망",
-            timing="보류",
-            signal_strength=5,
-            headline="관망",
-            primary_reason="근거 부족",
-            supporting_reasons=[],
-            risks=[],
-            confidence=0.45,
         )
 
         pipeline = DeepDivePipeline(
@@ -504,7 +455,6 @@ async def test_deep_dive_pipeline_with_playbook_engine_returns_verdict(
             "src.llm.analyzer.generate_technical_summary", new_callable=AsyncMock
         ) as mock_tech_summary,
         patch("src.llm.analyzer.analyze_news", new_callable=AsyncMock) as mock_news_analysis,
-        patch("src.llm.analyzer.generate_actionable_signal", new_callable=AsyncMock) as mock_signal,
         patch("src.pipelines.deep_dive.load_holdings") as mock_load_holdings,
     ):
         mock_tech_summary.return_value = TechnicalSummaryOutput(
@@ -520,16 +470,6 @@ async def test_deep_dive_pipeline_with_playbook_engine_returns_verdict(
             key_themes=["신제품"],
             summary="긍정적",
             impact_assessment="좋음",
-        )
-        mock_signal.return_value = ActionableSignalOutput(
-            action="매수",
-            timing="지금",
-            signal_strength=8,
-            headline="매수",
-            primary_reason="골든크로스",
-            supporting_reasons=[],
-            risks=[],
-            confidence=0.75,
         )
         mock_holdings = MagicMock()
         mock_holdings.find.return_value = None  # 미보유
@@ -559,7 +499,6 @@ async def test_deep_dive_pipeline_without_playbook_engine_returns_none_verdict(
             "src.llm.analyzer.generate_technical_summary", new_callable=AsyncMock
         ) as mock_tech_summary,
         patch("src.llm.analyzer.analyze_news", new_callable=AsyncMock) as mock_news_analysis,
-        patch("src.llm.analyzer.generate_actionable_signal", new_callable=AsyncMock) as mock_signal,
     ):
         mock_tech_summary.return_value = TechnicalSummaryOutput(
             summary="강세",
@@ -574,16 +513,6 @@ async def test_deep_dive_pipeline_without_playbook_engine_returns_none_verdict(
             key_themes=[],
             summary="긍정적",
             impact_assessment="좋음",
-        )
-        mock_signal.return_value = ActionableSignalOutput(
-            action="매수",
-            timing="지금",
-            signal_strength=8,
-            headline="매수",
-            primary_reason="골든크로스",
-            supporting_reasons=[],
-            risks=[],
-            confidence=0.75,
         )
 
         pipeline = DeepDivePipeline(

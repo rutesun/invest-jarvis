@@ -4,15 +4,12 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.prompts import ChatPromptTemplate
 
 from src.llm.models import (
-    ActionableSignalOutput,
     DebateAdvocacyInput,
     DebateAdvocacyOutput,
     DebateJudgeInput,
     DebateVerdictOutput,
     FundamentalSummaryInput,
     FundamentalSummaryOutput,
-    IntegratedAnalysisInput,
-    IntegratedAnalysisOutput,
     NewsAnalysisInput,
     NewsAnalysisOutput,
     TechnicalSummaryInput,
@@ -357,160 +354,6 @@ Provide summary with:
             "sector": input_data.sector or "N/A",
             "industry": input_data.industry or "N/A",
             "metrics_text": "\n".join(f"- {m}" for m in metrics_text),
-        }
-    )
-
-    return result
-
-
-async def generate_integrated_analysis(
-    input_data: IntegratedAnalysisInput,
-    llm: BaseChatModel,
-) -> IntegratedAnalysisOutput:
-    """기술적·기본적·공시·수급 팩터를 통합한 종합 투자 분석을 생성한다."""
-    disclosure_text = (
-        "\n".join(
-            f"- [{d['form_type']}] {d['date']}: {d['description']}\n  URL: {d['url']}"
-            for d in input_data.disclosure_items
-        )
-        if input_data.disclosure_items
-        else "해당 기간 주요 공시 없음"
-    )
-
-    flow_text = input_data.flow_summary or "수급 데이터 없음 (미국주식 또는 KIS 미설정)"
-
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            (
-                "system",
-                "당신은 한국 주식시장 종합 분석 전문가입니다. 실행 가능한 투자 인사이트를 제공하세요.",
-            ),
-            (
-                "user",
-                """종합 투자 분석을 제공하세요. 종목: {ticker}
-
-**기술적 분석**: {technical_recommendation} — {technical_rationale}
-
-**기본적 분석 (밸류에이션)**: {fundamental_valuation}
-
-**공시 분석 (최근 3개월)**:
-{disclosure_text}
-
-**수급 동향**:
-{flow_text}
-
-다음 형식으로 분석하세요:
-- recommendation: "매수", "매도", 또는 "중립"
-- rationale: 3-4개 근거 (각 항목은 "기술적:", "기본적:", "공시:", "수급:" 중 하나로 시작)
-- risks: 2-3개 리스크 요인
-- action_summary: 한 줄 요약""",
-            ),
-        ]
-    )
-
-    chain = prompt | llm.with_structured_output(IntegratedAnalysisOutput)
-
-    return await chain.ainvoke(
-        {
-            "ticker": input_data.ticker,
-            "technical_recommendation": input_data.technical_recommendation,
-            "technical_rationale": input_data.technical_rationale,
-            "fundamental_valuation": input_data.fundamental_valuation or "N/A",
-            "disclosure_text": disclosure_text,
-            "flow_text": flow_text,
-        }
-    )
-
-
-async def generate_actionable_signal(
-    ticker: str,
-    technical_summary: str,
-    chart_patterns: dict[str, ChartPatternResult],
-    price_levels: PriceLevels,
-    structure_context: str | None = None,
-    structure_levels=None,
-    execution_levels=None,
-    structure_summary: str | None = None,
-    execution_summary: str | None = None,
-    news_analysis: str | None = None,
-    fundamental_summary: str | None = None,
-    llm: BaseChatModel | None = None,
-) -> ActionableSignalOutput:
-    """Generate actionable signal with pattern and price insights"""
-    if llm is None:
-        from src.llm.provider import get_llm_instance
-
-        llm = get_llm_instance()
-
-    patterns_text = format_patterns_for_llm(chart_patterns)
-    structure_context_text = structure_context or format_structure_context_for_llm(
-        structure_levels,
-        execution_levels,
-    )
-
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            (
-                "system",
-                """당신은 프로 트레이더입니다. 구체적인 가격과 패턴으로 명확한 투자 신호를 제공하세요.
-
-**신규 필드 작성 가이드:**
-
-1. **pattern_insight**: 감지된 패턴을 자연스럽게 해석
-   - 패턴이 있으면: "Cup & Handle 형성 완료 (8일 전), 돌파 준비 중"
-   - 패턴이 없으면: "명확한 차트 패턴 없음, 지지/저항선 중심 분석"
-
-2. **target_price**: 시나리오별 목표가 (자유 서술)
-   - 상승 시: "돌파 시 Cup & Handle 목표 $250, 중간 저항 $210"
-   - 하락 시: "이탈 시 50일선 $175까지 조정 가능"
-
-3. **entry_zone**: 진입 타이밍과 구간
-   - "조정 시 $175-180 (50일선) 분할 매수, 돌파 확인 후 $205 추격 가능"
-
-4. **key_levels**: 핵심 가격 레벨 간결 요약
-   - "지지: $187/$175/$160, 저항: $200/$210/$250"
-
-**기존 필드 작성 규칙:**
-- primary_reason: 반드시 구체적 숫자 포함
-- signal_strength: 1-10, 패턴 신뢰도 포함""",
-            ),
-            (
-                "user",
-                """종목: {ticker}
-
-**기술적 분석**:
-{technical_summary}
-
-**차트 패턴**:
-{patterns_text}
-
-**구조/실행 레벨**:
-{structure_summary}
-{execution_summary}
-
-**구조/실행 상세**:
-{structure_context}
-
-**뉴스**: {news_analysis}
-**펀더멘탈**: {fundamental_summary}
-
-위 정보를 종합해서 명확한 투자 신호를 생성하세요.""",
-            ),
-        ]
-    )
-
-    chain = prompt | llm.with_structured_output(ActionableSignalOutput)
-
-    result = await chain.ainvoke(
-        {
-            "ticker": ticker,
-            "technical_summary": technical_summary,
-            "patterns_text": patterns_text,
-            "structure_context": structure_context_text,
-            "structure_summary": structure_summary or "구조 레벨 요약 없음",
-            "execution_summary": execution_summary or "실행 레벨 요약 없음",
-            "news_analysis": news_analysis or "없음",
-            "fundamental_summary": fundamental_summary or "없음",
         }
     )
 

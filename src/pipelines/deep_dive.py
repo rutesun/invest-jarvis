@@ -11,14 +11,12 @@ from src.llm.analyzer import (  # monkeypatch 대상
 from src.llm.models import (
     FundamentalSummaryInput,
     FundamentalSummaryOutput,
-    IntegratedAnalysisInput,
-    IntegratedAnalysisOutput,
     NewsAnalysisInput,
     NewsAnalysisOutput,
     TechnicalSummaryInput,
     TechnicalSummaryOutput,
 )
-from src.pipelines.analyze_decision import apply_criteria_veto, build_analyze_decision_bundle
+from src.pipelines.analyze_decision import build_analyze_decision_bundle
 from src.pipelines.debate.engine import run_debate
 from src.pipelines.debate.ledger import build_evidence_ledger
 from src.tools.criteria.holdings import load_holdings
@@ -169,8 +167,6 @@ class DeepDivePipeline:
                 - fundamental_summary: FundamentalSummaryOutput | None
                 - disclosure: list[DisclosureItem] | None (SEC 10-Q/8-K or OpenDART)
                 - flow: InvestorFlow | None (외국인/기관 순매수 동향, 한국주식만)
-                - integrated_analysis: IntegratedAnalysisOutput | None (종합 인사이트)
-                - actionable_signal: ActionableSignalOutput | None (실행 가능한 투자 시그널)
         """
         tech_result = await self.technical_tool.execute(ticker, period="3y")
         if not tech_result.success:
@@ -227,18 +223,6 @@ class DeepDivePipeline:
         disclosure_items: list[DisclosureItem] | None = optional_data.get("disclosure")
         flow_data: InvestorFlow | None = optional_data.get("flow")
 
-        # 공시 또는 수급 데이터가 있을 때만 종합 인사이트 생성
-        integrated_analysis = None
-        if disclosure_items is not None or flow_data is not None:
-            integrated_analysis = await self._generate_integrated_analysis(
-                ticker=ticker,
-                technical_summary=technical_summary,
-                fundamental_summary=fundamental_summary,
-                disclosure_items=disclosure_items,
-                flow_data=flow_data,
-            )
-
-        # Generate actionable investment signal
         df = technical_data.raw_dataframe
         if df is None:
             raise ValueError("raw_dataframe required for pattern detection and charting")
@@ -262,19 +246,6 @@ class DeepDivePipeline:
         presented_structure = self.structure_presentation_adapter(
             structure_levels,
             execution_levels,
-        )
-
-        actionable_signal = await analyzer.generate_actionable_signal(
-            ticker=ticker,
-            technical_summary=f"{technical_summary.summary}\n\n{technical_summary.rationale}",
-            chart_patterns=chart_patterns,
-            price_levels=price_levels,
-            structure_context=presented_structure.llm_context,
-            structure_summary=presented_structure.structure_summary
-            or level_payload.structure_summary,
-            execution_summary=presented_structure.execution_summary
-            or level_payload.execution_summary,
-            llm=self.llm,
         )
 
         # CriteriaEngine evaluation (optional)
@@ -312,12 +283,6 @@ class DeepDivePipeline:
             chart_patterns=chart_patterns,
             price_levels=price_levels,
         )
-        decision_bundle = decision_bundle.model_copy(
-            update={
-                "summary": apply_criteria_veto(decision_bundle.summary, criteria_verdict),
-            }
-        )
-
         debate_bundle, debate_ledger = await _build_debate(
             criteria_verdict=criteria_verdict,
             factor_assessments=decision_bundle.factor_assessments,
@@ -361,8 +326,6 @@ class DeepDivePipeline:
             "fundamental_summary": fundamental_summary,
             "disclosure": disclosure_items,
             "flow": flow_data,
-            "integrated_analysis": integrated_analysis,
-            "actionable_signal": actionable_signal,
             "structure_levels": structure_levels,
             "execution_levels": execution_levels,
             "presented_structure": presented_structure,
@@ -536,36 +499,3 @@ class DeepDivePipeline:
             ),
         ]
         return "\n".join(lines)
-
-    async def _generate_integrated_analysis(
-        self,
-        ticker: str,
-        technical_summary: TechnicalSummaryOutput,
-        fundamental_summary: FundamentalSummaryOutput | None,
-        disclosure_items: list[DisclosureItem] | None,
-        flow_data: InvestorFlow | None,
-    ) -> IntegratedAnalysisOutput:
-        # Convert DisclosureItem objects to dicts for LLM input
-        disclosure_dicts = []
-        if disclosure_items:
-            for item in disclosure_items:
-                disclosure_dicts.append(
-                    {
-                        "form_type": item.form_type,
-                        "date": item.date,
-                        "description": item.description,
-                        "url": item.url,
-                    }
-                )
-
-        input_data = IntegratedAnalysisInput(
-            ticker=ticker,
-            technical_recommendation=technical_summary.recommendation,
-            technical_rationale=technical_summary.rationale,
-            fundamental_valuation=(
-                fundamental_summary.valuation_assessment if fundamental_summary else None
-            ),
-            disclosure_items=disclosure_dicts,
-            flow_summary=self._format_flow_for_llm(flow_data) if flow_data else None,
-        )
-        return await analyzer.generate_integrated_analysis(input_data, self.llm)
