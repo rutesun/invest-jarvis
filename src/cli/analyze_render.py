@@ -710,6 +710,45 @@ def _format_structure_section(*, structure_levels, presented_structure, snapshot
     return "\n".join(parts) + "\n"
 
 
+def _format_debate_section(bundle) -> str:
+    """Bull/Bear 논쟁 종합 판정 — 유일한 결론."""
+    if bundle is None:
+        return ""
+    v = bundle.verdict
+    lines = [
+        "## 🧭 종합 판정",
+        "",
+        f"- **액션**: {v.action} | **확신도**: {v.confidence * 100:.0f}%",
+        f"- **결정적 변수**: {v.swing_factor}",
+        "",
+        "## 🟢 Bull 논거",
+        f"_{bundle.bull_case.thesis}_",
+    ]
+    lines += [f"- {p}" for p in bundle.bull_case.points]
+    lines += ["", "## 🔴 Bear 논거", f"_{bundle.bear_case.thesis}_"]
+    lines += [f"- {p}" for p in bundle.bear_case.points]
+    lines += ["", "## ⚖️ 판결 사유", v.reconciliation, ""]
+    return "\n".join(lines) + "\n"
+
+
+def _format_ledger_fallback(ledger) -> str:
+    """LLM 실패 시 — 결정적 증거 장부만 표시 (spec §10)."""
+    if ledger is None:
+        return ""
+    lines = [
+        "## 🧭 종합 판정 (LLM 미생성 — 증거 요약)",
+        "",
+        f"- Bull 가중치 {ledger.bull_weight} vs Bear 가중치 {ledger.bear_weight}",
+        "",
+        "**Bull 증거**",
+    ]
+    lines += [f"- {e.headline}: {e.detail} (가중치 {e.weight})" for e in ledger.bull] or ["- 없음"]
+    lines += ["", "**Bear 증거**"]
+    lines += [f"- {e.headline}: {e.detail} (가중치 {e.weight})" for e in ledger.bear] or ["- 없음"]
+    lines.append("")
+    return "\n".join(lines) + "\n"
+
+
 def format_deep_dive_output(result: dict) -> str:
     """Format deep dive result as markdown (구조화 레이아웃, 결론 없음 — 플랜 A)."""
     ticker = result["ticker"]
@@ -725,7 +764,12 @@ def format_deep_dive_output(result: dict) -> str:
     output = f"# Deep Dive Analysis: {ticker}\n\n"
     output += f"## 가격: ${snapshot.price:.2f} ({snapshot.change_pct:+.2f}%)\n\n"
 
-    # [플랜 B가 여기에 종합 판정(debate) 섹션을 삽입한다 — 가격 줄과 Summary 사이]
+    # 종합 판정 (유일한 결론) — debate 있으면 평결, 없으면 ledger 요약
+    debate_bundle = result.get("debate")
+    if debate_bundle is not None:
+        output += _format_debate_section(debate_bundle)
+    elif result.get("debate_ledger") is not None:
+        output += _format_ledger_fallback(result["debate_ledger"])
 
     gate = criteria_verdict.gate if criteria_verdict and hasattr(criteria_verdict, "gate") else None
     rs = criteria_verdict.relative_strength if criteria_verdict else None
