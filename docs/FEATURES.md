@@ -275,6 +275,12 @@ Deep Dive 분석 실행 시 자동으로 기술적 차트를 생성하여 `chart
 
 **의존성:** yfinance, LLM (OpenAI/Anthropic), scipy (peak detection), mplfinance, SEC EDGAR, OpenDART (선택), KIS API (선택)
 
+**Bull/Bear 논쟁 종합 판정 (Plan B — scope B, 구현 중):**
+
+| 항목 | 내용 |
+|------|------|
+| **논쟁 I/O 모델** | `DebateCase`, `DebateAdvocacyInput/Output`, `DebateJudgeInput`, `DebateVerdictOutput` (`src/llm/models.py`) |
+
 ---
 
 ## 3. Portfolio Monitoring (`jarvis portfolio`)

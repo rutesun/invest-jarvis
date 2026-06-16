@@ -171,3 +171,48 @@ class ActionableSignalOutput(BaseModel):
         if v is not None and v.strip() == "":
             return None
         return v
+
+
+class DebateCase(BaseModel):
+    """한 진영의 변론."""
+
+    stance: str  # "bull" | "bear"
+    thesis: str
+    points: list[str]
+
+
+class DebateAdvocacyInput(BaseModel):
+    """변론 콜 입력 — list[dict]는 입력에만 허용."""
+
+    ticker: str
+    mode: str  # "entry" | "holding"
+    bull_evidence: list[dict]  # [{headline, detail}]
+    bear_evidence: list[dict]
+
+
+class DebateAdvocacyOutput(BaseModel):
+    """변론 콜 출력 — 전부 타입 확정 (strict-schema)."""
+
+    bull_case: DebateCase
+    bear_case: DebateCase
+
+
+class DebateJudgeInput(BaseModel):
+    """판사 콜 입력."""
+
+    ticker: str
+    mode: str
+    bull_case: DebateCase
+    bear_case: DebateCase
+    bull_weight: float
+    bear_weight: float
+    allowed_actions: list[str]
+
+
+class DebateVerdictOutput(BaseModel):
+    """판사 콜 출력 — 단일 평결."""
+
+    action: str
+    confidence: float
+    swing_factor: str
+    reconciliation: str
