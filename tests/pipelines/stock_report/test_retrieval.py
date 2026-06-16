@@ -329,6 +329,7 @@ def test_search_documents_embeds_query_once_and_maps_hits() -> None:
     assert isinstance(hits[0], DocumentSearchHit)
     assert hits[0].chunk_id == 1
     assert hits[0].doc_title == "소부장 리포트"
+    assert hits[0].source_path == "data/files/doc.pdf"
     assert hits[0].similarity == 0.87
     assert hits[0].ticker_tags == ["000660.KS"]
 
@@ -362,3 +363,21 @@ def test_search_documents_no_embed_key_skips(monkeypatch: pytest.MonkeyPatch) ->
 
     assert hits == []
     assert search.calls == []
+
+
+def test_search_documents_embed_returns_empty_list_returns_empty() -> None:
+    search = _RecordingSearch([_doc_row()])
+    hits = search_documents(None, "HBM", embed_fn=lambda _payloads: [], search_fn=search)
+    assert hits == []
+    assert search.calls == []
+
+
+def test_search_documents_search_failure_returns_empty() -> None:
+    embed = _RecordingEmbed()
+
+    def boom(*_args: Any, **_kwargs: Any) -> list[dict[str, Any]]:
+        raise RuntimeError("db down")
+
+    hits = search_documents(None, "HBM", embed_fn=embed, search_fn=boom)
+    assert hits == []
+    assert embed.calls == [["HBM"]]

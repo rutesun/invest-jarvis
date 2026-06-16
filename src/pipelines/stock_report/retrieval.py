@@ -281,6 +281,7 @@ class DocumentSearchHit:
     chunk_id: int
     document_id: int
     doc_title: str | None
+    source_path: str | None
     broker_key: str | None
     published_date: date | None
     section_path: str
@@ -297,6 +298,7 @@ def _to_document_search_hit(row: dict[str, Any]) -> DocumentSearchHit:
         chunk_id=row["id"],
         document_id=row["document_id"],
         doc_title=row.get("doc_title"),
+        source_path=row.get("source_path"),
         broker_key=row.get("broker_key"),
         published_date=row.get("published_date"),
         section_path=row["section_path"],
