@@ -8,6 +8,7 @@ from src.pipelines.stock_report.embed import (
     EMBED_DIM,
     _format_vector_literal,
     embed_payloads,
+    has_embed_auth,
     upsert_embeddings,
 )
 
@@ -203,3 +204,14 @@ def test_embed_payloads_reads_open_ai_embedding_key(monkeypatch: pytest.MonkeyPa
 
     # 게이트웨이 chat 키와 분리된 OpenAI 직접 임베딩 키 슬롯을 인식한다.
     assert FakeEmbeddings.last_kwargs.get("api_key") == "sk-embedding-slot"
+
+
+def test_has_embed_auth_true_when_key_present(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("STOCK_REPORT_EMBED_API_KEY", "sk-embed-test")
+    assert has_embed_auth() is True
+
+
+def test_has_embed_auth_false_when_no_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    for key in ("STOCK_REPORT_EMBED_API_KEY", "OPEN_AI_EMBEDDING_KEY", "OPENAI_API_KEY"):
+        monkeypatch.delenv(key, raising=False)
+    assert has_embed_auth() is False

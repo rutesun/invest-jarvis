@@ -57,6 +57,15 @@ def _resolve_embed_auth() -> tuple[str | None, str]:
     return api_key, base_url
 
 
+def has_embed_auth() -> bool:
+    """임베딩 전용 API 키가 해석되는지(존재) 여부.
+
+    키가 없으면 OpenAI 임베딩 호출이 인증 실패하므로, 호출 전에 이 함수로 조기
+    skip해 매 호출 인증 실패 경고를 막는다(검색 경로 graceful degradation).
+    """
+    return _resolve_embed_auth()[0] is not None
+
+
 def _get_encoding(model: str) -> Any:
     """모델에 맞는 tiktoken 인코딩(미지원 모델은 cl100k_base 폴백)."""
     import tiktoken
