@@ -565,20 +565,44 @@ def _format_canslim_section(canslim) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _format_stage2_section(*, snapshot_dict, gate_b_reason, supertrend_value) -> str:
-    """Stage 2: SMA 값 + 정배열 + Supertrend(방향/라인/gap%)."""
+def _format_stage2_section(*, snapshot_dict, gate_b_reason, supertrend_value, ma_trend=None) -> str:
+    """Stage 2: SMA 값(+기울기) + 정배열(깨진 쌍 표시) + Supertrend(방향/라인/gap%)."""
     price = snapshot_dict.get("price")
+    ma_trend = ma_trend or {}
     lines = ["## Stage 2", ""]
     if gate_b_reason:
         lines += [f"**판정**: {gate_b_reason}", ""]
     for length in (20, 50, 150, 200):
         val = snapshot_dict.get(f"sma_{length}")
-        if val is not None:
-            lines.append(f"- **SMA {length}**: ${val:.2f}")
+        if val is None:
+            continue
+        line = f"- **SMA {length}**: ${val:.2f}"
+        slope = ma_trend.get(f"sma_{length}_slope")
+        if slope:  # 0/None이면 표기 생략(데이터 없음·평탄)
+            arrow = "↑ 상승" if slope > 0 else "↓ 하락"
+            line += f" ({arrow} {slope:+.1f}%/4주)"
+        lines.append(line)
     smas = [snapshot_dict.get(f"sma_{n}") for n in (20, 50, 150, 200)]
     if price is not None and all(s is not None for s in smas):
-        aligned = price > smas[0] > smas[1] > smas[2] > smas[3]
-        lines.append(f"- **배열**: {'정배열' if aligned else '비정배열'} (종가 ${price:.2f})")
+        chain = [
+            ("가격", price),
+            ("SMA20", smas[0]),
+            ("SMA50", smas[1]),
+            ("SMA150", smas[2]),
+            ("SMA200", smas[3]),
+        ]
+        broken = next(
+            (
+                f"{chain[i][0]}<{chain[i + 1][0]}"
+                for i in range(len(chain) - 1)
+                if not chain[i][1] > chain[i + 1][1]
+            ),
+            None,
+        )
+        if broken is None:
+            lines.append(f"- **배열**: 정배열 (종가 ${price:.2f})")
+        else:
+            lines.append(f"- **배열**: 비정배열 ({broken}) (종가 ${price:.2f})")
     direction = snapshot_dict.get("supertrend_direction")
     if direction is not None:
         line = f"- **Supertrend**: {'상승' if direction == 1 else '하락'}"
@@ -779,10 +803,14 @@ def format_deep_dive_output(result: dict) -> str:
     supertrend_value = None
     if technical.components and "supertrend" in technical.components:
         supertrend_value = technical.components["supertrend"]["metrics"].get("supertrend_value")
+    ma_trend = {}
+    if technical.components and "minervini" in technical.components:
+        ma_trend = technical.components["minervini"].get("metrics", {})
     output += _format_stage2_section(
         snapshot_dict=snapshot_dict,
         gate_b_reason=gate_b_reason,
         supertrend_value=supertrend_value,
+        ma_trend=ma_trend,
     )
     output += _format_momentum_section(snapshot_dict=snapshot_dict, events=events)
     output += _format_event_section(events=events, chart_patterns=chart_patterns)

@@ -92,3 +92,13 @@ def test_minervini_condition_labels_korean():
         "above_52w_low_30pct",
         "within_52w_high_25pct",
     }
+
+
+def test_minervini_exposes_sma_slope():
+    """metrics에 sma_150_slope/sma_200_slope(21일 기준 %)가 노출되고 추세 부호가 맞아야 한다."""
+    up = analyze_minervini(_make_df(260, 100.0, 200.0))  # 단조 상승
+    assert up.metrics["sma_150_slope"] > 0
+    assert up.metrics["sma_200_slope"] > 0
+
+    down = analyze_minervini(_make_df(260, 200.0, 100.0))  # 단조 하락
+    assert down.metrics["sma_200_slope"] < 0

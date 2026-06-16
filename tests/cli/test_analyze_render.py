@@ -99,6 +99,28 @@ def test_format_stage2_section_with_supertrend():
     assert "10.9%" in out or "+10.9" in out
 
 
+def test_format_stage2_shows_broken_pair_and_slope():
+    """비정배열일 때 깨진 쌍 표시 + SMA150/200 기울기(방향·%) 표기."""
+    from src.cli.analyze_render import _format_stage2_section
+
+    # ALAB 형태: 마지막 쌍만 역전(SMA150 < SMA200), 둘 다 상승
+    snap = {
+        "price": 389.2,
+        "sma_20": 327.27,
+        "sma_50": 242.21,
+        "sma_150": 178.75,
+        "sma_200": 183.18,
+        "supertrend_direction": 1,
+    }
+    ma_trend = {"sma_150_slope": 5.2, "sma_200_slope": 1.1}
+    out = _format_stage2_section(
+        snapshot_dict=snap, gate_b_reason=None, supertrend_value=None, ma_trend=ma_trend
+    )
+    assert "비정배열 (SMA150<SMA200)" in out  # 어느 쌍이 깨졌는지
+    assert "5.2" in out and "1.1" in out  # 기울기 %
+    assert "상승" in out
+
+
 # ── Task 13: 모멘텀 섹션 ─────────────────────────────────────────────────────
 
 

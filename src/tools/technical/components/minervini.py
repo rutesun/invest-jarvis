@@ -85,6 +85,14 @@ def analyze_minervini(df: pd.DataFrame) -> ComponentResult:
     for _name, _met in conditions.items():
         metrics[f"cond_{_name}"] = 1.0 if _met else 0.0
 
+    # SMA 기울기 (21거래일 ≈ 4주 기준 %). 정배열/비정배열의 개선·악화 방향 판별용.
+    metrics["sma_150_slope"] = (
+        round((sma_150 - sma_150_prev) / sma_150_prev * 100, 2) if sma_150_prev else 0.0
+    )
+    metrics["sma_200_slope"] = (
+        round((sma_200 - sma_200_prev) / sma_200_prev * 100, 2) if sma_200_prev else 0.0
+    )
+
     def _get_failure_reason(name: str) -> str:
         if name == "ma_stack":
             if close <= sma_150:
