@@ -5,6 +5,10 @@ from langchain_core.prompts import ChatPromptTemplate
 
 from src.llm.models import (
     ActionableSignalOutput,
+    DebateAdvocacyInput,
+    DebateAdvocacyOutput,
+    DebateJudgeInput,
+    DebateVerdictOutput,
     FundamentalSummaryInput,
     FundamentalSummaryOutput,
     IntegratedAnalysisInput,
@@ -511,3 +515,71 @@ async def generate_actionable_signal(
     )
 
     return result
+
+
+async def run_debate_advocacy(input_data: DebateAdvocacyInput, llm) -> DebateAdvocacyOutput:
+    """① 변론 콜: bull/bear 각자 자기 장부 증거만 인용."""
+
+    def _fmt(ev: list[dict]) -> str:
+        return "\n".join(f"- {e['headline']}: {e['detail']}" for e in ev) if ev else "(증거 없음)"
+
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                "너는 주식 분석 토론의 변론가다. Bull/Bear 각 진영 변론을 작성한다.\n"
+                "규칙: 각 진영은 자기 측 증거만 인용. 상대/중립 증거 인용 금지. 숫자·사실 환각 금지. 한국어로 간결히.",
+            ),
+            (
+                "human",
+                "종목: {ticker} (모드: {mode})\n\n[Bull 증거]\n{bull_evidence}\n\n[Bear 증거]\n{bear_evidence}\n\n"
+                "각 진영 thesis(한 줄)와 points(근거)를 작성. 증거 없는 진영은 thesis='해당 없음', points=[].",
+            ),
+        ]
+    )
+    chain = prompt | llm.with_structured_output(DebateAdvocacyOutput)
+    return await chain.ainvoke(
+        {
+            "ticker": input_data.ticker,
+            "mode": input_data.mode,
+            "bull_evidence": _fmt(input_data.bull_evidence),
+            "bear_evidence": _fmt(input_data.bear_evidence),
+        }
+    )
+
+
+async def run_debate_judge(input_data: DebateJudgeInput, llm) -> DebateVerdictOutput:
+    """② 판사 콜: 양측 변론 + 가중치 + 허용 액션 → 단일 평결."""
+
+    def _fmt_case(c) -> str:
+        pts = "\n".join(f"  - {p}" for p in c.points) or "  (없음)"
+        return f"thesis: {c.thesis}\n{pts}"
+
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                "너는 중립적 주식 분석 판사다. 변론과 증거 가중치를 읽고 단일 평결을 내린다.\n"
+                "규칙: action 은 반드시 allowed_actions 중에서만 선택(리스크 가드레일). 변론 합리화 말고 증거 우위로 판단. "
+                "reconciliation 에 결론 근거와, 가드레일이 액션을 제한했다면 그 이유도 적어라. 한국어로.",
+            ),
+            (
+                "human",
+                "종목: {ticker} (모드: {mode})\n\n[Bull 변론] (가중치 {bull_weight})\n{bull_case}\n\n"
+                "[Bear 변론] (가중치 {bear_weight})\n{bear_case}\n\n허용 액션: {allowed_actions}\n\n"
+                "action, confidence(0~1), swing_factor(한 줄), reconciliation 을 산출하라.",
+            ),
+        ]
+    )
+    chain = prompt | llm.with_structured_output(DebateVerdictOutput)
+    return await chain.ainvoke(
+        {
+            "ticker": input_data.ticker,
+            "mode": input_data.mode,
+            "bull_case": _fmt_case(input_data.bull_case),
+            "bear_case": _fmt_case(input_data.bear_case),
+            "bull_weight": input_data.bull_weight,
+            "bear_weight": input_data.bear_weight,
+            "allowed_actions": ", ".join(input_data.allowed_actions),
+        }
+    )
