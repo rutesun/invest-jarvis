@@ -548,5 +548,9 @@ Daily Report 및 Screener 리포트를 Notion Database에 자동 업로드.
 **7개 의미 단위 섹션 (구현 예정):**
 Summary / CAN SLIM / Stage 2 / 모멘텀 / Event / 구조레벨 / 원시데이터.
 
-**진행 중:**
+**구현 완료 (Task 1–6):**
 - `src/tools/technical/events_models.py`: 사건 결과 모델 (`MacdCross`, `RsiDivergence`, `PriceEvent`, `RsEvent`, `MomentumEvents`)
+- `src/tools/technical/events.py`: MACD 골든/데드 크로스, RSI 다이버전스(plateau 대응), 신고가 돌파/실패, 스윙로우 이탈/유지 감지 — 발생 날짜 포함
+- `compute_ud_volume_ratio`: 50일 상승일/하락일 거래량 압력 비율 (U/D Volume Ratio)
+- `compute_volume_trend`: 20일 vs 50일 평균 거래량으로 증가/감소/횡보 판단
+- `build_momentum_events`: 위 사건 감지 일괄 조립, RS 전환은 deep_dive에서 주입
