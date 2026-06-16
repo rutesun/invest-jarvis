@@ -275,11 +275,16 @@ Deep Dive 분석 실행 시 자동으로 기술적 차트를 생성하여 `chart
 
 **의존성:** yfinance, LLM (OpenAI/Anthropic), scipy (peak detection), mplfinance, SEC EDGAR, OpenDART (선택), KIS API (선택)
 
-**Bull/Bear 논쟁 종합 판정 (Plan B — scope B, 구현 중):**
+**Bull/Bear 논쟁 종합 판정 (Plan B — scope B, 완료):**
 
 | 항목 | 내용 |
 |------|------|
 | **논쟁 I/O 모델** | `DebateCase`, `DebateAdvocacyInput/Output`, `DebateJudgeInput`, `DebateVerdictOutput` (`src/llm/models.py`) |
+| **증거 라우팅** | `build_evidence_ledger` — criteria checks(A/B/C/E), CAN SLIM, RS magnitude, flow, factor assessments → bull/bear/neutral 분류 (`src/pipelines/debate/ledger.py`) |
+| **논쟁 엔진** | `run_debate` — 변론 콜 → 판사 콜 → `DebateBundle` 반환, 실패 시 ledger 보존 (`src/pipelines/debate/engine.py`) |
+| **환각 검출** | `points_grounding_ratio` — 각 논점의 증거 headline 토큰 매칭률 반환 (`src/pipelines/debate/grounding.py`) |
+| **렌더링** | `_format_debate_section` / `_format_ledger_fallback` — analyze 출력 최상단에 종합 판정 삽입 (`src/cli/analyze_render.py`) |
+| **제거된 코드** | `IntegratedAnalysisInput/Output`, `ActionableSignalOutput`, `generate_integrated_analysis`, `generate_actionable_signal`, `apply_criteria_veto` 삭제 |
 
 ---
 
