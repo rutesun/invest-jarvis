@@ -538,3 +538,15 @@ Daily Report 및 Screener 리포트를 Notion Database에 자동 업로드.
 | `OPENDART_API_KEY` | 선택 | 한국 공시 |
 | `NOTION_TOKEN` / `NOTION_DATABASE_ID` | 선택 | 리포트 업로드 |
 | `FMP_API_KEY` | 선택 | 미국 업종 강도 (FMP) |
+
+---
+
+## 11. Analyze 구조화 출력 (Plan A — 진행 중)
+
+`analyze`(deep_dive) 출력을 "평가·판정 없이" 수집→가공→렌더의 구조화된 증거 리포트로 재구성. 설계: `docs/superpowers/specs/2026-06-15-analyze-overhaul-design.md`.
+
+**7개 의미 단위 섹션 (구현 예정):**
+Summary / CAN SLIM / Stage 2 / 모멘텀 / Event / 구조레벨 / 원시데이터.
+
+**진행 중:**
+- `src/tools/technical/events_models.py`: 사건 결과 모델 (`MacdCross`, `RsiDivergence`, `PriceEvent`, `RsEvent`, `MomentumEvents`)
