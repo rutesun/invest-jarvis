@@ -596,31 +596,28 @@ def _format_stage2_section(*, snapshot_dict, gate_b_reason, supertrend_value, ma
             continue
         line = f"- **SMA {length}**: ${val:.2f}"
         slope = ma_trend.get(f"sma_{length}_slope")
-        if slope:  # 0/None이면 표기 생략(데이터 없음·평탄)
-            arrow = "↑ 상승" if slope > 0 else "↓ 하락"
+        if slope is not None:  # 0(평탄)도 의미 있는 정보 — 데이터 없음(None)과 구분
+            arrow = "↑ 상승" if slope > 0 else ("↓ 하락" if slope < 0 else "→ 평탄")
             line += f" ({arrow} {slope:+.1f}%/4주)"
         lines.append(line)
-    smas = [snapshot_dict.get(f"sma_{n}") for n in (20, 50, 150, 200)]
+    # 배열: Stage2 7조건 기준(50>150>200)과 통일 — 단기선(SMA20)은 Stage2와 무관해 제외
+    smas = [snapshot_dict.get(f"sma_{n}") for n in (50, 150, 200)]
     if price is not None and all(s is not None for s in smas):
         chain = [
             ("가격", price),
-            ("SMA20", smas[0]),
-            ("SMA50", smas[1]),
-            ("SMA150", smas[2]),
-            ("SMA200", smas[3]),
+            ("SMA50", smas[0]),
+            ("SMA150", smas[1]),
+            ("SMA200", smas[2]),
         ]
-        broken = next(
-            (
-                f"{chain[i][0]}<{chain[i + 1][0]}"
-                for i in range(len(chain) - 1)
-                if not chain[i][1] > chain[i + 1][1]
-            ),
-            None,
-        )
-        if broken is None:
+        broken = [
+            f"{chain[i][0]}<{chain[i + 1][0]}"
+            for i in range(len(chain) - 1)
+            if not chain[i][1] > chain[i + 1][1]
+        ]
+        if not broken:
             lines.append(f"- **배열**: 정배열 (종가 ${price:.2f})")
         else:
-            lines.append(f"- **배열**: 비정배열 ({broken}) (종가 ${price:.2f})")
+            lines.append(f"- **배열**: 비정배열 ({', '.join(broken)}) (종가 ${price:.2f})")
     direction = snapshot_dict.get("supertrend_direction")
     if direction is not None:
         line = f"- **Supertrend**: {'상승' if direction == 1 else '하락'}"

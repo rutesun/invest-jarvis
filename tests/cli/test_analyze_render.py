@@ -114,6 +114,50 @@ def test_format_stage2_shows_broken_pair_and_slope():
     assert "상승" in out
 
 
+def test_format_stage2_sma20_break_is_not_misalignment():
+    """단기선(SMA20)만 역전된 경우 Stage2 7조건(50/150/200) 기준상 정배열 — 'Stage2 통과인데 비정배열' 모순 방지."""
+    from src.cli.analyze_render import _format_stage2_section
+
+    # 가격>SMA50>SMA150>SMA200 정배열, 단 SMA20(138)<SMA50(142) 단기 조정
+    snap = {
+        "price": 155.0,
+        "sma_20": 138.0,
+        "sma_50": 142.0,
+        "sma_150": 135.0,
+        "sma_200": 128.0,
+    }
+    out = _format_stage2_section(snapshot_dict=snap, gate_b_reason=None, supertrend_value=None)
+    assert "정배열" in out and "비정배열" not in out
+
+
+def test_format_stage2_shows_all_broken_pairs():
+    """비정배열 쌍이 여러 개면 전부 표시(첫 쌍만 보여주지 않음)."""
+    from src.cli.analyze_render import _format_stage2_section
+
+    # SMA50<SMA150, SMA150<SMA200 둘 다 역전
+    snap = {
+        "price": 100.0,
+        "sma_20": 99.0,
+        "sma_50": 90.0,
+        "sma_150": 95.0,
+        "sma_200": 98.0,
+    }
+    out = _format_stage2_section(snapshot_dict=snap, gate_b_reason=None, supertrend_value=None)
+    assert "SMA50<SMA150" in out and "SMA150<SMA200" in out
+
+
+def test_format_stage2_flat_slope_shown():
+    """기울기가 정확히 0이면 '평탄'으로 표기(데이터 없음과 구분)."""
+    from src.cli.analyze_render import _format_stage2_section
+
+    snap = {"price": 100.0, "sma_50": 90.0, "sma_150": 85.0, "sma_200": 80.0}
+    ma_trend = {"sma_150_slope": 0.0}
+    out = _format_stage2_section(
+        snapshot_dict=snap, gate_b_reason=None, supertrend_value=None, ma_trend=ma_trend
+    )
+    assert "평탄" in out
+
+
 # ── Task 13: 모멘텀 섹션 ─────────────────────────────────────────────────────
 
 
