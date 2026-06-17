@@ -32,7 +32,7 @@ async def test_run_debate_bundle():
                 weight=4.0,
                 headline="게이트 A",
                 detail="상승장",
-                source="playbook",
+                source="criteria",
             )
         ],
         bear=[
@@ -42,7 +42,7 @@ async def test_run_debate_bundle():
                 weight=3.0,
                 headline="게이트 E",
                 detail="미돌파",
-                source="playbook",
+                source="criteria",
             )
         ],
         neutral=[],

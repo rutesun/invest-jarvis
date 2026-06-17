@@ -63,7 +63,7 @@ def build_evidence_ledger(
                     weight=weight,
                     headline=f"신호 {check.name} ({code})",
                     detail=check.reason,
-                    source="playbook",
+                    source="criteria",
                     kind="signal",
                 ),
             )
@@ -88,7 +88,7 @@ def build_evidence_ledger(
                     weight=1.0,
                     headline=f"CAN SLIM {attr.upper()} {label}",
                     detail=v.detail or "—",
-                    source="playbook",
+                    source="criteria",
                     kind="signal",
                 ),
             )
@@ -106,7 +106,7 @@ def build_evidence_ledger(
                     weight=min(abs(rs) / 10.0, 3.0),
                     headline="상대강도 크기",
                     detail=f"Mansfield RS={rs:+.2f}",
-                    source="playbook",
+                    source="criteria",
                     kind="signal",
                 ),
             )
@@ -188,7 +188,7 @@ def build_evidence_ledger(
                         weight=sw.get(sig.severity, 1.0),
                         headline=f"매도신호 {sig.code}",
                         detail=sig.detail,
-                        source="playbook",
+                        source="criteria",
                         kind="signal",
                     ),
                 )
@@ -202,7 +202,7 @@ def build_evidence_ledger(
                         weight=min(abs(ev.current_r), 3.0),
                         headline="R 쿠션",
                         detail=f"current_r={ev.current_r:.2f}",
-                        source="playbook",
+                        source="criteria",
                         kind="signal",
                     ),
                 )

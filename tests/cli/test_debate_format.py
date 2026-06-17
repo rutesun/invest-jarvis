@@ -14,7 +14,7 @@ def _bundle(action="매수"):
                 weight=4.0,
                 headline="게이트 A",
                 detail="상승장",
-                source="playbook",
+                source="criteria",
             )
         ],
         bear=[
@@ -24,7 +24,7 @@ def _bundle(action="매수"):
                 weight=3.0,
                 headline="게이트 E",
                 detail="미돌파",
-                source="playbook",
+                source="criteria",
             )
         ],
         neutral=[],

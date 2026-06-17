@@ -591,6 +591,7 @@ Summary / CAN SLIM / Stage 2 / 모멘텀 / Event / 구조레벨 / 원시데이�
 - **업종강세 라벨 방향 수정**: FMP `rank_pct`에서 0=최강/1=최약인데 `상위{rank_pct:.0%}` 표기가 `rank_pct=0.98` → `상위98%`처럼 약세를 강세 표현으로 오표기하던 버그 수정. 이제 `rank_pct ≤ 0.5`이면 `상위X%`, 초과이면 `하위{1-rank_pct:.0%}` 표시 — `rank_pct=0.98 → 하위2%`.
 - **S/R 근접 이벤트 감지**: `detect_sr_proximity_events(snapshot_dict, threshold_pct=1.0)` 추가 — 현재가와 피봇/지지S1/저항R1 거리가 1% 이내이면 `SR_TEST` PriceEvent 생성(`피봇 테스트 중 (위, 거리 0.3%)`). `build_momentum_events`에 `snapshot_dict` 파라미터 추가, `deep_dive.py`에서 `snapshot.model_dump()` 전달.
 - **2026-06-17: Stage2 배열 표기 정합성 (High/Medium)** — 배열 판정을 Stage2 7조건 기준(50>150>200)과 통일해 SMA20을 제외했다. 단기선(SMA20)만 역전돼도 "Stage2 통과(7/7)인데 비정배열"로 표시되던 모순을 제거. 비정배열 쌍을 첫 쌍만이 아니라 전부 표시(`SMA50<SMA150, SMA150<SMA200`). SMA 기울기가 정확히 0(평탄)이면 데이터 없음(None)과 구분해 `→ 평탄`으로 표기.
+- **2026-06-17: 코드 정리** — 미사용 함수 삭제(`analyze_render._format_timing_label`, `deep_dive._format_flow_for_llm`), debate `Evidence.source` 라벨을 `playbook`→`criteria`로 통일(`tools/playbook`→`tools/criteria` 패키지 rename 반영, 표시용 라벨이라 런타임 동작 무관).
 
 **버그 수정 (실데이터 검증):**
 - **2026-06-17: RSI 다이버전스 방향 정정 (Critical)** — `detect_rsi_divergence`가 고점(`_find_peaks`)만 보고 "가격 고점↓ + RSI 고점↑"(정통 분류상 hidden bearish = 하락 지속)을 `bullish`로 오라벨하던 버그. 사용자에게 하락 신호를 상승으로 표시했다. `_find_troughs` 추가 → bullish는 저점끼리(가격 저점↓+RSI 저점↑), bearish는 고점끼리 비교하도록 분리. `dropna`로 trailing NaN 가드 동시 적용, detail 문구도 실제 본 데이터(고점/저점)와 일치. 회귀 테스트 3종 추가.

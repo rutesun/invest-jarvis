@@ -480,25 +480,3 @@ class DeepDivePipeline:
         )
 
         return await generate_fundamental_summary(input_data, self.llm)
-
-    def _format_flow_for_llm(self, flow: InvestorFlow) -> str:
-        """InvestorFlow를 LLM 컨텍스트용 마크다운 테이블 문자열로 변환."""
-        lines = [
-            "| 투자자 | 1일 | 5일 | 10일 | 10일 순매수 일수 |",
-            "|--------|-----|-----|------|-----------------|",
-            (
-                f"| 외국인 "
-                f"| {flow.foreign_direction_1d} ({flow.foreign_net_1d:+,}) "
-                f"| {flow.foreign_direction_5d} ({flow.foreign_net_5d:+,}) "
-                f"| {flow.foreign_direction_10d} ({flow.foreign_net_10d:+,}) "
-                f"| {flow.foreign_buy_days}/10일 |"
-            ),
-            (
-                f"| 기관 "
-                f"| {flow.institution_direction_1d} ({flow.institution_net_1d:+,}) "
-                f"| {flow.institution_direction_5d} ({flow.institution_net_5d:+,}) "
-                f"| {flow.institution_direction_10d} ({flow.institution_net_10d:+,}) "
-                f"| {flow.institution_buy_days}/10일 |"
-            ),
-        ]
-        return "\n".join(lines)

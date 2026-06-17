@@ -92,14 +92,6 @@ def _format_factor_label(value: str) -> str:
     }.get(value, value)
 
 
-def _format_timing_label(value: str) -> str:
-    return {
-        "조정_대기": "조정 대기",
-        "보류": "보류",
-        "지금": "지금",
-    }.get(value, value)
-
-
 def _format_factor_section(factor_assessments: list) -> str:
     lines = ["## 팩터 분류", ""]
     for role in ("주도", "보조", "참고"):

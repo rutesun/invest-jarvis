@@ -11,7 +11,7 @@ class Evidence(BaseModel):
     weight: float  # 0~5
     headline: str
     detail: str
-    source: str  # "playbook" | "factor" | "flow" | "technical"
+    source: str  # "criteria" | "factor" | "flow" | "technical"
     kind: str = "signal"  # "signal" | "gate"
 
 
