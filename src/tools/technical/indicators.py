@@ -24,6 +24,7 @@ class IndicatorCalculator:
         df["SMA_10"] = ta.sma(df["Close"], length=10)
         df["SMA_20"] = ta.sma(df["Close"], length=20)
         df["SMA_50"] = ta.sma(df["Close"], length=50)
+        df["SMA_100"] = ta.sma(df["Close"], length=100)
         df["SMA_120"] = ta.sma(df["Close"], length=120)
         df["SMA_150"] = ta.sma(df["Close"], length=150)
         df["SMA_200"] = ta.sma(df["Close"], length=200)

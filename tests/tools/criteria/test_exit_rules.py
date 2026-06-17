@@ -26,10 +26,12 @@ def _make_df(n: int = 60, close_last: float = 100.0, trend: str = "flat") -> pd.
         index=idx,
     )
     # 이동평균 컬럼 추가
-    df["SMA20"] = df["Close"].rolling(20, min_periods=1).mean()
-    df["SMA50"] = df["Close"].rolling(50, min_periods=1).mean()
-    df["SMA150"] = df["Close"].rolling(150, min_periods=1).mean()
-    df["SMA200"] = df["Close"].rolling(200, min_periods=1).mean()
+    df["SMA_20"] = df["Close"].rolling(20, min_periods=1).mean()
+    df["SMA_50"] = df["Close"].rolling(50, min_periods=1).mean()
+    df["SMA_100"] = df["Close"].rolling(100, min_periods=1).mean()
+    df["SMA_150"] = df["Close"].rolling(150, min_periods=1).mean()
+    df["SMA_200"] = df["Close"].rolling(200, min_periods=1).mean()
+    df["Vol_SMA_20"] = df["Volume"].rolling(20, min_periods=1).mean()
     return df
 
 
@@ -92,10 +94,10 @@ def test_exit_no_signals_hold():
     # 종가가 모든 이평 위, 매집 우세, RS 강세
     df = _make_df(n=250, close_last=120.0, trend="up")
     # 이평을 강제로 낮게 설정 (close > 모든 MA)
-    df["SMA20"] = 90.0
-    df["SMA50"] = 85.0
-    df["SMA150"] = 80.0
-    df["SMA200"] = 78.0
+    df["SMA_20"] = 90.0
+    df["SMA_50"] = 85.0
+    df["SMA_150"] = 80.0
+    df["SMA_200"] = 78.0
 
     result = evaluate_exit(
         df=df,
@@ -117,10 +119,10 @@ def test_exit_sma_short_below_sma20():
     from src.tools.criteria.exit_rules import evaluate_exit
 
     df = _make_df(n=60, close_last=80.0)
-    df["SMA20"] = 95.0  # close(80) < SMA20(95)
-    df["SMA50"] = 100.0
-    df["SMA150"] = 70.0  # close > SMA150 → 신호5 없음
-    df["SMA200"] = 70.0
+    df["SMA_20"] = 95.0  # close(80) < SMA20(95)
+    df["SMA_50"] = 100.0
+    df["SMA_150"] = 70.0  # close > SMA150 → 신호5 없음
+    df["SMA_200"] = 70.0
 
     result = evaluate_exit(
         df=df,
@@ -140,10 +142,10 @@ def test_exit_uses_last_valid_close_when_trailing_nan():
     from src.tools.criteria.exit_rules import evaluate_exit
 
     df = _make_df(n=60, close_last=80.0)
-    df["SMA20"] = 95.0  # 직전 유효 close(80) < SMA20(95) → SMA_SHORT
-    df["SMA50"] = 100.0
-    df["SMA150"] = 70.0
-    df["SMA200"] = 70.0
+    df["SMA_20"] = 95.0  # 직전 유효 close(80) < SMA20(95) → SMA_SHORT
+    df["SMA_50"] = 100.0
+    df["SMA_150"] = 70.0
+    df["SMA_200"] = 70.0
     next_day = df.index[-1] + pd.offsets.BDay(1)
     df.loc[next_day] = {c: float("nan") for c in df.columns}  # 당일 미완성 봉
 
@@ -167,10 +169,10 @@ def test_exit_distribution_signal():
     from src.tools.criteria.exit_rules import evaluate_exit
 
     df = _make_df(n=60, close_last=100.0)
-    df["SMA20"] = 80.0
-    df["SMA50"] = 75.0
-    df["SMA150"] = 70.0
-    df["SMA200"] = 68.0
+    df["SMA_20"] = 80.0
+    df["SMA_50"] = 75.0
+    df["SMA_150"] = 70.0
+    df["SMA_200"] = 68.0
 
     result = evaluate_exit(
         df=df,
@@ -192,10 +194,10 @@ def test_exit_rs_weakening_signal():
     from src.tools.criteria.exit_rules import evaluate_exit
 
     df = _make_df(n=60, close_last=100.0)
-    df["SMA20"] = 80.0
-    df["SMA50"] = 75.0
-    df["SMA150"] = 70.0
-    df["SMA200"] = 68.0
+    df["SMA_20"] = 80.0
+    df["SMA_50"] = 75.0
+    df["SMA_150"] = 70.0
+    df["SMA_200"] = 68.0
 
     result = evaluate_exit(
         df=df,
@@ -211,55 +213,82 @@ def test_exit_rs_weakening_signal():
 
 
 # ---------------------------------------------------------------------------
-# 신호 5: SMA_LONG — 종가 < SMA150 또는 < SMA200 → strong
+# 신호 5: 장기 이평 이탈 — 거래량 동반 하락 시만 (SMA200→청산, SMA100→비중축소)
 # ---------------------------------------------------------------------------
 
 
-def test_exit_sma_long_below_sma150():
+def test_exit_sma200_break_volume_confirmed():
+    """종가<SMA200 + 평균거래량 1.2배 이상 동반 하락 → SMA_200_BREAK(strong), 청산."""
     from src.tools.criteria.exit_rules import evaluate_exit
 
-    df = _make_df(n=250, close_last=60.0)
-    df["SMA20"] = 70.0
-    df["SMA50"] = 75.0
-    df["SMA150"] = 80.0  # close(60) < SMA150(80) → 신호 5
-    df["SMA200"] = 85.0
+    df = _make_df(n=250, close_last=200.0, trend="down")  # 마지막 close=80, 하락봉
+    df["SMA_20"] = 70.0  # close(80) > → SMA_SHORT 없음
+    df["SMA_50"] = 70.0
+    df["SMA_100"] = 90.0
+    df["SMA_200"] = 95.0  # close(80) < SMA200
+    df["Vol_SMA_20"] = 1_000_000.0
+    df.loc[df.index[-1], "Volume"] = 1_300_000.0  # 평균의 1.3배
 
     result = evaluate_exit(
         df=df,
-        snapshot=_snapshot(60.0),
+        snapshot=_snapshot(80.0),
         relative_strength=_rs(True),
         accumulation=_acc(0.8),
         holding=_holding(avg=100.0),
     )
     codes = {s.code for s in result.signals}
-    assert "SMA_LONG" in codes
-    long_sig = next(s for s in result.signals if s.code == "SMA_LONG")
-    assert long_sig.severity == "strong"
+    assert "SMA_200_BREAK" in codes
+    assert next(s for s in result.signals if s.code == "SMA_200_BREAK").severity == "strong"
+    assert result.action == "liquidate"
 
 
-# ---------------------------------------------------------------------------
-# 매핑: 강(5) → 청산
-# ---------------------------------------------------------------------------
-
-
-def test_exit_liquidate_on_strong_signal():
-    """SMA_LONG(강) → 청산."""
+def test_exit_sma100_break_reduces():
+    """종가<SMA100(SMA200 위) + 거래량 동반 하락 → SMA_100_BREAK(medium), 비중축소."""
     from src.tools.criteria.exit_rules import evaluate_exit
 
-    df = _make_df(n=250, close_last=60.0)
-    df["SMA20"] = 70.0
-    df["SMA50"] = 75.0
-    df["SMA150"] = 80.0  # 신호5(강)
-    df["SMA200"] = 85.0
+    df = _make_df(n=250, close_last=200.0, trend="down")  # 마지막 close=80, 하락봉
+    df["SMA_20"] = 70.0  # SMA_SHORT 없음
+    df["SMA_50"] = 70.0
+    df["SMA_100"] = 95.0  # close(80) < SMA100
+    df["SMA_200"] = 70.0  # close(80) > SMA200 → 200 안 깨짐
+    df["Vol_SMA_20"] = 1_000_000.0
+    df.loc[df.index[-1], "Volume"] = 1_300_000.0
 
     result = evaluate_exit(
         df=df,
-        snapshot=_snapshot(60.0),
+        snapshot=_snapshot(80.0),
         relative_strength=_rs(True),
         accumulation=_acc(0.8),
         holding=_holding(avg=100.0),
     )
-    assert result.action == "liquidate"
+    codes = {s.code for s in result.signals}
+    assert "SMA_100_BREAK" in codes
+    assert next(s for s in result.signals if s.code == "SMA_100_BREAK").severity == "medium"
+    assert result.action == "reduce"
+
+
+def test_exit_no_long_break_without_volume():
+    """종가<SMA200이지만 거래량 미동반(1.2배 미만) → 장기 이탈 신호 없음."""
+    from src.tools.criteria.exit_rules import evaluate_exit
+
+    df = _make_df(n=250, close_last=200.0, trend="down")  # 마지막 close=80
+    df["SMA_20"] = 70.0
+    df["SMA_50"] = 70.0
+    df["SMA_100"] = 95.0
+    df["SMA_200"] = 95.0  # close(80) < SMA200
+    df["Vol_SMA_20"] = 1_000_000.0
+    # 마지막 거래량은 평균 수준(1.0배) → 미동반
+
+    result = evaluate_exit(
+        df=df,
+        snapshot=_snapshot(80.0),
+        relative_strength=_rs(True),
+        accumulation=_acc(0.8),
+        holding=_holding(avg=100.0),
+    )
+    codes = {s.code for s in result.signals}
+    assert "SMA_200_BREAK" not in codes
+    assert "SMA_100_BREAK" not in codes
 
 
 # ---------------------------------------------------------------------------
@@ -272,10 +301,10 @@ def test_exit_reduce_on_single_medium_signal():
     from src.tools.criteria.exit_rules import evaluate_exit
 
     df = _make_df(n=60, close_last=80.0)
-    df["SMA20"] = 95.0  # close < SMA20 → SMA_SHORT(medium)
-    df["SMA50"] = 100.0  # close < SMA50 → SMA_SHORT에 포함 (같은 신호코드)
-    df["SMA150"] = 70.0  # close > SMA150 → SMA_LONG 없음
-    df["SMA200"] = 68.0
+    df["SMA_20"] = 95.0  # close < SMA20 → SMA_SHORT(medium)
+    df["SMA_50"] = 100.0  # close < SMA50 → SMA_SHORT에 포함 (같은 신호코드)
+    df["SMA_100"] = 70.0  # close > SMA100 → 장기이탈 없음
+    df["SMA_200"] = 68.0
 
     result = evaluate_exit(
         df=df,
@@ -300,10 +329,10 @@ def test_exit_liquidate_on_two_medium_signals():
     from src.tools.criteria.exit_rules import evaluate_exit
 
     df = _make_df(n=60, close_last=80.0)
-    df["SMA20"] = 95.0  # SMA_SHORT(medium)
-    df["SMA50"] = 100.0  # close < SMA50 → 또다른 medium
-    df["SMA150"] = 70.0
-    df["SMA200"] = 68.0
+    df["SMA_20"] = 95.0  # SMA_SHORT(medium)
+    df["SMA_50"] = 100.0  # close < SMA50 → 또다른 medium
+    df["SMA_150"] = 70.0
+    df["SMA_200"] = 68.0
 
     result = evaluate_exit(
         df=df,
@@ -327,10 +356,10 @@ def test_exit_current_r_with_stop():
     from src.tools.criteria.exit_rules import evaluate_exit
 
     df = _make_df(n=60, close_last=115.0)
-    df["SMA20"] = 80.0
-    df["SMA50"] = 75.0
-    df["SMA150"] = 70.0
-    df["SMA200"] = 68.0
+    df["SMA_20"] = 80.0
+    df["SMA_50"] = 75.0
+    df["SMA_150"] = 70.0
+    df["SMA_200"] = 68.0
 
     holding = _holding(avg=100.0, stop=90.0)  # avg-stop=10, close-avg=15 → R=1.5
     result = evaluate_exit(
@@ -353,10 +382,10 @@ def test_exit_current_r_without_stop():
     from src.tools.criteria.exit_rules import evaluate_exit
 
     df = _make_df(n=60, close_last=115.0)
-    df["SMA20"] = 80.0
-    df["SMA50"] = 75.0
-    df["SMA150"] = 70.0
-    df["SMA200"] = 68.0
+    df["SMA_20"] = 80.0
+    df["SMA_50"] = 75.0
+    df["SMA_150"] = 70.0
+    df["SMA_200"] = 68.0
 
     holding = _holding(avg=100.0, stop=None)
     result = evaluate_exit(
@@ -378,10 +407,10 @@ def test_exit_trailing_stop_is_sma50():
     from src.tools.criteria.exit_rules import evaluate_exit
 
     df = _make_df(n=60, close_last=115.0)
-    sma50_last = float(df["SMA50"].iloc[-1])
-    df["SMA20"] = 80.0
-    df["SMA150"] = 70.0
-    df["SMA200"] = 68.0
+    sma50_last = float(df["SMA_50"].iloc[-1])
+    df["SMA_20"] = 80.0
+    df["SMA_150"] = 70.0
+    df["SMA_200"] = 68.0
 
     result = evaluate_exit(
         df=df,

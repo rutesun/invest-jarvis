@@ -138,7 +138,7 @@ class PositionPlan(BaseModel):
 class ExitSignal(BaseModel):
     """매도 신호 단일 항목."""
 
-    code: str  # "CHARACTER_CHANGE" | "SMA_SHORT" | "DISTRIBUTION" | "RS_WEAKENING" | "SMA_LONG"
+    code: str  # "CHARACTER_CHANGE" | "SMA_SHORT" | "DISTRIBUTION" | "RS_WEAKENING" | "SMA_100_BREAK" | "SMA_200_BREAK"
     severity: str  # "strong" | "medium" | "weak"
     detail: str
 

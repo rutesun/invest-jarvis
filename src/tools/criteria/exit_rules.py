@@ -5,7 +5,7 @@
   2. SMA_SHORT         종가 < SMA20 또는 종가 < SMA50 (medium)
   3. DISTRIBUTION      매집/분산 분석 결과 분산 우세 (medium)
   4. RS_WEAKENING      RS 음전환 (weak)
-  5. SMA_LONG          종가 < SMA150 또는 종가 < SMA200 (strong)
+  5. 장기이평 이탈     거래량 동반 하락 시 — 종가<SMA200→청산(strong), 종가<SMA100→비중축소(medium)
 
 매핑:
   - 강(strong) 신호 1개 → 청산
@@ -71,8 +71,8 @@ def evaluate_exit(
             )
 
     # ── 신호 2: SMA_SHORT (단기이평) ─────────────────────────────────────────
-    sma20 = _get_ma(df, "SMA20", last)
-    sma50 = _get_ma(df, "SMA50", last)
+    sma20 = _get_ma(df, "SMA_20", last)
+    sma50 = _get_ma(df, "SMA_50", last)
     short_parts = []
     if sma20 is not None and close < sma20:
         short_parts.append(f"종가<SMA20({sma20:.2f})")
@@ -110,22 +110,45 @@ def evaluate_exit(
             )
         )
 
-    # ── 신호 5: SMA_LONG (장기이평) ──────────────────────────────────────────
-    sma150 = _get_ma(df, "SMA150", last)
-    sma200 = _get_ma(df, "SMA200", last)
-    long_parts = []
-    if sma150 is not None and close < sma150:
-        long_parts.append(f"종가<SMA150({sma150:.2f})")
-    if sma200 is not None and close < sma200:
-        long_parts.append(f"종가<SMA200({sma200:.2f})")
-    if long_parts:
-        signals.append(
-            ExitSignal(
-                code="SMA_LONG",
-                severity="strong",
-                detail=" | ".join(long_parts),
+    # ── 신호 5: 장기 이평 이탈 (거래량 동반 하락 시만) ──────────────────────────
+    # 종가<SMA200 → 청산(strong), 종가<SMA100 → 비중축소(medium).
+    # 평균 거래량(Vol_SMA_20)의 1.2배 이상을 동반한 하락(음봉)일 때만 유효.
+    sma100 = _get_ma(df, "SMA_100", last)
+    sma200 = _get_ma(df, "SMA_200", last)
+    vol_avg = _get_ma(df, "Vol_SMA_20", last)
+    last_volume = last.get("Volume")
+    volume = (
+        float(last_volume)
+        if "Volume" in df.columns and last_volume is not None and not pd.isna(last_volume)
+        else None
+    )
+    prev_close = float(df["Close"].iloc[-2]) if len(df) >= 2 else None
+    is_down_day = prev_close is not None and close < prev_close
+    volume_confirmed = (
+        volume is not None
+        and vol_avg is not None
+        and vol_avg > 0
+        and volume >= vol_avg * 1.2
+        and is_down_day
+    )
+    if volume_confirmed:
+        vol_mult = volume / vol_avg
+        if sma200 is not None and close < sma200:
+            signals.append(
+                ExitSignal(
+                    code="SMA_200_BREAK",
+                    severity="strong",
+                    detail=f"종가<SMA200({sma200:.2f}) + 거래량 {vol_mult:.1f}배 하락 → 청산",
+                )
             )
-        )
+        elif sma100 is not None and close < sma100:
+            signals.append(
+                ExitSignal(
+                    code="SMA_100_BREAK",
+                    severity="medium",
+                    detail=f"종가<SMA100({sma100:.2f}) + 거래량 {vol_mult:.1f}배 하락 → 비중축소",
+                )
+            )
 
     # ── current_r 계산 ────────────────────────────────────────────────────────
     current_r: float | None = None

@@ -40,7 +40,7 @@ def _holding(signals, action="hold", current_r=None):
 def test_holding_routes_exit_and_keeps_canslim_m():
     from src.pipelines.debate.ledger import build_evidence_ledger
 
-    signals = [ExitSignal(code="SMA_LONG", severity="strong", detail="종가<SMA200")]
+    signals = [ExitSignal(code="SMA_200_BREAK", severity="strong", detail="종가<SMA200")]
     ledger = build_evidence_ledger(
         criteria_verdict=_holding(signals, action="liquidate"),
         factor_assessments=[],
@@ -49,8 +49,8 @@ def test_holding_routes_exit_and_keeps_canslim_m():
         mode="holding",
     )
     keys = {e.key for e in ledger.bull + ledger.bear}
-    assert "exit_SMA_LONG" in keys
+    assert "exit_SMA_200_BREAK" in keys
     assert "canslim_M" in keys  # holding은 게이트 없으니 M 유지
     assert "canslim_L" not in keys  # L은 항상 제외
     assert not any(k.startswith("gate_") for k in keys)
-    assert next(e for e in ledger.bear if e.key == "exit_SMA_LONG").weight == 5.0
+    assert next(e for e in ledger.bear if e.key == "exit_SMA_200_BREAK").weight == 5.0

@@ -48,6 +48,7 @@ def test_extended_indicators(sample_df):
     calculator = IndicatorCalculator()
     result_df = calculator.calculate(sample_df)
 
+    assert "SMA_100" in result_df.columns
     assert "SMA_150" in result_df.columns
     assert "cRSI" in result_df.columns
     assert "cRSI_HighBand" in result_df.columns
