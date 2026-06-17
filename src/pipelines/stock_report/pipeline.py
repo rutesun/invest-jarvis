@@ -24,9 +24,17 @@ from src.pipelines.stock_report.db import (
     resolve_db_dsn,
 )
 from src.pipelines.stock_report.normalize import normalize_messages, persist_normalized_messages
-from src.pipelines.stock_report.render_markdown import render_stock_report_markdown
-from src.pipelines.stock_report.retrieval import load_same_day_bundle
-from src.pipelines.stock_report.synthesize import synthesize_same_day_bundle
+from src.pipelines.stock_report.render_markdown import (
+    parse_referenced_from_markdown,
+    render_stock_report_markdown,
+)
+from src.pipelines.stock_report.retrieval import SameDayBundle, load_same_day_bundle
+from src.pipelines.stock_report.synthesize import (
+    ReportEvidenceRef,
+    _evidence_refs,
+    _sanitize_chunk_ids,
+    synthesize_daily,
+)
 from src.pipelines.stock_report.taxonomy import load_taxonomy_registry
 from src.pipelines.stock_report.telegram_ingest import TelegramIngestStats, ingest_telegram_raw_csvs
 
@@ -54,6 +62,113 @@ class DailyV2RunResult:
     output_markdown: str
     preview_canonical_summaries: list[str]
     migrations_applied: list[str]
+    google_grounding_markdown: str | None = None
+
+
+@dataclass(slots=True)
+class GoogleGroundingOnlyResult:
+    date: str
+    google_grounding_markdown: str
+    category_bucket_count: int
+    theme_bucket_count: int
+    focus_ticker_count: int
+    chunk_count: int
+    model: str
+
+
+@traceable(name="Stock Report Daily V2 - Google Grounding Only")
+def run_google_grounding_only(
+    date: str,
+    dsn: str | None = None,
+) -> GoogleGroundingOnlyResult:
+    """DB에 저장된 knowledge_chunks를 읽어 Google Search Grounding 리포트만 생성한다."""
+    date = _validate_date(date)
+    run_tree = get_current_run_tree()
+    if run_tree:
+        run_tree.name = f"Stock Report Google Grounding Only - {date}"
+
+    from src.pipelines.stock_report.config import get_google_grounding_config
+    from src.pipelines.stock_report.google_grounding import synthesize_with_google_grounding
+    from src.pipelines.stock_report.render_markdown import render_google_grounded_report
+
+    gg_config = get_google_grounding_config()
+    resolved_dsn = resolve_db_dsn(dsn)
+
+    logger.info(
+        "google-grounding-only started: date=%s model=%s",
+        date,
+        gg_config.model,
+    )
+
+    with connect_db(resolved_dsn) as conn:
+        same_day_bundle = _stage_load_same_day_bundle(conn, date)
+
+        logger.info(
+            "google-grounding-only bundle loaded: date=%s chunks=%d categories=%d tickers=%d",
+            date,
+            len(same_day_bundle.chunks),
+            len(same_day_bundle.category_buckets),
+            len(same_day_bundle.focus_ticker_buckets),
+        )
+
+        if not same_day_bundle.chunks:
+            raise ValueError(
+                f"DB에 {date} 날짜의 knowledge_chunks가 없습니다. "
+                "먼저 'jarvis report daily-v2'를 실행해 데이터를 생성하세요."
+            )
+
+        grounded_artifact = synthesize_with_google_grounding(
+            same_day_bundle, api_key=gg_config.api_key, model=gg_config.model
+        )
+        google_markdown = render_google_grounded_report(grounded_artifact)
+
+        # Parse chunk refs from the LLM's raw output only — not the full rendered markdown,
+        # which includes the citation footer whose numeric indices could be misread as chunk ids.
+        evidence_refs = _grounding_evidence_refs(
+            grounded_artifact.synthesis_markdown, same_day_bundle
+        )
+        report_run_id = persist_report_artifact(
+            conn,
+            report_date=same_day_bundle.report_date,
+            provider=_GROUNDING_PROVIDER,
+            output_markdown=google_markdown,
+            evidence_refs=evidence_refs,
+        )
+
+    logger.info(
+        "google-grounding-only completed: date=%s report_run_id=%s citations=%d queries=%d "
+        "evidence_refs=%d chars=%d",
+        date,
+        report_run_id,
+        len(grounded_artifact.citations),
+        len(grounded_artifact.search_queries),
+        len(evidence_refs),
+        len(google_markdown),
+    )
+
+    return GoogleGroundingOnlyResult(
+        date=date,
+        google_grounding_markdown=google_markdown,
+        category_bucket_count=len(same_day_bundle.category_buckets),
+        theme_bucket_count=sum(len(b.theme_buckets) for b in same_day_bundle.category_buckets),
+        focus_ticker_count=len(same_day_bundle.focus_ticker_buckets),
+        chunk_count=len(same_day_bundle.chunks),
+        model=grounded_artifact.model,
+    )
+
+
+_GROUNDING_PROVIDER = "google_grounding"
+
+
+def _grounding_evidence_refs(markdown: str, bundle: SameDayBundle) -> list[ReportEvidenceRef]:
+    """Project chunk-id references found in the rendered grounding report into evidence
+    refs, keeping only ids present in the bundle (a single 'google_grounding' section)."""
+    chunk_index = {chunk.id: chunk for chunk in bundle.chunks}
+    clean_ids = _sanitize_chunk_ids(
+        sorted(parse_referenced_from_markdown(markdown)), set(chunk_index)
+    )
+    chunks = [chunk_index[cid] for cid in clean_ids]
+    return _evidence_refs(section_key=_GROUNDING_PROVIDER, item_key="report", chunks=chunks)
 
 
 def _validate_date(date: str) -> str:
@@ -190,7 +305,7 @@ def _stage_load_same_day_bundle(conn, date: str):
 
 @traceable(name="Stock Report Daily V2 - Local Evidence Synthesis")
 def _stage_local_evidence_synthesis(bundle, *, provider: str):
-    return synthesize_same_day_bundle(bundle, provider=provider)
+    return synthesize_daily(bundle, provider=provider)
 
 
 @traceable(
@@ -200,6 +315,15 @@ def _stage_local_evidence_synthesis(bundle, *, provider: str):
 )
 def _stage_render_markdown(report_artifact):
     return render_stock_report_markdown(report_artifact)
+
+
+@traceable(name="Stock Report Daily V2 - Google Grounding Synthesis")
+def _stage_google_grounding(bundle, *, api_key: str | None, model: str | None) -> str:
+    from src.pipelines.stock_report.google_grounding import synthesize_with_google_grounding
+    from src.pipelines.stock_report.render_markdown import render_google_grounded_report
+
+    artifact = synthesize_with_google_grounding(bundle, api_key=api_key, model=model)
+    return render_google_grounded_report(artifact)
 
 
 @traceable(
@@ -236,6 +360,7 @@ def run_daily_v2(
     config_path: str = "config.yaml",
     taxonomy_path: str = "config/stock_report_vocabulary.yaml",
     preview_limit: int = 12,
+    google_grounding: bool = False,
 ) -> DailyV2RunResult:
     date = _validate_date(date)
     run_tree = get_current_run_tree()
@@ -288,6 +413,17 @@ def run_daily_v2(
         same_day_bundle = _stage_load_same_day_bundle(conn, date)
         report_artifact = _stage_local_evidence_synthesis(same_day_bundle, provider=provider)
         output_markdown = _stage_render_markdown(report_artifact)
+        google_grounding_markdown: str | None = None
+        if google_grounding:
+            from src.pipelines.stock_report.config import get_google_grounding_config
+
+            gg_config = get_google_grounding_config()
+            try:
+                google_grounding_markdown = _stage_google_grounding(
+                    same_day_bundle, api_key=gg_config.api_key, model=gg_config.model
+                )
+            except Exception:
+                logger.exception("google grounding synthesis failed, skipping: date=%s", date)
         report_run_id = _stage_persist_report(
             conn,
             report_date=report_artifact.report_date,
@@ -354,6 +490,7 @@ def run_daily_v2(
         output_markdown=output_markdown,
         preview_canonical_summaries=preview_canonical_summaries,
         migrations_applied=migrations_applied,
+        google_grounding_markdown=google_grounding_markdown,
     )
 
 

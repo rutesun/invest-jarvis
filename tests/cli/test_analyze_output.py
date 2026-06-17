@@ -405,3 +405,251 @@ def test_format_deep_dive_output_shows_na_for_missing_fundamental_metrics():
     assert "Sector/Industry**: N/A / N/A" in output
     assert "**시가총액**: N/A" in output
     assert "**ROE**: N/A" in output
+
+
+def test_format_deep_dive_output_renders_playbook_section_with_gate_pass():
+    """playbook_verdict가 있으면 플레이북 평가 섹션이 렌더돼야 한다 (게이트 통과)."""
+    from src.tools.playbook.models import (
+        CanslimResult,
+        ElementVerdict,
+        GateCheck,
+        GateResult,
+        MarketRegimeResult,
+        PlaybookVerdict,
+        PositionPlan,
+        RelativeStrengthResult,
+    )
+
+    snapshot = IndicatorSnapshot(price=178.50, change_pct=2.5)
+    technical = TechnicalResult(
+        ticker="AAPL",
+        timestamp=datetime.now(),
+        snapshot=snapshot,
+        indicators=snapshot,
+        components={},
+        total_score=75,
+        strategies=[],
+        overall_assessment="매수",
+        confidence_score=75.0,
+        key_insights=[],
+        warnings=[],
+    )
+
+    verdict = PlaybookVerdict(
+        ticker="AAPL",
+        holding=False,
+        market_regime=MarketRegimeResult(
+            regime="상승", allow_new_buy=True, index_symbol="SPY", detail="SPY > SMA150"
+        ),
+        relative_strength=RelativeStrengthResult(
+            mansfield_rs=5.0,
+            outperform_6m=10.0,
+            rp_slope_4w=0.5,
+            index_symbol="SPY",
+        ),
+        sector_strength=None,
+        canslim=CanslimResult(
+            c=ElementVerdict(met=True, detail="EPS +25%"),
+            a=ElementVerdict(met=True, detail="연간 EPS 성장"),
+            n=ElementVerdict(met=True, detail="52주 신고가"),
+            s=ElementVerdict(met=None, detail="데이터 없음"),
+            l=ElementVerdict(met=True, detail="RS 상위"),
+            i=ElementVerdict(met=None, detail="업종 데이터 없음"),
+            m=ElementVerdict(met=True, detail="시장 상승"),
+        ),
+        gate=GateResult(
+            passed=True,
+            checklist=[
+                GateCheck(name="시장환경(A)", required=True, met=True, reason="SPY 상승추세"),
+                GateCheck(name="Stage2(B)", required=True, met=True, reason="Stage2 확인"),
+                GateCheck(name="업종강도(C)", required=False, met=None, reason="데이터 없음"),
+                GateCheck(name="수급(E)", required=False, met=None, reason="해당없음"),
+            ],
+            quality_grade="B",
+            veto_reason=None,
+        ),
+        position_plan=PositionPlan(
+            entry=178.50,
+            stop=170.0,
+            stop_basis="-8%",
+            per_share_risk=8.5,
+            shares=100,
+            position_value=17850.0,
+            weight_pct=2.0,
+            r_targets={"+2R": 195.5, "+3R": 204.0},
+            capital_mode="absolute",
+            error=None,
+        ),
+        exit_verdict=None,
+        headline="AAPL: 매수 적격 (grade=B) — 100주 @ 178.50, stop=170.00",
+    )
+
+    result = {
+        "ticker": "AAPL",
+        "technical": technical,
+        "technical_summary": type(
+            "TechSummary",
+            (),
+            {
+                "summary": "강세",
+                "key_insights": [],
+                "recommendation": "매수",
+                "confidence": 0.75,
+                "rationale": "좋음",
+            },
+        )(),
+        "decision_summary": AnalyzeDecisionSummary(
+            leader="technical",
+            core_variables=["가격 모멘텀"],
+            action="매수",
+            timing="조정_대기",
+            action_sentence="눌림 후 접근",
+        ),
+        "factor_assessments": [],
+        "scenarios": [],
+        "playbook_verdict": verdict,
+    }
+
+    output = format_deep_dive_output(result)
+
+    assert "📋 플레이북 평가" in output
+    assert "매수 적격" in output
+    assert "시장환경(A)" in output
+    assert "C✅" in verdict.canslim.summary  # canslim summary 검증
+    assert "100주" in output  # position plan
+    assert "178.50" in output  # entry price
+    assert "170.0" in output  # stop price
+    # CAN SLIM 7요소 상세 지표(detail) 출력
+    assert "EPS +25%" in output  # C detail
+    assert "RS 상위" in output  # L detail
+    assert "시장 상승" in output  # M detail
+
+
+def test_format_deep_dive_output_renders_playbook_section_with_gate_fail():
+    """gate FAIL이면 부적격 + veto_reason이 출력돼야 한다."""
+    from src.tools.playbook.models import (
+        GateCheck,
+        GateResult,
+        MarketRegimeResult,
+        PlaybookVerdict,
+        RelativeStrengthResult,
+    )
+
+    snapshot = IndicatorSnapshot(price=50.0, change_pct=-1.5)
+    technical = TechnicalResult(
+        ticker="XYZ",
+        timestamp=datetime.now(),
+        snapshot=snapshot,
+        indicators=snapshot,
+        components={},
+        total_score=20,
+        strategies=[],
+        overall_assessment="관망",
+        confidence_score=30.0,
+        key_insights=[],
+        warnings=[],
+    )
+
+    verdict = PlaybookVerdict(
+        ticker="XYZ",
+        holding=False,
+        market_regime=MarketRegimeResult(regime="하락", allow_new_buy=False, index_symbol="SPY"),
+        relative_strength=RelativeStrengthResult(
+            mansfield_rs=-2.0,
+            outperform_6m=-5.0,
+            rp_slope_4w=-0.3,
+            index_symbol="SPY",
+        ),
+        sector_strength=None,
+        canslim=None,
+        gate=GateResult(
+            passed=False,
+            checklist=[
+                GateCheck(name="시장환경(A)", required=True, met=False, reason="SPY 하락추세"),
+            ],
+            quality_grade=None,
+            veto_reason="시장 환경 불량: 하락 국면",
+        ),
+        position_plan=None,
+        exit_verdict=None,
+        headline="XYZ: 매수 거부 — 시장 환경 불량: 하락 국면",
+    )
+
+    result = {
+        "ticker": "XYZ",
+        "technical": technical,
+        "technical_summary": type(
+            "TechSummary",
+            (),
+            {
+                "summary": "약세",
+                "key_insights": [],
+                "recommendation": "관망",
+                "confidence": 0.3,
+                "rationale": "약세",
+            },
+        )(),
+        "decision_summary": AnalyzeDecisionSummary(
+            leader="technical",
+            core_variables=["추세 약화"],
+            action="관망",
+            timing="보류",
+            action_sentence="관망",
+        ),
+        "factor_assessments": [],
+        "scenarios": [],
+        "playbook_verdict": verdict,
+    }
+
+    output = format_deep_dive_output(result)
+
+    assert "📋 플레이북 평가" in output
+    assert "매수 부적격" in output
+    assert "시장 환경 불량" in output
+
+
+def test_format_deep_dive_output_no_playbook_section_when_verdict_is_none():
+    """playbook_verdict=None이면 플레이북 섹션이 없어야 한다."""
+    snapshot = IndicatorSnapshot(price=100.0, change_pct=0.5)
+    technical = TechnicalResult(
+        ticker="AAPL",
+        timestamp=datetime.now(),
+        snapshot=snapshot,
+        indicators=snapshot,
+        components={},
+        total_score=75,
+        strategies=[],
+        overall_assessment="매수",
+        confidence_score=75.0,
+        key_insights=[],
+        warnings=[],
+    )
+
+    result = {
+        "ticker": "AAPL",
+        "technical": technical,
+        "technical_summary": type(
+            "TechSummary",
+            (),
+            {
+                "summary": "강세",
+                "key_insights": [],
+                "recommendation": "매수",
+                "confidence": 0.75,
+                "rationale": "좋음",
+            },
+        )(),
+        "decision_summary": AnalyzeDecisionSummary(
+            leader="technical",
+            core_variables=["가격 모멘텀"],
+            action="매수",
+            timing="조정_대기",
+            action_sentence="눌림 후 접근",
+        ),
+        "factor_assessments": [],
+        "scenarios": [],
+        "playbook_verdict": None,
+    }
+
+    output = format_deep_dive_output(result)
+    assert "📋 플레이북 평가" not in output

@@ -10,6 +10,13 @@ from src.core.interfaces import BaseProvider
 from src.providers.kis_models import KISToken
 
 
+# KIS FID_ORG_ADJ_PRC: "0" = 수정주가(split/dividend adjusted), "1" = 원주가(unadjusted).
+# Confirmed via Task 1 live call: 005930 had a 50:1 split in May 2018.
+# "0" returns split-adjusted closes (pre-split ~48 500 KRW, post-split ~52 000 KRW — continuous).
+# "1" returns raw/unadjusted closes (pre-split ~2 400 000 KRW, post-split ~52 000 — chart distortion).
+ADJUSTED = "0"
+
+
 class KISProvider(BaseProvider):
     """한국투자증권 API provider for Korean stocks."""
 
@@ -157,12 +164,19 @@ class KISProvider(BaseProvider):
             "change_pct": float(output["prdy_ctrt"]),
             "volume": int(output["acml_vol"]),
             "name": output.get("hts_kor_isnm", ""),
+            # 업종명 (한글) — Task 3b: 업종지수 코드와 다른 체계.
+            # bstp_kor_isnm='전기·전자' → sector_code='0013' 변환에는 KOSPI_SECTOR_CODE 매핑 필요.
+            "bstp_kor_isnm": output.get("bstp_kor_isnm", ""),
         }
 
-    async def get_price_history(self, ticker: str, period: str = "1y") -> pd.DataFrame:
+    async def get_price_history(
+        self, ticker: str, period: str = "1y", _org_adj_prc: str = ADJUSTED
+    ) -> pd.DataFrame:
         """Get historical price data for Korean stock.
 
         KIS API는 한 번에 100일만 반환하므로, 필요시 여러 번 호출해서 병합합니다.
+
+        _org_adj_prc: ADJUSTED(수정주가) or "0"(원주가). Use the module constant ADJUSTED.
         """
         period_days_map = {
             "1mo": 30,
@@ -203,7 +217,7 @@ class KISProvider(BaseProvider):
                 "FID_INPUT_DATE_1": batch_start.strftime("%Y%m%d"),
                 "FID_INPUT_DATE_2": batch_end.strftime("%Y%m%d"),
                 "FID_PERIOD_DIV_CODE": "D",
-                "FID_ORG_ADJ_PRC": "0",
+                "FID_ORG_ADJ_PRC": _org_adj_prc,
             }
 
             async with httpx.AsyncClient(timeout=30.0) as client:
@@ -551,8 +565,13 @@ class KISProvider(BaseProvider):
             )
         return results
 
-    async def _get_finance_data(self, path: str, tr_id: str, ticker: str) -> list[dict]:
-        """Get domestic stock finance data from KIS API."""
+    async def _get_finance_data(
+        self, path: str, tr_id: str, ticker: str, div_cls_code: str = "0"
+    ) -> list[dict]:
+        """Get domestic stock finance data from KIS API.
+
+        div_cls_code: "0"=연간, "1"=분기 (confirmed via Task 1 live call).
+        """
         token = await self._get_access_token()
         url = f"{self.BASE_URL}{path}"
         headers = {
@@ -563,7 +582,7 @@ class KISProvider(BaseProvider):
             "Content-Type": "application/json; charset=utf-8",
         }
         params = {
-            "FID_DIV_CLS_CODE": "0",
+            "FID_DIV_CLS_CODE": div_cls_code,
             "FID_COND_MRKT_DIV_CODE": "J",
             "FID_INPUT_ISCD": ticker.replace(".KS", "").replace(".KQ", ""),
         }
@@ -575,37 +594,106 @@ class KISProvider(BaseProvider):
 
         return data.get("output", [])
 
-    async def get_financial_ratio(self, ticker: str) -> list[dict]:
+    async def get_financial_ratio(self, ticker: str, div_cls_code: str = "0") -> list[dict]:
         return await self._get_finance_data(
             path="/uapi/domestic-stock/v1/finance/financial-ratio",
             tr_id="FHKST66430100",
             ticker=ticker,
+            div_cls_code=div_cls_code,
         )
 
-    async def get_balance_sheet(self, ticker: str) -> list[dict]:
+    async def get_balance_sheet(self, ticker: str, div_cls_code: str = "0") -> list[dict]:
         return await self._get_finance_data(
             path="/uapi/domestic-stock/v1/finance/balance-sheet",
             tr_id="FHKST66430200",
             ticker=ticker,
+            div_cls_code=div_cls_code,
         )
 
-    async def get_profit_ratio(self, ticker: str) -> list[dict]:
+    async def get_profit_ratio(self, ticker: str, div_cls_code: str = "0") -> list[dict]:
         return await self._get_finance_data(
             path="/uapi/domestic-stock/v1/finance/profit-ratio",
             tr_id="FHKST66430300",
             ticker=ticker,
+            div_cls_code=div_cls_code,
         )
 
-    async def get_income_statement(self, ticker: str) -> list[dict]:
+    async def get_income_statement(self, ticker: str, div_cls_code: str = "0") -> list[dict]:
         return await self._get_finance_data(
             path="/uapi/domestic-stock/v1/finance/income-statement",
             tr_id="FHKST66430400",
             ticker=ticker,
+            div_cls_code=div_cls_code,
         )
 
-    async def get_other_major_ratios(self, ticker: str) -> list[dict]:
+    async def get_other_major_ratios(self, ticker: str, div_cls_code: str = "0") -> list[dict]:
         return await self._get_finance_data(
             path="/uapi/domestic-stock/v1/finance/other-major-ratios",
             tr_id="FHKST66430500",
             ticker=ticker,
+            div_cls_code=div_cls_code,
         )
+
+    async def get_growth_ratio(self, ticker: str, div_cls_code: str = "0") -> list[dict]:
+        """성장성비율 (매출/영업이익/순이익 증가율).
+
+        EPS증가율은 응답에 없을 수 있음 — Task 1 실호출 검증 결과 참조.
+        tr_id FHKST66430800 confirmed via Task 1 live call.
+        """
+        return await self._get_finance_data(
+            path="/uapi/domestic-stock/v1/finance/growth-ratio",
+            tr_id="FHKST66430800",
+            ticker=ticker,
+            div_cls_code=div_cls_code,
+        )
+
+    async def get_sector_index_history(self, sector_code: str, period: str = "1y") -> pd.DataFrame:
+        """국내 업종지수 일별 OHLCV. sector_code 예: '0001'(코스피종합).
+
+        inquire-daily-indexchartprice (tr FHKUP03500100, FID_COND_MRKT_DIV_CODE='U').
+        Plan 5 실호출 검증 — bstp_nmix_oprc/hgpr/lwpr/prpr 필드 사용.
+        """
+        token = await self._get_access_token()
+        url = f"{self.BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-daily-indexchartprice"
+        headers = {
+            "Authorization": f"{token.token_type} {token.access_token}",
+            "appkey": self.app_key,
+            "appsecret": self.app_secret,
+            "tr_id": "FHKUP03500100",
+            "Content-Type": "application/json; charset=utf-8",
+        }
+        days_map = {"1mo": 30, "3mo": 90, "6mo": 180, "1y": 365, "2y": 730}
+        days = days_map.get(period, 365)
+        end = datetime.now()
+        start = end - timedelta(days=days)
+        params = {
+            "FID_COND_MRKT_DIV_CODE": "U",
+            "FID_INPUT_ISCD": sector_code,
+            "FID_INPUT_DATE_1": start.strftime("%Y%m%d"),
+            "FID_INPUT_DATE_2": end.strftime("%Y%m%d"),
+            "FID_PERIOD_DIV_CODE": "D",
+        }
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            r = await client.get(url, headers=headers, params=params)
+            r.raise_for_status()
+            data = r.json()
+
+        rows = []
+        for it in data.get("output2", []):
+            if not it.get("stck_bsop_date"):
+                continue
+            rows.append(
+                {
+                    "Date": pd.to_datetime(it["stck_bsop_date"]),
+                    "Open": float(it.get("bstp_nmix_oprc") or 0),
+                    "High": float(it.get("bstp_nmix_hgpr") or 0),
+                    "Low": float(it.get("bstp_nmix_lwpr") or 0),
+                    "Close": float(it.get("bstp_nmix_prpr") or 0),
+                    "Volume": int(it.get("acml_vol") or 0),
+                }
+            )
+        df = pd.DataFrame(rows)
+        if not df.empty:
+            df = df.drop_duplicates("Date").set_index("Date").sort_index()
+            df.index = df.index.tz_localize("Asia/Seoul")
+        return df

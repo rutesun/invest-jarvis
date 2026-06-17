@@ -86,6 +86,9 @@ class FundamentalSummaryInput(BaseModel):
     profit_margin: float | None = None
     dividend_yield: float | None = None
     payout_ratio: float | None = None
+    # CAN SLIM C·A EPS growth
+    eps_growth_quarterly: float | None = None  # most recent quarter YoY
+    eps_cagr_annual: float | None = None  # annual EPS CAGR (last 3y)
 
 
 class FundamentalSummaryOutput(BaseModel):

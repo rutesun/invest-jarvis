@@ -1,16 +1,36 @@
 from __future__ import annotations
 
 import json
-from collections import defaultdict
 from textwrap import dedent
 from typing import Any
 
 from src.pipelines.stock_report.models import NormalizedMessage
-from src.pipelines.stock_report.retrieval import SameDayBundle, SameDayChunk, TickerBucket
+from src.pipelines.stock_report.retrieval import (
+    CategoryBucket,
+    TickerBucket,
+)
 
 
-FOCUS_TICKER_DETAILED_BUCKET_LIMIT = 10
-FOCUS_TICKER_COMPACT_SUMMARY_LIMIT = 3
+# Canonical event_type taxonomy — single source of truth. The prose enumeration inside
+# SEMANTIC_EXTRACTION_SYSTEM_PROMPT must mirror this set (guarded by a test that asserts
+# every member appears in the prompt). Downstream consumers (e.g. the event safety net)
+# import this rather than re-hardcoding the literals, so a rename fails fast instead of
+# silently degrading.
+CANONICAL_EVENT_TYPES: frozenset[str] = frozenset(
+    {
+        "자본조달",
+        "수주/계약",
+        "실적",
+        "정책",
+        "인증/승인",
+        "M&A",
+        "출시/제품",
+        "가격/마진",
+        "통계/지표",
+        "해석/전망",
+        "공지",
+    }
+)
 
 
 SEMANTIC_EXTRACTION_SYSTEM_PROMPT = dedent(
@@ -118,207 +138,346 @@ def build_semantic_extraction_user_prompt(
     ).strip()
 
 
-REPORT_SYNTHESIS_SYSTEM_PROMPT = dedent(
+# ---------------------------------------------------------------------------
+# T09-F: per-category / per-ticker synthesis prompts
+# ---------------------------------------------------------------------------
+
+CATEGORY_SYNTHESIS_SYSTEM_PROMPT = dedent(
     """
-    당신은 한국/미국 주식 데일리 리포트 합성기다.
+    당신은 단일 카테고리 evidence bucket을 투자 요약 카드로 합성하는 분석기다.
 
     핵심 원칙:
-    - 제공된 evidence packet과 schema만 사용해 합성한다.
-    - 외부 검색/브라우징/추가 소스 탐색은 금지한다(local mode).
-    - 사실을 추측하거나 새로 만들지 않는다.
-    - 모든 주장/요약은 반드시 evidence_chunk_ids로 근거를 연결한다.
-    - evidence_chunk_ids에는 packet에 포함된 chunk id만 사용한다.
-    - unsupported 근거가 많으면 과감히 항목 수를 줄인다.
-    - low confidence 항목은 호출자가 별도로 처리하므로 출력하지 않는다.
+    - 제공된 evidence chunk만 사용한다. 외부 지식/검색/추론 금지.
+    - 모든 주장은 반드시 evidence_chunk_ids로 근거를 연결한다.
+    - evidence_chunk_ids에는 패킷에 포함된 chunk_id 정수만 사용한다. 문자열 id 금지.
+    - 수치(%, 금액, 성장률, 기간)는 원문에 있는 것만 쓴다. 창작 금지.
+    - 구체 사실(숫자/급등락/사건명)을 보존한다. 압축하더라도 수치는 남긴다.
+    - 하락·급락·실적 부진·소송·규제 같은 부정적/리스크 이벤트도 반드시 포함한다. 호재만 골라 담지 마라. 한 chunk 안에 상승·하락이 섞여 있으면 양쪽 다 반영한다.
+    - M&A·IPO·대형 자본조달(증자·인수·펀드 결성)은 시장 영향이 크므로 우선 포함한다.
+    - 인용한 chunk의 핵심 수치(목표주가, 계약규모, 등락률 등)는 본문에 실제로 반영한다. 출처만 달고 내용을 빠뜨리지 마라.
+    - unsupported 내용은 과감히 제거한다.
+    - 맞춤법을 정확히 지킨다.
+    """
+).strip()
+
+TICKER_SYNTHESIS_SYSTEM_PROMPT = dedent(
+    """
+    당신은 단일 종목 evidence bucket을 투자 요약 카드로 합성하는 분석기다.
+
+    핵심 원칙:
+    - 제공된 evidence chunk만 사용한다. 외부 지식/검색/추론 금지.
+    - 모든 주장은 반드시 evidence_chunk_ids로 근거를 연결한다.
+    - evidence_chunk_ids에는 패킷에 포함된 chunk_id 정수만 사용한다. 문자열 id 금지.
+    - 수치(%, 금액, 성장률, 기간)는 원문에 있는 것만 쓴다. 창작 금지.
+    - 구체 사실(숫자/급등락/사건명)을 보존한다. 압축하더라도 수치는 남긴다.
+    - 하락·급락·실적 부진·소송·규제 같은 부정적/리스크 이벤트도 반드시 포함한다. 호재만 골라 담지 마라. 한 chunk 안에 상승·하락이 섞여 있으면 양쪽 다 반영한다.
+    - M&A·IPO·대형 자본조달(증자·인수·펀드 결성)은 시장 영향이 크므로 우선 포함한다.
+    - 인용한 chunk의 핵심 수치(목표주가, 계약규모, 등락률 등)는 본문에 실제로 반영한다. 출처만 달고 내용을 빠뜨리지 마라.
+    - unsupported 내용은 과감히 제거한다.
     """
 ).strip()
 
 
-def _build_chunk_packet(bundle: SameDayBundle) -> list[dict[str, object]]:
-    packet: list[dict[str, object]] = []
-    for chunk in bundle.chunks:
-        evidence_excerpt = [
-            item.get("text", "").strip()
+def _build_category_chunk_entries(bucket: CategoryBucket) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+    for chunk in bucket.chunks:
+        evidence_items = [
+            {"kind": str(item.get("kind") or "fact"), "text": str(item.get("text", "")).strip()}
             for item in chunk.evidence_items
-            if isinstance(item, dict) and item.get("text")
+            if isinstance(item, dict) and str(item.get("text", "")).strip()
         ]
-        packet.append(
+        entries.append(
             {
                 "chunk_id": chunk.id,
-                "category": chunk.display_category,
-                "theme": chunk.display_theme,
-                "tickers": chunk.ticker_tags,
+                "message_type": chunk.message_type,
+                "priority_score": chunk.priority_score,
+                "tickers": list(chunk.ticker_tags),
                 "canonical_summary": chunk.canonical_summary,
-                "supporting_facts": chunk.supporting_facts[:3],
-                "evidence_items_excerpt": evidence_excerpt[:4],
+                "supporting_facts": list(chunk.supporting_facts),
+                "evidence_items": evidence_items,
                 "source": f"{chunk.channel_name or chunk.channel_key or 'unknown'}#{chunk.channel_message_id or '-'}",
             }
         )
-    return packet
+    return entries
 
 
-def _dedupe_texts(values: list[str]) -> list[str]:
-    deduped: list[str] = []
-    seen: set[str] = set()
-    for value in values:
-        text = " ".join(value.strip().split())
-        if not text or text in seen:
-            continue
-        seen.add(text)
-        deduped.append(text)
-    return deduped
-
-
-def _evidence_items_for_chunk(chunk: SameDayChunk) -> list[dict[str, str]]:
-    items: list[dict[str, str]] = []
-    for item in chunk.evidence_items:
-        if not isinstance(item, dict):
-            continue
-        text = str(item.get("text", "")).strip()
-        if not text:
-            continue
-        kind = str(item.get("kind") or "fact").strip() or "fact"
-        items.append({"kind": kind, "text": text})
-    return items
-
-
-def _evidence_by_kind(chunks: list[SameDayChunk]) -> dict[str, list[str]]:
-    grouped: dict[str, list[str]] = defaultdict(list)
-    for chunk in chunks:
-        for item in _evidence_items_for_chunk(chunk):
-            grouped[item["kind"]].append(item["text"])
-    return {kind: _dedupe_texts(values) for kind, values in sorted(grouped.items())}
-
-
-def _source_for_chunk(chunk: SameDayChunk) -> str:
-    return (
-        f"{chunk.channel_name or chunk.channel_key or 'unknown'}#{chunk.channel_message_id or '-'}"
-    )
-
-
-def _ticker_detail_level(bucket: TickerBucket) -> str:
-    evidence_count = sum(len(_evidence_items_for_chunk(chunk)) for chunk in bucket.chunks)
-    fact_count = sum(len(chunk.supporting_facts) for chunk in bucket.chunks)
-    if len(bucket.chunks) >= 2 or evidence_count + fact_count >= 8:
-        return "deep"
-    return "brief"
-
-
-def _build_detailed_focus_ticker_bucket(bucket: TickerBucket) -> dict[str, Any]:
-    supporting_facts = _dedupe_texts(
-        [fact for chunk in bucket.chunks for fact in chunk.supporting_facts]
-    )
-    return {
-        "ticker": bucket.ticker,
-        "detail_level": _ticker_detail_level(bucket),
-        "chunk_count": len(bucket.chunks),
-        "evidence_item_count": sum(
-            len(_evidence_items_for_chunk(chunk)) for chunk in bucket.chunks
-        ),
-        "categories": sorted({chunk.display_category for chunk in bucket.chunks}),
-        "themes": sorted({theme for chunk in bucket.chunks if (theme := chunk.display_theme)}),
-        "source_chunks": [
+def _build_ticker_chunk_entries(bucket: TickerBucket) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+    for chunk in bucket.chunks:
+        evidence_items = [
+            {"kind": str(item.get("kind") or "fact"), "text": str(item.get("text", "")).strip()}
+            for item in chunk.evidence_items
+            if isinstance(item, dict) and str(item.get("text", "")).strip()
+        ]
+        entries.append(
             {
                 "chunk_id": chunk.id,
-                "canonical_summary": chunk.canonical_summary,
                 "category": chunk.display_category,
                 "theme": chunk.display_theme,
-                "source": _source_for_chunk(chunk),
+                "message_type": chunk.message_type,
+                "priority_score": chunk.priority_score,
+                "canonical_summary": chunk.canonical_summary,
+                "supporting_facts": list(chunk.supporting_facts),
+                "evidence_items": evidence_items,
+                "source": f"{chunk.channel_name or chunk.channel_key or 'unknown'}#{chunk.channel_message_id or '-'}",
             }
-            for chunk in bucket.chunks
-        ],
-        "supporting_facts": supporting_facts,
-        "evidence_by_kind": _evidence_by_kind(bucket.chunks),
-    }
+        )
+    return entries
 
 
-def _build_compact_focus_ticker_bucket(bucket: TickerBucket) -> dict[str, Any]:
-    return {
-        "ticker": bucket.ticker,
-        "detail_level": _ticker_detail_level(bucket),
-        "chunk_count": len(bucket.chunks),
-        "categories": sorted({chunk.display_category for chunk in bucket.chunks}),
-        "themes": sorted({theme for chunk in bucket.chunks if (theme := chunk.display_theme)}),
-        "chunk_ids": [chunk.id for chunk in bucket.chunks],
-        "top_summaries": [
-            chunk.canonical_summary
-            for chunk in bucket.chunks[:FOCUS_TICKER_COMPACT_SUMMARY_LIMIT]
-            if chunk.canonical_summary
-        ],
-    }
+# Token budget: approximate character limit per category prompt (~12000 tokens ≈ 48000 chars).
+# We use a char count proxy because the actual tokenizer is not available here.
+CATEGORY_CONTEXT_BUDGET_CHARS = 48_000
+# Minimum evidence_items to keep per chunk even when trimming
+_MIN_EVIDENCE_ITEMS_PER_CHUNK = 1
 
 
-def _build_focus_ticker_packet(bundle: SameDayBundle) -> dict[str, Any]:
-    detailed_buckets: list[dict[str, Any]] = []
-    compact_buckets: list[dict[str, Any]] = []
-    for index, bucket in enumerate(bundle.focus_ticker_buckets):
-        if index >= FOCUS_TICKER_DETAILED_BUCKET_LIMIT:
-            compact_buckets.append(_build_compact_focus_ticker_bucket(bucket))
-            continue
-        detailed_buckets.append(_build_detailed_focus_ticker_bucket(bucket))
-    return {
-        "detailed_buckets": detailed_buckets,
-        "compact_buckets": compact_buckets,
-        "detailed_bucket_limit": FOCUS_TICKER_DETAILED_BUCKET_LIMIT,
-    }
+def _trim_entries_to_budget(
+    entries: list[dict[str, Any]],
+    budget_chars: int,
+) -> list[dict[str, Any]]:
+    """Progressively trim supporting_facts and evidence_items on low-priority chunks
+    until the serialized JSON fits within budget_chars.
+
+    Priority order for trimming (lowest priority first):
+    1. Reduce evidence_items on low priority_score chunks first
+    2. Reduce supporting_facts on low priority_score chunks
+    3. Sub-batch: drop entire low-priority chunks if still over budget
+
+    Returns a new list (entries themselves are not mutated).
+    """
+    import copy
+
+    working = copy.deepcopy(entries)
+    # Sort ascending by priority_score so we trim the least important first
+    indexed = sorted(enumerate(working), key=lambda x: (x[1].get("priority_score", 0.0), x[0]))
+
+    def _serialized_len() -> int:
+        return len(json.dumps(working, ensure_ascii=False))
+
+    # Pass 1: trim evidence_items progressively from least-priority chunks
+    for orig_idx, _entry in indexed:
+        if _serialized_len() <= budget_chars:
+            break
+        items = working[orig_idx].get("evidence_items", [])
+        while len(items) > _MIN_EVIDENCE_ITEMS_PER_CHUNK and _serialized_len() > budget_chars:
+            items.pop()
+        working[orig_idx]["evidence_items"] = items
+
+    # Pass 2: trim supporting_facts progressively
+    for orig_idx, _entry in indexed:
+        if _serialized_len() <= budget_chars:
+            break
+        facts = working[orig_idx].get("supporting_facts", [])
+        while facts and _serialized_len() > budget_chars:
+            facts.pop()
+        working[orig_idx]["supporting_facts"] = facts
+
+    # Pass 3: drop entire chunks (sub-batch) if still over budget.
+    # Walk indexed ascending (lowest priority first) and drop by object identity.
+    # Each iteration rebuilds `working` without the target entry so that
+    # _serialized_len() stays accurate and index positions never shift.
+    for _orig_idx, target in indexed:  # ascending = lowest priority first
+        if _serialized_len() <= budget_chars:
+            break
+        if len(working) <= 1:
+            break
+        working = [e for e in working if e is not target]
+
+    return working
 
 
-def _build_synthesis_packet(bundle: SameDayBundle) -> dict[str, object]:
-    return {
-        "chunks": _build_chunk_packet(bundle),
-        "focus_ticker_packet": _build_focus_ticker_packet(bundle),
-    }
-
-
-def build_report_synthesis_user_prompt(bundle: SameDayBundle) -> str:
-    packet = _build_synthesis_packet(bundle)
-    packet_json = json.dumps(packet, ensure_ascii=False, indent=2)
+def build_category_synthesis_prompt(bucket: CategoryBucket) -> str:
+    entries = _build_category_chunk_entries(bucket)
+    entries = _trim_entries_to_budget(entries, CATEGORY_CONTEXT_BUDGET_CHARS)
+    packet_json = json.dumps(entries, ensure_ascii=False, indent=2)
     return dedent(
         f"""
-        report_date: {bundle.report_date.isoformat()}
+        category: {bucket.category_key}
+        chunk_count: {len(bucket.chunks)}
 
-        아래 evidence packet을 사용해 구조화된 리포트를 생성하라.
-        출력 schema:
-        - pulse: 3~5개 (title, body, evidence_chunk_ids, priority_score)
-        - category_summaries: 투자 내러티브 카드 배열
-          (category_key, title, evidence_bullets, impact, related_stocks[name,ticker,catalyst],
-           evidence_chunk_ids, priority_score)
-        - core_themes: 핵심 상위 내러티브 카드 배열
-          (key, title, thesis, evidence_bullets, impact, watch_points,
-           related_categories, related_stocks[name,ticker,catalyst], evidence_chunk_ids, priority_score)
-        - focus_tickers: 핵심 종목 카드 배열
-          (key, title, investment_case, catalysts, evidence_bullets,
-           key_metrics, risks_or_watch_points, related_themes, evidence_chunk_ids, priority_score)
+        아래 evidence chunks를 사용해 이 카테고리의 투자 요약 카드를 생성하라.
+
+        출력 schema (JSON):
+        {{
+          "category_key": "{bucket.category_key}",
+          "title": "카테고리 핵심 내러티브 제목 (20자 이내)",
+          "narrative": "이 카테고리의 핵심 투자 내러티브 (1~3문장, 구체 사실/수치 포함)",
+          "evidence_bullets": ["원문 기반 핵심 근거 bullet (3~8개)", ...],
+          "impact": "수혜/피해 범위, 밸류체인, 수급/실적 경로 (1~2문장)",
+          "related_stocks": [{{"name": "...", "ticker": "...", "catalyst": "..."}}],
+          "evidence_chunk_ids": [chunk_id 정수 배열 — 이 카드에 근거가 된 chunk id만],
+          "priority_score": 0.0~1.0 (시장 영향도·반복 근거·수혜 명확성·당일성 기준)
+        }}
 
         작성 규칙:
-        - 카드는 자르지 말고 evidence packet에서 의미 있는 투자 내러티브를 모두 보여준다.
-        - 모든 카드 배열은 priority_score가 높은 순서로 작성한다.
-        - priority_score는 0.0~1.0 사이 숫자이며, 시장 영향도·반복 근거 수·수혜 종목 명확성·당일성으로 판단한다.
-        - 서로 다른 category에 있어도 같은 투자 논리와 수혜 구조면 하나의 카드로 병합한다.
-        - 비슷해 보여도 수혜 구조나 리스크가 다르면 별도 카드로 유지한다.
-        - pulse는 가능하면 서로 다른 category/theme에서 고른다.
-        - 같은 category/theme를 pulse에 2개 이상 넣는 것은 해당 축이 당일 시장을 압도할 때만 허용한다.
-        - Core Themes는 상위 카테고리 반복 요약이 아니라 여러 chunk/category/ticker를 관통하는
-          핵심 투자 내러티브를 뽑는다.
-        - Core Themes는 최소 2개 이상의 category 또는 3개 이상의 chunk를 연결할 때만 만든다.
-        - Core Themes는 예를 들어 `AI 데이터센터 투자 확대 -> 전력/반도체/부품 수요 확산`처럼
-          원인, 수혜 경로, 연결 섹터가 보이는 경우를 우선한다.
-        - Core Themes가 category_summaries와 같은 말이면 만들지 말고, 더 상위의 연결 논리로 재작성한다.
-        - Core Themes의 thesis는 `왜 이 테마가 당일 투자적으로 중요한지`를 한 문장으로 쓴다.
-        - Core Themes의 evidence_bullets는 서로 다른 chunk/category에서 가져온 근거 3~6개를 우선한다.
-        - Core Themes의 impact는 수혜 범위, 밸류체인 확산, 수급/실적 경로를 설명한다.
-        - Core Themes의 watch_points는 이 논리가 약해지는 조건이나 확인할 변수 2~5개를 쓴다.
-        - Focus Tickers는 단순 1문단 요약이 아니라 해당 종목을 왜 오늘 봐야 하는지 설명한다.
-        - Focus Tickers는 `focus_ticker_packet`을 우선 사용하고, `detail_level=deep`인 종목은
-          중요한 수치·논리·리스크를 과도하게 압축하지 않는다.
-        - Focus Tickers의 investment_case는 `이 종목의 당일 투자 포인트`를 한 문장으로 쓴다.
-        - Focus Tickers의 catalysts는 주가/관심을 움직일 촉매를 쓴다. deep 종목은 4~8개까지 허용한다.
-        - Focus Tickers의 key_metrics는 수치가 있는 핵심 근거만 분리해 쓴다.
-        - Focus Tickers의 evidence_bullets는 원문 기반 핵심 근거를 보존한다. deep 종목은 8~15개까지 허용한다.
-        - Focus Tickers의 risks_or_watch_points는 이 종목 논리가 약해지는 조건이나 확인 변수를 쓴다.
-        - Focus Tickers의 related_themes는 이 종목이 연결되는 테마를 1~5개 쓴다.
+        - evidence_chunk_ids에는 아래 패킷에 있는 chunk_id 정수만 사용한다.
+        - 수치 창작 금지 — 원문에 있는 수치만 쓴다.
+        - 구체 사실(숫자/급등락/사건명)을 보존한다.
+        - 카드는 반드시 1개만 출력한다 (배열 아님).
 
-        evidence packet(JSON):
+        evidence chunks (JSON):
         {packet_json}
+        """
+    ).strip()
+
+
+def build_ticker_synthesis_prompt(bucket: TickerBucket) -> str:
+    entries = _build_ticker_chunk_entries(bucket)
+    entries = _trim_entries_to_budget(entries, CATEGORY_CONTEXT_BUDGET_CHARS)
+    packet_json = json.dumps(entries, ensure_ascii=False, indent=2)
+    return dedent(
+        f"""
+        ticker: {bucket.ticker}
+        chunk_count: {len(bucket.chunks)}
+
+        아래 evidence chunks를 사용해 이 종목의 투자 요약 카드를 생성하라.
+
+        출력 schema (JSON):
+        {{
+          "ticker": "{bucket.ticker}",
+          "investment_case": "당일 투자 포인트 (1문장, 구체 사실/수치 포함)",
+          "catalysts": ["주가/관심을 움직일 촉매 (3~8개)", ...],
+          "key_metrics": ["수치가 있는 핵심 근거만 (있으면)", ...],
+          "risks": ["투자 논리가 약해지는 조건/확인 변수", ...],
+          "evidence_chunk_ids": [chunk_id 정수 배열 — 이 카드에 근거가 된 chunk id만]
+        }}
+
+        작성 규칙:
+        - evidence_chunk_ids에는 아래 패킷에 있는 chunk_id 정수만 사용한다.
+        - 수치 창작 금지 — 원문에 있는 수치만 쓴다.
+        - 구체 사실(숫자/급등락/사건명)을 보존한다.
+        - 카드는 반드시 1개만 출력한다 (배열 아님).
+
+        evidence chunks (JSON):
+        {packet_json}
+        """
+    ).strip()
+
+
+# ---------------------------------------------------------------------------
+# T09-G: overview (reduce) synthesis prompts
+# ---------------------------------------------------------------------------
+
+OVERVIEW_SYNTHESIS_SYSTEM_PROMPT = dedent(
+    """
+    당신은 per-category/per-ticker 요약 카드들을 받아 당일 시장 전체 관점의 Pulse와 Core Themes를 합성하는 reduce 분석기다.
+
+    핵심 원칙:
+    - 입력은 이미 합성된 카드 요약이다. 외부 지식/검색/추론 금지.
+    - 모든 주장은 source_card_indices로 어느 카드에서 나왔는지 연결한다.
+    - Pulse는 단순 뉴스 나열이 아니라 **투자 인사이트**다. 3~5개, 서로 다른 카드에서 선택한다.
+      각 항목은 "무슨 일이 있었나(핵심 신호+수치)"에서 멈추지 말고, **그래서 투자적으로 무엇을
+      의미하는가**를 제시한다: 방향성, 수급/자금 흐름, 밸류에이션/멀티플, 포지셔닝(무엇이 수혜/피해),
+      주목해야 할 포인트 중 해당되는 것을 카드 근거로 묶어 말한다. 카드에 없는 추측·수치는 금지.
+    - Core Themes는 반드시 2개 이상의 서로 다른 카테고리 카드를 연결하는 상위 투자 내러티브만 만든다.
+      단일 카테고리의 내용만 반복하는 테마는 금지.
+    - 카드의 구체 사실(숫자/사건명/급등락)을 그대로 인용해 cross-category 연결 논리를 만든다.
+    - 수치 창작 금지 — 카드에 있는 수치만 사용한다.
+    - source_card_indices는 0-based 정수 배열. 입력 카드 배열의 인덱스다.
+    """
+).strip()
+
+
+def _build_category_card_entry(card: Any, idx: int) -> dict[str, Any]:
+    """Serialize a CategorySummaryCard into a compact JSON-serializable dict."""
+    return {
+        "card_index": idx,
+        "card_type": "category",
+        "category_key": getattr(card, "category_key", ""),
+        "title": getattr(card, "title", ""),
+        "narrative": getattr(card, "narrative", ""),
+        "evidence_bullets": list(getattr(card, "evidence_bullets", []))[:6],
+        "impact": getattr(card, "impact", ""),
+        "related_stocks": [
+            {
+                "name": str(s.get("name", "") if isinstance(s, dict) else getattr(s, "name", "")),
+                "ticker": s.get("ticker") if isinstance(s, dict) else getattr(s, "ticker", None),
+            }
+            for s in list(getattr(card, "related_stocks", []))[:5]
+        ],
+        "priority_score": float(getattr(card, "priority_score", 0.0)),
+        "evidence_chunk_ids": list(getattr(card, "evidence_chunk_ids", [])),
+    }
+
+
+def _build_ticker_card_entry(card: Any, idx: int) -> dict[str, Any]:
+    """Serialize a TickerCard into a compact JSON-serializable dict."""
+    return {
+        "card_index": idx,
+        "card_type": "ticker",
+        "ticker": getattr(card, "ticker", ""),
+        "investment_case": getattr(card, "investment_case", ""),
+        "catalysts": list(getattr(card, "catalysts", []))[:5],
+        "key_metrics": list(getattr(card, "key_metrics", []))[:5],
+        "risks": list(getattr(card, "risks", []))[:3],
+        "evidence_chunk_ids": list(getattr(card, "evidence_chunk_ids", [])),
+    }
+
+
+def build_overview_prompt(
+    category_cards: list[Any],
+    ticker_cards: list[Any],
+) -> str:
+    """Build the reduce-step user prompt from CategorySummaryCard / TickerCard lists.
+
+    Inputs are already-synthesized card summaries, not raw chunks.
+    The LLM must reference source_card_indices (0-based index into the combined
+    card array) for each Pulse item and Core Theme.
+    """
+    combined_cards: list[dict[str, Any]] = []
+    for idx, card in enumerate(category_cards):
+        combined_cards.append(_build_category_card_entry(card, idx))
+    ticker_offset = len(category_cards)
+    for rel_idx, card in enumerate(ticker_cards):
+        combined_cards.append(_build_ticker_card_entry(card, ticker_offset + rel_idx))
+
+    cards_json = json.dumps(combined_cards, ensure_ascii=False, indent=2)
+    cat_count = len(category_cards)
+    ticker_count = len(ticker_cards)
+    return dedent(
+        f"""
+        category_card_count: {cat_count}
+        ticker_card_count: {ticker_count}
+
+        아래 per-category/per-ticker 요약 카드 배열을 사용해 Pulse와 Core Themes를 합성하라.
+
+        출력 schema (JSON):
+        {{
+          "pulse": [
+            {{
+              "key": "pulse-1",
+              "title": "방향성 있는 신호 제목 (20자 이내)",
+              "body": "핵심 신호와 수치를 담되, 단순 사건 요약에서 멈추지 말고 그 신호의 투자 함의(방향성/수급/밸류에이션/포지셔닝/주목 포인트)를 1~2문장으로 제시. 투자자가 어떻게 읽어야 하는지가 보여야 한다.",
+              "source_card_indices": [0-based card_index 정수 배열],
+              "priority_score": 0.0~1.0
+            }},
+            ...
+          ],
+          "core_themes": [
+            {{
+              "key": "theme-1",
+              "title": "테마 제목 (20자 이내)",
+              "thesis": "왜 이 테마가 당일 투자적으로 중요한지 (1문장, 카드 수치 인용)",
+              "connected_categories": ["연결된 category_key 배열 (2개 이상 필수)"],
+              "impact": "수혜 범위/밸류체인/수급 경로 (1~2문장)",
+              "watch_points": ["이 논리가 약해지는 조건 (2~4개)"],
+              "source_card_indices": [0-based card_index 정수 배열],
+              "priority_score": 0.0~1.0
+            }},
+            ...
+          ]
+        }}
+
+        작성 규칙:
+        - pulse: 3~5개, 서로 다른 카드에서 선택. 당일 가장 중요한 신호 우선.
+        - core_themes: connected_categories에 2개 이상 서로 다른 category_key가 있어야 만든다.
+          단일 카테고리 요약은 core_themes에 넣지 않는다.
+        - source_card_indices는 입력 배열의 card_index 정수만 사용한다.
+        - 카드에 없는 수치/사실 창작 금지.
+        - JSON만 출력한다.
+
+        cards (JSON):
+        {cards_json}
         """
     ).strip()

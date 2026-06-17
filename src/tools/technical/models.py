@@ -359,7 +359,6 @@ class TechnicalResult(BaseModel):
                     "MACD",
                     "cRSI",
                     "Vol_SMA_",
-                    "Is_Stage2",
                     "BB_",
                     "ADX",
                     "ATR",
