@@ -16,6 +16,7 @@ def detect_vcp_breakout(df: pd.DataFrame) -> VcpResult:
       - in_vcp=True, breakout=False: 수축만 확인, 돌파 아직
       - in_vcp=False, breakout=False: 수축 없음
     """
+    df = df[df["Close"].notna()]  # 당일 미완성 봉(trailing NaN) 제거 — 돌파 판정 무력화 방지
     vcp = _detect_vcp(df)
     in_vcp = bool(vcp.get("signals"))
 

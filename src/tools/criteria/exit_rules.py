@@ -34,6 +34,11 @@ def evaluate_exit(
 ) -> ExitVerdict:
     """보유 종목 매도 판정. 순수 함수 — I/O 없음."""
     signals: list[ExitSignal] = []
+    df = df[df["Close"].notna()]  # 당일 미완성 봉(trailing NaN) 제거 — 매도 신호 무음화 방지
+    if df.empty:
+        return ExitVerdict(
+            action="hold", signals=[], current_r=None, trailing_stop=None, detail="유효 종가 없음"
+        )
     last = df.iloc[-1]
     close = float(last["Close"])
 

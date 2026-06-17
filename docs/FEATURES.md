@@ -593,6 +593,7 @@ Summary / CAN SLIM / Stage 2 / 모멘텀 / Event / 구조레벨 / 원시데이�
 
 **버그 수정 (실데이터 검증):**
 - **2026-06-17: RSI 다이버전스 방향 정정 (Critical)** — `detect_rsi_divergence`가 고점(`_find_peaks`)만 보고 "가격 고점↓ + RSI 고점↑"(정통 분류상 hidden bearish = 하락 지속)을 `bullish`로 오라벨하던 버그. 사용자에게 하락 신호를 상승으로 표시했다. `_find_troughs` 추가 → bullish는 저점끼리(가격 저점↓+RSI 저점↑), bearish는 고점끼리 비교하도록 분리. `dropna`로 trailing NaN 가드 동시 적용, detail 문구도 실제 본 데이터(고점/저점)와 일치. 회귀 테스트 3종 추가.
+- **2026-06-17: 당일 미완성 봉(trailing NaN) 가드 확대 (Critical/High)** — NaN은 어떤 비교든 False라 신호를 조용히 무음화한다(`close > pivot`·`close < sma` → 항상 False). `last_valid_close` 공통 헬퍼(`src/tools/technical/df_guards.py`) 도입 후 소비처 전반에 가드: `criteria/engine.py`(진입가 NaN → 포지션 플랜 전체 오염), `criteria/vcp.py`(돌파 미탐지), `criteria/exit_rules.py`(손절 신호 무음화), `technical/components/chart_patterns.py` 디스패처(8개 패턴 함수 일괄). 회귀 테스트 추가.
 - **2026-06-16: 당일 미완성 봉(트레일링 NaN) NaN 전파 수정** — 미국장 개장/마감 시점에 데이터 마지막 행 Close가 NaN으로 들어와 발생.
   - `events.py` `detect_price_events`: 마지막 유효 봉 기준으로 보도록 `df["Close"].notna()` 필터 추가. NaN last_close가 `+nan%`를 만들고 신고가/스윙로우 사건 감지를 조용히 무력화하던 문제 해소.
   - `chart_patterns.py` `detect_bullish_flag`·`detect_bearish_flag`: `prices`를 `df["Close"].dropna()`로 — `Flag 조정 nan%/day` 및 NaN 기울기가 검증(`>0.1`)을 우회해 생기던 flag 오탐 제거.

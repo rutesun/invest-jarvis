@@ -40,6 +40,7 @@ from src.tools.criteria.sizing import plan_position
 from src.tools.criteria.vcp import detect_vcp_breakout
 from src.tools.disclosure import is_korean_ticker
 from src.tools.technical.components.minervini import STAGE2_CONDITION_LABELS
+from src.tools.technical.df_guards import last_valid_close
 
 
 logger = logging.getLogger(__name__)
@@ -153,8 +154,8 @@ class CriteriaEngine:
             )
 
             position_plan = None
-            if gate_result.passed:
-                entry = float(stock_df["Close"].iloc[-1])
+            entry = last_valid_close(stock_df)  # 당일 미완성 봉(trailing NaN) 가드
+            if gate_result.passed and entry is not None:
                 atr_stop = _extract_atr_stop(stock_df, entry)
                 invalidation_low = _extract_invalidation_low(zone_set, entry)
 
@@ -166,6 +167,8 @@ class CriteriaEngine:
                     capital=capital,
                     risk_pct=risk_pct,
                 )
+            elif gate_result.passed:
+                logger.warning("Close all-NaN for %s; skip position plan", ticker)
 
             exit_verdict = None
             headline = _build_gate_headline(ticker, gate_result, position_plan)

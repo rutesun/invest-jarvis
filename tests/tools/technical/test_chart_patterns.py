@@ -789,3 +789,31 @@ def test_bullish_flag_handles_trailing_nan_close():
 
     assert "nan" not in result.description.lower()
     assert not np.isnan(result.current_price)
+
+
+def test_detect_chart_patterns_ignores_trailing_nan():
+    """디스패처: 당일 미완성 봉(Close=NaN)이 있어도 모든 패턴의 current_price가 NaN이 아니다."""
+    import math
+
+    import numpy as np
+
+    from src.tools.technical.components.chart_patterns import detect_chart_patterns
+
+    n = 120
+    close = np.linspace(100.0, 130.0, n)
+    df = pd.DataFrame(
+        {
+            "Open": close - 0.5,
+            "High": close + 1.0,
+            "Low": close - 1.0,
+            "Close": close,
+            "Volume": [1e6] * n,
+        },
+        index=pd.date_range("2024-01-01", periods=n, freq="B"),
+    )
+    next_day = df.index[-1] + pd.offsets.BDay(1)
+    df.loc[next_day] = {c: float("nan") for c in df.columns}  # 당일 미완성 봉
+
+    patterns = detect_chart_patterns(df)
+    for name, res in patterns.items():
+        assert not math.isnan(res.current_price), f"{name}: current_price가 NaN으로 오염됨"

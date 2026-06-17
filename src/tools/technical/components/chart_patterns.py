@@ -1049,6 +1049,11 @@ def detect_chart_patterns(
 ) -> dict[str, ChartPatternResult]:
     """모든 차트 패턴 감지 통합 함수"""
 
+    if "Close" in df.columns:
+        df = df[
+            df["Close"].notna()
+        ]  # 당일 미완성 봉(trailing NaN) 제거 — current_price/지표 오염 방지
+
     patterns = {
         "cup_and_handle": detect_cup_and_handle(df),
         "double_bottom": detect_double_bottom(df),

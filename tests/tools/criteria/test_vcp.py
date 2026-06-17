@@ -110,3 +110,12 @@ def test_detail_not_empty():
     df = _base_df(60)
     r = detect_vcp_breakout(df)
     assert r.detail != ""
+
+
+def test_breakout_survives_trailing_nan_bar():
+    """당일 미완성 봉(Close=NaN)이 끝에 붙어도 직전 돌파봉 기준으로 breakout=True."""
+    df = _make_breakout_df()
+    next_day = df.index[-1] + pd.offsets.BDay(1)
+    df.loc[next_day] = {col: float("nan") for col in df.columns}
+    r = detect_vcp_breakout(df)
+    assert r.breakout is True, f"trailing NaN이 돌파 판정을 무력화하면 안 됨, detail={r.detail}"

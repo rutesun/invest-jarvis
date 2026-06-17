@@ -135,6 +135,29 @@ def test_exit_sma_short_below_sma20():
     assert short_sig.severity == "medium"
 
 
+def test_exit_uses_last_valid_close_when_trailing_nan():
+    """당일 미완성 봉(Close=NaN)이 끝에 붙어도 직전 유효 종가로 매도 신호를 판정한다."""
+    from src.tools.criteria.exit_rules import evaluate_exit
+
+    df = _make_df(n=60, close_last=80.0)
+    df["SMA20"] = 95.0  # 직전 유효 close(80) < SMA20(95) → SMA_SHORT
+    df["SMA50"] = 100.0
+    df["SMA150"] = 70.0
+    df["SMA200"] = 70.0
+    next_day = df.index[-1] + pd.offsets.BDay(1)
+    df.loc[next_day] = {c: float("nan") for c in df.columns}  # 당일 미완성 봉
+
+    result = evaluate_exit(
+        df=df,
+        snapshot=_snapshot(80.0),
+        relative_strength=_rs(True),
+        accumulation=_acc(0.8),
+        holding=_holding(avg=90.0),
+    )
+    codes = {s.code for s in result.signals}
+    assert "SMA_SHORT" in codes, f"trailing NaN이 매도 신호를 무력화하면 안 됨, signals={codes}"
+
+
 # ---------------------------------------------------------------------------
 # 신호 3: DISTRIBUTION — 분산 우세
 # ---------------------------------------------------------------------------
