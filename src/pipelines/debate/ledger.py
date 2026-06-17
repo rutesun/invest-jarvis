@@ -111,15 +111,20 @@ def build_evidence_ledger(
                 ),
             )
 
-    # flow 행 (factor_flow 제외, 이 행만)
+    # flow 행 (factor_flow 제외, 이 행만): 매수 우세 → bull, 동시 매도 → bear(분산)
     if flow is not None:
         foreign = getattr(flow, "foreign_direction_5d", "N/A")
         inst = getattr(flow, "institution_direction_5d", "N/A")
+        flow_side = None
         if foreign == "매수" or inst == "매수":
+            flow_side = "bull"
+        elif foreign == "매도" and inst == "매도":
+            flow_side = "bear"
+        if flow_side is not None:
             _add(
                 buckets,
                 Evidence(
-                    side="bull",
+                    side=flow_side,
                     key="flow",
                     weight=2.0,
                     headline="수급",

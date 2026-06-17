@@ -135,7 +135,7 @@ def test_rs_magnitude_zero_not_added():
 
 
 # ---------------------------------------------------------------------------
-# 4. flow 양방향 — 외인만 매수 → bull, 기관만 매수 → bull, 둘 다 매도 → 없음
+# 4. flow 양방향 — 외인/기관 매수 → bull, 둘 다 매도 → bear(분산), 혼조/N/A → 없음
 # ---------------------------------------------------------------------------
 
 
@@ -158,6 +158,19 @@ def test_flow_routing(foreign, inst, expect_flow_bull):
     )
     has_flow = any(e.key == "flow" for e in ledger.bull)
     assert has_flow is expect_flow_bull
+
+
+def test_flow_both_selling_routes_to_bear():
+    """외인·기관 동시 매도 → bear 증거(분산). 약세 신호가 토론에서 누락되면 안 됨."""
+    ledger = build_evidence_ledger(
+        criteria_verdict=None,
+        factor_assessments=[],
+        snapshot=None,
+        flow=_FakeFlow(foreign="매도", inst="매도"),
+        mode="entry",
+    )
+    assert any(e.key == "flow" for e in ledger.bear)
+    assert not any(e.key == "flow" for e in ledger.bull)
 
 
 # ---------------------------------------------------------------------------
