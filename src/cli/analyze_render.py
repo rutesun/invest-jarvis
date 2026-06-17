@@ -500,6 +500,16 @@ def _format_criteria_section(verdict) -> str:
 # ---------------------------------------------------------------------------
 
 
+_CRITERIA_CAPTIONS: dict[str, str] = {
+    "A": "시장국면",
+    "B": "Stage2",
+    "C": "RS강세",
+    "E": "VCP돌파",
+    "D": "CANSLIM",
+    "I": "기관매집",
+}
+
+
 def _format_summary_section(
     *,
     checks,
@@ -517,11 +527,12 @@ def _format_summary_section(
     required = [c for c in (checks or []) if c.required]
     if required:
         sym = {True: "✅", False: "❌", None: "—"}
-        gate_parts = [f"{c.name}{sym[c.met]}" for c in required]
+        gate_parts = [f"{_CRITERIA_CAPTIONS.get(c.name, c.name)}{sym[c.met]}" for c in required]
         grade = f" · 등급 {quality_grade}" if quality_grade else ""
         lines.append(f"**핵심 기준**: {' '.join(gate_parts)}{grade}")
         for c in required:
-            lines.append(f"- {c.name}: {c.reason}")
+            caption = _CRITERIA_CAPTIONS.get(c.name, c.name)
+            lines.append(f"- {caption}: {c.reason}")
         lines.append("")
     metrics = []
     if relative_strength is not None:

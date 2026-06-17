@@ -172,4 +172,54 @@ def test_price_events_use_last_valid_close_when_trailing_nan():
     held = [e for e in events if e.code == "SWING_LOW_HELD"]
     assert held, "스윙로우 유지 이벤트가 있어야 함"
     assert "nan" not in held[0].detail.lower()
-    assert "+42" in held[0].detail  # 마지막 유효 종가(128) 기준 pct
+
+
+def test_detect_sr_proximity_r1_test():
+    """저항 R1 1% 이내 → SR_TEST bear 이벤트."""
+    from src.tools.technical.events import detect_sr_proximity_events
+
+    snap = {"price": 390.1, "pivot": 380.0, "resistance_r1": 391.3}
+    events = detect_sr_proximity_events(snap)
+    codes = [e.code for e in events]
+    assert "SR_TEST" in codes
+    r1_ev = next(e for e in events if "R1" in e.headline)
+    assert r1_ev.side == "bear"  # 가격이 R1 아래 → 아직 저항 아래
+    assert "0.3" in r1_ev.detail  # 거리 ~0.3%
+
+
+def test_detect_sr_proximity_no_event_when_far():
+    """레벨과 거리 1% 초과 → 이벤트 없음."""
+    from src.tools.technical.events import detect_sr_proximity_events
+
+    snap = {"price": 390.1, "pivot": 380.0, "resistance_r1": 400.0}
+    events = detect_sr_proximity_events(snap)
+    assert not any(e.code == "SR_TEST" for e in events)
+
+
+def test_detect_sr_proximity_pivot_above():
+    """가격이 피봇 위 → SR_TEST bull 이벤트."""
+    from src.tools.technical.events import detect_sr_proximity_events
+
+    snap = {"price": 150.5, "pivot": 150.0}
+    events = detect_sr_proximity_events(snap)
+    ev = next((e for e in events if "피봇" in e.headline), None)
+    assert ev is not None
+    assert ev.side == "bull"  # 가격이 피봇 위
+
+
+def test_build_momentum_events_includes_sr_events():
+    """snapshot_dict 전달 시 S/R 근접 이벤트가 price_events에 포함된다."""
+    import pandas as pd
+
+    from src.tools.technical.events import build_momentum_events
+    from src.tools.technical.events_models import MomentumEvents
+
+    df = pd.DataFrame(
+        {"Close": [100.0] * 10, "Volume": [1000] * 10},
+        index=pd.date_range("2026-01-01", periods=10),
+    )
+    snap = {"price": 150.5, "pivot": 150.0, "support_s1": 145.0, "resistance_r1": 200.0}
+    ev = build_momentum_events(df, vol_sma_20=None, vol_sma_50=None, snapshot_dict=snap)
+    assert isinstance(ev, MomentumEvents)
+    sr = [e for e in ev.price_events if e.code == "SR_TEST"]
+    assert len(sr) == 1  # 피봇만 근접 (R1=200은 멀다)

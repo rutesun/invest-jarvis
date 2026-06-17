@@ -586,6 +586,11 @@ Summary / CAN SLIM / Stage 2 / 모멘텀 / Event / 구조레벨 / 원시데이�
 - **Stage 2 섹션 보강**: SMA150/200에 기울기 표기(`%/4주`, 미너비니가 계산하는 21일 추세 `sma_150_slope`/`sma_200_slope` 재사용), 비정배열 시 깨진 쌍 명시(예: `비정배열 (SMA150<SMA200)`). "비정배열이지만 정배열 임박"처럼 방향성까지 읽힘.
 - **Summary 체크리스트 복원**: 렌더가 제거된 `criteria_verdict.gate`를 참조해 항상 비어 있던 것을 `checks`/`quality_grade`로 재배선 — Summary의 핵심 기준(A·B·C·E pass/fail + 사유)과 Stage2 "판정" 줄이 정상 출력됨.
 
+**UI 개선 (2026-06-17):**
+- **핵심 기준 캡션**: Summary 섹션 체크리스트가 `A✅ B❌`처럼 코드 문자 대신 `시장국면✅ Stage2❌ RS강세✅ VCP돌파❌`로 의미있는 한글 캡션 표시. `_CRITERIA_CAPTIONS` dict를 `analyze_render.py`에 추가. 기준 사유 행도 `- Stage2: is_stage2=0.0 (6/7)` 형식으로 동기화.
+- **업종강세 라벨 방향 수정**: FMP `rank_pct`에서 0=최강/1=최약인데 `상위{rank_pct:.0%}` 표기가 `rank_pct=0.98` → `상위98%`처럼 약세를 강세 표현으로 오표기하던 버그 수정. 이제 `rank_pct ≤ 0.5`이면 `상위X%`, 초과이면 `하위{1-rank_pct:.0%}` 표시 — `rank_pct=0.98 → 하위2%`.
+- **S/R 근접 이벤트 감지**: `detect_sr_proximity_events(snapshot_dict, threshold_pct=1.0)` 추가 — 현재가와 피봇/지지S1/저항R1 거리가 1% 이내이면 `SR_TEST` PriceEvent 생성(`피봇 테스트 중 (위, 거리 0.3%)`). `build_momentum_events`에 `snapshot_dict` 파라미터 추가, `deep_dive.py`에서 `snapshot.model_dump()` 전달.
+
 **버그 수정 (실데이터 검증):**
 - **2026-06-16: 당일 미완성 봉(트레일링 NaN) NaN 전파 수정** — 미국장 개장/마감 시점에 데이터 마지막 행 Close가 NaN으로 들어와 발생.
   - `events.py` `detect_price_events`: 마지막 유효 봉 기준으로 보도록 `df["Close"].notna()` 필터 추가. NaN last_close가 `+nan%`를 만들고 신고가/스윙로우 사건 감지를 조용히 무력화하던 문제 해소.

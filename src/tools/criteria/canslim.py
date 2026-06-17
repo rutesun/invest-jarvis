@@ -141,7 +141,9 @@ def _judge_l(sector_strength, relative_strength) -> ElementVerdict:  # noqa: E74
         if industry:
             sec_extras.append(industry)
         if rank_pct is not None:
-            sec_extras.append(f"상위{rank_pct:.0%}")
+            pct_label = "상위" if rank_pct <= 0.5 else "하위"
+            pct_display = rank_pct if rank_pct <= 0.5 else (1 - rank_pct)
+            sec_extras.append(f"{pct_label}{pct_display:.0%}")
         if sec_extras:
             sec_detail += f"({', '.join(sec_extras)})"
 

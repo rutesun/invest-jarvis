@@ -39,8 +39,8 @@ def test_format_summary_section():
         perf_1y=45.0,
     )
     assert "Summary" in out
-    assert "핵심 기준" in out and "A✅" in out and "B❌" in out  # 체크리스트 렌더
-    assert "B: is_stage2=0.0 (6/7)" in out  # 부연 사유
+    assert "핵심 기준" in out and "시장국면✅" in out and "Stage2❌" in out  # 체크리스트 렌더
+    assert "Stage2: is_stage2=0.0 (6/7)" in out  # 부연 사유
     assert "2.1" in out
     assert "-3.2%" in out or "-3.24%" in out
     assert "18" in out

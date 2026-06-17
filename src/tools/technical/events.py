@@ -178,15 +178,55 @@ def detect_rsi_divergence(df: pd.DataFrame, window: int = 20) -> RsiDivergence |
     return None
 
 
+_SR_PROXIMITY_PCT = 1.0  # within 1% triggers "테스트 중" event
+
+
+def detect_sr_proximity_events(
+    snapshot_dict: dict, *, threshold_pct: float = _SR_PROXIMITY_PCT
+) -> list[PriceEvent]:
+    """피봇/지지/저항 근접 이벤트. 현재가가 threshold_pct% 이내면 '테스트 중' 사건 생성."""
+    events: list[PriceEvent] = []
+    price = snapshot_dict.get("price")
+    if price is None or price <= 0:
+        return events
+
+    levels = [
+        ("피봇", snapshot_dict.get("pivot")),
+        ("지지 S1", snapshot_dict.get("support_s1")),
+        ("저항 R1", snapshot_dict.get("resistance_r1")),
+    ]
+    for label, level in levels:
+        if level is None or level <= 0:
+            continue
+        dist_pct = abs(price - level) / level * 100
+        if dist_pct <= threshold_pct:
+            side = "bull" if price >= level else "bear"
+            above_below = "위" if price >= level else "아래"
+            events.append(
+                PriceEvent(
+                    code="SR_TEST",
+                    side=side,
+                    headline=f"{label} 테스트 중",
+                    detail=f"현재가 {price:.2f}, {label} {level:.2f} ({above_below}, 거리 {dist_pct:.1f}%)",
+                )
+            )
+    return events
+
+
 def build_momentum_events(
-    df: pd.DataFrame, *, vol_sma_20: float | None, vol_sma_50: float | None
+    df: pd.DataFrame,
+    *,
+    vol_sma_20: float | None,
+    vol_sma_50: float | None,
+    snapshot_dict: dict | None = None,
 ) -> MomentumEvents:
     """raw_dataframe + 거래량 SMA로 신규 사건 일괄 감지. RS 전환은 deep_dive 가 주입."""
+    sr_events = detect_sr_proximity_events(snapshot_dict) if snapshot_dict else []
     return MomentumEvents(
         macd_cross=detect_macd_cross(df),
         rsi_divergence=detect_rsi_divergence(df),
         ud_volume_ratio=compute_ud_volume_ratio(df),
         volume_trend=compute_volume_trend(vol_sma_20, vol_sma_50),
-        price_events=detect_price_events(df),
+        price_events=detect_price_events(df) + sr_events,
         rs_event=None,
     )

@@ -256,6 +256,35 @@ def test_compute_canslim_l_detail_shows_sector_and_rs_status():
     assert "Semiconductors" in result.l.detail  # 업종명
     assert "Mansfield" in result.l.detail  # 종목 RS 수치
     assert "기울기" in result.l.detail  # 4주 RP 기울기 (RS강세 판정의 결정 요인)
+    assert "상위5%" in result.l.detail  # rank_pct=0.05 → 강세권 → "상위5%"
+
+
+def test_canslim_l_label_weak_sector_shows_low_tier():
+    """rank_pct=0.98 (하위권) → 라벨이 '하위2%'이어야 한다 (상위98% 오표기 방지)."""
+    from src.tools.criteria.canslim import compute_canslim
+    from src.tools.criteria.models import RelativeStrengthResult, SectorStrengthResult
+
+    weak_sector = SectorStrengthResult(
+        industry="Electrical Equipment & Parts",
+        rank_pct=0.98,
+        trend="down",
+        is_strong=False,
+        source="FMP",
+    )
+    rs = RelativeStrengthResult(
+        mansfield_rs=-1.0, outperform_6m=-5.0, rp_slope_4w=-0.3, index_symbol="SPY"
+    )
+    result = compute_canslim(
+        snapshot=None,
+        components=None,
+        fundamental=None,
+        accumulation=None,
+        sector_strength=weak_sector,
+        relative_strength=rs,
+        market_regime=None,
+    )
+    assert "하위2%" in result.l.detail
+    assert "상위98%" not in result.l.detail
 
 
 def test_compute_canslim_s_detail_shows_volume_ratio():

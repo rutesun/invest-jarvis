@@ -267,7 +267,10 @@ class DeepDivePipeline:
 
         snapshot = technical_data.snapshot
         momentum_events: MomentumEvents = build_momentum_events(
-            df, vol_sma_20=snapshot.vol_sma_20, vol_sma_50=snapshot.vol_sma_50
+            df,
+            vol_sma_20=snapshot.vol_sma_20,
+            vol_sma_50=snapshot.vol_sma_50,
+            snapshot_dict=snapshot.model_dump(),
         )
         if criteria_verdict is not None:
             momentum_events.rs_event = _rs_event_from_verdict(criteria_verdict.relative_strength)
