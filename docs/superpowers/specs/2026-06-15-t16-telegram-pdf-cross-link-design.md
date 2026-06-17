@@ -1,7 +1,7 @@
 # Design: Stock Report Engine V2 — T16 PDF Semantic Search (T17 LLM-tool ready)
 
 **작성일**: 2026-06-15
-**상태**: DRAFT
+**상태**: IMPLEMENTED (2026-06-17) — 커밋 8252dbd~45821ae, 신규 테스트 11개, 전체 747 통과
 **대상**: `src/pipelines/stock_report/retrieval.py` PDF 검색 함수 (Stock Report Engine V2 Phase 2 검색 경로)
 **관련 계획**: `docs/superpowers/plans/2026-05-08-stock-report-engine-v2.md` (T16)
 **상위 설계서**: `docs/superpowers/specs/2026-06-04-stock-report-v2-pdf-ingest-design.md` (write path)
