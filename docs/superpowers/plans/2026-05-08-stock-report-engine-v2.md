@@ -376,8 +376,10 @@ flowchart TD
 
 **기대효과:** Telegram short signal과 PDF long-form 근거가 하나의 theme/ticker evidence로 묶인다.
 
-- [ ] exact tag와 vector similarity를 함께 사용해 cross-link를 만든다
-- [ ] 같은 문서에서 여러 chunk가 걸리면 source 단위로 합친다
+- [x] exact tag와 vector similarity를 함께 사용해 cross-link를 만든다
+- [x] 같은 문서에서 여러 chunk가 걸리면 source 단위로 합친다 (per-doc dedup)
+
+**완료 (2026-06-17)**: T16은 **PDF 의미검색 능력**까지 구현했다 — `search_documents(query_text, category?, ticker?)` 래퍼(retrieval.py) + `search_document_chunks`의 `ticker_filter`(db.py, exact 태그) + `has_embed_auth()` 키 가드(embed.py). per-doc dedup·category/ticker exact 필터·벡터 recall·graceful degradation 포함, 테스트 11개 추가(전체 747 통과). 설계 결정에 따라 **실제 Telegram↔PDF 연결은 synthesis LLM이 `search_documents`를 function-calling 툴로 소비하는 T17에서 실현**하며, Telegram 임베딩(T11)은 보류한다. 스펙: `docs/superpowers/specs/2026-06-15-t16-telegram-pdf-cross-link-design.md`, 계획: `docs/superpowers/plans/2026-06-15-t16-pdf-semantic-search.md`. 커밋 8252dbd·5c1d1e7·b15dc92·d7afdf6·45821ae.
 
 ### T17. report assembler가 PDF evidence를 읽도록 확장한다
 
