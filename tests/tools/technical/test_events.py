@@ -129,6 +129,53 @@ def test_rsi_no_divergence_returns_none():
     assert detect_rsi_divergence(df) is None
 
 
+def test_rsi_bullish_divergence_from_troughs():
+    """가격 저점 하락 + RSI 저점 상승 → bullish (저점 기반). 고점만 보면 놓친다."""
+    from src.tools.technical.events import detect_rsi_divergence
+
+    # 저점: Close 95→90(하락), RSI 30→35(상승) | 고점은 둘 다 상승(다이버전스 없음)
+    close = [105, 95, 110, 90, 120] + [120] * 15
+    rsi = [50, 30, 55, 35, 60] + [60] * 15
+    df = pd.DataFrame(
+        {"Close": close, "RSI": rsi},
+        index=pd.date_range("2026-05-01", periods=len(close), freq="D"),
+    )
+    div = detect_rsi_divergence(df)
+    assert div is not None
+    assert div.divergence_type == "bullish"
+    assert "저점" in div.detail
+
+
+def test_rsi_no_false_bullish_from_lower_highs():
+    """고점 하락 + RSI 고점 상승(=hidden bearish)을 bullish로 오판하지 않는다."""
+    from src.tools.technical.events import detect_rsi_divergence
+
+    # 고점: Close 115→105(하락), RSI 58→65(상승) | 저점은 둘 다 하락(bullish 아님)
+    close = [100, 95, 115, 90, 105] + [105] * 15
+    rsi = [55, 45, 58, 38, 65] + [65] * 15
+    df = pd.DataFrame(
+        {"Close": close, "RSI": rsi},
+        index=pd.date_range("2026-05-01", periods=len(close), freq="D"),
+    )
+    div = detect_rsi_divergence(df)
+    assert div is None or div.divergence_type != "bullish"
+
+
+def test_rsi_divergence_ignores_trailing_nan():
+    """마지막 봉 Close=NaN(당일 미완성)이어도 다이버전스 탐지가 동작한다."""
+    from src.tools.technical.events import detect_rsi_divergence
+
+    close = [100, 105, 101, 108, 102] + [101] * 14 + [float("nan")]
+    rsi = [60, 72, 64, 68, 62] + [60] * 15
+    df = pd.DataFrame(
+        {"Close": close, "RSI": rsi},
+        index=pd.date_range("2026-05-01", periods=len(close), freq="D"),
+    )
+    div = detect_rsi_divergence(df)
+    assert div is not None
+    assert div.divergence_type == "bearish"
+
+
 def test_build_momentum_events_assembles():
     from src.tools.technical.events import build_momentum_events
     from src.tools.technical.events_models import MomentumEvents

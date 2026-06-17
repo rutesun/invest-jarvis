@@ -139,42 +139,52 @@ def _find_peaks(values: list[float]) -> list[int]:
     return peaks
 
 
+def _find_troughs(values: list[float]) -> list[int]:
+    """local minima 인덱스. plateau 대응: 왼쪽은 <, 오른쪽은 <= 로 평탄한 저점도 포착."""
+    troughs = []
+    for i in range(1, len(values) - 1):
+        if values[i] < values[i - 1] and values[i] <= values[i + 1]:
+            troughs.append(i)
+    return troughs
+
+
 def detect_rsi_divergence(df: pd.DataFrame, window: int = 20) -> RsiDivergence | None:
-    """최근 window일 가격-RSI 다이버전스 + 가격 봉우리 날짜."""
+    """최근 window일 가격-RSI 다이버전스. bearish는 고점끼리, bullish는 저점끼리 비교."""
     if "RSI" not in df.columns or "Close" not in df.columns or len(df) < window:
         return None
-    recent = df.tail(window).reset_index()
-    date_col = recent.columns[0]
-    price_peaks = _find_peaks(recent["Close"].tolist())
-    rsi_peaks = _find_peaks(recent["RSI"].tolist())
-    if len(price_peaks) < 2 or len(rsi_peaks) < 2:
+    # 당일 미완성 봉(trailing NaN)이 peak/trough 비교를 무력화하지 않도록 제거
+    recent = df.tail(window).dropna(subset=["Close", "RSI"]).reset_index()
+    if len(recent) < 2:
         return None
+    date_col = recent.columns[0]
+    closes = recent["Close"].tolist()
+    rsis = recent["RSI"].tolist()
 
-    p_last, p_prev = price_peaks[-1], price_peaks[-2]
-    r_last, r_prev = rsi_peaks[-1], rsi_peaks[-2]
-    price_hi = recent["Close"].iloc[p_last] > recent["Close"].iloc[p_prev]
-    price_lo = recent["Close"].iloc[p_last] < recent["Close"].iloc[p_prev]
-    rsi_lower = recent["RSI"].iloc[r_last] < recent["RSI"].iloc[r_prev]
-    rsi_higher = recent["RSI"].iloc[r_last] > recent["RSI"].iloc[r_prev]
+    # Bearish: 가격 고점 상승 + RSI 고점 하락 (고점끼리 비교)
+    price_peaks, rsi_peaks = _find_peaks(closes), _find_peaks(rsis)
+    if len(price_peaks) >= 2 and len(rsi_peaks) >= 2:
+        pl, pp = price_peaks[-1], price_peaks[-2]
+        rl, rp = rsi_peaks[-1], rsi_peaks[-2]
+        if closes[pl] > closes[pp] and rsis[rl] < rsis[rp]:
+            return RsiDivergence(
+                divergence_type="bearish",
+                date=recent[date_col].iloc[pl].strftime("%Y-%m-%d"),
+                days_ago=int(len(recent) - 1 - pl),
+                detail=f"가격 고점 상승, RSI 고점 하락 ({rsis[rp]:.0f}→{rsis[rl]:.0f})",
+            )
 
-    # 보고 날짜·days_ago 는 가격 봉우리(actionable) 기준
-    peak_date = recent[date_col].iloc[p_last]
-    days_ago = window - 1 - p_last
-
-    if price_hi and rsi_lower:
-        return RsiDivergence(
-            divergence_type="bearish",
-            date=peak_date.strftime("%Y-%m-%d"),
-            days_ago=int(days_ago),
-            detail=f"가격 고점 상승, RSI 고점 하락 ({recent['RSI'].iloc[r_prev]:.0f}→{recent['RSI'].iloc[r_last]:.0f})",
-        )
-    if price_lo and rsi_higher:
-        return RsiDivergence(
-            divergence_type="bullish",
-            date=peak_date.strftime("%Y-%m-%d"),
-            days_ago=int(days_ago),
-            detail=f"가격 저점 하락, RSI 저점 상승 ({recent['RSI'].iloc[r_prev]:.0f}→{recent['RSI'].iloc[r_last]:.0f})",
-        )
+    # Bullish: 가격 저점 하락 + RSI 저점 상승 (저점끼리 비교)
+    price_troughs, rsi_troughs = _find_troughs(closes), _find_troughs(rsis)
+    if len(price_troughs) >= 2 and len(rsi_troughs) >= 2:
+        pl, pp = price_troughs[-1], price_troughs[-2]
+        rl, rp = rsi_troughs[-1], rsi_troughs[-2]
+        if closes[pl] < closes[pp] and rsis[rl] > rsis[rp]:
+            return RsiDivergence(
+                divergence_type="bullish",
+                date=recent[date_col].iloc[pl].strftime("%Y-%m-%d"),
+                days_ago=int(len(recent) - 1 - pl),
+                detail=f"가격 저점 하락, RSI 저점 상승 ({rsis[rp]:.0f}→{rsis[rl]:.0f})",
+            )
     return None
 
 
