@@ -584,6 +584,7 @@ Summary / CAN SLIM / Stage 2 / 모멘텀 / Event / 구조레벨 / 원시데이�
 - `tests/cli/test_main.py`: `_format_metric_value`·`_get_metric_display_name` import 경로를 `analyze_render`로 수정
 - `tests/cli/test_cli.py`: `test_cli_analyze_command` — 플랜 A 레이아웃 assertion으로 마이그레이션, `decision_summary` mock 제거
 - **Stage 2 섹션 보강**: SMA150/200에 기울기 표기(`%/4주`, 미너비니가 계산하는 21일 추세 `sma_150_slope`/`sma_200_slope` 재사용), 비정배열 시 깨진 쌍 명시(예: `비정배열 (SMA150<SMA200)`). "비정배열이지만 정배열 임박"처럼 방향성까지 읽힘.
+- **Summary 체크리스트 복원**: 렌더가 제거된 `criteria_verdict.gate`를 참조해 항상 비어 있던 것을 `checks`/`quality_grade`로 재배선 — Summary의 핵심 기준(A·B·C·E pass/fail + 사유)과 Stage2 "판정" 줄이 정상 출력됨.
 
 **버그 수정 (실데이터 검증):**
 - **2026-06-16: 당일 미완성 봉(트레일링 NaN) NaN 전파 수정** — 미국장 개장/마감 시점에 데이터 마지막 행 Close가 NaN으로 들어와 발생.

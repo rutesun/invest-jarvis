@@ -14,31 +14,22 @@ def test_main_reexports_format_deep_dive_output():
 # ── Task 10: Summary 섹션 ─────────────────────────────────────────────────────
 
 
-def _make_criteria_verdict_gate():
-    """CriteriaVerdict-like object with checks and quality_grade (gate duck-type)."""
-    from src.tools.criteria.models import CriteriaCheck
-
-    class _FakeGate:
-        checklist = [
-            CriteriaCheck(name="A", required=True, met=True, reason="시장환경=상승"),
-            CriteriaCheck(name="B", required=True, met=True, reason="is_stage2=1.0 (7/7)"),
-            CriteriaCheck(name="C", required=True, met=True, reason="RS=True, 업종강세=True"),
-            CriteriaCheck(name="E", required=True, met=True, reason="breakout=True"),
-        ]
-        quality_grade = "A"
-
-    return _FakeGate()
-
-
 def test_format_summary_section():
     from src.cli.analyze_render import _format_summary_section
-    from src.tools.criteria.models import RelativeStrengthResult
+    from src.tools.criteria.models import CriteriaCheck, RelativeStrengthResult
 
     rs = RelativeStrengthResult(
         mansfield_rs=2.1, outperform_6m=10.0, rp_slope_4w=0.5, index_symbol="^GSPC"
     )
+    checks = [
+        CriteriaCheck(name="A", required=True, met=True, reason="시장환경=상승"),
+        CriteriaCheck(name="B", required=True, met=False, reason="is_stage2=0.0 (6/7)"),
+        CriteriaCheck(name="C", required=True, met=True, reason="RS=True, 업종강세=True"),
+        CriteriaCheck(name="E", required=True, met=False, reason="breakout=False"),
+    ]
     out = _format_summary_section(
-        gate=_make_criteria_verdict_gate(),
+        checks=checks,
+        quality_grade=None,
         relative_strength=rs,
         high_52w=160.5,
         price=155.3,
@@ -48,6 +39,8 @@ def test_format_summary_section():
         perf_1y=45.0,
     )
     assert "Summary" in out
+    assert "핵심 기준" in out and "A✅" in out and "B❌" in out  # 체크리스트 렌더
+    assert "B: is_stage2=0.0 (6/7)" in out  # 부연 사유
     assert "2.1" in out
     assert "-3.2%" in out or "-3.24%" in out
     assert "18" in out

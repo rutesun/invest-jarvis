@@ -501,20 +501,27 @@ def _format_criteria_section(verdict) -> str:
 
 
 def _format_summary_section(
-    *, gate, relative_strength, high_52w, price, ud_volume_ratio, atr, perf_3m, perf_1y
+    *,
+    checks,
+    quality_grade,
+    relative_strength,
+    high_52w,
+    price,
+    ud_volume_ratio,
+    atr,
+    perf_3m,
+    perf_1y,
 ) -> str:
-    """Summary: 핵심 신호 pass/fail(부연) + 핵심 수치 + 퍼포먼스."""
+    """Summary: 핵심 기준 pass/fail(부연) + 핵심 수치 + 퍼포먼스."""
     lines = ["## 📊 Summary", ""]
-    if gate is not None:
+    required = [c for c in (checks or []) if c.required]
+    if required:
         sym = {True: "✅", False: "❌", None: "—"}
-        checks = gate.checklist if hasattr(gate, "checklist") else []
-        quality_grade = gate.quality_grade if hasattr(gate, "quality_grade") else None
-        gate_parts = [f"{c.name}{sym[c.met]}" for c in checks if c.required]
+        gate_parts = [f"{c.name}{sym[c.met]}" for c in required]
         grade = f" · 등급 {quality_grade}" if quality_grade else ""
         lines.append(f"**핵심 기준**: {' '.join(gate_parts)}{grade}")
-        for c in checks:
-            if c.required:
-                lines.append(f"- {c.name}: {c.reason}")
+        for c in required:
+            lines.append(f"- {c.name}: {c.reason}")
         lines.append("")
     metrics = []
     if relative_strength is not None:
@@ -780,10 +787,12 @@ def format_deep_dive_output(result: dict) -> str:
     elif result.get("debate_ledger") is not None:
         output += _format_ledger_fallback(result["debate_ledger"])
 
-    gate = criteria_verdict.gate if criteria_verdict and hasattr(criteria_verdict, "gate") else None
+    checks = criteria_verdict.checks if criteria_verdict else []
+    quality_grade = criteria_verdict.quality_grade if criteria_verdict else None
     rs = criteria_verdict.relative_strength if criteria_verdict else None
     output += _format_summary_section(
-        gate=gate,
+        checks=checks,
+        quality_grade=quality_grade,
         relative_strength=rs,
         high_52w=snapshot.high_52w,
         price=snapshot.price,
@@ -796,9 +805,8 @@ def format_deep_dive_output(result: dict) -> str:
         output += _format_canslim_section(criteria_verdict.canslim)
 
     gate_b_reason = None
-    if gate is not None:
-        checks = gate.checklist if hasattr(gate, "checklist") else []
-        gb = next((c for c in checks if c.name == "B"), None)
+    if criteria_verdict and criteria_verdict.checks:
+        gb = next((c for c in criteria_verdict.checks if c.name == "B"), None)
         gate_b_reason = gb.reason if gb else None
     supertrend_value = None
     if technical.components and "supertrend" in technical.components:
