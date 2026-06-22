@@ -4,9 +4,13 @@ import asyncio
 import logging
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
+
+
+if TYPE_CHECKING:
+    from src.pipelines.stock_report.retrieval import DocumentSearchHit
 
 from src.pipelines.daily_report.llm_utils import invoke_llm_with_retry
 from src.pipelines.stock_report.config import (
@@ -18,6 +22,7 @@ from src.pipelines.stock_report.event_safety_net import (
     HIGH_IMPACT_EVENT_TYPES,
     enforce_high_impact_event_coverage,
 )
+from src.pipelines.stock_report.llm_tools import invoke_llm_with_tools
 from src.pipelines.stock_report.prompts import (
     CATEGORY_SYNTHESIS_SYSTEM_PROMPT,
     OVERVIEW_SYNTHESIS_SYSTEM_PROMPT,
@@ -69,6 +74,7 @@ class CategorySummaryCard:
     related_stocks: list[dict[str, str | None]]
     evidence_chunk_ids: list[int]
     priority_score: float = 0.0
+    document_hits: list[DocumentSearchHit] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -79,6 +85,7 @@ class TickerCard:
     key_metrics: list[str]
     risks: list[str]
     evidence_chunk_ids: list[int]
+    document_hits: list[DocumentSearchHit] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -316,11 +323,13 @@ async def synthesize_category(
     bucket: CategoryBucket,
     *,
     provider: str = "openai",
+    search_fn=None,
 ) -> CategorySummaryCard:
     """Synthesize a single CategoryBucket into a CategorySummaryCard.
 
     Hybrid strategy:
     - chunk_count < 3 → deterministic raw fallback (no LLM call)
+    - search_fn 주입 시 → invoke_llm_with_tools (PDF 근거 수집)
     - LLM call fails (retries exhausted) → same raw fallback
     """
     if len(bucket.chunks) < _CATEGORY_RAW_FALLBACK_THRESHOLD:
@@ -329,12 +338,25 @@ async def synthesize_category(
     allowed_ids = {chunk.id for chunk in bucket.chunks}
     user_prompt = build_category_synthesis_prompt(bucket)
     try:
-        output = await _run_synthesis_call(
-            CATEGORY_SYNTHESIS_SYSTEM_PROMPT,
-            user_prompt,
-            CategoryCardLLMOutput,
-            provider,
-        )
+        if search_fn is not None:
+            llm_config = get_report_synthesis_llm_config(provider)
+            llm = llm_config.create_llm()
+            messages = llm_config.build_messages(CATEGORY_SYNTHESIS_SYSTEM_PROMPT, user_prompt)
+            output, trace = await invoke_llm_with_tools(
+                llm,
+                CategoryCardLLMOutput,
+                messages,
+                search_fn=search_fn,
+                config={},
+            )
+        else:
+            output = await _run_synthesis_call(
+                CATEGORY_SYNTHESIS_SYSTEM_PROMPT,
+                user_prompt,
+                CategoryCardLLMOutput,
+                provider,
+            )
+            trace = None
         assert isinstance(output, CategoryCardLLMOutput)
         clean_ids = _sanitize_chunk_ids(output.evidence_chunk_ids, allowed_ids)
         related_stocks: list[dict[str, str | None]] = [
@@ -354,6 +376,7 @@ async def synthesize_category(
             related_stocks=related_stocks,
             evidence_chunk_ids=clean_ids,
             priority_score=output.priority_score,
+            document_hits=trace.collected_hits if trace is not None else [],
         )
         return enforce_high_impact_event_coverage(card, bucket.chunks)
     except Exception:
@@ -370,11 +393,13 @@ async def synthesize_ticker(
     bucket: TickerBucket,
     *,
     provider: str = "openai",
+    search_fn=None,
 ) -> TickerCard:
     """Synthesize a single TickerBucket into a TickerCard.
 
     Hybrid strategy:
     - chunk_count < 3 → deterministic raw fallback (no LLM call)
+    - search_fn 주입 시 → invoke_llm_with_tools (PDF 근거 수집)
     - LLM call fails (retries exhausted) → same raw fallback
     """
     if len(bucket.chunks) < _CATEGORY_RAW_FALLBACK_THRESHOLD:
@@ -383,12 +408,25 @@ async def synthesize_ticker(
     allowed_ids = {chunk.id for chunk in bucket.chunks}
     user_prompt = build_ticker_synthesis_prompt(bucket)
     try:
-        output = await _run_synthesis_call(
-            TICKER_SYNTHESIS_SYSTEM_PROMPT,
-            user_prompt,
-            TickerCardLLMOutput,
-            provider,
-        )
+        if search_fn is not None:
+            llm_config = get_report_synthesis_llm_config(provider)
+            llm = llm_config.create_llm()
+            messages = llm_config.build_messages(TICKER_SYNTHESIS_SYSTEM_PROMPT, user_prompt)
+            output, trace = await invoke_llm_with_tools(
+                llm,
+                TickerCardLLMOutput,
+                messages,
+                search_fn=search_fn,
+                config={},
+            )
+        else:
+            output = await _run_synthesis_call(
+                TICKER_SYNTHESIS_SYSTEM_PROMPT,
+                user_prompt,
+                TickerCardLLMOutput,
+                provider,
+            )
+            trace = None
         assert isinstance(output, TickerCardLLMOutput)
         clean_ids = _sanitize_chunk_ids(output.evidence_chunk_ids, allowed_ids)
         return TickerCard(
@@ -398,6 +436,7 @@ async def synthesize_ticker(
             key_metrics=output.key_metrics,
             risks=output.risks,
             evidence_chunk_ids=clean_ids,
+            document_hits=trace.collected_hits if trace is not None else [],
         )
     except Exception:
         logger.warning(
@@ -791,6 +830,35 @@ def _refs_for_items(
     return refs
 
 
+def _pdf_evidence_refs(
+    section_key: str,
+    item_key: str,
+    hits: list[DocumentSearchHit],
+) -> list[ReportEvidenceRef]:
+    """PDF document_hits → source_type='pdf' ReportEvidenceRef 리스트 (B2 전용 경로)."""
+    refs: list[ReportEvidenceRef] = []
+    for hit in hits:
+        snapshot: dict[str, Any] = {
+            "evidence_kind": "searched",
+            "doc_title": hit.doc_title,
+            "broker_key": hit.broker_key,
+            "source_path": hit.source_path,
+            "section_path": hit.section_path,
+            "similarity": hit.similarity,
+        }
+        refs.append(
+            ReportEvidenceRef(
+                section_key=section_key,
+                item_key=item_key,
+                rank_score=hit.similarity,
+                knowledge_chunk_snapshot=snapshot,
+                source_type="pdf",
+                document_chunk_id=hit.chunk_id,
+            )
+        )
+    return refs
+
+
 def _assemble_tiered_artifact(
     bundle: SameDayBundle,
     category_cards: list[CategorySummaryCard],
@@ -820,6 +888,16 @@ def _assemble_tiered_artifact(
     evidence_refs.extend(_refs_for_items("core_themes", core_themes, chunk_index))
     evidence_refs.extend(_refs_for_items("focus_tickers", focus_tickers, chunk_index))
 
+    # B2: PDF refs — 기존 _refs_for_items(텔레그램 전용)과 별도 경로
+    category_items = category_summaries[: len(category_cards)]  # minor_item 제외
+    for card, item in zip(category_cards, category_items, strict=True):
+        if card.document_hits:
+            evidence_refs.extend(_pdf_evidence_refs("category_summaries", item.key, card.document_hits))
+    for card in ticker_cards:
+        if card.document_hits:
+            item_key = card.ticker
+            evidence_refs.extend(_pdf_evidence_refs("focus_tickers", item_key, card.document_hits))
+
     return StockReportArtifact(
         report_date=bundle.report_date,
         pulse=pulse,
@@ -835,6 +913,7 @@ async def synthesize_tiered(
     bundle: SameDayBundle,
     *,
     provider: str = "openai",
+    search_fn=None,
 ) -> StockReportArtifact:
     """Full map-reduce: per-category + top-N ticker map → reduce → StockReportArtifact.
 
@@ -857,11 +936,11 @@ async def synthesize_tiered(
 
     async def _cat(b: CategoryBucket) -> CategorySummaryCard:
         async with sem:
-            return await synthesize_category(b, provider=provider)
+            return await synthesize_category(b, provider=provider, search_fn=search_fn)
 
     async def _tic(b: TickerBucket) -> TickerCard:
         async with sem:
-            return await synthesize_ticker(b, provider=provider)
+            return await synthesize_ticker(b, provider=provider, search_fn=search_fn)
 
     try:
         category_cards = list(await asyncio.gather(*[_cat(b) for b in major_buckets]))
@@ -887,9 +966,10 @@ def synthesize_daily(
     bundle: SameDayBundle,
     *,
     provider: str = "openai",
+    search_fn=None,
 ) -> StockReportArtifact:
     """Sync entry point for the tiered pipeline (wraps asyncio.run)."""
-    return asyncio.run(synthesize_tiered(bundle, provider=provider))
+    return asyncio.run(synthesize_tiered(bundle, provider=provider, search_fn=search_fn))
 
 
 # ---------------------------------------------------------------------------
