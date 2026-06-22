@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import hashlib
 import logging
 from dataclasses import dataclass
@@ -23,12 +24,14 @@ from src.pipelines.stock_report.db import (
     persist_report_artifact,
     resolve_db_dsn,
 )
+from src.pipelines.stock_report.embed import has_embed_auth
 from src.pipelines.stock_report.normalize import normalize_messages, persist_normalized_messages
 from src.pipelines.stock_report.render_markdown import (
     parse_referenced_from_markdown,
     render_stock_report_markdown,
 )
 from src.pipelines.stock_report.retrieval import SameDayBundle, load_same_day_bundle
+from src.pipelines.stock_report.retrieval import search_documents as _search_documents
 from src.pipelines.stock_report.synthesize import (
     ReportEvidenceRef,
     _evidence_refs,
@@ -205,14 +208,21 @@ def _summarize_markdown_for_trace(markdown: str) -> dict[str, Any]:
 def _summarize_evidence_refs_for_trace(evidence_refs) -> dict[str, Any]:
     refs = list(evidence_refs or [])
     section_counts: dict[str, int] = {}
+    source_type_counts: dict[str, int] = {}
     chunk_ids: list[int] = []
+    document_chunk_ids: list[int] = []
     sources: list[str] = []
     for ref in refs:
         section = getattr(ref, "section_key", "unknown")
         section_counts[section] = section_counts.get(section, 0) + 1
+        source_type = getattr(ref, "source_type", "telegram")
+        source_type_counts[source_type] = source_type_counts.get(source_type, 0) + 1
         chunk_id = getattr(ref, "knowledge_chunk_id", None)
         if chunk_id is not None and len(chunk_ids) < 50:
             chunk_ids.append(chunk_id)
+        doc_chunk_id = getattr(ref, "document_chunk_id", None)
+        if doc_chunk_id is not None and len(document_chunk_ids) < 50:
+            document_chunk_ids.append(doc_chunk_id)
         snapshot = getattr(ref, "knowledge_chunk_snapshot", {}) or {}
         channel = snapshot.get("channel_name") or snapshot.get("channel_key")
         message_id = snapshot.get("channel_message_id")
@@ -224,7 +234,9 @@ def _summarize_evidence_refs_for_trace(evidence_refs) -> dict[str, Any]:
         "type": "evidence_refs",
         "count": len(refs),
         "section_counts": section_counts,
+        "source_type_counts": source_type_counts,
         "sample_chunk_ids": chunk_ids,
+        "sample_document_chunk_ids": document_chunk_ids,
         "sample_sources": sources,
     }
 
@@ -304,8 +316,8 @@ def _stage_load_same_day_bundle(conn, date: str):
 
 
 @traceable(name="Stock Report Daily V2 - Local Evidence Synthesis")
-def _stage_local_evidence_synthesis(bundle, *, provider: str):
-    return synthesize_daily(bundle, provider=provider)
+def _stage_local_evidence_synthesis(bundle, *, provider: str, search_fn=None):
+    return synthesize_daily(bundle, provider=provider, search_fn=search_fn)
 
 
 @traceable(
@@ -411,7 +423,14 @@ def run_daily_v2(
         )
         logger.info("daily-v2 classified chunks persisted")
         same_day_bundle = _stage_load_same_day_bundle(conn, date)
-        report_artifact = _stage_local_evidence_synthesis(same_day_bundle, provider=provider)
+        search_fn = (
+            functools.partial(_search_documents, conn)
+            if has_embed_auth()
+            else None
+        )
+        report_artifact = _stage_local_evidence_synthesis(
+            same_day_bundle, provider=provider, search_fn=search_fn
+        )
         output_markdown = _stage_render_markdown(report_artifact)
         google_grounding_markdown: str | None = None
         if google_grounding:
