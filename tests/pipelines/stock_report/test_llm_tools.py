@@ -72,6 +72,9 @@ def _make_fake_llm(responses: list[AIMessage]):
             call_count += 1
             return response
 
+        async def ainvoke(self, messages: list[BaseMessage], config: dict | None = None) -> AIMessage:
+            return self.invoke(messages, config)
+
     class FakeStructuredLLM:
         def __init__(self):
             self.last_messages: list[BaseMessage] = []
@@ -79,6 +82,9 @@ def _make_fake_llm(responses: list[AIMessage]):
         def invoke(self, messages: list[BaseMessage], config: dict | None = None) -> BaseModel:
             self.last_messages = list(messages)
             return FakeOutputModel(result="structured_ok")
+
+        async def ainvoke(self, messages: list[BaseMessage], config: dict | None = None) -> BaseModel:
+            return self.invoke(messages, config)
 
     structured_llm = FakeStructuredLLM()
     bound_llm = FakeBoundLLM()

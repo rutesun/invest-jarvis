@@ -162,7 +162,7 @@ async def invoke_llm_with_tools(
     bound_llm = llm.bind_tools([SEARCH_DOCUMENTS_TOOL])
 
     for round_idx in range(max_tool_rounds):
-        response: AIMessage = bound_llm.invoke(history, config)
+        response: AIMessage = await bound_llm.ainvoke(history, config)
         history.append(response)
 
         tool_calls = getattr(response, "tool_calls", None) or []
@@ -185,6 +185,6 @@ async def invoke_llm_with_tools(
 
     # 누적 이력 전달해 최종 structured output 1회 호출
     structured_llm = llm.with_structured_output(output_model)
-    output: BaseModel = structured_llm.invoke(history, config)
+    output: BaseModel = await structured_llm.ainvoke(history, config)
 
     return output, trace
