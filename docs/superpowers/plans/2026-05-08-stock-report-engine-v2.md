@@ -383,16 +383,24 @@ flowchart TD
 
 ### T17. report assembler가 PDF evidence를 읽도록 확장한다
 
+**DESIGNED (2026-06-22, 서브에이전트 리뷰 반영 개정)**: tool-calling 방식으로 설계 확정. 합성(map) 단계가 `search_documents`를 LLM 도구로 호출해 PDF 근거를 끌어오고, 검색 trace(쿼리·문서 id)를 `report_evidence`에 적재·렌더한다. 공용 `invoke_llm_with_retry`는 건드리지 않고 `llm_tools.py`에 `invoke_llm_with_tools`를 신설(격리). evidence 모델은 `source_type` 구분자 + 단일 분기로 소스 확장(뉴스·공시)에 대비 → `source_type` 칸 추가 마이그레이션 1개. 리뷰 반영: 동기 검색 to_thread 래핑, search_fn 전 구간 배선, PDF id를 텔레그램 id 공간에 격리(eval 오염 차단), tool 이력 전달 + round cap 미응답 tool_call 정리, evidence_kind/dedup/비용 상한. 스펙: `docs/superpowers/specs/2026-06-22-t17-pdf-evidence-tool-calling-design.md`, 계획: `docs/superpowers/plans/2026-06-22-t17-pdf-evidence-tool-calling.md`.
+
+**완료 (2026-06-22)**: T17은 **synthesis LLM이 `search_documents`를 function-calling 도구로 소비해 PDF 근거를 리포트에 통합**하는 기능을 구현했다 — `invoke_llm_with_tools`(llm_tools.py, `asyncio.to_thread` 래핑·round cap·history 전달) + `source_type` 컬럼(migration 010) + `_pdf_evidence_refs` 전용 경로(B2/B3 격리) + `source_type` dispatch 렌더 + `search_fn` seam 전 구간 배선(`has_embed_auth()` false → None → 하위 호환). 테스트 419개 통과. 커밋 ca87ffc·3c00bd9·7da6792·cd08133·fcd930c.
+
 **Files:**
+- Create: `src/pipelines/stock_report/llm_tools.py`
+- Create: `migrations/stock_report/010_report_evidence_source_type.sql`
 - Modify: `src/pipelines/stock_report/synthesize.py`
+- Modify: `src/pipelines/stock_report/db.py`
 - Modify: `src/pipelines/stock_report/render_markdown.py`
+- Modify: `src/pipelines/stock_report/pipeline.py`
 
 **Why:** Phase 2의 실질 가치는 PDF가 synthesis에 들어가는 순간 발생한다.
 
 **기대효과:** 리포트의 근거가 짧은 텔레그램 문장만으로 끝나지 않는다.
 
-- [ ] evidence bundle에 PDF excerpt를 추가한다
-- [ ] Markdown에서 source type별 표시 형식을 나눈다
+- [x] evidence bundle에 PDF excerpt를 추가한다
+- [x] Markdown에서 source type별 표시 형식을 나눈다
 
 ### T18. PDF validation 세트와 파싱 실패 케이스를 정리한다
 
