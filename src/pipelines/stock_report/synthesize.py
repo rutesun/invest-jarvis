@@ -901,9 +901,11 @@ def synthesize_daily(
 class ReportEvidenceRef:
     section_key: str
     item_key: str
-    knowledge_chunk_id: int
     rank_score: float
     knowledge_chunk_snapshot: dict[str, Any]
+    knowledge_chunk_id: int | None = None
+    source_type: str = "telegram"
+    document_chunk_id: int | None = None
 
 
 @dataclass(slots=True)

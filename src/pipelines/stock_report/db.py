@@ -260,6 +260,18 @@ def persist_classified_chunks(
     conn.commit()
 
 
+def _dedup_evidence_refs(refs: list[ReportEvidenceRef]) -> list[ReportEvidenceRef]:
+    """(section_key, item_key, knowledge_chunk_id, document_chunk_id) 기준으로 중복 제거. 첫 등장 유지."""
+    seen: set[tuple] = set()
+    result: list[ReportEvidenceRef] = []
+    for ref in refs:
+        key = (ref.section_key, ref.item_key, ref.knowledge_chunk_id, ref.document_chunk_id)
+        if key not in seen:
+            seen.add(key)
+            result.append(ref)
+    return result
+
+
 def persist_report_artifact(
     conn: Any,
     *,
@@ -287,6 +299,7 @@ def persist_report_artifact(
         report_run_id = cur.fetchone()[0]
 
         if evidence_refs:
+            deduped = _dedup_evidence_refs(evidence_refs)
             cur.executemany(
                 """
                 INSERT INTO report_evidence (
@@ -295,8 +308,10 @@ def persist_report_artifact(
                     item_key,
                     knowledge_chunk_id,
                     rank_score,
-                    knowledge_chunk_snapshot
-                ) VALUES (%s, %s, %s, %s, %s, %s::jsonb);
+                    knowledge_chunk_snapshot,
+                    source_type,
+                    document_chunk_id
+                ) VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s, %s);
                 """,
                 [
                     (
@@ -306,8 +321,10 @@ def persist_report_artifact(
                         ref.knowledge_chunk_id,
                         ref.rank_score,
                         json.dumps(ref.knowledge_chunk_snapshot, ensure_ascii=False),
+                        ref.source_type,
+                        ref.document_chunk_id,
                     )
-                    for ref in evidence_refs
+                    for ref in deduped
                 ],
             )
     conn.commit()
