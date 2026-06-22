@@ -46,14 +46,23 @@ class MarkdownReportBuilder:
 
         Exact-duplicate display lines are dropped here; channel-level dedup + capping happens
         at render time (see _format_sources) so the same lookup can feed every section.
+        source_type dispatch: 'pdf' → 'doc {id} {broker} · {title}', else telegram format.
         """
         lookup: dict[tuple[str, str], list[tuple[str, str]]] = defaultdict(list)
         seen: dict[tuple[str, str], set[str]] = defaultdict(set)
         for ref in report.evidence_refs:
             snapshot = ref.knowledge_chunk_snapshot or {}
-            channel_name = snapshot.get("channel_name") or snapshot.get("channel_key") or "unknown"
-            channel_message_id = snapshot.get("channel_message_id") or "-"
-            line = f"chunk {ref.knowledge_chunk_id} {channel_name}#{channel_message_id}"
+            if getattr(ref, "source_type", "telegram") == "pdf":
+                broker = snapshot.get("broker_key") or "pdf"
+                title = snapshot.get("doc_title") or ""
+                doc_id = ref.document_chunk_id
+                title_part = f" · {title}" if title else ""
+                line = f"doc {doc_id} {broker}{title_part}"
+                channel_name = broker
+            else:
+                channel_name = snapshot.get("channel_name") or snapshot.get("channel_key") or "unknown"
+                channel_message_id = snapshot.get("channel_message_id") or "-"
+                line = f"chunk {ref.knowledge_chunk_id} {channel_name}#{channel_message_id}"
             key = (ref.section_key, ref.item_key)
             if line not in seen[key]:
                 seen[key].add(line)
