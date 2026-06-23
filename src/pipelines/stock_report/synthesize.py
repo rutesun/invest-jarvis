@@ -24,6 +24,7 @@ from src.pipelines.stock_report.event_safety_net import (
 )
 from src.pipelines.stock_report.llm_tools import invoke_llm_with_tools
 from src.pipelines.stock_report.prompts import (
+    _SEARCH_DOCUMENTS_TOOL_ADDENDUM,
     CATEGORY_SYNTHESIS_SYSTEM_PROMPT,
     OVERVIEW_SYNTHESIS_SYSTEM_PROMPT,
     TICKER_SYNTHESIS_SYSTEM_PROMPT,
@@ -341,7 +342,8 @@ async def synthesize_category(
         if search_fn is not None:
             llm_config = get_report_synthesis_llm_config(provider)
             llm = llm_config.create_llm()
-            messages = llm_config.build_messages(CATEGORY_SYNTHESIS_SYSTEM_PROMPT, user_prompt)
+            system_prompt = f"{CATEGORY_SYNTHESIS_SYSTEM_PROMPT}\n\n{_SEARCH_DOCUMENTS_TOOL_ADDENDUM}"
+            messages = llm_config.build_messages(system_prompt, user_prompt)
             output, trace = await invoke_llm_with_tools(
                 llm,
                 CategoryCardLLMOutput,
@@ -411,7 +413,8 @@ async def synthesize_ticker(
         if search_fn is not None:
             llm_config = get_report_synthesis_llm_config(provider)
             llm = llm_config.create_llm()
-            messages = llm_config.build_messages(TICKER_SYNTHESIS_SYSTEM_PROMPT, user_prompt)
+            system_prompt = f"{TICKER_SYNTHESIS_SYSTEM_PROMPT}\n\n{_SEARCH_DOCUMENTS_TOOL_ADDENDUM}"
+            messages = llm_config.build_messages(system_prompt, user_prompt)
             output, trace = await invoke_llm_with_tools(
                 llm,
                 TickerCardLLMOutput,
