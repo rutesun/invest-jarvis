@@ -144,11 +144,12 @@ def build_semantic_extraction_user_prompt(
 
 _SEARCH_DOCUMENTS_TOOL_ADDENDUM = dedent(
     """
-    search_documents 도구 사용:
-    - search_documents 도구가 제공된다. 증권사 PDF 리포트에서 추가 근거를 검색할 수 있다.
-    - 텔레그램 chunk로 커버되지 않는 수치·배경·분석이 있을 때 category와 ticker를 지정해 검색하라.
+    search_documents 도구 사용 (필수):
+    - 최종 출력을 반환하기 전에 search_documents를 반드시 1회 이상 호출하라.
+    - 카테고리 키워드 + 핵심 종목 또는 테마로 검색해 증권사 PDF 리포트의 분석·수치·전망을 보강하라.
+    - category 파라미터는 현재 카테고리 key(예: tech, finance)를 그대로 넣는다.
     - 검색 결과의 [doc:id] 식별자는 evidence_chunk_ids에 넣지 말 것 — 리포트 생성 후 자동 연결된다.
-    - 도구 호출은 최대 2회만 하라.
+    - 도구 호출은 최대 2회다.
     """
 ).strip()
 

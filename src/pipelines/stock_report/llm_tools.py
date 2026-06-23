@@ -166,6 +166,12 @@ async def invoke_llm_with_tools(
         history.append(response)
 
         tool_calls = getattr(response, "tool_calls", None) or []
+        logger.debug(
+            "invoke_llm_with_tools round=%d tool_calls=%d content_preview=%.60s",
+            round_idx,
+            len(tool_calls),
+            str(response.content)[:60],
+        )
         if not tool_calls:
             break
 
