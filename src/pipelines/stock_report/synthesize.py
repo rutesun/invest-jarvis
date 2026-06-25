@@ -22,7 +22,7 @@ from src.pipelines.stock_report.event_safety_net import (
     HIGH_IMPACT_EVENT_TYPES,
     enforce_high_impact_event_coverage,
 )
-from src.pipelines.stock_report.llm_tools import invoke_llm_with_tools
+from src.pipelines.stock_report.llm_tools import ToolCallTrace, invoke_llm_with_tools
 from src.pipelines.stock_report.prompts import (
     _SEARCH_DOCUMENTS_TOOL_ADDENDUM,
     CATEGORY_SYNTHESIS_SYSTEM_PROMPT,
@@ -320,6 +320,18 @@ def _render_raw_ticker_card(bucket: TickerBucket) -> TickerCard:
 _CATEGORY_RAW_FALLBACK_THRESHOLD = 3
 
 
+def _log_pdf_trace(label: str, trace: ToolCallTrace) -> None:
+    """tool-calling trace를 stdout에 한 줄씩 출력한다."""
+    for rec in trace.records:
+        if not rec.query:
+            continue
+        titles = ", ".join(
+            (h.doc_title or h.source_path or "?")[:45] for h in rec.hits[:2]
+        )
+        suffix = f" ({titles})" if titles else " (결과 없음)"
+        print(f"  \U0001f50d [{label}] \"{rec.query}\" → {len(rec.hits)}건{suffix}")
+
+
 async def synthesize_category(
     bucket: CategoryBucket,
     *,
@@ -351,6 +363,7 @@ async def synthesize_category(
                 search_fn=search_fn,
                 config={},
             )
+            _log_pdf_trace(bucket.category_key, trace)
         else:
             output = await _run_synthesis_call(
                 CATEGORY_SYNTHESIS_SYSTEM_PROMPT,
@@ -422,6 +435,7 @@ async def synthesize_ticker(
                 search_fn=search_fn,
                 config={},
             )
+            _log_pdf_trace(bucket.ticker, trace)
         else:
             output = await _run_synthesis_call(
                 TICKER_SYNTHESIS_SYSTEM_PROMPT,
