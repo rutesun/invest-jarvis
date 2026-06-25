@@ -22,7 +22,11 @@ from src.pipelines.stock_report.event_safety_net import (
     HIGH_IMPACT_EVENT_TYPES,
     enforce_high_impact_event_coverage,
 )
-from src.pipelines.stock_report.llm_tools import ToolCallTrace, invoke_llm_with_tools
+from src.pipelines.stock_report.llm_tools import (
+    PdfSearchLogEntry,
+    ToolCallTrace,
+    invoke_llm_with_tools,
+)
 from src.pipelines.stock_report.prompts import (
     _SEARCH_DOCUMENTS_TOOL_ADDENDUM,
     CATEGORY_SYNTHESIS_SYSTEM_PROMPT,
@@ -76,6 +80,7 @@ class CategorySummaryCard:
     evidence_chunk_ids: list[int]
     priority_score: float = 0.0
     document_hits: list[DocumentSearchHit] = field(default_factory=list)
+    search_log_entries: list[PdfSearchLogEntry] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -87,6 +92,7 @@ class TickerCard:
     risks: list[str]
     evidence_chunk_ids: list[int]
     document_hits: list[DocumentSearchHit] = field(default_factory=list)
+    search_log_entries: list[PdfSearchLogEntry] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -320,6 +326,27 @@ def _render_raw_ticker_card(bucket: TickerBucket) -> TickerCard:
 _CATEGORY_RAW_FALLBACK_THRESHOLD = 3
 
 
+def _trace_to_log_entries(
+    label: str, label_type: str, trace: ToolCallTrace | None
+) -> list[PdfSearchLogEntry]:
+    if trace is None:
+        return []
+    return [
+        PdfSearchLogEntry(
+            label=label,
+            label_type=label_type,
+            query=rec.query,
+            category=rec.category,
+            ticker=rec.ticker,
+            top_k=rec.top_k,
+            hit_count=len(rec.hits),
+            hit_chunk_ids=[h.chunk_id for h in rec.hits],
+        )
+        for rec in trace.records
+        if rec.query
+    ]
+
+
 def _log_pdf_trace(label: str, trace: ToolCallTrace) -> None:
     """tool-calling trace를 stdout에 한 줄씩 출력한다."""
     for rec in trace.records:
@@ -392,6 +419,7 @@ async def synthesize_category(
             evidence_chunk_ids=clean_ids,
             priority_score=output.priority_score,
             document_hits=trace.collected_hits if trace is not None else [],
+            search_log_entries=_trace_to_log_entries(bucket.category_key, "category", trace),
         )
         return enforce_high_impact_event_coverage(card, bucket.chunks)
     except Exception:
@@ -454,6 +482,7 @@ async def synthesize_ticker(
             risks=output.risks,
             evidence_chunk_ids=clean_ids,
             document_hits=trace.collected_hits if trace is not None else [],
+            search_log_entries=_trace_to_log_entries(bucket.ticker, "ticker", trace),
         )
     except Exception:
         logger.warning(
@@ -915,6 +944,12 @@ def _assemble_tiered_artifact(
             item_key = card.ticker
             evidence_refs.extend(_pdf_evidence_refs("focus_tickers", item_key, card.document_hits))
 
+    pdf_search_entries: list[PdfSearchLogEntry] = []
+    for card in category_cards:
+        pdf_search_entries.extend(card.search_log_entries)
+    for card in ticker_cards:
+        pdf_search_entries.extend(card.search_log_entries)
+
     return StockReportArtifact(
         report_date=bundle.report_date,
         pulse=pulse,
@@ -923,6 +958,7 @@ def _assemble_tiered_artifact(
         focus_tickers=focus_tickers,
         low_confidence_notes=low_confidence_notes,
         evidence_refs=evidence_refs,
+        pdf_search_entries=pdf_search_entries,
     )
 
 
@@ -1034,6 +1070,7 @@ class StockReportArtifact:
     focus_tickers: list[ReportSectionItem]
     low_confidence_notes: list[str]
     evidence_refs: list[ReportEvidenceRef]
+    pdf_search_entries: list[PdfSearchLogEntry] = field(default_factory=list)
 
 
 def _join_summaries(chunks: list[SameDayChunk]) -> str:

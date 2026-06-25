@@ -107,10 +107,31 @@ def _make_fake_llm(responses: list[AIMessage]):
 def test_module_import():
     """llm_tools 모듈이 정상적으로 임포트되어야 한다."""
     from src.pipelines.stock_report.llm_tools import (  # noqa: F401
+        PdfSearchLogEntry,
         ToolCallRecord,
         ToolCallTrace,
         invoke_llm_with_tools,
     )
+
+
+def test_pdf_search_log_entry_fields() -> None:
+    """PdfSearchLogEntry 필드가 올바르게 구성된다."""
+    from src.pipelines.stock_report.llm_tools import PdfSearchLogEntry
+
+    entry = PdfSearchLogEntry(
+        label="반도체",
+        label_type="category",
+        query="HBM 삼성전자",
+        category="반도체",
+        ticker=None,
+        top_k=3,
+        hit_count=2,
+        hit_chunk_ids=[101, 102],
+    )
+    assert entry.label == "반도체"
+    assert entry.label_type == "category"
+    assert entry.hit_count == 2
+    assert entry.hit_chunk_ids == [101, 102]
 
 
 # ---------------------------------------------------------------------------

@@ -331,6 +331,40 @@ def persist_report_artifact(
     return report_run_id
 
 
+def persist_pdf_search_log(
+    conn: Any,
+    report_run_id: int,
+    entries: list,
+) -> None:
+    """pdf_search_log 테이블에 synthesis 검색 쿼리 기록을 저장한다."""
+    if not entries:
+        return
+    with conn.cursor() as cur:
+        cur.executemany(
+            """
+            INSERT INTO pdf_search_log (
+                report_run_id, label, label_type, query,
+                category, ticker, top_k, hit_count, hit_chunk_ids
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb);
+            """,
+            [
+                (
+                    report_run_id,
+                    e.label,
+                    e.label_type,
+                    e.query,
+                    e.category,
+                    e.ticker,
+                    e.top_k,
+                    e.hit_count,
+                    json.dumps(e.hit_chunk_ids),
+                )
+                for e in entries
+            ],
+        )
+    conn.commit()
+
+
 # --- PDF ingest write-path (T15) -------------------------------------------
 #
 # 아래 함수들은 텔레그램 경로(persist_classified_chunks)와 의도적으로 다르게

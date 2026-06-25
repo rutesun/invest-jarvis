@@ -21,6 +21,7 @@ from src.pipelines.stock_report.db import (
     connect_db,
     load_telegram_messages_by_date,
     persist_classified_chunks,
+    persist_pdf_search_log,
     persist_report_artifact,
     resolve_db_dsn,
 )
@@ -450,6 +451,8 @@ def run_daily_v2(
             output_markdown=output_markdown,
             evidence_refs=report_artifact.evidence_refs,
         )
+        if report_artifact.pdf_search_entries:
+            persist_pdf_search_log(conn, report_run_id, report_artifact.pdf_search_entries)
         logger.info(
             "daily-v2 report artifact persisted: report_run_id=%s categories=%d themes=%d focus_tickers=%d low_confidence=%d",
             report_run_id,

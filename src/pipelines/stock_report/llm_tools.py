@@ -51,6 +51,18 @@ SEARCH_DOCUMENTS_TOOL = {
 
 
 @dataclass
+class PdfSearchLogEntry:
+    label: str
+    label_type: str  # 'category' | 'ticker'
+    query: str
+    category: str | None
+    ticker: str | None
+    top_k: int
+    hit_count: int
+    hit_chunk_ids: list[int]
+
+
+@dataclass
 class ToolCallRecord:
     query: str
     category: str | None

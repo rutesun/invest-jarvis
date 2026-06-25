@@ -342,6 +342,123 @@ def test_assemble_tiered_artifact_adds_pdf_refs_from_document_hits() -> None:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# search_log_entries: card 필드 + artifact 수집
+# ---------------------------------------------------------------------------
+
+
+def test_category_summary_card_has_search_log_entries_field() -> None:
+    """CategorySummaryCard에 search_log_entries 필드가 있고 기본값이 빈 리스트다."""
+    card = CategorySummaryCard(
+        category_key="tech",
+        title="기술",
+        narrative="n",
+        evidence_bullets=[],
+        impact="",
+        related_stocks=[],
+        evidence_chunk_ids=[],
+    )
+    assert hasattr(card, "search_log_entries")
+    assert card.search_log_entries == []
+
+
+def test_ticker_card_has_search_log_entries_field() -> None:
+    """TickerCard에 search_log_entries 필드가 있고 기본값이 빈 리스트다."""
+    card = TickerCard(
+        ticker="NVDA",
+        investment_case="case",
+        catalysts=[],
+        key_metrics=[],
+        risks=[],
+        evidence_chunk_ids=[],
+    )
+    assert hasattr(card, "search_log_entries")
+    assert card.search_log_entries == []
+
+
+def test_synthesize_category_populates_search_log_entries(monkeypatch) -> None:
+    """search_fn 주입 시 synthesize_category가 card.search_log_entries를 채운다."""
+    from src.pipelines.stock_report.synthesize import CategoryCardLLMOutput, synthesize_category
+
+    fake_output = CategoryCardLLMOutput(
+        category_key="tech",
+        title="기술",
+        narrative="n",
+        evidence_bullets=[],
+        impact="",
+        related_stocks=[],
+        evidence_chunk_ids=[],
+        priority_score=0.5,
+    )
+    from src.pipelines.stock_report.llm_tools import ToolCallRecord, ToolCallTrace
+
+    recorded_hit = _make_pdf_hit(7001)
+    fake_trace = ToolCallTrace(records=[
+        ToolCallRecord(query="AI 반도체", category="tech", ticker=None, top_k=3, hits=[recorded_hit]),
+    ])
+
+    async def fake_invoke(llm, output_model, messages, *, search_fn=None, config=None, **kwargs):
+        return fake_output, fake_trace
+
+    class FakeLLMConfig:
+        def create_llm(self): return object()
+        def build_messages(self, s, u): return []
+
+    monkeypatch.setattr(
+        "src.pipelines.stock_report.synthesize.get_report_synthesis_llm_config",
+        lambda p: FakeLLMConfig(),
+    )
+    monkeypatch.setattr("src.pipelines.stock_report.synthesize.invoke_llm_with_tools", fake_invoke)
+
+    bucket = _major_category_bucket()
+    card = asyncio.run(synthesize_category(bucket, search_fn=_fake_search_fn))
+
+    assert len(card.search_log_entries) == 1
+    entry = card.search_log_entries[0]
+    assert entry.query == "AI 반도체"
+    assert entry.label == bucket.category_key
+    assert entry.label_type == "category"
+    assert entry.hit_count == 1
+    assert entry.hit_chunk_ids == [7001]
+
+
+def test_assemble_tiered_artifact_collects_pdf_search_entries() -> None:
+    """_assemble_tiered_artifact이 category/ticker 카드의 search_log_entries를 pdf_search_entries에 모은다."""
+    from src.pipelines.stock_report.llm_tools import PdfSearchLogEntry
+    from src.pipelines.stock_report.retrieval import SameDayBundle
+    from src.pipelines.stock_report.synthesize import OverviewResult, _assemble_tiered_artifact
+
+    entry = PdfSearchLogEntry(
+        label="tech", label_type="category", query="AI 반도체",
+        category="tech", ticker=None, top_k=3, hit_count=1, hit_chunk_ids=[9001],
+    )
+    bucket = _major_category_bucket()
+    bundle = SameDayBundle(
+        report_date=date(2026, 6, 22),
+        chunks=list(bucket.chunks),
+        category_buckets=[bucket],
+        focus_ticker_buckets=[],
+        low_confidence_chunks=[],
+    )
+    card = CategorySummaryCard(
+        category_key="tech",
+        title="기술",
+        narrative="n",
+        evidence_bullets=[],
+        impact="",
+        related_stocks=[],
+        evidence_chunk_ids=[],
+        search_log_entries=[entry],
+    )
+    overview = OverviewResult(pulse=[], core_themes=[], evidence_chunk_ids=[])
+
+    artifact = _assemble_tiered_artifact(bundle, [card], [], overview)
+
+    assert hasattr(artifact, "pdf_search_entries")
+    assert len(artifact.pdf_search_entries) == 1
+    assert artifact.pdf_search_entries[0].query == "AI 반도체"
+
+
 def test_synthesize_tiered_does_not_call_search_fn_for_minor_buckets(monkeypatch) -> None:
     """minor 버킷(chunk < threshold)에 대해 search_fn이 호출되지 않는다."""
     from src.pipelines.stock_report.retrieval import SameDayBundle

@@ -239,6 +239,7 @@ def test_run_daily_v2_calls_migration_and_ingest(monkeypatch):
         return SimpleNamespace(
             report_date=date(2026, 5, 8),
             evidence_refs=[object()],
+            pdf_search_entries=[],
         )
 
     def _fake_render_stock_report_markdown(artifact):
