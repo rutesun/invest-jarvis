@@ -574,6 +574,7 @@ def _format_presented_structure(presented_structure) -> str:
 
 
 def _format_raw_analysis_sections(result: dict) -> str:
+    ticker = result.get("ticker", "")
     technical = result["technical"]
     tech_summary = result["technical_summary"]
     news_analysis = result.get("news_analysis")
@@ -721,11 +722,12 @@ def _format_raw_analysis_sections(result: dict) -> str:
         output += "\n"
 
         if fundamental.quarterly_data is not None and len(fundamental.quarterly_data) > 0:
+            is_korean = ticker.endswith((".KS", ".KQ"))
             output += "### 분기별 실적\n\n"
             output += "**매출 추이:**\n\n"
             for q in fundamental.quarterly_data:
                 if q.revenue is not None:
-                    revenue_str = f"${q.revenue / 1e9:.2f}B"
+                    revenue_str = f"{q.revenue:.0f}억" if is_korean else f"${q.revenue / 1e9:.2f}B"
                     yoy_str = _format_growth_rate(q.revenue_yoy)
                     qoq_str = _format_growth_rate(q.revenue_qoq)
                     output += f"- {q.period}: {revenue_str} (YoY {yoy_str}, QoQ {qoq_str})\n"
@@ -734,7 +736,7 @@ def _format_raw_analysis_sections(result: dict) -> str:
             output += "**이익 추이:**\n\n"
             for q in fundamental.quarterly_data:
                 if q.earnings is not None:
-                    earnings_str = f"${q.earnings / 1e9:.2f}B"
+                    earnings_str = f"{q.earnings:.0f}억" if is_korean else f"${q.earnings / 1e9:.2f}B"
                     yoy_str = _format_growth_rate(q.earnings_yoy)
                     qoq_str = _format_growth_rate(q.earnings_qoq)
                     output += f"- {q.period}: {earnings_str} (YoY {yoy_str}, QoQ {qoq_str})\n"

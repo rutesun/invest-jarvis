@@ -34,6 +34,7 @@ def test_normalize_kis_snapshot_sets_missing_values_to_none():
         other_major_ratios=[],
         income_statement=[],
         balance_sheet=[],
+        balance_sheet_q=[],
     )
 
     assert snapshot.pe_ratio is None
@@ -103,6 +104,7 @@ def test_normalize_kis_snapshot_maps_core_metrics_and_growth():
                 "thtr_ntin": "344514.00",
             },
         ],
+        balance_sheet_q=[],
     )
 
     assert snapshot.roe == pytest.approx(0.1085)
@@ -117,13 +119,10 @@ def test_normalize_kis_snapshot_maps_core_metrics_and_growth():
     assert snapshot.ps_ratio == pytest.approx(55000.0 / 49471.0)
     assert snapshot.ev_ebitda == pytest.approx(5.20)
     assert snapshot.payout_ratio == pytest.approx(0.251)
+    # 연간 성장률은 balance_sheet의 결산월(XX12) 행끼리만 비교한다 (분기행 혼입 방지)
     assert snapshot.earnings_growth == pytest.approx((452068.0 - 344514.0) / 344514.0)
     assert snapshot.revenue_growth == pytest.approx((3336059.0 - 3008709.0) / 3008709.0)
-    assert snapshot.quarterly_data is not None
-    assert snapshot.quarterly_data[0].period == "2025-12"
-    assert snapshot.quarterly_data[0].revenue_qoq == pytest.approx(
-        (3336059.0 - 3008709.0) / 3008709.0
-    )
+    # 분기 매출/이익은 balance_sheet_q(div=1) 기반이며, 별도 테스트가 검증한다.
 
 
 def _http_status_error(status_code: int) -> httpx.HTTPStatusError:
@@ -248,13 +247,16 @@ async def test_fetch_kis_fundamentals_annual_eps_from_profit_ratio_a():
     assert snapshot.annual_data[0].year == "2025"
     assert snapshot.annual_data[0].eps == pytest.approx(6564.0)
 
-    # 분기 quarterly_data는 profit_ratio div=1에서 나와야 한다
+    # 분기 quarterly_data는 profit_ratio div=1에서 나와야 한다.
+    # KIS 분기 EPS는 누적값이므로 순수 분기(standalone)로 변환된다:
+    #   2025-06 = 1920(반기 누적) - 1186(Q1 누적) = 734
+    #   2024-06 = 2394 (해당 연도 첫 행, 누적=standalone)
     assert snapshot.quarterly_data is not None
     eps_by_period = {q.period: q for q in snapshot.quarterly_data}
     q0 = eps_by_period.get("2025-06")
     assert q0 is not None
-    assert q0.eps == pytest.approx(1920.0)
-    expected_yoy = (1920.0 - 2394.0) / abs(2394.0)
+    assert q0.eps == pytest.approx(734.0)
+    expected_yoy = (734.0 - 2394.0) / abs(2394.0)
     assert q0.eps_yoy == pytest.approx(expected_yoy, rel=1e-5)
 
 
@@ -293,6 +295,11 @@ def test_normalize_kis_snapshot_quarterly_data_eps_series_based():
         {"stac_yymm": "202409", "eps": "3701.00"},
         {"stac_yymm": "202406", "eps": "1186.00"},  # 전년 동기
     ]
+    # 분기 매출/이익은 balance_sheet_q(div=1, 누적)에서 가져온다.
+    balance_sheet_q = [
+        {"stac_yymm": "202506", "sale_account": "1500000", "op_prfi": "150000", "thtr_ntin": "130000"},
+        {"stac_yymm": "202503", "sale_account": "800000", "op_prfi": "80000", "thtr_ntin": "70000"},
+    ]
 
     snap = tool._normalize_kis_snapshot(  # type: ignore[attr-defined]
         ticker="005930.KS",
@@ -304,6 +311,7 @@ def test_normalize_kis_snapshot_quarterly_data_eps_series_based():
         other_major_ratios=[],
         income_statement=[],
         balance_sheet=balance_sheet_mixed,
+        balance_sheet_q=balance_sheet_q,
     )
 
     assert snap.quarterly_data is not None
@@ -313,11 +321,11 @@ def test_normalize_kis_snapshot_quarterly_data_eps_series_based():
     periods = [q.period for q in snap.quarterly_data]
     assert "2025-06" in periods, f"Expected 2025-06 in {periods}"
     assert "2025-03" in periods, f"Expected 2025-03 in {periods}"
-    # EPS가 채워져야 한다
+    # KIS 분기 EPS는 누적값 → 순수 분기로 변환: 2025-06 = 1920 - 1186 = 734
     eps_by_period = {q.period: q for q in snap.quarterly_data}
-    assert eps_by_period["2025-06"].eps == pytest.approx(1920.0)
+    assert eps_by_period["2025-06"].eps == pytest.approx(734.0)
     assert eps_by_period["2025-06"].eps_yoy is not None, "eps_yoy should be set for 2025-06"
-    # balance-sheet에서 분기 매칭된 것은 revenue/earnings 있음
+    # balance_sheet_q에서 분기 매칭된 것은 revenue 있음 (2025-03은 Q1이라 누적=순수)
     assert eps_by_period["2025-03"].revenue == pytest.approx(800000.0)
 
 

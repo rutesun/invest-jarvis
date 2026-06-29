@@ -34,35 +34,61 @@ def test_snapshot_holds_annual_data():
 
 
 def test_kis_quarterly_eps_yoy_matches_same_month():
-    # financial-ratio div=1 분기 행 (최신순). eps 문자열은 KIS 응답 형식.
+    # financial-ratio div=1 분기 행은 당해 연도 누적 EPS다 (최신순).
+    # 순수 분기 EPS = 누적 - 직전 분기 누적, YoY는 같은 분기월 1년 전 순수 분기와 비교.
     rows = [
-        {"stac_yymm": "202506", "eps": "1920.00"},
-        {"stac_yymm": "202503", "eps": "1186.00"},
-        {"stac_yymm": "202412", "eps": "4950.00"},
-        {"stac_yymm": "202409", "eps": "3701.00"},
-        {"stac_yymm": "202406", "eps": "1186.00"},  # 전년 동기(6월)
+        {"stac_yymm": "202506", "eps": "1700.00"},  # 2025 반기 누적
+        {"stac_yymm": "202503", "eps": "1000.00"},  # 2025 Q1 누적
+        {"stac_yymm": "202406", "eps": "1200.00"},  # 2024 반기 누적
+        {"stac_yymm": "202403", "eps": "800.00"},  # 2024 Q1 누적
     ]
     q = FundamentalTool._build_quarterly_eps(rows)
-    # 202506 EPS YoY = (1920 - 1186)/1186
+    # 2025-06 순수 분기 = 1700 - 1000 = 700, 2024-06 순수 분기 = 1200 - 800 = 400
     latest = q[0]
     assert latest.period.endswith("06")
-    assert latest.eps == 1920.0
-    assert abs(latest.eps_yoy - (1920.0 - 1186.0) / 1186.0) < 1e-6
+    assert latest.eps == 700.0
+    assert abs(latest.eps_yoy - (700.0 - 400.0) / 400.0) < 1e-6
 
 
 def test_kis_quarterly_eps_yoy_none_when_no_prior_year():
-    """전년 동기 행이 없으면 eps_yoy=None."""
+    """전년 동기(같은 분기월) 행이 없으면 eps_yoy=None."""
     rows = [
-        {"stac_yymm": "202506", "eps": "1920.00"},
-        {"stac_yymm": "202503", "eps": "1186.00"},
-        {"stac_yymm": "202412", "eps": "4950.00"},
-        {"stac_yymm": "202409", "eps": "3701.00"},
-        # 202406 없음
+        {"stac_yymm": "202506", "eps": "1700.00"},  # 2025 반기 누적
+        {"stac_yymm": "202503", "eps": "1000.00"},  # 2025 Q1 누적
+        # 2024-06 없음 → 2025-06 YoY 불가
     ]
     q = FundamentalTool._build_quarterly_eps(rows)
     latest = q[0]
-    assert latest.eps == 1920.0
+    # 2025-06 순수 분기 = 1700 - 1000 = 700
+    assert latest.eps == 700.0
     assert latest.eps_yoy is None
+
+
+def test_kis_cumulative_to_standalone_converts_within_year():
+    """누적 분기 수치를 순수 분기로 변환: standalone = 누적 - 직전 분기 누적."""
+    rows = [
+        {"stac_yymm": "202512", "sale_account": "1000"},  # 연간 누적
+        {"stac_yymm": "202509", "sale_account": "700"},  # 3Q 누적
+        {"stac_yymm": "202506", "sale_account": "450"},  # 반기 누적
+        {"stac_yymm": "202503", "sale_account": "200"},  # Q1 누적
+    ]
+    result = FundamentalTool._kis_cumulative_to_standalone(rows, "sale_account")
+    assert result["2025-03"] == 200.0  # Q1: 누적=순수
+    assert result["2025-06"] == 250.0  # 450 - 200
+    assert result["2025-09"] == 250.0  # 700 - 450
+    assert result["2025-12"] == 300.0  # 1000 - 700
+
+
+def test_kis_cumulative_to_standalone_resets_each_year():
+    """회계연도가 바뀌면 누적이 리셋되므로 Q1은 그대로 사용."""
+    rows = [
+        {"stac_yymm": "202603", "sale_account": "300"},  # 2026 Q1 (새 연도)
+        {"stac_yymm": "202512", "sale_account": "1000"},  # 2025 연간 누적
+        {"stac_yymm": "202509", "sale_account": "700"},  # 2025 3Q 누적
+    ]
+    result = FundamentalTool._kis_cumulative_to_standalone(rows, "sale_account")
+    assert result["2026-03"] == 300.0  # 새 연도 Q1: 누적=순수
+    assert result["2025-12"] == 300.0  # 1000 - 700 (같은 연도 내 차감)
 
 
 def test_kis_quarterly_eps_returns_at_most_4():
