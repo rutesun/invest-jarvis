@@ -46,6 +46,19 @@ Apply the following principles on every code change and refactor:
 - Michael Feathers: identify hard-to-change code and propose seams to create testable boundaries before invasive edits.
 - DDD / Eric Evans (when applicable): keep domain model and ubiquitous language consistent with business concepts.
 
+## Testing Principles
+
+외부 금융 API(KIS, DART, yfinance)는 응답의 '의미'가 암묵적이다 — 누적값인지 단독값인지, 행 종류가 혼재하는지 등은 타입 시스템이 잡지 못한다. 아래 두 레이어로 이를 방어한다.
+
+**경계 계약 (Boundary Contract)**
+- KIS/DART Provider 코드를 수정할 때는 해당 API 응답의 형식 가정을 `tests/harness/`의 contract 함수로 명시한다.
+- contract 함수는 conftest fixture에 연결해 로드 즉시 검증되게 한다 — 가정이 깨지면 테스트 setup 단계에서 즉시 실패.
+- 런타임에도 가정이 벗어나면 잘못된 값을 조용히 내려보내지 말고 `logger.warning` 또는 예외로 즉시 표면화한다.
+
+**골든 테스트 (Golden Test)**
+- 외부 API를 쓰는 신규 기능은 실제 raw 응답을 `tests/fixtures/`에 저장하고, 실제로 확인한 정답값과 비교하는 골든 테스트를 포함한다.
+- 골든 테스트는 중간 로직이 아닌 전체 경로(raw 응답 → 최종 결과)를 고정한다 — KIS 응답 형식이 바뀌거나 변환 로직이 잘못 수정되면 이 테스트가 깨져서 알려준다.
+
 ## Architecture
 
 Layered architecture — data flows one way:
@@ -82,6 +95,8 @@ Providers → Tools → Pipelines → CLI (src/cli/main.py)
 ## Documentation Rules
 
 문서 생성/업데이트 원칙과 ADR 운영 규칙의 기준 문서는 `docs/DOCUMENTATION.md`.
+
+기능 변경(`src/`)이 있는 PR을 마무리할 때는 `docs/changes/` 변경 기록을 작성하고 `docs/changes/INDEX.md`를 갱신한다. pre-push에서 LLM이 기능 변경으로 판정하면 `docs/FEATURES.md`와 `docs/changes/` 누락 시 push가 차단된다.
 
 ## Collaboration Rules
 
