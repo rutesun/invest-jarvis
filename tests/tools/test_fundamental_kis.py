@@ -297,7 +297,12 @@ def test_normalize_kis_snapshot_quarterly_data_eps_series_based():
     ]
     # 분기 매출/이익은 balance_sheet_q(div=1, 누적)에서 가져온다.
     balance_sheet_q = [
-        {"stac_yymm": "202506", "sale_account": "1500000", "op_prfi": "150000", "thtr_ntin": "130000"},
+        {
+            "stac_yymm": "202506",
+            "sale_account": "1500000",
+            "op_prfi": "150000",
+            "thtr_ntin": "130000",
+        },
         {"stac_yymm": "202503", "sale_account": "800000", "op_prfi": "80000", "thtr_ntin": "70000"},
     ]
 

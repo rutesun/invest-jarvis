@@ -177,17 +177,23 @@ def test_synthesize_category_with_search_fn_uses_tool_calling(monkeypatch) -> No
         priority_score=0.8,
     )
 
-    async def fake_invoke_llm_with_tools(llm, output_model, messages, *, search_fn, config, **kwargs):
+    async def fake_invoke_llm_with_tools(
+        llm, output_model, messages, *, search_fn, config, **kwargs
+    ):
         invoke_calls.append({"search_fn": search_fn})
-        trace = ToolCallTrace(records=[
-            ToolCallRecord(query="tech query", category="tech", ticker=None, top_k=3, hits=hits)
-        ])
+        trace = ToolCallTrace(
+            records=[
+                ToolCallRecord(query="tech query", category="tech", ticker=None, top_k=3, hits=hits)
+            ]
+        )
         return fake_output, trace
 
     class FakeLLMConfig:
         model = "fake-model"
+
         def create_llm(self):
             return object()
+
         def build_messages(self, system, user):
             return []
 
@@ -240,15 +246,19 @@ def test_synthesize_category_pdf_id_not_in_evidence_chunk_ids(monkeypatch) -> No
     )
 
     async def fake_invoke(llm, output_model, messages, *, search_fn, config, **kwargs):
-        trace = ToolCallTrace(records=[
-            ToolCallRecord(query="q", category=None, ticker=None, top_k=3, hits=hits)
-        ])
+        trace = ToolCallTrace(
+            records=[ToolCallRecord(query="q", category=None, ticker=None, top_k=3, hits=hits)]
+        )
         return fake_output, trace
 
     class FakeLLMConfig:
         model = "fake-model"
-        def create_llm(self): return object()
-        def build_messages(self, s, u): return []
+
+        def create_llm(self):
+            return object()
+
+        def build_messages(self, s, u):
+            return []
 
     monkeypatch.setattr(
         "src.pipelines.stock_report.synthesize.get_report_synthesis_llm_config",
@@ -393,16 +403,23 @@ def test_synthesize_category_populates_search_log_entries(monkeypatch) -> None:
     from src.pipelines.stock_report.llm_tools import ToolCallRecord, ToolCallTrace
 
     recorded_hit = _make_pdf_hit(7001)
-    fake_trace = ToolCallTrace(records=[
-        ToolCallRecord(query="AI 반도체", category="tech", ticker=None, top_k=3, hits=[recorded_hit]),
-    ])
+    fake_trace = ToolCallTrace(
+        records=[
+            ToolCallRecord(
+                query="AI 반도체", category="tech", ticker=None, top_k=3, hits=[recorded_hit]
+            ),
+        ]
+    )
 
     async def fake_invoke(llm, output_model, messages, *, search_fn=None, config=None, **kwargs):
         return fake_output, fake_trace
 
     class FakeLLMConfig:
-        def create_llm(self): return object()
-        def build_messages(self, s, u): return []
+        def create_llm(self):
+            return object()
+
+        def build_messages(self, s, u):
+            return []
 
     monkeypatch.setattr(
         "src.pipelines.stock_report.synthesize.get_report_synthesis_llm_config",
@@ -429,8 +446,14 @@ def test_assemble_tiered_artifact_collects_pdf_search_entries() -> None:
     from src.pipelines.stock_report.synthesize import OverviewResult, _assemble_tiered_artifact
 
     entry = PdfSearchLogEntry(
-        label="tech", label_type="category", query="AI 반도체",
-        category="tech", ticker=None, top_k=3, hit_count=1, hit_chunk_ids=[9001],
+        label="tech",
+        label_type="category",
+        query="AI 반도체",
+        category="tech",
+        ticker=None,
+        top_k=3,
+        hit_count=1,
+        hit_chunk_ids=[9001],
     )
     bucket = _major_category_bucket()
     bundle = SameDayBundle(

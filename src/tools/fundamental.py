@@ -415,7 +415,7 @@ class FundamentalTool(BaseTool):
         Returns:
             {"YYYY-MM": standalone_value} 형태의 dict
         """
-        MONTH_ORDER = {"03": 0, "06": 1, "09": 2, "12": 3}
+        month_order = {"03": 0, "06": 1, "09": 2, "12": 3}
 
         by_year: dict[str, dict[str, float | None]] = {}
         for row in rows:
@@ -423,13 +423,13 @@ class FundamentalTool(BaseTool):
             if len(ym) != 6:
                 continue
             year, month = ym[:4], ym[4:]
-            if month not in MONTH_ORDER:
+            if month not in month_order:
                 continue
             by_year.setdefault(year, {})[month] = cls._to_float(row.get(value_key))
 
         result: dict[str, float | None] = {}
         for year, months_map in by_year.items():
-            sorted_months = sorted(months_map.keys(), key=lambda m: MONTH_ORDER[m])
+            sorted_months = sorted(months_map.keys(), key=lambda m: month_order[m])
             prev_cum: float | None = None
             for month in sorted_months:
                 cum = months_map[month]
@@ -569,8 +569,7 @@ class FundamentalTool(BaseTool):
         # KIS balance_sheet은 최신 분기행(예: 202603)과 연간행(XX12)이 혼재한다.
         # 분기행 vs 연간행을 비교하면 의미 없는 성장률이 나오므로 연간행끼리만 비교한다.
         annual_balance_rows = [
-            r for r in valid_balance_sheet
-            if (r.get("stac_yymm") or "").strip().endswith("12")
+            r for r in valid_balance_sheet if (r.get("stac_yymm") or "").strip().endswith("12")
         ]
         if len(annual_balance_rows) >= 2:
             current_row = annual_balance_rows[0]

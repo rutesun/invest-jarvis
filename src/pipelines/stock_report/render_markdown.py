@@ -60,7 +60,9 @@ class MarkdownReportBuilder:
                 line = f"doc {doc_id} {broker}{title_part}"
                 channel_name = broker
             else:
-                channel_name = snapshot.get("channel_name") or snapshot.get("channel_key") or "unknown"
+                channel_name = (
+                    snapshot.get("channel_name") or snapshot.get("channel_key") or "unknown"
+                )
                 channel_message_id = snapshot.get("channel_message_id") or "-"
                 line = f"chunk {ref.knowledge_chunk_id} {channel_name}#{channel_message_id}"
             key = (ref.section_key, ref.item_key)
