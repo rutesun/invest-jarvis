@@ -1,18 +1,23 @@
 #!/usr/bin/env bash
-# Pre-push hook: LLM으로 기능 변경 여부 판단 → FEATURES.md 업데이트 강제
+# Pre-push hook: LLM으로 기능 변경 여부 판단 → FEATURES.md + docs/changes/ 업데이트 강제
 # .pre-commit-config.yaml의 pre-push stage에서 호출됨
 
 set -euo pipefail
 
 BASE_BRANCH="main"
 
+CHANGED=$(git diff "$BASE_BRANCH"...HEAD --name-only)
+
 # src/ 변경이 없으면 패스
-if ! git diff "$BASE_BRANCH"...HEAD --name-only | grep -q "^src/"; then
+if ! echo "$CHANGED" | grep -q "^src/"; then
     exit 0
 fi
 
-# FEATURES.md가 이미 업데이트되었으면 패스
-if git diff "$BASE_BRANCH"...HEAD --name-only | grep -q "^docs/FEATURES.md"; then
+features_updated=$(echo "$CHANGED" | grep -q "^docs/FEATURES.md" && echo 1 || echo 0)
+changes_updated=$(echo "$CHANGED" | grep -q "^docs/changes/" && echo 1 || echo 0)
+
+# 필수 문서가 모두 업데이트되었으면 LLM 호출 없이 패스
+if [ "$features_updated" = 1 ] && [ "$changes_updated" = 1 ]; then
     exit 0
 fi
 
@@ -44,11 +49,12 @@ fi
 
 if echo "$VERDICT" | grep -q "FEATURE_CHANGE"; then
     echo ""
-    echo "❌ 기능 변경이 감지되었지만 docs/FEATURES.md가 업데이트되지 않았습니다."
-    echo "   FEATURES.md를 업데이트하고 다시 push하세요."
+    echo "❌ 기능 변경이 감지되었습니다. 다음 문서를 업데이트하고 다시 push하세요:"
+    [ "$features_updated" = 0 ] && echo "   - docs/FEATURES.md (현재 기능 상태)"
+    [ "$changes_updated" = 0 ] && echo "   - docs/changes/{name}.md (변경 기록) — '/change-record'로 초안 생성"
     echo ""
     exit 1
 fi
 
-echo "✅ 내부 변경으로 판단. FEATURES.md 업데이트 불필요."
+echo "✅ 내부 변경으로 판단. 문서 업데이트 불필요."
 exit 0

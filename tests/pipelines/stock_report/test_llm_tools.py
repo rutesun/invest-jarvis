@@ -40,7 +40,9 @@ class FakeOutputModel(BaseModel):
     result: str = "ok"
 
 
-def _make_tool_call(id: str, query: str, category: str | None = None, ticker: str | None = None, top_k: int = 3) -> dict:
+def _make_tool_call(
+    id: str, query: str, category: str | None = None, ticker: str | None = None, top_k: int = 3
+) -> dict:
     args: dict[str, Any] = {"query": query, "top_k": top_k}
     if category:
         args["category"] = category
@@ -72,7 +74,9 @@ def _make_fake_llm(responses: list[AIMessage]):
             call_count += 1
             return response
 
-        async def ainvoke(self, messages: list[BaseMessage], config: dict | None = None) -> AIMessage:
+        async def ainvoke(
+            self, messages: list[BaseMessage], config: dict | None = None
+        ) -> AIMessage:
             return self.invoke(messages, config)
 
     class FakeStructuredLLM:
@@ -83,7 +87,9 @@ def _make_fake_llm(responses: list[AIMessage]):
             self.last_messages = list(messages)
             return FakeOutputModel(result="structured_ok")
 
-        async def ainvoke(self, messages: list[BaseMessage], config: dict | None = None) -> BaseModel:
+        async def ainvoke(
+            self, messages: list[BaseMessage], config: dict | None = None
+        ) -> BaseModel:
             return self.invoke(messages, config)
 
     structured_llm = FakeStructuredLLM()
@@ -170,14 +176,20 @@ def test_invoke_llm_with_tools_single_round():
     hits = [_make_hit(201), _make_hit(202)]
     search_fn_calls: list[dict] = []
 
-    def fake_search_fn(query: str, *, category=None, ticker=None, top_k=3) -> list[DocumentSearchHit]:
-        search_fn_calls.append({"query": query, "category": category, "ticker": ticker, "top_k": top_k})
+    def fake_search_fn(
+        query: str, *, category=None, ticker=None, top_k=3
+    ) -> list[DocumentSearchHit]:
+        search_fn_calls.append(
+            {"query": query, "category": category, "ticker": ticker, "top_k": top_k}
+        )
         return hits
 
-    llm, structured_llm, invoke_history = _make_fake_llm([
-        _ai_message_with_tool_call("tc1", "AI semiconductor trend", category="tech", top_k=3),
-        _ai_message_no_tool_call(),
-    ])
+    llm, structured_llm, invoke_history = _make_fake_llm(
+        [
+            _ai_message_with_tool_call("tc1", "AI semiconductor trend", category="tech", top_k=3),
+            _ai_message_no_tool_call(),
+        ]
+    )
 
     messages = [HumanMessage(content="Summarize the market")]
     output, trace = asyncio.run(
@@ -259,10 +271,12 @@ def test_invoke_llm_with_tools_max_rounds_cleanup():
         return hits
 
     # 두 라운드 모두 tool_call을 반환 → max_tool_rounds=2 도달
-    llm, structured_llm, invoke_history = _make_fake_llm([
-        _ai_message_with_tool_call("tc1", "query 1"),
-        _ai_message_with_tool_call("tc2", "query 2"),
-    ])
+    llm, structured_llm, invoke_history = _make_fake_llm(
+        [
+            _ai_message_with_tool_call("tc1", "query 1"),
+            _ai_message_with_tool_call("tc2", "query 2"),
+        ]
+    )
 
     output, trace = asyncio.run(
         invoke_llm_with_tools(
@@ -294,10 +308,12 @@ def test_invoke_llm_with_tools_history_passed_to_final():
     def fake_search_fn(query: str, **kwargs) -> list[DocumentSearchHit]:
         return [_make_hit(401)]
 
-    llm, structured_llm, _ = _make_fake_llm([
-        _ai_message_with_tool_call("tc1", "search query"),
-        _ai_message_no_tool_call(),
-    ])
+    llm, structured_llm, _ = _make_fake_llm(
+        [
+            _ai_message_with_tool_call("tc1", "search query"),
+            _ai_message_no_tool_call(),
+        ]
+    )
 
     asyncio.run(
         invoke_llm_with_tools(
@@ -331,10 +347,12 @@ def test_invoke_llm_with_tools_search_fn_called_from_thread():
         call_threads.append(threading.current_thread())
         return [_make_hit(501)]
 
-    llm, _, _ = _make_fake_llm([
-        _ai_message_with_tool_call("tc1", "thread test query"),
-        _ai_message_no_tool_call(),
-    ])
+    llm, _, _ = _make_fake_llm(
+        [
+            _ai_message_with_tool_call("tc1", "thread test query"),
+            _ai_message_no_tool_call(),
+        ]
+    )
 
     asyncio.run(
         invoke_llm_with_tools(
@@ -363,10 +381,12 @@ def test_invoke_llm_with_tools_search_exception_absorbed():
     def failing_search_fn(query: str, **kwargs) -> list[DocumentSearchHit]:
         raise RuntimeError("DB connection failed")
 
-    llm, _, _ = _make_fake_llm([
-        _ai_message_with_tool_call("tc1", "failing query"),
-        _ai_message_no_tool_call(),
-    ])
+    llm, _, _ = _make_fake_llm(
+        [
+            _ai_message_with_tool_call("tc1", "failing query"),
+            _ai_message_no_tool_call(),
+        ]
+    )
 
     output, trace = asyncio.run(
         invoke_llm_with_tools(

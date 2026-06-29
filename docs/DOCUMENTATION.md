@@ -102,6 +102,36 @@
 3. 머지 직전/직후 `Merged`로 마감
 4. 현재 상태 변화가 있으면 `docs/FEATURES.md`도 함께 업데이트
 
+### 파일 포맷
+
+템플릿: `docs/changes/_templates/change-record.md`
+
+헤더 필드:
+- `Status`: Draft | In Progress | Merged
+- `Date`: 머지일, ISO 8601 (`YYYY-MM-DD`)
+- `PRs`: PR 번호
+- `Type`: feat | fix | refactor | docs | perf
+
+`Changes` 섹션은 다음 카테고리로 분류한다 (해당 없는 항목 생략):
+
+| 카테고리 | 의미 |
+|---------|------|
+| **Added** | 새 기능/동작 추가 |
+| **Changed** | 기존 동작 변경 (사용자 해석이 달라지는 것) |
+| **Fixed** | 버그 수정 |
+| **Removed** | 기능/동작 제거 |
+| **Breaking** | 하위 호환을 깨는 변경 — 있으면 반드시 명시 |
+
+각 항목은 동사로 시작한다. 커밋 로그를 그대로 옮기지 않는다.
+
+### 인덱스 유지
+
+`docs/changes/INDEX.md`를 단일 진입점으로 운영한다. change record를 새로 추가하거나 상태가 바뀌면 INDEX도 함께 업데이트한다.
+
+### 초안 생성
+
+빈 템플릿을 수동으로 채우지 말고 `/change-record`로 초안을 생성한다. 현재 브랜치의 diff·커밋 로그를 분석해 Why/What/Before·After/Impact/Constraints를 채운 초안을 만든다. 생성 후 사람이 검토·보정한다.
+
 ---
 
 ## 6. ADR 운영 원칙
@@ -127,23 +157,25 @@
 
 ## 7. 강제 방식
 
-기본적으로 문서 규칙은 **훅으로 강제하지 않아도 된다**.
+문서 누락이 반복되어(기능 PR 다수가 `docs/changes/` 기록 없이 머지됨) 아래 자동화를 도입했다.
+생성·유도·차단 3계층으로, 작성 비용을 낮춘 뒤 누락만 게이트로 막는다.
 
-권장 운영:
+**생성 (마찰 제거)**
 
-- brainstorming 종료 시 설계 문서에 ADR 후보가 있는지 확인
-- 구현 완료 시 `docs/changes/`와 `docs/FEATURES.md` 업데이트 여부 확인
-- 머지 전 ADR 필요 여부를 최종 확인
+- `/change-record` (`.claude/commands/change-record.md`): 현재 브랜치 diff·커밋 로그를 분석해
+  템플릿에 맞는 change record 초안을 생성한다. 작성 비용을 낮춰 강제가 실제로 작동하게 만드는 것이 목적.
 
-즉, 기본값은 **프로세스 체크리스트와 리뷰로 관리**한다.
+**유도 (세션 종료 시)**
 
-훅이나 자동 검사는 다음 경우에만 선택적으로 도입한다.
+- Stop hook (`.claude/hooks/check-docs.sh`): feature 브랜치에서 `src/` 변경이 있는데
+  `docs/changes/` 기록이 없으면 에이전트에게 작성을 유도한다. `stop_hook_active`로 한 번만 막는다.
 
-- 문서 누락이 반복된다
-- 팀에서 같은 실수를 자주 한다
-- `FEATURES.md`, `CLI_USAGE.md`, `docs/changes/` 누락이 실제 운영 비용으로 이어진다
+**차단 (push 시)**
 
-자동화를 하더라도 brainstorming 단계까지 강제로 막기보다는, `pre-push`나 PR 체크에서 경고 또는 실패시키는 쪽이 더 적합하다.
+- pre-push (`scripts/check-features-doc.sh`): `src/` 변경 PR을 LLM이 기능 변경으로 판정하면
+  `docs/FEATURES.md`와 `docs/changes/`가 둘 다 있어야 push가 통과한다.
+
+brainstorming 단계까지 막지는 않는다. 게이트는 세션 종료 시점과 push 시점에만 둔다.
 
 ---
 

@@ -352,9 +352,7 @@ def _log_pdf_trace(label: str, trace: ToolCallTrace) -> None:
     for rec in trace.records:
         if not rec.query:
             continue
-        titles = ", ".join(
-            (h.doc_title or h.source_path or "?")[:45] for h in rec.hits[:2]
-        )
+        titles = ", ".join((h.doc_title or h.source_path or "?")[:45] for h in rec.hits[:2])
         suffix = f" ({titles})" if titles else " (결과 없음)"
         logger.info("pdf_search [%s] %r → %d건%s", label, rec.query, len(rec.hits), suffix)
 
@@ -381,7 +379,9 @@ async def synthesize_category(
         if search_fn is not None:
             llm_config = get_report_synthesis_llm_config(provider)
             llm = llm_config.create_llm()
-            system_prompt = f"{CATEGORY_SYNTHESIS_SYSTEM_PROMPT}\n\n{_SEARCH_DOCUMENTS_TOOL_ADDENDUM}"
+            system_prompt = (
+                f"{CATEGORY_SYNTHESIS_SYSTEM_PROMPT}\n\n{_SEARCH_DOCUMENTS_TOOL_ADDENDUM}"
+            )
             messages = llm_config.build_messages(system_prompt, user_prompt)
             output, trace = await invoke_llm_with_tools(
                 llm,
@@ -940,7 +940,9 @@ def _assemble_tiered_artifact(
     category_items = category_summaries[: len(category_cards)]  # minor_item 제외
     for card, item in zip(category_cards, category_items, strict=True):
         if card.document_hits:
-            evidence_refs.extend(_pdf_evidence_refs("category_summaries", item.key, card.document_hits))
+            evidence_refs.extend(
+                _pdf_evidence_refs("category_summaries", item.key, card.document_hits)
+            )
     for card in ticker_cards:
         if card.document_hits:
             item_key = card.ticker

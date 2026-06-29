@@ -437,16 +437,22 @@ def _make_artifact_with_refs(refs: list[ReportEvidenceRef]) -> StockReportArtifa
 
 def test_pdf_ref_renders_as_doc_format() -> None:
     """PDF 출처는 'doc {id} {broker} · {title}' 형식으로 렌더된다."""
-    artifact = _make_artifact_with_refs([
-        ReportEvidenceRef(
-            section_key="category_summaries",
-            item_key="반도체",
-            rank_score=0.9,
-            knowledge_chunk_snapshot={"evidence_kind": "searched", "doc_title": "반도체 전망 리포트", "broker_key": "samsung"},
-            source_type="pdf",
-            document_chunk_id=9001,
-        )
-    ])
+    artifact = _make_artifact_with_refs(
+        [
+            ReportEvidenceRef(
+                section_key="category_summaries",
+                item_key="반도체",
+                rank_score=0.9,
+                knowledge_chunk_snapshot={
+                    "evidence_kind": "searched",
+                    "doc_title": "반도체 전망 리포트",
+                    "broker_key": "samsung",
+                },
+                source_type="pdf",
+                document_chunk_id=9001,
+            )
+        ]
+    )
 
     markdown = MarkdownReportBuilder().build(artifact)
 
@@ -458,20 +464,22 @@ def test_pdf_ref_renders_as_doc_format() -> None:
 
 def test_telegram_ref_renders_as_chunk_format() -> None:
     """텔레그램 출처는 기존 'chunk {id} {channel}#{msg}' 형식을 유지한다 (회귀 가드)."""
-    artifact = _make_artifact_with_refs([
-        ReportEvidenceRef(
-            section_key="category_summaries",
-            item_key="반도체",
-            knowledge_chunk_id=1234,
-            rank_score=1.0,
-            knowledge_chunk_snapshot={
-                "channel_name": "신한 리서치",
-                "channel_message_id": "99",
-                "channel_key": "shinhan",
-            },
-            source_type="telegram",
-        )
-    ])
+    artifact = _make_artifact_with_refs(
+        [
+            ReportEvidenceRef(
+                section_key="category_summaries",
+                item_key="반도체",
+                knowledge_chunk_id=1234,
+                rank_score=1.0,
+                knowledge_chunk_snapshot={
+                    "channel_name": "신한 리서치",
+                    "channel_message_id": "99",
+                    "channel_key": "shinhan",
+                },
+                source_type="telegram",
+            )
+        ]
+    )
 
     markdown = MarkdownReportBuilder().build(artifact)
 
@@ -480,24 +488,34 @@ def test_telegram_ref_renders_as_chunk_format() -> None:
 
 def test_mixed_refs_both_sources_rendered() -> None:
     """텔레그램 + PDF 출처가 혼재할 때 양쪽 모두 렌더된다."""
-    artifact = _make_artifact_with_refs([
-        ReportEvidenceRef(
-            section_key="category_summaries",
-            item_key="반도체",
-            knowledge_chunk_id=1234,
-            rank_score=1.0,
-            knowledge_chunk_snapshot={"channel_name": "신한", "channel_message_id": "1", "channel_key": "shinhan"},
-            source_type="telegram",
-        ),
-        ReportEvidenceRef(
-            section_key="category_summaries",
-            item_key="반도체",
-            rank_score=0.85,
-            knowledge_chunk_snapshot={"evidence_kind": "searched", "doc_title": "리포트", "broker_key": "kb"},
-            source_type="pdf",
-            document_chunk_id=9002,
-        ),
-    ])
+    artifact = _make_artifact_with_refs(
+        [
+            ReportEvidenceRef(
+                section_key="category_summaries",
+                item_key="반도체",
+                knowledge_chunk_id=1234,
+                rank_score=1.0,
+                knowledge_chunk_snapshot={
+                    "channel_name": "신한",
+                    "channel_message_id": "1",
+                    "channel_key": "shinhan",
+                },
+                source_type="telegram",
+            ),
+            ReportEvidenceRef(
+                section_key="category_summaries",
+                item_key="반도체",
+                rank_score=0.85,
+                knowledge_chunk_snapshot={
+                    "evidence_kind": "searched",
+                    "doc_title": "리포트",
+                    "broker_key": "kb",
+                },
+                source_type="pdf",
+                document_chunk_id=9002,
+            ),
+        ]
+    )
 
     markdown = MarkdownReportBuilder().build(artifact)
 

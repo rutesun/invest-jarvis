@@ -424,11 +424,7 @@ def run_daily_v2(
         )
         logger.info("daily-v2 classified chunks persisted")
         same_day_bundle = _stage_load_same_day_bundle(conn, date)
-        search_fn = (
-            functools.partial(_search_documents, conn)
-            if has_embed_auth()
-            else None
-        )
+        search_fn = functools.partial(_search_documents, conn) if has_embed_auth() else None
         report_artifact = _stage_local_evidence_synthesis(
             same_day_bundle, provider=provider, search_fn=search_fn
         )
@@ -455,7 +451,9 @@ def run_daily_v2(
             if report_artifact.pdf_search_entries:
                 persist_pdf_search_log(conn, report_run_id, report_artifact.pdf_search_entries)
         except Exception:
-            logger.warning("persist_pdf_search_log 실패 — 무시: report_run_id=%s", report_run_id, exc_info=True)
+            logger.warning(
+                "persist_pdf_search_log 실패 — 무시: report_run_id=%s", report_run_id, exc_info=True
+            )
         logger.info(
             "daily-v2 report artifact persisted: report_run_id=%s categories=%d themes=%d focus_tickers=%d low_confidence=%d",
             report_run_id,
