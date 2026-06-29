@@ -1,5 +1,6 @@
 # tests/tools/test_disclosure.py
 import json
+from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -113,7 +114,12 @@ async def test_sec_fetcher_returns_filtered_filings(
     sec_fetcher, sec_cik_response, sec_submissions_response
 ):
     """최근 3개월 이내의 10-Q, 8-K만 반환하고 오래된 공시와 다른 유형은 제외."""
-    with patch("httpx.AsyncClient") as mock_client_cls:
+    # 시간 고정: cutoff = 2026-03-22 → 04-05(8-K), 03-30(10-Q) 포함 / 2025-12-01 제외
+    fixed_now = datetime(2026, 6, 20)
+    with patch("src.tools.disclosure.datetime") as mock_dt, patch(
+        "httpx.AsyncClient"
+    ) as mock_client_cls:
+        mock_dt.now.return_value = fixed_now
         mock_client = AsyncMock()
         mock_client_cls.return_value.__aenter__.return_value = mock_client
 
