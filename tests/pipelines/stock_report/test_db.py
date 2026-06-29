@@ -196,6 +196,144 @@ def test_persist_report_artifact_writes_run_and_evidence() -> None:
     assert conn.commits == 1
 
 
+def test_report_evidence_ref_has_source_type_and_document_chunk_id() -> None:
+    """ReportEvidenceRef에 source_type과 document_chunk_id 필드가 있고 기본값이 올바르다."""
+    # telegram ref: 기본값 확인
+    ref = ReportEvidenceRef(
+        section_key="category_summaries",
+        item_key="반도체",
+        knowledge_chunk_id=10,
+        rank_score=1.0,
+        knowledge_chunk_snapshot={"id": 10},
+    )
+    assert ref.source_type == "telegram"
+    assert ref.document_chunk_id is None
+
+    # pdf ref: knowledge_chunk_id 없음, document_chunk_id 있음
+    pdf_ref = ReportEvidenceRef(
+        section_key="category_summaries",
+        item_key="반도체",
+        rank_score=0.9,
+        knowledge_chunk_snapshot={},
+        source_type="pdf",
+        document_chunk_id=5001,
+    )
+    assert pdf_ref.source_type == "pdf"
+    assert pdf_ref.document_chunk_id == 5001
+    assert pdf_ref.knowledge_chunk_id is None
+
+
+def test_persist_report_artifact_includes_source_type_and_document_chunk_id() -> None:
+    """INSERT에 source_type, document_chunk_id 컬럼이 포함되어야 한다."""
+    from src.pipelines.stock_report.db import persist_report_artifact
+
+    conn = FakeConnection()
+    persist_report_artifact(
+        conn,
+        report_date=date(2026, 6, 22),
+        provider="openai",
+        output_markdown="# report",
+        evidence_refs=[
+            ReportEvidenceRef(
+                section_key="category_summaries",
+                item_key="반도체",
+                knowledge_chunk_id=10,
+                rank_score=1.0,
+                knowledge_chunk_snapshot={"id": 10},
+                source_type="telegram",
+            )
+        ],
+    )
+
+    evidence_query, evidence_params = conn.executemany_calls[0]
+    assert "source_type" in evidence_query
+    assert "document_chunk_id" in evidence_query
+    # source_type 값이 바인딩됨
+    row = evidence_params[0]
+    assert "telegram" in row
+
+
+def test_persist_report_artifact_mixed_telegram_and_pdf() -> None:
+    """telegram 근거(knowledge_chunk_id)와 pdf 근거(document_chunk_id) 혼재 시 모두 적재."""
+    from src.pipelines.stock_report.db import persist_report_artifact
+
+    conn = FakeConnection()
+    persist_report_artifact(
+        conn,
+        report_date=date(2026, 6, 22),
+        provider="openai",
+        output_markdown="# report",
+        evidence_refs=[
+            ReportEvidenceRef(
+                section_key="category_summaries",
+                item_key="반도체",
+                knowledge_chunk_id=10,
+                rank_score=1.0,
+                knowledge_chunk_snapshot={"id": 10},
+                source_type="telegram",
+            ),
+            ReportEvidenceRef(
+                section_key="category_summaries",
+                item_key="반도체",
+                rank_score=0.9,
+                knowledge_chunk_snapshot={},
+                source_type="pdf",
+                document_chunk_id=5001,
+            ),
+        ],
+    )
+
+    _, evidence_params = conn.executemany_calls[0]
+    assert len(evidence_params) == 2
+    # 각 행에 source_type 값이 포함되어야 함
+    row_values_flat = [str(v) for row in evidence_params for v in row]
+    assert "telegram" in row_values_flat
+    assert "pdf" in row_values_flat
+    # pdf ref는 document_chunk_id(5001)를 가져야 함
+    assert any(5001 in row for row in evidence_params)
+
+
+def test_persist_report_artifact_deduplicates_refs() -> None:
+    """동일한 (section_key, item_key, knowledge_chunk_id, document_chunk_id) 쌍은 1건만 적재."""
+    from src.pipelines.stock_report.db import persist_report_artifact
+
+    conn = FakeConnection()
+    persist_report_artifact(
+        conn,
+        report_date=date(2026, 6, 22),
+        provider="openai",
+        output_markdown="# report",
+        evidence_refs=[
+            ReportEvidenceRef(
+                section_key="category_summaries",
+                item_key="반도체",
+                knowledge_chunk_id=10,
+                rank_score=1.0,
+                knowledge_chunk_snapshot={"id": 10},
+            ),
+            # 동일한 ref — dedup 되어야 함
+            ReportEvidenceRef(
+                section_key="category_summaries",
+                item_key="반도체",
+                knowledge_chunk_id=10,
+                rank_score=0.95,
+                knowledge_chunk_snapshot={"id": 10},
+            ),
+            # 다른 item_key — 유지
+            ReportEvidenceRef(
+                section_key="category_summaries",
+                item_key="AI",
+                knowledge_chunk_id=10,
+                rank_score=0.8,
+                knowledge_chunk_snapshot={"id": 10},
+            ),
+        ],
+    )
+
+    _, evidence_params = conn.executemany_calls[0]
+    assert len(evidence_params) == 2  # 3 → dedup → 2
+
+
 # --- PDF ingest write-path tests (T15) -------------------------------------
 
 

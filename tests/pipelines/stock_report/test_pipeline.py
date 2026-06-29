@@ -234,11 +234,12 @@ def test_run_daily_v2_calls_migration_and_ingest(monkeypatch):
             low_confidence_chunks=[],
         )
 
-    def _fake_synthesize_same_day_bundle(bundle, *, provider):
+    def _fake_synthesize_same_day_bundle(bundle, *, provider, search_fn=None):
         events.append(f"synthesize_bundle:{provider}")
         return SimpleNamespace(
             report_date=date(2026, 5, 8),
             evidence_refs=[object()],
+            pdf_search_entries=[],
         )
 
     def _fake_render_stock_report_markdown(artifact):
@@ -349,3 +350,89 @@ def test_validate_date_normalizes_slash_separator():
 def test_validate_date_raises_on_invalid_date():
     with pytest.raises(ValueError):
         _validate_date("2026/13/08")
+
+
+# ---------------------------------------------------------------------------
+# T17: Task 5 — pipeline edge 배선 테스트
+# ---------------------------------------------------------------------------
+
+
+def test_stage_local_evidence_synthesis_passes_search_fn(monkeypatch) -> None:
+    """_stage_local_evidence_synthesis가 search_fn을 synthesize_daily에 전달한다."""
+    from src.pipelines.stock_report.pipeline import _stage_local_evidence_synthesis
+
+    captured: list[dict] = []
+
+    def fake_synthesize_daily(bundle, *, provider, search_fn=None):
+        captured.append({"provider": provider, "search_fn": search_fn})
+        return SimpleNamespace(report_date=date(2026, 6, 22), evidence_refs=[])
+
+    monkeypatch.setattr(
+        "src.pipelines.stock_report.pipeline.synthesize_daily",
+        fake_synthesize_daily,
+    )
+
+    def fake_search_fn(query: str, **kwargs):
+        return []
+
+    bundle = SimpleNamespace()
+    _stage_local_evidence_synthesis(bundle, provider="openai", search_fn=fake_search_fn)
+
+    assert len(captured) == 1
+    assert captured[0]["search_fn"] is fake_search_fn
+    assert captured[0]["provider"] == "openai"
+
+
+def test_stage_local_evidence_synthesis_passes_none_when_no_search_fn(monkeypatch) -> None:
+    """임베딩 키 부재 시 search_fn=None이 synthesize_daily에 전달된다."""
+    from src.pipelines.stock_report.pipeline import _stage_local_evidence_synthesis
+
+    captured: list[dict] = []
+
+    def fake_synthesize_daily(bundle, *, provider, search_fn=None):
+        captured.append({"search_fn": search_fn})
+        return SimpleNamespace(report_date=date(2026, 6, 22), evidence_refs=[])
+
+    monkeypatch.setattr(
+        "src.pipelines.stock_report.pipeline.synthesize_daily",
+        fake_synthesize_daily,
+    )
+
+    bundle = SimpleNamespace()
+    _stage_local_evidence_synthesis(bundle, provider="openai")
+
+    assert captured[0]["search_fn"] is None
+
+
+def test_summarize_evidence_refs_includes_pdf_info() -> None:
+    """_summarize_evidence_refs_for_trace가 source_type별 카운트와 PDF document_chunk_id 샘플을 포함한다."""
+    from src.pipelines.stock_report.pipeline import _summarize_evidence_refs_for_trace
+    from src.pipelines.stock_report.synthesize import ReportEvidenceRef
+
+    refs = [
+        ReportEvidenceRef(
+            section_key="category_summaries",
+            item_key="반도체",
+            knowledge_chunk_id=100,
+            rank_score=1.0,
+            knowledge_chunk_snapshot={"channel_name": "신한", "channel_message_id": "1", "channel_key": "shinhan"},
+            source_type="telegram",
+        ),
+        ReportEvidenceRef(
+            section_key="category_summaries",
+            item_key="반도체",
+            rank_score=0.9,
+            knowledge_chunk_snapshot={"evidence_kind": "searched", "doc_title": "리포트"},
+            source_type="pdf",
+            document_chunk_id=9001,
+        ),
+    ]
+
+    summary = _summarize_evidence_refs_for_trace(refs)
+
+    assert summary["count"] == 2
+    # source_type별 카운트
+    assert summary.get("source_type_counts", {}).get("telegram") == 1
+    assert summary.get("source_type_counts", {}).get("pdf") == 1
+    # PDF document_chunk_id 샘플
+    assert 9001 in summary.get("sample_document_chunk_ids", [])

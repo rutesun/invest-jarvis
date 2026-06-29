@@ -436,8 +436,35 @@ TelegramMessage → MappedIssue → ShuffleResult → ThemeAnalysis/NewsItem →
 - `--input-dir`, `--provider`(분류 LLM, 기본 openai), `--use-hybrid`, `--ocr-lang`, `--embed-missing`(pending/failed 청크만 임베딩하는 backfill 경로), `--reembed`(멱등 skip 무시하고 전체 재적재)
 
 **제약:**
-- PDF 의미검색(`search_documents`)은 제공하나, synthesis LLM이 이를 툴로 소비해 텔레그램 리포트에 PDF 근거를 넣는 것은 후속 작업(T17)
 - hybrid(docling) 통합은 `needs_hybrid=True` 문서 재처리 경로로 예정
+
+---
+
+## 5-3. Stock Report V2 - PDF Evidence via Tool-Calling (`jarvis report daily-v2`)
+
+synthesis(map) 단계가 `search_documents`를 LLM tool로 직접 호출해 PDF 근거를 리포트에 통합하는 기능 (V2 T17).
+
+**동작 방식:**
+- `invoke_llm_with_tools` (`src/pipelines/stock_report/llm_tools.py`): `bind_tools` 루프(최대 2 round) → `asyncio.to_thread`로 동기 `search_documents` 호출 → 누적 history를 `with_structured_output` 최종 호출에 전달
+- `search_fn` seam: `functools.partial(_search_documents, conn)`으로 connection-bound 함수 주입. `has_embed_auth()` false이면 `None` → 기존 텔레그램 전용 경로 그대로 동작 (100% 하위 호환)
+- `ToolCallTrace`: 쿼리·category·ticker·top_k·hits를 라운드별 기록, `all_document_chunk_ids` dedup property로 중복 chunk 제거
+- round cap: 미응답 `tool_calls`는 빈 `ToolMessage`로 정리 후 `with_structured_output` 호출 (OpenAI 400 방지)
+
+**Evidence 격리 (B2/B3):**
+- PDF 참조는 `_pdf_evidence_refs` 전용 경로만 사용 — `ReportSectionItem.evidence_chunk_ids`(텔레그램 공간)에는 절대 진입하지 않음
+- `source_type='pdf'`, `evidence_kind='searched'` in `knowledge_chunk_snapshot`으로 DB에 기록
+
+**저장:**
+- `report_evidence` 테이블에 `source_type TEXT DEFAULT 'telegram'` 컬럼 추가 (migration `010_report_evidence_source_type.sql`)
+- `document_chunk_id` 컬럼으로 PDF chunk ID 저장 (텔레그램 `knowledge_chunk_id`와 분리)
+- `_dedup_evidence_refs`: `(section_key, item_key, knowledge_chunk_id, document_chunk_id)` 조합으로 중복 제거 후 적재
+
+**렌더링:**
+- `_build_source_lookup`: `source_type='pdf'` → `doc {id} {broker} · {title}` 형식, `telegram` → 기존 `chunk {id} {channel}#{msg}` 형식 (single dispatch)
+
+**비용 상한:**
+- major 버킷당 최대 3 round(2 tool + 1 final), `top_k=3`, `excerpt_chars=400`로 토큰 사용 상한 제한
+- `has_embed_auth()=False`이면 PDF tool 호출 자체가 없어 기존 비용과 동일
 
 ---
 

@@ -407,3 +407,112 @@ def test_body_not_duplicated_when_equal_to_thesis_or_investment_case() -> None:
 
     assert markdown.count("AI 투자가 밸류체인 전반으로 번진다") == 1
     assert markdown.count("AI 칩 수요 강세가 지속된다") == 1
+
+
+# ---------------------------------------------------------------------------
+# T17: source_type dispatch tests
+# ---------------------------------------------------------------------------
+
+
+def _make_artifact_with_refs(refs: list[ReportEvidenceRef]) -> StockReportArtifact:
+    return StockReportArtifact(
+        report_date=date(2026, 6, 22),
+        pulse=[],
+        category_summaries=[
+            ReportSectionItem(
+                key="반도체",
+                title="반도체",
+                body="narrative",
+                evidence_chunk_ids=[],
+                evidence_bullets=["bullet1"],
+                impact="high",
+            )
+        ],
+        core_themes=[],
+        focus_tickers=[],
+        low_confidence_notes=[],
+        evidence_refs=refs,
+    )
+
+
+def test_pdf_ref_renders_as_doc_format() -> None:
+    """PDF 출처는 'doc {id} {broker} · {title}' 형식으로 렌더된다."""
+    artifact = _make_artifact_with_refs([
+        ReportEvidenceRef(
+            section_key="category_summaries",
+            item_key="반도체",
+            rank_score=0.9,
+            knowledge_chunk_snapshot={"evidence_kind": "searched", "doc_title": "반도체 전망 리포트", "broker_key": "samsung"},
+            source_type="pdf",
+            document_chunk_id=9001,
+        )
+    ])
+
+    markdown = MarkdownReportBuilder().build(artifact)
+
+    assert "doc 9001" in markdown
+    assert "samsung" in markdown
+    # B3 가드: chunk 형식이 아니어야 함
+    assert "chunk 9001" not in markdown
+
+
+def test_telegram_ref_renders_as_chunk_format() -> None:
+    """텔레그램 출처는 기존 'chunk {id} {channel}#{msg}' 형식을 유지한다 (회귀 가드)."""
+    artifact = _make_artifact_with_refs([
+        ReportEvidenceRef(
+            section_key="category_summaries",
+            item_key="반도체",
+            knowledge_chunk_id=1234,
+            rank_score=1.0,
+            knowledge_chunk_snapshot={
+                "channel_name": "신한 리서치",
+                "channel_message_id": "99",
+                "channel_key": "shinhan",
+            },
+            source_type="telegram",
+        )
+    ])
+
+    markdown = MarkdownReportBuilder().build(artifact)
+
+    assert "chunk 1234 신한 리서치#99" in markdown
+
+
+def test_mixed_refs_both_sources_rendered() -> None:
+    """텔레그램 + PDF 출처가 혼재할 때 양쪽 모두 렌더된다."""
+    artifact = _make_artifact_with_refs([
+        ReportEvidenceRef(
+            section_key="category_summaries",
+            item_key="반도체",
+            knowledge_chunk_id=1234,
+            rank_score=1.0,
+            knowledge_chunk_snapshot={"channel_name": "신한", "channel_message_id": "1", "channel_key": "shinhan"},
+            source_type="telegram",
+        ),
+        ReportEvidenceRef(
+            section_key="category_summaries",
+            item_key="반도체",
+            rank_score=0.85,
+            knowledge_chunk_snapshot={"evidence_kind": "searched", "doc_title": "리포트", "broker_key": "kb"},
+            source_type="pdf",
+            document_chunk_id=9002,
+        ),
+    ])
+
+    markdown = MarkdownReportBuilder().build(artifact)
+
+    assert "chunk 1234" in markdown
+    assert "doc 9002" in markdown
+
+
+def test_parse_referenced_does_not_match_doc_format() -> None:
+    """parse_referenced_from_markdown이 'doc {id}' 형식을 chunk id로 오인하지 않는다 (B3)."""
+    from src.pipelines.stock_report.render_markdown import parse_referenced_from_markdown
+
+    # 텔레그램 chunk 형식
+    ids = parse_referenced_from_markdown("출처: chunk 1234 신한#99")
+    assert 1234 in ids
+
+    # PDF doc 형식 — 오인 금지
+    pdf_ids = parse_referenced_from_markdown("출처: doc 9001 samsung · 반도체 전망")
+    assert 9001 not in pdf_ids

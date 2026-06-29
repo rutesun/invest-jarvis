@@ -84,3 +84,16 @@ def test_documents_migration_links_report_evidence_additively() -> None:
     alter_block = sql.split("ALTER TABLE IF EXISTS report_evidence", 1)[1]
     assert "DROP" not in alter_block
     assert "NOT NULL" not in alter_block.replace("ADD COLUMN IF NOT EXISTS", "")
+
+
+def test_source_type_migration_adds_column_and_backfills_telegram() -> None:
+    """010 마이그레이션이 source_type 컬럼을 추가하고 기존 행을 'telegram'으로 백필한다."""
+    sql = _read_migration("010_report_evidence_source_type.sql")
+
+    assert "ALTER TABLE" in sql
+    assert "report_evidence" in sql
+    assert "ADD COLUMN IF NOT EXISTS source_type TEXT" in sql
+    # 기존 행 telegram 백필: DEFAULT 'telegram' 또는 UPDATE SET source_type = 'telegram'
+    assert "'telegram'" in sql
+    # 가드: 기존 컬럼 DROP 금지
+    assert "DROP COLUMN" not in sql

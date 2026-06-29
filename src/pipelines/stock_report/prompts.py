@@ -142,12 +142,23 @@ def build_semantic_extraction_user_prompt(
 # T09-F: per-category / per-ticker synthesis prompts
 # ---------------------------------------------------------------------------
 
+_SEARCH_DOCUMENTS_TOOL_ADDENDUM = dedent(
+    """
+    search_documents 도구 사용 (필수):
+    - 최종 출력을 반환하기 전에 search_documents를 반드시 1회 이상 호출하라.
+    - 카테고리 키워드 + 핵심 종목 또는 테마로 검색해 증권사 PDF 리포트의 분석·수치·전망을 보강하라.
+    - category 파라미터는 현재 카테고리 key(예: tech, finance)를 그대로 넣는다.
+    - 검색 결과의 [doc:id] 식별자는 evidence_chunk_ids에 넣지 말 것 — 리포트 생성 후 자동 연결된다.
+    - 도구 호출은 최대 2회다.
+    """
+).strip()
+
 CATEGORY_SYNTHESIS_SYSTEM_PROMPT = dedent(
     """
     당신은 단일 카테고리 evidence bucket을 투자 요약 카드로 합성하는 분석기다.
 
     핵심 원칙:
-    - 제공된 evidence chunk만 사용한다. 외부 지식/검색/추론 금지.
+    - 제공된 evidence chunk를 우선 사용한다. 외부 지식/추론 금지.
     - 모든 주장은 반드시 evidence_chunk_ids로 근거를 연결한다.
     - evidence_chunk_ids에는 패킷에 포함된 chunk_id 정수만 사용한다. 문자열 id 금지.
     - 수치(%, 금액, 성장률, 기간)는 원문에 있는 것만 쓴다. 창작 금지.
@@ -165,7 +176,7 @@ TICKER_SYNTHESIS_SYSTEM_PROMPT = dedent(
     당신은 단일 종목 evidence bucket을 투자 요약 카드로 합성하는 분석기다.
 
     핵심 원칙:
-    - 제공된 evidence chunk만 사용한다. 외부 지식/검색/추론 금지.
+    - 제공된 evidence chunk를 우선 사용한다. 외부 지식/추론 금지.
     - 모든 주장은 반드시 evidence_chunk_ids로 근거를 연결한다.
     - evidence_chunk_ids에는 패킷에 포함된 chunk_id 정수만 사용한다. 문자열 id 금지.
     - 수치(%, 금액, 성장률, 기간)는 원문에 있는 것만 쓴다. 창작 금지.

@@ -260,6 +260,18 @@ def persist_classified_chunks(
     conn.commit()
 
 
+def _dedup_evidence_refs(refs: list[ReportEvidenceRef]) -> list[ReportEvidenceRef]:
+    """(section_key, item_key, knowledge_chunk_id, document_chunk_id) 기준으로 중복 제거. 첫 등장 유지."""
+    seen: set[tuple] = set()
+    result: list[ReportEvidenceRef] = []
+    for ref in refs:
+        key = (ref.section_key, ref.item_key, ref.knowledge_chunk_id, ref.document_chunk_id)
+        if key not in seen:
+            seen.add(key)
+            result.append(ref)
+    return result
+
+
 def persist_report_artifact(
     conn: Any,
     *,
@@ -287,6 +299,7 @@ def persist_report_artifact(
         report_run_id = cur.fetchone()[0]
 
         if evidence_refs:
+            deduped = _dedup_evidence_refs(evidence_refs)
             cur.executemany(
                 """
                 INSERT INTO report_evidence (
@@ -295,8 +308,10 @@ def persist_report_artifact(
                     item_key,
                     knowledge_chunk_id,
                     rank_score,
-                    knowledge_chunk_snapshot
-                ) VALUES (%s, %s, %s, %s, %s, %s::jsonb);
+                    knowledge_chunk_snapshot,
+                    source_type,
+                    document_chunk_id
+                ) VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s, %s);
                 """,
                 [
                     (
@@ -306,12 +321,48 @@ def persist_report_artifact(
                         ref.knowledge_chunk_id,
                         ref.rank_score,
                         json.dumps(ref.knowledge_chunk_snapshot, ensure_ascii=False),
+                        ref.source_type,
+                        ref.document_chunk_id,
                     )
-                    for ref in evidence_refs
+                    for ref in deduped
                 ],
             )
     conn.commit()
     return report_run_id
+
+
+def persist_pdf_search_log(
+    conn: Any,
+    report_run_id: int,
+    entries: list,
+) -> None:
+    """pdf_search_log 테이블에 synthesis 검색 쿼리 기록을 저장한다."""
+    if not entries:
+        return
+    with conn.cursor() as cur:
+        cur.executemany(
+            """
+            INSERT INTO pdf_search_log (
+                report_run_id, label, label_type, query,
+                category, ticker, top_k, hit_count, hit_chunk_ids
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb);
+            """,
+            [
+                (
+                    report_run_id,
+                    e.label,
+                    e.label_type,
+                    e.query,
+                    e.category,
+                    e.ticker,
+                    e.top_k,
+                    e.hit_count,
+                    json.dumps(e.hit_chunk_ids),
+                )
+                for e in entries
+            ],
+        )
+    conn.commit()
 
 
 # --- PDF ingest write-path (T15) -------------------------------------------
