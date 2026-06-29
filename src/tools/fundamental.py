@@ -569,8 +569,7 @@ class FundamentalTool(BaseTool):
         # KIS balance_sheet은 최신 분기행(예: 202603)과 연간행(XX12)이 혼재한다.
         # 분기행 vs 연간행을 비교하면 의미 없는 성장률이 나오므로 연간행끼리만 비교한다.
         annual_balance_rows = [
-            r for r in valid_balance_sheet
-            if (r.get("stac_yymm") or "").strip().endswith("12")
+            r for r in valid_balance_sheet if (r.get("stac_yymm") or "").strip().endswith("12")
         ]
         if len(annual_balance_rows) >= 2:
             current_row = annual_balance_rows[0]

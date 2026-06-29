@@ -39,7 +39,11 @@ SEARCH_DOCUMENTS_TOOL = {
             "query": {"type": "string", "description": "검색 쿼리 (한국어 또는 영어)"},
             "category": {"type": "string", "description": "taxonomy category key (선택)"},
             "ticker": {"type": "string", "description": "종목 코드 (선택, 예: 005930)"},
-            "top_k": {"type": "integer", "description": "반환할 최대 결과 수 (기본 3)", "default": 3},
+            "top_k": {
+                "type": "integer",
+                "description": "반환할 최대 결과 수 (기본 3)",
+                "default": 3,
+            },
         },
         "required": ["query"],
     },

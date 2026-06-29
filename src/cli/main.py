@@ -736,7 +736,9 @@ def _format_raw_analysis_sections(result: dict) -> str:
             output += "**이익 추이:**\n\n"
             for q in fundamental.quarterly_data:
                 if q.earnings is not None:
-                    earnings_str = f"{q.earnings:.0f}억" if is_korean else f"${q.earnings / 1e9:.2f}B"
+                    earnings_str = (
+                        f"{q.earnings:.0f}억" if is_korean else f"${q.earnings / 1e9:.2f}B"
+                    )
                     yoy_str = _format_growth_rate(q.earnings_yoy)
                     qoq_str = _format_growth_rate(q.earnings_qoq)
                     output += f"- {q.period}: {earnings_str} (YoY {yoy_str}, QoQ {qoq_str})\n"

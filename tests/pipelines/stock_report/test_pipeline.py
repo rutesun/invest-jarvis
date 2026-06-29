@@ -415,7 +415,11 @@ def test_summarize_evidence_refs_includes_pdf_info() -> None:
             item_key="반도체",
             knowledge_chunk_id=100,
             rank_score=1.0,
-            knowledge_chunk_snapshot={"channel_name": "신한", "channel_message_id": "1", "channel_key": "shinhan"},
+            knowledge_chunk_snapshot={
+                "channel_name": "신한",
+                "channel_message_id": "1",
+                "channel_key": "shinhan",
+            },
             source_type="telegram",
         ),
         ReportEvidenceRef(
