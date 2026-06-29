@@ -159,8 +159,6 @@ async def invoke_llm_with_tools(
     max_tool_rounds: int = 2,
     default_top_k: int = 3,
     excerpt_chars: int = 400,
-    max_retries: int = 3,
-    timeout_seconds: float = 180.0,
 ) -> tuple[BaseModel, ToolCallTrace]:
     """LLM tool-calling 루프를 실행하고 (structured_output, ToolCallTrace)를 반환한다.
 

@@ -348,7 +348,7 @@ def _trace_to_log_entries(
 
 
 def _log_pdf_trace(label: str, trace: ToolCallTrace) -> None:
-    """tool-calling trace를 stdout에 한 줄씩 출력한다."""
+    """tool-calling trace를 logger.info로 출력한다."""
     for rec in trace.records:
         if not rec.query:
             continue
@@ -356,7 +356,7 @@ def _log_pdf_trace(label: str, trace: ToolCallTrace) -> None:
             (h.doc_title or h.source_path or "?")[:45] for h in rec.hits[:2]
         )
         suffix = f" ({titles})" if titles else " (결과 없음)"
-        print(f"  \U0001f50d [{label}] \"{rec.query}\" → {len(rec.hits)}건{suffix}")
+        logger.info("pdf_search [%s] %r → %d건%s", label, rec.query, len(rec.hits), suffix)
 
 
 async def synthesize_category(
@@ -399,7 +399,8 @@ async def synthesize_category(
                 provider,
             )
             trace = None
-        assert isinstance(output, CategoryCardLLMOutput)
+        if not isinstance(output, CategoryCardLLMOutput):
+            raise TypeError(f"expected CategoryCardLLMOutput, got {type(output)}")
         clean_ids = _sanitize_chunk_ids(output.evidence_chunk_ids, allowed_ids)
         related_stocks: list[dict[str, str | None]] = [
             {
@@ -472,7 +473,8 @@ async def synthesize_ticker(
                 provider,
             )
             trace = None
-        assert isinstance(output, TickerCardLLMOutput)
+        if not isinstance(output, TickerCardLLMOutput):
+            raise TypeError(f"expected TickerCardLLMOutput, got {type(output)}")
         clean_ids = _sanitize_chunk_ids(output.evidence_chunk_ids, allowed_ids)
         return TickerCard(
             ticker=output.ticker or bucket.ticker,

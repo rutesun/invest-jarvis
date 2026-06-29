@@ -451,8 +451,11 @@ def run_daily_v2(
             output_markdown=output_markdown,
             evidence_refs=report_artifact.evidence_refs,
         )
-        if report_artifact.pdf_search_entries:
-            persist_pdf_search_log(conn, report_run_id, report_artifact.pdf_search_entries)
+        try:
+            if report_artifact.pdf_search_entries:
+                persist_pdf_search_log(conn, report_run_id, report_artifact.pdf_search_entries)
+        except Exception:
+            logger.warning("persist_pdf_search_log 실패 — 무시: report_run_id=%s", report_run_id, exc_info=True)
         logger.info(
             "daily-v2 report artifact persisted: report_run_id=%s categories=%d themes=%d focus_tickers=%d low_confidence=%d",
             report_run_id,
