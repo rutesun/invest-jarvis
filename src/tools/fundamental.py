@@ -403,6 +403,48 @@ class FundamentalTool(BaseTool):
         return valid_rows
 
     @classmethod
+    def _kis_cumulative_to_standalone(
+        cls, rows: list[dict], value_key: str
+    ) -> dict[str, float | None]:
+        """KIS 분기 누적 수치를 순수 분기(standalone) 수치로 변환.
+
+        KIS balance-sheet·profit-ratio 분기 API는 당해 회계연도 누적으로 반환한다
+        (Q2=Q1+Q2 합계, Q3=Q1+Q2+Q3 합계). 순수 분기 = 누적 - 직전 분기 누적.
+        Q1(월=03)은 누적=순수이므로 그대로 사용.
+
+        Returns:
+            {"YYYY-MM": standalone_value} 형태의 dict
+        """
+        MONTH_ORDER = {"03": 0, "06": 1, "09": 2, "12": 3}
+
+        by_year: dict[str, dict[str, float | None]] = {}
+        for row in rows:
+            ym = (row.get("stac_yymm") or "").strip()
+            if len(ym) != 6:
+                continue
+            year, month = ym[:4], ym[4:]
+            if month not in MONTH_ORDER:
+                continue
+            by_year.setdefault(year, {})[month] = cls._to_float(row.get(value_key))
+
+        result: dict[str, float | None] = {}
+        for year, months_map in by_year.items():
+            sorted_months = sorted(months_map.keys(), key=lambda m: MONTH_ORDER[m])
+            prev_cum: float | None = None
+            for month in sorted_months:
+                cum = months_map[month]
+                if prev_cum is None:
+                    standalone = cum
+                else:
+                    standalone = (
+                        (cum - prev_cum) if (cum is not None and prev_cum is not None) else None
+                    )
+                result[f"{year}-{month}"] = standalone
+                prev_cum = cum
+
+        return result
+
+    @classmethod
     def _build_kis_quarterly_data(cls, rows: list[dict]) -> list[QuarterlyData] | None:
         valid_rows = cls._filter_valid_rows(rows, ["sale_account", "op_prfi", "thtr_ntin"])
         if not valid_rows:
@@ -438,25 +480,34 @@ class FundamentalTool(BaseTool):
 
     @classmethod
     def _build_quarterly_eps(cls, financial_ratio_q_rows: list[dict]) -> list[QuarterlyData]:
-        """financial-ratio div=1 분기 행으로 EPS + YoY 계산.
+        """financial-ratio div=1 분기 행으로 순수 분기 EPS + YoY 계산.
 
-        YoY는 같은 분기월(MM) 1년 전(YYYY-1) 행과 비교.
+        KIS는 당해 연도 누적 EPS를 반환하므로 _kis_cumulative_to_standalone으로 변환 후
+        같은 분기월 1년 전(YYYY-1) 순수 분기 EPS와 YoY 비교.
         """
-        by_period: dict[str, float] = {}
+        # 누적 → 순수 분기 EPS 변환
+        standalone_eps = cls._kis_cumulative_to_standalone(financial_ratio_q_rows, "eps")
+
+        # YYYYMM 키 순서 유지를 위해 원본 rows 순서 기준으로 4개 선택
+        seen: list[str] = []
         for row in financial_ratio_q_rows:
             ym = (row.get("stac_yymm") or "").strip()
-            eps = cls._to_float(row.get("eps"))
-            if len(ym) == 6 and eps is not None:
-                by_period[ym] = eps
+            period_key = f"{ym[:4]}-{ym[4:]}" if len(ym) == 6 else None
+            if period_key and period_key in standalone_eps and period_key not in seen:
+                seen.append(period_key)
+            if len(seen) == 4:
+                break
 
         result: list[QuarterlyData] = []
-        for ym in list(by_period.keys())[:4]:  # 최신 4분기
-            eps = by_period[ym]
-            year, mm = ym[:4], ym[4:]
-            prev = f"{int(year) - 1}{mm}"
-            prev_eps = by_period.get(prev)
+        for period_key in seen:
+            eps = standalone_eps.get(period_key)
+            if eps is None:
+                continue
+            year, mm = period_key[:4], period_key[5:]
+            prev_key = f"{int(year) - 1}-{mm}"
+            prev_eps = standalone_eps.get(prev_key)
             eps_yoy = (eps - prev_eps) / abs(prev_eps) if prev_eps not in (None, 0) else None
-            result.append(QuarterlyData(period=f"{year}-{mm}", eps=eps, eps_yoy=eps_yoy))
+            result.append(QuarterlyData(period=period_key, eps=eps, eps_yoy=eps_yoy))
         return result
 
     def _normalize_kis_snapshot(
@@ -471,6 +522,7 @@ class FundamentalTool(BaseTool):
         other_major_ratios: list[dict],
         income_statement: list[dict],
         balance_sheet: list[dict],
+        balance_sheet_q: list[dict],
     ) -> FundamentalSnapshot:
         valid_profit_ratio = self._filter_valid_rows(profit_ratio, ["roe_val", "eps", "bps", "sps"])
         valid_financial_ratio = self._filter_valid_rows(
@@ -514,9 +566,15 @@ class FundamentalTool(BaseTool):
 
         revenue_growth = None
         earnings_growth = None
-        if len(valid_balance_sheet) >= 2:
-            current_row = valid_balance_sheet[0]
-            previous_row = valid_balance_sheet[1]
+        # KIS balance_sheet은 최신 분기행(예: 202603)과 연간행(XX12)이 혼재한다.
+        # 분기행 vs 연간행을 비교하면 의미 없는 성장률이 나오므로 연간행끼리만 비교한다.
+        annual_balance_rows = [
+            r for r in valid_balance_sheet
+            if (r.get("stac_yymm") or "").strip().endswith("12")
+        ]
+        if len(annual_balance_rows) >= 2:
+            current_row = annual_balance_rows[0]
+            previous_row = annual_balance_rows[1]
             current_revenue = self._to_float(current_row.get("sale_account"))
             previous_revenue = self._to_float(previous_row.get("sale_account"))
             current_earnings = self._to_float(current_row.get("thtr_ntin"))
@@ -530,16 +588,17 @@ class FundamentalTool(BaseTool):
         # balance-sheet 매출/순이익은 같은 period만 병합. 연간 행은 quarterly에 넣지 않음.
         # EPS series가 없으면 balance-sheet 기준으로 fallback.
         eps_quarters = self._build_quarterly_eps(profit_ratio_q)
-        # balance-sheet 분기 행만 period-keyed map으로 구성 (EPS series period와 교집합만 병합)
-        balance_by_period: dict[str, tuple[float | None, float | None]] = {}
-        for row in valid_balance_sheet:
-            ym = (row.get("stac_yymm") or "").strip()
-            if len(ym) == 6:
-                period_key = f"{ym[:4]}-{ym[4:]}"
-                balance_by_period[period_key] = (
-                    self._to_float(row.get("sale_account")),
-                    self._to_float(row.get("thtr_ntin")),
-                )
+        # 분기 balance sheet(div=1)에서 순수 분기(standalone) period-keyed map 구성.
+        # KIS는 누적값을 반환하므로 _kis_cumulative_to_standalone으로 변환한다.
+        valid_balance_sheet_q = self._filter_valid_rows(
+            balance_sheet_q, ["sale_account", "op_prfi", "thtr_ntin"]
+        )
+        standalone_rev = self._kis_cumulative_to_standalone(valid_balance_sheet_q, "sale_account")
+        standalone_earn = self._kis_cumulative_to_standalone(valid_balance_sheet_q, "thtr_ntin")
+        all_periods = set(standalone_rev) | set(standalone_earn)
+        balance_by_period: dict[str, tuple[float | None, float | None]] = {
+            p: (standalone_rev.get(p), standalone_earn.get(p)) for p in all_periods
+        }
         if eps_quarters:
             # EPS series 기준: balance-sheet는 period 매칭 시만 병합, 연간 행 제외
             merged_quarters: list[QuarterlyData] = []
@@ -556,11 +615,13 @@ class FundamentalTool(BaseTool):
                 )
             quarterly_data_final = merged_quarters if merged_quarters else None
         else:
-            # EPS 없음: balance-sheet 기준 fallback (기존 동작 유지)
-            balance_quarters = self._build_kis_quarterly_data(valid_balance_sheet) or []
+            # EPS 없음: 분기 balance-sheet 기준 fallback
+            balance_quarters = self._build_kis_quarterly_data(valid_balance_sheet_q) or []
             quarterly_data_final = balance_quarters if balance_quarters else None
 
         # Build annual_data from profit-ratio div=0
+        # KIS는 div=0(연간) API에서도 최신 분기행(XX03/06/09)을 먼저 반환한다.
+        # 연간 데이터는 결산월(stac_yymm이 XX12로 끝나는) 행만 사용한다.
         annual_data: list[AnnualData] | None = None
         annual_rows = [
             AnnualData(
@@ -569,6 +630,7 @@ class FundamentalTool(BaseTool):
             )
             for r in profit_ratio_a
             if self._to_float(r.get("eps")) is not None
+            and (r.get("stac_yymm") or "").strip().endswith("12")
         ][:5]
         if annual_rows:
             annual_data = annual_rows
@@ -661,6 +723,10 @@ class FundamentalTool(BaseTool):
             "balance_sheet": self._run_with_retry(
                 "balance_sheet", lambda: self.kis_provider.get_balance_sheet(ticker)
             ),
+            "balance_sheet_q": self._run_with_retry(
+                "balance_sheet_q",
+                lambda: self.kis_provider.get_balance_sheet(ticker, div_cls_code="1"),
+            ),
             "profit_ratio": self._run_with_retry(
                 "profit_ratio", lambda: self.kis_provider.get_profit_ratio(ticker)
             ),
@@ -689,6 +755,7 @@ class FundamentalTool(BaseTool):
         quote_data = merged["quote"][0] or {}
         financial_ratio = merged["financial_ratio"][0] or []
         balance_sheet = merged["balance_sheet"][0] or []
+        balance_sheet_q = merged["balance_sheet_q"][0] or []
         profit_ratio = merged["profit_ratio"][0] or []
         profit_ratio_q = merged["profit_ratio_q"][0] or []
         profit_ratio_a = merged["profit_ratio_a"][0] or []
@@ -712,4 +779,5 @@ class FundamentalTool(BaseTool):
             other_major_ratios=other_major,
             income_statement=income_statement,
             balance_sheet=balance_sheet,
+            balance_sheet_q=balance_sheet_q,
         )

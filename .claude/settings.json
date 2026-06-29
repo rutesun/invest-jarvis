@@ -37,6 +37,10 @@
           {
             "type": "command",
             "command": "jq -r 'if .tool_input.command | startswith(\"pip \") then {hookSpecificOutput: {hookEventName: \"PreToolUse\", permissionDecision: \"deny\", permissionDecisionReason: \"Use uv instead of pip.\\n\\nExamples:\\n  pip install package → uv add package\\n  pip install -e . → uv sync\\n  pip list → uv pip list\\n  pip freeze → uv pip freeze\"}} else {continue: true} end'"
+          },
+          {
+            "type": "command",
+            "command": "cmd=$(jq -r '.tool_input.command // \"\"'); if echo \"$cmd\" | grep -qE '^git (commit|push)'; then branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null); if [ \"$branch\" = \"main\" ]; then echo '{\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"deny\", \"permissionDecisionReason\": \"main 브랜치 직접 commit/push 금지 — feature 브랜치를 생성하세요: git checkout -b feature/...\"}}'; fi; fi"
           }
         ]
       }
