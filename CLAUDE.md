@@ -83,6 +83,10 @@ Providers → Tools → Pipelines → CLI (src/cli/main.py)
 
 문서 생성/업데이트 원칙과 ADR 운영 규칙의 기준 문서는 `docs/DOCUMENTATION.md`.
 
+## Git Workflow
+
+**main 브랜치 직접 커밋 금지.** 모든 변경은 feature 브랜치에서 작업하고 PR로 병합한다.
+
 ## Collaboration Rules
 
 `AGENTS.md`와 `CLAUDE.md`는 같은 수준의 최상위 작업 문서다. 모델/도구 특화 내용을 제외한 공통 규칙은 두 문서에 동일하게 반영한다.
