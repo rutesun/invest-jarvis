@@ -28,10 +28,12 @@
 ## 2. 범위
 
 ### 포함
+- **[선행 버그수정] exit_rules SMA 컬럼 계약 불일치** — `exit_rules.py`는 `SMA20` 형식을 찾지만 `indicators.py`는 `SMA_20` 형식을 생성 → SMA 매도신호·trailing_stop이 실경로에서 침묵 누락 중(기존 `analyze` 버그). 단위테스트가 자체 픽스처(`SMA20`)로 가려왔음. 수정 + 실경로(raw_dataframe) 통합 회귀 테스트 선행
 - `BriefPipeline` 신규 (`src/pipelines/brief.py`) + CLI `jarvis brief`
-- `playbook.yaml`에 `watchlist` 섹션 추가 + `load_holdings` 로더 확장
-- 종목별 액션 판정: 보유 → `evaluate_exit` 재사용 / 워치 → PlaybookEngine gate 재사용
-- 규칙 기반 우선순위 점수(주목도) + 전 종목 정렬 + Top-3 하이라이트
+- `playbook.yaml`에 `watchlist` 섹션 추가 + `load_holdings` 로더 확장 (명시적 스키마 에러·티커 정규화·holdings 우선 중복 제거를 로더 단계에서 처리)
+- 종목별 액션 판정: 보유/워치 모두 **`PlaybookEngine.evaluate()` 단일 진입점** 호출 — 엔진이 holding 유무로 exit/gate 분기 (RS·매집·스냅샷 조립이 엔진 내부에 있으므로 `evaluate_exit` 직접 호출 금지)
+- 규칙 기반 우선순위 랭킹(버킷 + 동버킷 가산) + 전 종목 정렬 + Top-3 하이라이트
+- 근거 슬롯: 기술점수·레벨 + 뉴스(NewsTool) + 공시(DisclosureTool) + 수급(KR, InvestorFlow) — 모두 표기 전용, 점수 미반영
 - LLM 배치 1콜 문장화 (실패 시 규칙 원문 fallback)
 - 마크다운 출력 (`reports/YYYY-MM/brief_YYYY-MM-DD.md`) + 터미널 rich 출력
 - **PortfolioPipeline 제거** (별도 커밋): 파이프라인 + `jarvis portfolio` CLI + PortfolioTool + 관련 테스트·문서. KIS provider `get_balance()`는 보존
@@ -55,9 +57,10 @@ MacroTool ──────┘        │
                          ├─ 1. 매크로 스냅샷 1회 (VIX·F&G·금리·달러)
                          ├─ 2. 종목 루프 (holdings + watchlist 전체, 누락 없음)
                          │     ├─ TechnicalAnalysisTool (기술점수·지표)
-                         │     ├─ 보유 종목 → evaluate_exit  → hold/reduce/liquidate + 신호
-                         │     ├─ 워치 종목 → PlaybookEngine gate → 적격/임박/거부 + 근접도
-                         │     └─ NewsTool(3건) + 한국주식이면 InvestorFlow(수급)
+                         │     ├─ PlaybookEngine.evaluate() ← 보유/워치 공통 단일 진입점
+                         │     │     ├─ 보유(holding 전달) → exit_verdict: hold/reduce/liquidate + 신호
+                         │     │     └─ 워치(holding=None) → gate: 적격/임박/거부 + checklist
+                         │     └─ NewsTool(3건) + DisclosureTool(최근 공시 2-3건) + 한국주식이면 InvestorFlow(수급)
                          ├─ 3. 규칙 랭킹 → 우선순위 큐 (전 종목 정렬, Top-3 하이라이트)
                          ├─ 4. LLM 배치 1콜 → 종목별 슬롯 서술 (사실은 규칙 결과만 사용)
                          └─ 5. 출력: 터미널(rich) + reports/YYYY-MM/brief_YYYY-MM-DD.md
@@ -99,31 +102,31 @@ watchlist:          # 신규 (관심 = 티커만 필수)
 
 | 구분 | 판정 소스 | 결과 |
 |---|---|---|
-| 보유 | `evaluate_exit` (exit_rules.py) | `청산` / `비중축소` / `보유` + 신호 목록 + 평단 대비 R값 |
+| 보유 | `PlaybookEngine.evaluate(holding=...)` → exit_verdict | `청산` / `비중축소` / `보유` + 신호 목록 + 평단 대비 R값 |
 | 보유 보조 | `stop_price` 설정 시 | 현재가가 스탑 대비 **3% 이내**면 `스탑 근접` 경고 |
-| 워치 | PlaybookEngine gate | `매수 적격`(통과, 사이징 포함) / `진입 임박` / `거부` |
-| 임박 기준 | gate 미통과지만 | Stage2 7조건 중 **5개 이상 충족** → 임박 (미충족 조건 라벨을 근거로 표기) |
+| 워치 | `PlaybookEngine.evaluate(holding=None)` → gate | `매수 적격`(통과, 사이징 포함) / `진입 임박` / `거부` |
+| 임박 기준 | gate 미통과지만 | **필수 게이트 4개(A 시장환경·B Stage2·C RS/업종·E VCP) 중 3개 충족** → 임박. 미충족 1개를 "남은 조건"으로 표기 (`GateResult.checklist` 기반 — Stage2 개수만 보면 시장 하락·RS 약세를 무시하게 되므로) |
 
-### 5.2 우선순위 점수 (주목도)
+### 5.2 우선순위 랭킹 (버킷 + 동버킷 내 가산점)
 
-결정적 계산. 높을수록 상단. 값은 초기값이며 운영하며 조정 가능한 상수로 관리.
+결정적 계산. **버킷 순서가 절대 우선**이고, 가산점은 같은 버킷 안의 정렬(tie-breaker)에만 쓴다 — 가산점이 버킷을 역전시키지 못하게 하기 위함 (예: "축소+스탑근접"이 "청산"보다 위로 올라가는 왜곡 방지).
 
 ```text
-청산 신호        100   ← "놓치면 손실" 최우선
-매수 적격 (워치)   90   ← "놓치면 기회"
-비중축소          80
-진입 임박 (워치)   60
-보유 (약신호 있음) 30
-거부 (워치)       20
-보유 (이상 없음)   10
+버킷 1  청산 신호          ← "놓치면 손실" 최우선
+버킷 2  매수 적격 (워치)    ← "놓치면 기회"
+버킷 3  비중축소
+버킷 4  진입 임박 (워치)
+버킷 5  보유 (약신호 있음)
+버킷 6  거부 (워치)
+버킷 7  보유 (이상 없음)
 
-가산:
-스탑 근접        +30
-급변 보정        +20   (당일 등락 ±5% 이상)
+동버킷 내 가산 (정렬용 + ⚠ 마커 표기):
+스탑 근접   +30
+급변 보정   +20  — 방향별 사유 구분: 보유 하락 / 워치 상승 돌파 / 워치 급락
 ```
 
-- 뉴스는 **점수에 반영하지 않고 근거로 표기만** — 감성 점수화는 노이즈가 커서 제목 나열이 더 정직함
-- 전 종목이 점수순 정렬되어 출력 (누락 없음), 상위 3개만 "오늘의 액션" 하이라이트
+- 뉴스·공시는 **점수에 반영하지 않고 근거로 표기만** — 감성 점수화는 노이즈가 커서 제목 나열이 더 정직함
+- 전 종목이 버킷→가산점 순 정렬되어 출력 (누락 없음), 상위 3개만 "오늘의 액션" 하이라이트
 - 랭킹 로직은 순수 함수로 분리 (`src/tools/brief/scoring.py`) — I/O 없이 단위테스트 가능
 
 ## 6. LLM 배치 + 출력 포맷
@@ -146,9 +149,9 @@ watchlist:          # 신규 (관심 = 티커만 필수)
 VIX 14.2 · Fear&Greed 62(Greed) · 10Y 4.1% — 한 줄 요약
 
 ## ⚡ 오늘의 액션 (Top 3)
-1. [축소] 005930 삼성전자 (점수 80)
-2. [적격] NVDA (점수 90)
-3. [임박] 035420 (점수 60+20, 급변 보정)
+1. [적격] NVDA (버킷 2)
+2. [축소] 005930 삼성전자 (버킷 3)
+3. [임박] 035420 (버킷 4 ⚠급변: 워치 상승 돌파) — 남은 조건: E(VCP 돌파)
 
 ## 보유 (3종목)
 
@@ -157,6 +160,7 @@ VIX 14.2 · Fear&Greed 62(Greed) · 10Y 4.1% — 한 줄 요약
 - **가격/기술**: 현재가 71,200 (평단 대비 -1.1%) · RSI 48 · 추세 중립
 - **수급(KR)**: 외국인 5일 순매도 3일, 기관 중립
 - **뉴스**: "삼성전자 파운드리 수주 지연" (7/13) · 그 외 2건
+- **공시**: 분기보고서 제출 (7/10)
 - **스탑 상태**: 스탑 65,000 대비 +9.5% (근접 아님)
 - **다음 확인 지점**: SMA50(72,800) 재돌파 여부
 
@@ -179,7 +183,7 @@ VIX 14.2 · Fear&Greed 62(Greed) · 10Y 4.1% — 한 줄 요약
 |---|---|
 | 특정 종목 기술분석 실패 (yfinance/KIS 오류) | 해당 종목 "데이터 조회 실패" 항목으로 표시, 나머지 정상 진행 |
 | PlaybookEngine 일부 실패 (섹터강도 등) | 기존 engine의 graceful None 그대로 — 해당 근거만 생략, 가능한 신호로 판정 계속 |
-| 뉴스/수급 조회 실패 | 해당 슬롯 생략, 판정에 영향 없음 (둘 다 근거 표기용) |
+| 뉴스/공시/수급 조회 실패 | 해당 슬롯 생략, 판정에 영향 없음 (셋 다 근거 표기용) |
 | LLM 배치 콜 실패/타임아웃 | 전체를 규칙 결과 원문으로 대체 — 브리핑 자체는 항상 완성 |
 | playbook.yaml 파싱 실패 (스키마 오류) | 즉시 예외로 중단 + 잘못된 필드 명시 (침묵 실패 금지) |
 | watchlist·holdings 모두 빈 경우 | "설정된 종목 없음" 안내 후 정상 종료 (에러 아님) |
@@ -188,15 +192,16 @@ VIX 14.2 · Fear&Greed 62(Greed) · 10Y 4.1% — 한 줄 요약
 
 ## 8. 테스트 전략
 
-이 기능은 **외부 API 신규 호출이 없다** — 기존 TechnicalAnalysisTool·PlaybookEngine·MacroTool·NewsTool·InvestorFlow 재사용이므로 골든 테스트 대상은 각 하위 도구 쪽에 이미 존재. brief 신규 테스트는:
+이 기능은 **새로운 '종류'의 외부 API를 소비하지 않는다** (기존 도구 재사용 — 응답 형식 골든 테스트는 각 하위 도구에 이미 존재). 단, **운영 경로와 호출량은 신규**다: 전 종목 풀에 대해 가격·뉴스·공시·지수·수급·섹터를 호출하므로 부분 실패·순차 처리를 brief 레벨에서 검증한다. brief 신규 테스트는:
 
-1. **랭킹/판정 로직 단위테스트** (`src/tools/brief/scoring.py` 순수 함수)
+1. **[선행] exit_rules 실경로 회귀 테스트** — `TechnicalAnalysisTool.raw_dataframe`(SMA_20 형식)을 그대로 `evaluate_exit`에 통과시켜 SMA 신호가 실제로 발화하는지 고정. 기존 단위테스트의 자체 픽스처(`SMA20`)가 가린 계약 불일치의 재발 방지
+2. **랭킹/판정 로직 단위테스트** (`src/tools/brief/scoring.py` 순수 함수)
    - 입력: `ExitVerdict`/`GateResult` 목 객체 조합
-   - 검증: 점수표 정렬, 스탑 근접·급변 가산, holdings/watchlist 중복 시 보유 우선
-2. **로더 확장 테스트** (`load_holdings`의 watchlist 파싱)
-   - watchlist 있음/없음/중복 티커/note 누락 케이스 — 경계 계약 성격, 스키마 가정이 깨지면 즉시 실패
-3. **BriefPipeline 통합테스트** — 전 도구 목 교체, 파이프라인 조립(순서·에러 격리)만 검증. golden fixture 중복 생성 안 함
-4. **LLM fallback 테스트** — LLM 클라이언트 실패 목 처리 후 규칙 원문으로 브리핑 완성 검증
+   - 검증: 버킷 순서 절대 우선(가산점이 버킷 역전 불가), 스탑 근접·급변 가산, 임박 판정(필수 4중 3), holdings/watchlist 중복 시 보유 우선
+3. **로더 확장 테스트** (`load_holdings`의 watchlist 파싱)
+   - watchlist 있음/없음/중복 티커/note 누락/필수 필드 누락 시 명시적 에러 — 경계 계약 성격, 스키마 가정이 깨지면 즉시 실패
+4. **BriefPipeline 통합테스트** — 전 도구 목 교체, 파이프라인 조립(순서·에러 격리) 검증. **부분 실패 픽스처 포함**: 특정 종목 기술분석 실패·수급 timeout·섹터 None 상황에서 나머지 종목 브리핑이 완성되는지. KIS 호출은 순차임을 조립 코드에서 보장
+5. **LLM fallback 테스트** — LLM 클라이언트 실패 목 처리 후 규칙 원문으로 브리핑 완성 검증
 
 ## 9. 결정 이력 (인터뷰 → 브레인스토밍)
 
@@ -210,3 +215,5 @@ VIX 14.2 · Fear&Greed 62(Greed) · 10Y 4.1% — 한 줄 요약
 | D6 | 종목별 출력 = 구조화 불렛 (자유 문단 아님) | 사용자 확정. 슬롯별 근거 가시성 + LLM fallback 용이 |
 | D7 | PortfolioPipeline 제거 | KIS 잔고 전제 소멸, brief가 역할 대체. `get_balance()` provider 메서드는 보존 |
 | D8 | TickerReportPipeline 유지 | 관찰 리포트로 계속 사용. MacroTool 등 부품만 공유 |
+| D9 | Codex 설계 리뷰(2026-07-14) 반영 | ①exit_rules SMA 컬럼 계약 버그 발견(기존 analyze에도 영향) → 선행 수정 + 실경로 회귀 테스트. ②보유/워치 모두 PlaybookEngine.evaluate() 단일 진입(evaluate_exit 직접 호출 금지 — RS·매집 조립이 엔진 내부). ③임박 재정의: Stage2 5/7 → 필수 게이트 4중 3 충족(checklist 기반). ④랭킹을 버킷+동버킷 가산으로 변경(가산점의 버킷 역전 방지). ⑤부분 실패 픽스처 테스트 추가. 반려: 호출 budget 검증(YAGNI), PortfolioPipeline 제거 연기(사용자 결정 유지) |
+| D10 | 공시 슬롯 포함 | 기존 DisclosureTool 재사용으로 비용 낮음, 인터뷰 목표 문장("뉴스/공시 근거")과 일치. 점수 미반영, 표기 전용 |
