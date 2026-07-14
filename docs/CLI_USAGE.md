@@ -6,6 +6,7 @@
 ```bash
 uv run jarvis check AAPL
 uv run jarvis analyze AAPL
+uv run jarvis brief --no-llm
 uv run jarvis report
 ```
 
@@ -429,32 +430,45 @@ uv run pytest tests/pipelines/stock_report/test_golden_set.py
 
 ---
 
-### 4. portfolio - 포트폴리오 모니터링
+### 4. brief - 일일 포트 액션 브리핑
 
 **특징:**
-- 실시간 보유 종목 조회 (KIS API)
-- 각 종목 기술적 분석
-- 최근 뉴스 요약
-- 수익률 추적
+- `playbook.yaml`의 보유 종목과 워치리스트를 함께 평가
+- 청산, 매수 가능, 축소, 진입 임박, 관망 후보 순으로 우선순위 정렬
+- 뉴스·공시·수급은 점수에 반영하지 않고 근거로만 표시
+- LLM 문장화 실패 또는 `--no-llm` 사용 시 규칙 원문으로 출력
 
 **요구사항:**
-- `KIS_APP_KEY`, `KIS_APP_SECRET`, `KIS_ACCOUNT_NO` 필요
+- `playbook.yaml` 필요
+- LLM 문장화를 쓰려면 `OPENAI_API_KEY` 또는 `ANTHROPIC_API_KEY` 필요
+- 한국주식 실시간 가격·수급은 `KIS_APP_KEY`, `KIS_APP_SECRET` 설정 시 사용
 
 **사용법:**
 ```bash
-uv run jarvis portfolio
+uv run jarvis brief                # LLM 문장화 포함 (기본 openai)
+uv run jarvis brief --no-llm       # 규칙 원문만 (LLM 키 불필요)
+uv run jarvis brief -p anthropic
+```
+
+**playbook.yaml 예시:**
+```yaml
+holdings:
+  - ticker: "005930"
+    quantity: 10
+    avg_price: 72000
+    stop_price: 65000   # 선택
+watchlist:
+  - ticker: NVDA
+    note: "AI 반도체 대장"   # 선택
 ```
 
 **출력 내용:**
-- 총 자산
-- 현금 잔고
-- 주식 평가액
-- **보유 종목별:**
-  - 종목명 및 티커
-  - 보유 수량
-  - 현재 가격
-  - 손익 금액 및 비율
-  - 기술적 평가 및 인사이트
+- 시장 환경 요약
+- 액션 큐 Top N
+- 보유 종목의 exit verdict와 stop 근접 마커
+- 워치리스트의 매수 가능 또는 진입 임박 조건
+- 종목별 뉴스·공시·수급 근거
+- 저장 파일: `reports/YYYY-MM/brief_YYYY-MM-DD.md`
 
 ---
 

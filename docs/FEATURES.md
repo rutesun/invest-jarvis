@@ -272,15 +272,21 @@ Deep Dive 분석 실행 시 자동으로 기술적 차트를 생성하여 `chart
 
 ---
 
-## 3. Portfolio Monitoring (`jarvis portfolio`)
+## 3. Daily Brief (`jarvis brief`)
 
-KIS 계좌의 보유 종목별 기술적 분석 + 최근 뉴스.
+로컬 `playbook.yaml`의 보유 종목과 워치리스트를 평가해 일일 액션 브리핑을 생성.
 
 **입출력:**
-- 입력: 없음 (KIS 인증 정보 사용)
-- 출력: 총자산, 현금, 보유 종목별 P&L + 기술적 평가 + 뉴스 3건
+- 입력: `playbook.yaml`의 `holdings` + `watchlist`
+- 출력: 터미널 마크다운 + `reports/YYYY-MM/brief_YYYY-MM-DD.md`
 
-**의존성:** KIS API (잔고 조회), yfinance (기술 분석), NewsTool
+**평가 흐름:**
+- `PlaybookEngine.evaluate()`로 보유/워치 종목의 액션 판정
+- 버킷 랭킹으로 청산/매수 가능/축소/진입 임박/관망 후보 우선순위 정렬
+- 뉴스·공시·수급은 점수에 반영하지 않고 근거 표기에만 사용
+- LLM은 종목별 서술 슬롯 문장화만 담당하며 `--no-llm` 실행 가능
+
+**데이터 소스:** TechnicalAnalysisTool, PlaybookEngine, MacroTool, NewsTool, DisclosureTool, FlowTool
 
 ---
 
