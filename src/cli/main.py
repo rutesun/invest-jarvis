@@ -14,8 +14,8 @@ from rich.panel import Panel
 
 from src.llm.models import ActionableSignalOutput
 from src.llm.provider import LLMProvider
+from src.pipelines.brief import BriefPipeline
 from src.pipelines.deep_dive import DeepDivePipeline
-from src.pipelines.portfolio import PortfolioPipeline
 from src.pipelines.quick_check import QuickCheckPipeline
 from src.pipelines.screener import ScreenerPipeline
 from src.pipelines.ticker_report import TickerReportPipeline
@@ -23,10 +23,10 @@ from src.providers.kis import KISProvider
 from src.providers.naver import NaverProvider
 from src.providers.ticker_resolver import TickerResolver
 from src.providers.yfinance_provider import YFinanceProvider
+from src.tools.disclosure import DARTDisclosureFetcher, DisclosureTool, SECDisclosureFetcher
 from src.tools.fundamental import FundamentalTool
 from src.tools.macro import MacroTool
 from src.tools.news import NewsTool
-from src.tools.portfolio import PortfolioTool
 from src.tools.screener.evidence import EvidenceCollector
 from src.tools.screener.universe import UniverseBuilder
 from src.tools.technical.scorer import TechnicalScorer
@@ -304,9 +304,6 @@ async def run_deep_dive(ticker_or_name: str, provider: str) -> dict:
         base_url=base_url,
         temperature=0,
     )
-
-    # 공시 툴: SEC는 항상 사용 가능, DART는 API 키 있을 때만
-    from src.tools.disclosure import DARTDisclosureFetcher, DisclosureTool, SECDisclosureFetcher
 
     sec_fetcher = SECDisclosureFetcher()
     opendart_key = os.getenv("OPENDART_API_KEY")
@@ -1185,50 +1182,96 @@ def report_ticker(
         raise typer.Exit(1) from None
 
 
-async def run_portfolio_monitoring() -> dict:
-    """Run portfolio monitoring."""
-    kis_provider = KISProvider(
-        app_key=os.getenv("KIS_APP_KEY"),
-        app_secret=os.getenv("KIS_APP_SECRET"),
-    )
-    yf_provider = YFinanceProvider()
-
-    portfolio_tool = PortfolioTool(provider=kis_provider)
-    scorer = TechnicalScorer()
-    technical_tool = TechnicalAnalysisTool(provider=yf_provider, scorer=scorer)
-    news_tool = NewsTool()
-
-    pipeline = PortfolioPipeline(
-        portfolio_tool=portfolio_tool,
-        technical_tool=technical_tool,
-        news_tool=news_tool,
-    )
-
-    return await pipeline.run()
-
-
 @app.command()
-def portfolio(
-    provider: str = typer.Option("openai", help="LLM provider"),
+def brief(
+    provider: Literal["openai", "anthropic"] = typer.Option(
+        "openai", "--provider", "-p", help="LLM provider"
+    ),
+    no_llm: bool = typer.Option(False, "--no-llm", help="LLM 문장화 없이 규칙 원문만 출력"),
 ):
-    """Monitor portfolio with technical analysis and news."""
-    kis_app_key = os.getenv("KIS_APP_KEY")
-    kis_app_secret = os.getenv("KIS_APP_SECRET")
-    if not kis_app_key or not kis_app_secret:
-        console.print("[red]Error: KIS_APP_KEY and KIS_APP_SECRET required[/red]")
+    """일일 포트 액션 브리핑 — playbook.yaml 보유+워치 전 종목 평가."""
+    console.print("[bold]Daily brief 생성 중...[/bold]")
+
+    try:
+        result = asyncio.run(run_brief(provider, use_llm=not no_llm))
+        pipeline = result.pop("_pipeline")
+        console.print(Markdown(pipeline.format_output(result)))
+        report_path = pipeline.save_report(result)
+        console.print(f"\n[green]리포트 저장: {report_path}[/green]")
+    except ValueError as e:
+        console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1) from None
 
-    console.print("[bold]Loading portfolio...[/bold]\n")
 
-    result = asyncio.run(run_portfolio_monitoring())
+async def run_brief(provider: str, use_llm: bool) -> dict:
+    """brief 파이프라인 조립·실행. run_deep_dive와 동일한 도구 조립 패턴."""
+    from src.providers.index_provider import IndexProvider
+    from src.providers.kis_wrapper import KISProviderWrapper
+    from src.tools.flow import FlowTool
+    from src.tools.playbook.engine import PlaybookEngine
+    from src.tools.playbook.holdings import load_holdings
 
-    if not result.get("success", False):
-        console.print(f"[red]Error: {result.get('error', 'Unknown error')}[/red]")
-        raise typer.Exit(1) from None
+    config = load_holdings()
+    if not config.holdings and not config.watchlist:
+        raise ValueError("playbook.yaml에 holdings/watchlist가 없습니다")
 
-    pipeline = PortfolioPipeline(None, None, None)
-    output = pipeline.format_output(result)
-    console.print(Markdown(output))
+    kis_key = os.getenv("KIS_APP_KEY")
+    kis_secret = os.getenv("KIS_APP_SECRET")
+    kis_provider = (
+        KISProvider(app_key=kis_key, app_secret=kis_secret) if kis_key and kis_secret else None
+    )
+
+    scorer = TechnicalScorer()
+    us_tool = TechnicalAnalysisTool(provider=YFinanceProvider(), scorer=scorer)
+    kr_tool = (
+        TechnicalAnalysisTool(provider=KISProviderWrapper(kis_provider), scorer=scorer)
+        if kis_provider
+        else us_tool
+    )
+
+    fmp_provider = None
+    fmp_api_key = os.getenv("FMP_API_KEY")
+    if fmp_api_key:
+        with contextlib.suppress(Exception):
+            from src.providers.fmp_provider import FmpProvider
+
+            fmp_provider = FmpProvider(api_key=fmp_api_key)
+
+    engine = PlaybookEngine(
+        index_provider=IndexProvider(),
+        fmp_provider=fmp_provider,
+        kis_provider=kis_provider,
+        usd_capital=config.usd_capital,
+        usd_risk_pct=config.usd_risk_pct or 0.01,
+        krw_capital=config.krw_capital,
+        krw_risk_pct=config.krw_risk_pct or 0.01,
+    )
+
+    opendart_key = os.getenv("OPENDART_API_KEY")
+    dart_fetcher = DARTDisclosureFetcher(api_key=opendart_key) if opendart_key else None
+
+    llm = None
+    if use_llm:
+        try:
+            llm = LLMProvider.create(provider=provider, temperature=0)
+        except Exception as e:
+            console.print(f"[yellow]LLM 초기화 실패 — 규칙 원문으로 진행: {e}[/yellow]")
+
+    pipeline = BriefPipeline(
+        technical_tools={"KR": kr_tool, "US": us_tool},
+        playbook_engine=engine,
+        macro_tool=MacroTool(),
+        news_tool=NewsTool(),
+        disclosure_tool=DisclosureTool(
+            sec_fetcher=SECDisclosureFetcher(),
+            dart_fetcher=dart_fetcher,
+        ),
+        flow_tool=FlowTool(kis_provider=kis_provider),
+        llm=llm,
+    )
+    result = await pipeline.run(config)
+    result["_pipeline"] = pipeline
+    return result
 
 
 async def run_screen(market: str) -> dict:
