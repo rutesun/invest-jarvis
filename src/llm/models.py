@@ -171,3 +171,19 @@ class ActionableSignalOutput(BaseModel):
         if v is not None and v.strip() == "":
             return None
         return v
+
+
+class TickerNarrative(BaseModel):
+    """brief 종목별 서술 슬롯 — 규칙 판정 사실의 문장화만 담당."""
+
+    ticker: str = Field(description="입력 사실 JSON의 ticker 그대로")
+    technical_note: str = Field(description="기술적 근거 1-2문장 (제공된 사실만 사용)")
+    flow_note: str | None = Field(default=None, description="수급 데이터가 있으면 1문장")
+    news_note: str | None = Field(default=None, description="뉴스가 있으면 해석 1문장")
+    next_check: str = Field(description="다음 확인 지점 1문장")
+
+
+class BriefNarrativesOutput(BaseModel):
+    """brief LLM 배치 1콜 출력 — 전 종목 서술 목록."""
+
+    narratives: list[TickerNarrative]
