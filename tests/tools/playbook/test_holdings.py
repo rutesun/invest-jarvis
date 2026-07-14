@@ -2,6 +2,8 @@
 
 import textwrap
 
+import pytest
+
 
 # ---------------------------------------------------------------------------
 # 파일 없을 때: 빈 설정 반환
@@ -209,3 +211,101 @@ def test_get_account_for_no_account_returns_none(tmp_path):
 
     capital, risk_pct = config.get_account_for("MSFT")
     assert capital is None
+
+
+def test_load_watchlist_basic(tmp_path):
+    p = tmp_path / "playbook.yaml"
+    p.write_text(
+        """
+watchlist:
+  - ticker: NVDA
+    note: "AI 반도체"
+  - ticker: "035420"
+""",
+        encoding="utf-8",
+    )
+    from src.tools.playbook.holdings import load_holdings
+
+    config = load_holdings(p)
+    assert len(config.watchlist) == 2
+    assert config.watchlist[0].ticker == "NVDA"
+    assert config.watchlist[0].note == "AI 반도체"
+    assert config.watchlist[0].currency == "USD"
+    assert config.watchlist[1].note is None
+    assert config.watchlist[1].currency == "KRW"
+
+
+def test_load_watchlist_absent_returns_empty(tmp_path):
+    p = tmp_path / "playbook.yaml"
+    p.write_text("holdings: []\n", encoding="utf-8")
+    from src.tools.playbook.holdings import load_holdings
+
+    assert load_holdings(p).watchlist == []
+
+
+def test_watchlist_dedupe_holdings_first(tmp_path, caplog):
+    """holdings에 있는 티커는 watchlist에서 무시 (보유 우선)."""
+    p = tmp_path / "playbook.yaml"
+    p.write_text(
+        """
+holdings:
+  - ticker: NVDA
+    quantity: 5
+    avg_price: 150.0
+watchlist:
+  - ticker: nvda
+  - ticker: AAPL
+""",
+        encoding="utf-8",
+    )
+    from src.tools.playbook.holdings import load_holdings
+
+    config = load_holdings(p)
+    assert [w.ticker for w in config.watchlist] == ["AAPL"]
+
+
+def test_watchlist_dedupe_within_watchlist(tmp_path):
+    p = tmp_path / "playbook.yaml"
+    p.write_text(
+        """
+watchlist:
+  - ticker: AAPL
+  - ticker: aapl
+""",
+        encoding="utf-8",
+    )
+    from src.tools.playbook.holdings import load_holdings
+
+    config = load_holdings(p)
+    assert len(config.watchlist) == 1
+
+
+def test_watchlist_missing_ticker_raises(tmp_path):
+    p = tmp_path / "playbook.yaml"
+    p.write_text(
+        """
+watchlist:
+  - note: "티커 없음"
+""",
+        encoding="utf-8",
+    )
+    from src.tools.playbook.holdings import load_holdings
+
+    with pytest.raises(ValueError, match=r"watchlist\[0\]"):
+        load_holdings(p)
+
+
+def test_holdings_missing_field_raises_with_index(tmp_path):
+    p = tmp_path / "playbook.yaml"
+    p.write_text(
+        """
+holdings:
+  - ticker: AAPL
+    quantity: 5
+""",
+        encoding="utf-8",
+    )
+    from src.tools.playbook.holdings import load_holdings
+
+    with pytest.raises(ValueError, match=r"holdings\[0\]"):
+        load_holdings(p)
