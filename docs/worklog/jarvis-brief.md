@@ -26,3 +26,10 @@
 - 근원(root cause): exit_rules는 "SMA20" 컬럼을 찾는데 IndicatorCalculator는 "SMA_20"을 생성. 단위테스트가 자체 픽스처("SMA20")로 계약 불일치를 은폐
 - 수정: _get_ma가 양쪽 컬럼명을 순서대로 조회. 실경로 컬럼명 회귀 테스트 추가
 - 재발 방지 / 배운 것: 부품 간 DataFrame 컬럼 계약은 생산자 실제 출력으로 테스트해야 함 (CLAUDE.md 골든 테스트 원칙의 단위테스트 버전)
+
+## (2026-07-14 18:58) [Decision] Codex 구현 + Claude 리뷰 워크플로로 brief 전 태스크 완료
+- 맥락: 사용자 지시 "코덱스로 구현하고 너가 리뷰해". 플랜 9개 태스크를 3배치로 나눠 Codex(codex exec, workspace-write)가 코드+테스트 작성, Claude가 배치마다 리뷰·커밋.
+- 마찰: Codex의 workspace-write 샌드박스가 (1) 워크트리 실제 git 디렉터리(cwd 바깥)와 (2) 전역 uv 캐시(~/.cache/uv)에 쓰기 불가 → Codex가 커밋도 테스트도 못 함. 대응: git·pytest는 리뷰어(Claude)가 전담, Codex는 코드 편집만.
+- 리뷰 발견: Task 4 테스트 mock이 결함(플랜 자체 결함) — `prompt | llm.with_structured_output(X)`는 실제 ChatPromptTemplate.__or__를 타므로 mock의 __ror__가 무시됨. 기존 analyzer 테스트 패턴(ChatPromptTemplate patch + mock_prompt.__or__)으로 교체해 통과. Codex가 이 우려를 먼저 플래그했고 리뷰에서 확정·수정.
+- 결과: 전체 1144 passed / 1 failed(test_sec_fetcher_uses_cache — 네트워크 의존 기존 실패, 무관). `jarvis brief --help` 등록 확인. 커밋 8개(fix 1, feat 5, docs 2).
+- ADR 후보? no
