@@ -159,9 +159,13 @@ def evaluate_exit(
 
 
 def _get_ma(df: pd.DataFrame, col: str, last) -> float | None:
-    """DataFrame 마지막 행에서 이동평균 값 추출."""
-    if col in df.columns:
-        val = last.get(col)
-        if val is not None and not pd.isna(val):
-            return float(val)
+    """DataFrame 마지막 행에서 이동평균 값 추출.
+
+    'SMA50'(레거시 픽스처)·'SMA_50'(IndicatorCalculator 실제 출력) 양식 모두 허용.
+    """
+    for name in (col, col.replace("SMA", "SMA_", 1)):
+        if name in df.columns:
+            val = last.get(name)
+            if val is not None and not pd.isna(val):
+                return float(val)
     return None

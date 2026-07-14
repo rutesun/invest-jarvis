@@ -20,3 +20,9 @@
 - 선택: 검증 후 선별 수용 — 고심각도 3건 전부 코드로 사실 확인되어 수용: ①exit_rules(`SMA20`)와 indicators(`SMA_20`) 컬럼 계약 불일치로 SMA 매도신호·trailing_stop이 실경로에서 침묵 누락(기존 analyze 버그, 단위테스트 자체 픽스처가 은폐 — test_exit_rules.py:29) → 선행 수정 + 실경로 회귀 테스트로 스펙에 명시. ②evaluate_exit 직접 호출 → PlaybookEngine.evaluate() 단일 진입으로 수정(RS·매집 조립이 엔진 내부). ③임박 기준 Stage2 5/7 → 필수 게이트 4중 3 충족(checklist 기반)으로 재정의. 중간 심각도: 랭킹을 버킷+동버킷 가산으로 변경(축소+스탑근접>청산 역전 방지), 로더 계약 강화, 부분 실패 픽스처 테스트 추가. 공시 슬롯 포함(사용자 확정, DisclosureTool 재사용).
 - 기각: 호출 횟수 budget 검증(개인용 CLI에 과함, YAGNI), PortfolioPipeline 제거 연기 제안(사용자가 제거 확정 — 별도 커밋으로 회귀 통제).
 - ADR 후보? no (스펙 문서 D9·D10에 기록됨). 단 SMA 컬럼 버그는 수정 검증 후 [Bug] 엔트리 별도 기록 예정.
+
+## (2026-07-14 18:13) [Bug] exit_rules SMA 컬럼 계약 불일치 수정
+- 증상: analyze 보유 종목 매도판정에서 SMA_SHORT/SMA_LONG 신호·trailing_stop이 발화하지 않음
+- 근원(root cause): exit_rules는 "SMA20" 컬럼을 찾는데 IndicatorCalculator는 "SMA_20"을 생성. 단위테스트가 자체 픽스처("SMA20")로 계약 불일치를 은폐
+- 수정: _get_ma가 양쪽 컬럼명을 순서대로 조회. 실경로 컬럼명 회귀 테스트 추가
+- 재발 방지 / 배운 것: 부품 간 DataFrame 컬럼 계약은 생산자 실제 출력으로 테스트해야 함 (CLAUDE.md 골든 테스트 원칙의 단위테스트 버전)

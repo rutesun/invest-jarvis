@@ -368,3 +368,25 @@ def test_exit_trailing_stop_is_sma50():
         holding=_holding(avg=100.0),
     )
     assert result.trailing_stop == pytest.approx(sma50_last, rel=1e-4)
+
+
+def test_sma_signals_fire_with_underscore_columns():
+    """indicators.py 실제 컬럼명(SMA_50 형식)으로도 SMA 신호가 발화해야 한다 (계약 회귀)."""
+    from src.tools.playbook.exit_rules import evaluate_exit
+
+    df = pd.DataFrame({"Close": [100.0] * 60})
+    df.loc[df.index[-1], "Close"] = 80.0
+    df["SMA_20"] = 90.0
+    df["SMA_50"] = 85.0
+    df["SMA_150"] = 95.0
+    df["SMA_200"] = 96.0
+
+    verdict = evaluate_exit(
+        df=df, snapshot=None, relative_strength=None, accumulation=None, holding=None
+    )
+
+    codes = {s.code for s in verdict.signals}
+    assert "SMA_SHORT" in codes
+    assert "SMA_LONG" in codes
+    assert verdict.trailing_stop == 85.0
+    assert verdict.action == "liquidate"  # strong 1개(SMA_LONG) → 청산
