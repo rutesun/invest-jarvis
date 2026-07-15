@@ -33,3 +33,10 @@
 - 리뷰 발견: Task 4 테스트 mock이 결함(플랜 자체 결함) — `prompt | llm.with_structured_output(X)`는 실제 ChatPromptTemplate.__or__를 타므로 mock의 __ror__가 무시됨. 기존 analyzer 테스트 패턴(ChatPromptTemplate patch + mock_prompt.__or__)으로 교체해 통과. Codex가 이 우려를 먼저 플래그했고 리뷰에서 확정·수정.
 - 결과: 전체 1144 passed / 1 failed(test_sec_fetcher_uses_cache — 네트워크 의존 기존 실패, 무관). `jarvis brief --help` 등록 확인. 커밋 8개(fix 1, feat 5, docs 2).
 - ADR 후보? no
+
+## (2026-07-15 18:00) [Decision] SMA_LONG 전환 시도 국면 강등 (실사용 피드백 반영)
+- 맥락: 실제 포트폴리오로 brief 첫 실행 후 사용자 피드백 — PGY·TEM은 "200일선 아래지만 150일선을 회복했고 150일선 기울기가 양전환해 선취매한 전환(턴어라운드) 포지션"인데 SMA_LONG 강신호 하나로 "청산" 오분류. 현재 규칙(종가<SMA150 OR 종가<SMA200 → strong)이 와인스타인 원전보다 거침 — Stage 기준선은 30주선(SMA150)이고, 150선 회복+상승은 Stage2 전환 시도 국면.
+- 후보: A) 규칙 정교화(종가>SMA150 && SMA150 상승이면 SMA200 이탈을 strong→weak 강등) / B) holdings에 strategy 태그(turnaround별 exit 기준 분기) / C) 무변경(해석으로 커버)
+- 선택: A — 특정 종목 예외처리가 아닌 원전에 충실한 일반 규칙. 상승 판정은 21거래일 전 대비(market_regime의 SMA200 상승 판정과 동일 창). 결과: PGY 청산→비중축소(분산 중신호 잔존), TEM 청산→보유(약신호). SMA150 이탈은 여전히 강신호 유지.
+- 기각: B(스키마·분기 복잡도, v1 단순성 훼손 — 2차 피드백 루프에서 재검토), C(매일 틀린 라벨 반복 → "근거 신뢰" 수용 기준 훼손).
+- ADR 후보? no (스펙 D11에 기록)

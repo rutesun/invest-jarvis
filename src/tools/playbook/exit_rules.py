@@ -6,6 +6,9 @@
   3. DISTRIBUTION      매집/분산 분석 결과 분산 우세 (medium)
   4. RS_WEAKENING      RS 음전환 (weak)
   5. SMA_LONG          종가 < SMA150 또는 종가 < SMA200 (strong)
+                       단, 종가 > SMA150 이고 SMA150이 상승 중이면 weak로 강등
+                       (와인스타인 Stage 기준선은 30주선(SMA150) — 150선 회복+상승은
+                        Stage2 전환 시도 국면이라 SMA200 이탈만으로 청산하지 않음)
 
 매핑:
   - 강(strong) 신호 1개 → 청산
@@ -114,10 +117,17 @@ def evaluate_exit(
     if sma200 is not None and close < sma200:
         long_parts.append(f"종가<SMA200({sma200:.2f})")
     if long_parts:
+        # 전환 시도 국면 강등: 와인스타인 Stage 기준선은 30주선(SMA150).
+        # 종가가 SMA150 위에 있고 SMA150이 상승 중이면 Stage2 전환 시도 국면 —
+        # SMA200 이탈만으로는 "추세 붕괴"가 아니므로 weak로 강등한다.
+        severity = "strong"
+        if sma150 is not None and close >= sma150 and _is_ma_rising(df, "SMA150"):
+            severity = "weak"
+            long_parts.append(f"단, 종가>SMA150({sma150:.2f})·SMA150 상승 — 전환 시도 국면")
         signals.append(
             ExitSignal(
                 code="SMA_LONG",
-                severity="strong",
+                severity=severity,
                 detail=" | ".join(long_parts),
             )
         )
@@ -169,3 +179,17 @@ def _get_ma(df: pd.DataFrame, col: str, last) -> float | None:
             if val is not None and not pd.isna(val):
                 return float(val)
     return None
+
+
+_MA_SLOPE_LOOKBACK = 21  # 거래일 — market_regime의 SMA200 상승 판정과 동일 창
+
+
+def _is_ma_rising(df: pd.DataFrame, col: str, lookback: int = _MA_SLOPE_LOOKBACK) -> bool:
+    """이동평균이 lookback 거래일 전보다 상승했는지. 데이터 부족·결측이면 False (보수적)."""
+    for name in (col, col.replace("SMA", "SMA_", 1)):
+        if name in df.columns:
+            series = df[name].dropna()
+            if len(series) <= lookback:
+                return False
+            return float(series.iloc[-1]) > float(series.iloc[-1 - lookback])
+    return False
