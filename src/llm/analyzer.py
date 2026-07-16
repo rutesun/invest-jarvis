@@ -557,7 +557,9 @@ async def generate_brief_narratives(
                 "각 종목에 대해 technical_note(기술적 근거 1-2문장), "
                 "flow_note(수급 사실이 있으면 1문장, 없으면 null), "
                 "news_note(뉴스가 있으면 해석 1문장, 없으면 null), "
-                "next_check(다음 확인 지점 1문장)를 작성하라.",
+                "next_check(다음 확인 지점 1문장)를 작성하라. "
+                "technical_verdict와 score_history가 있으면 technical_note와 next_check에 반영하라. "
+                "제공된 score와 action을 바꾸지 마라.",
             ),
         ]
     )

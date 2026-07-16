@@ -39,3 +39,7 @@ async def test_generate_brief_narratives_returns_structured_output():
     assert result.narratives[0].ticker == "NVDA"
     mock_llm.with_structured_output.assert_called_once()
     mock_chain.ainvoke.assert_awaited_once()
+    messages = mock_prompt_class.from_messages.call_args.args[0]
+    prompt_text = " ".join(message[1] for message in messages)
+    assert "technical_verdict와 score_history" in prompt_text
+    assert "제공된 score와 action을 바꾸지 마라" in prompt_text

@@ -64,6 +64,38 @@ def test_render_marker_shown():
     assert "스탑 근접" in md
 
 
+def test_render_markdown_shows_technical_verdict_reason():
+    item = BriefItem(
+        ticker="AAPL",
+        kind="holding",
+        action="hold",
+        bucket=BUCKET_HOLD_OK,
+        price=210.0,
+        change_pct=0.3,
+        technical_verdict={
+            "action": "hold",
+            "reasons": ["상승 추세 유지"],
+            "cautions": ["단기 과열"],
+            "score_trend_summary": "최근 5거래일 adjusted score 둔화",
+        },
+        score_history=[
+            {
+                "date": "2026-07-16",
+                "close": 100.0,
+                "component_raw_total": 80,
+                "adjusted_score": 62,
+                "verdict_action": "hold",
+                "one_line_reason": "단기 과열",
+            }
+        ],
+    )
+
+    output = render_markdown(datetime(2026, 7, 16), None, [item])
+
+    assert "상승 추세 유지" in output
+    assert "최근 5거래일" in output
+
+
 def test_render_error_item():
     items = [
         BriefItem(
