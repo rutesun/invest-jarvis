@@ -199,3 +199,45 @@ uv run pytest tests/tools/technical/test_models.py tests/tools/technical/test_sc
 결과: `23 passed, 2 warnings`
 
 경고는 기존 Pydantic `Config` deprecation과 `pandas_ta` `Copy-on-Write` deprecation입니다.
+
+## Review Fix: strict ComponentResult score
+
+### 수정 내용
+
+- `ComponentResult.score`를 Pydantic v2의 `StrictInt`로 변경해 component 경계에서 `20.0`과 `True`의 coercion을 거부합니다.
+- 기존의 `TechnicalResult` raw dict score validation은 유지했습니다.
+- raw OHLCV score와 aggregator 동작은 추가하지 않았습니다.
+
+### 추가 테스트
+
+- `ComponentResult(score=20.0, ...)` rejection
+- `ComponentResult(score=True, ...)` rejection
+- `ComponentResult(score=20, ...)` acceptance
+
+### 검증
+
+RED:
+
+```bash
+uv run pytest tests/tools/technical/test_scoring_models.py -v
+```
+
+결과: 신규 component rejection 테스트 2건이 기대대로 실패했습니다(`12 passed, 2 failed`).
+
+Covering tests:
+
+```bash
+uv run pytest tests/tools/technical/test_scoring_models.py tests/tools/technical/test_models.py -v
+```
+
+결과: `23 passed, 1 warning`
+
+Focused regression:
+
+```bash
+uv run pytest tests/tools/technical/test_models.py tests/tools/technical/test_scorer.py tests/tools/technical/test_scoring_models.py -v
+```
+
+결과: `29 passed, 2 warnings`
+
+경고는 기존 Pydantic `Config` deprecation과 `pandas_ta` `Copy-on-Write` deprecation입니다.

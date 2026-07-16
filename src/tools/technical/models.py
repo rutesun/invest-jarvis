@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Literal, Self
 
 import pandas as pd
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, StrictInt, model_validator
 
 
 SignalType = Literal[
@@ -101,7 +101,7 @@ class ComponentResult(BaseModel):
     signals: list[str]
     evidence: list[str]
     metrics: dict[str, float]
-    score: int
+    score: StrictInt
     signal_metadata: list[ComponentSignal] = Field(default_factory=list)
 
 

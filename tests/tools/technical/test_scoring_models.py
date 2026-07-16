@@ -36,6 +36,37 @@ def test_component_result_accepts_signal_metadata():
     assert result.signal_metadata[0].entry_eligible is True
 
 
+def test_component_result_rejects_float_score():
+    with pytest.raises(ValueError):
+        ComponentResult(
+            signals=[],
+            evidence=[],
+            metrics={},
+            score=20.0,
+        )
+
+
+def test_component_result_rejects_bool_score():
+    with pytest.raises(ValueError):
+        ComponentResult(
+            signals=[],
+            evidence=[],
+            metrics={},
+            score=True,
+        )
+
+
+def test_component_result_accepts_integer_score():
+    result = ComponentResult(
+        signals=[],
+        evidence=[],
+        metrics={},
+        score=20,
+    )
+
+    assert result.score == 20
+
+
 def test_technical_result_defaults_keep_total_score_contract():
     snapshot = IndicatorSnapshot(price=100.0, change_pct=1.0)
 
