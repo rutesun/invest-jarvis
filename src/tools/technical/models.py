@@ -442,8 +442,13 @@ class TechnicalResult(BaseModel):
         component_scores = [
             component.get("score") for component in self.components.values()
         ]
+        for component_name, component in self.components.items():
+            if "score" in component and type(component["score"]) is not int:
+                raise ValueError(
+                    f"component score for {component_name} must be an integer"
+                )
         if component_scores and all(
-            isinstance(score, (int, float)) and not isinstance(score, bool)
+            type(score) is int
             for score in component_scores
         ):
             component_raw_total = sum(component_scores)

@@ -87,6 +87,49 @@ uv run pytest tests/tools/technical/test_models.py tests/tools/technical/test_sc
 
 경고는 기존 Pydantic `Config` deprecation과 `pandas_ta` `Copy-on-Write` deprecation입니다.
 
+## Review Fix: require integer component scores
+
+### 수정 내용
+
+- `TechnicalResult.components`에 `score`가 있는 경우 실제 `int` 타입만 허용하도록 검증했습니다.
+- `float`, `bool`, `str` 등 non-integer score는 `ValueError`로 거부합니다. `bool`은 Python에서 `int`의 subclass로 취급될 수 있어 `type(score) is int`으로 명시적으로 제한했습니다.
+- `components={}`의 기존 `total_score` fallback과 정수 component score 합산/backfill 동작은 유지했습니다.
+- raw OHLCV score나 aggregator 동작은 추가하지 않았습니다.
+
+### 추가 테스트
+
+- non-empty components의 float score rejection
+- non-empty components의 bool score rejection
+- 정수 component score 합산 후 `component_raw_total`이 `int`로 backfill되는지 검증
+
+### 검증
+
+RED:
+
+```bash
+uv run pytest tests/tools/technical/test_scoring_models.py -v
+```
+
+결과: 신규 rejection 테스트가 기대대로 실패했습니다(`9 passed, 2 failed`).
+
+GREEN:
+
+```bash
+uv run pytest tests/tools/technical/test_scoring_models.py -v
+```
+
+결과: `11 passed, 1 warning`
+
+Focused regression:
+
+```bash
+uv run pytest tests/tools/technical/test_models.py tests/tools/technical/test_scorer.py tests/tools/technical/test_scoring_models.py -v
+```
+
+결과: `26 passed, 2 warnings`
+
+경고는 기존 Pydantic `Config` deprecation과 `pandas_ta` `Copy-on-Write` deprecation입니다.
+
 ## Review Fix: total_score contract
 
 ### 수정 내용

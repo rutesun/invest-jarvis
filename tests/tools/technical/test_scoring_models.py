@@ -73,6 +73,56 @@ def test_technical_result_backfills_component_raw_total_from_component_scores():
     assert result.adjusted_score == 15
 
 
+def test_technical_result_rejects_float_component_scores():
+    snapshot = IndicatorSnapshot(price=100.0, change_pct=1.0)
+
+    with pytest.raises(ValueError, match="integer"):
+        TechnicalResult(
+            ticker="AAPL",
+            timestamp=datetime.now(UTC),
+            snapshot=snapshot,
+            components={
+                "trend": {"score": 1.5},
+                "momentum": {"score": 0.5},
+            },
+            total_score=2,
+        )
+
+
+def test_technical_result_rejects_bool_component_scores():
+    snapshot = IndicatorSnapshot(price=100.0, change_pct=1.0)
+
+    with pytest.raises(ValueError, match="integer"):
+        TechnicalResult(
+            ticker="AAPL",
+            timestamp=datetime.now(UTC),
+            snapshot=snapshot,
+            components={
+                "trend": {"score": True},
+                "momentum": {"score": 1},
+            },
+            total_score=2,
+        )
+
+
+def test_technical_result_backfills_integer_component_raw_total():
+    snapshot = IndicatorSnapshot(price=100.0, change_pct=1.0)
+
+    result = TechnicalResult(
+        ticker="AAPL",
+        timestamp=datetime.now(UTC),
+        snapshot=snapshot,
+        components={
+            "trend": {"score": 2},
+            "momentum": {"score": 3},
+        },
+        total_score=5,
+    )
+
+    assert result.component_raw_total == 5
+    assert type(result.component_raw_total) is int
+
+
 def test_technical_result_rejects_total_score_mismatch():
     snapshot = IndicatorSnapshot(price=100.0, change_pct=1.0)
 
