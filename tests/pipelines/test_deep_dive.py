@@ -16,6 +16,7 @@ from src.pipelines.deep_dive import DeepDivePipeline
 from src.tools.fundamental import FundamentalSnapshot
 from src.tools.news import NewsArticle
 from src.tools.technical.models import (
+    AggregationTraceEntry,
     ExecutionLevelView,
     IndicatorSnapshot,
     InvalidationLevelView,
@@ -630,6 +631,15 @@ async def test_deep_dive_passes_verdict_and_score_history_to_technical_summary(
             one_line_reason="단기 과열",
         )
     ]
+    tech.score_history_warning = "score history 일부 기간 부족"
+    tech.aggregation_trace = [
+        AggregationTraceEntry(
+            rule="overextended_penalty",
+            before=70,
+            after=62,
+            reason="단기 과열",
+        )
+    ]
 
     with (
         patch("src.llm.analyzer.generate_technical_summary", new_callable=AsyncMock) as mock_tech_summary,
@@ -684,3 +694,5 @@ async def test_deep_dive_passes_verdict_and_score_history_to_technical_summary(
     input_data = mock_tech_summary.call_args.args[0]
     assert input_data.technical_verdict["action"] == "hold"
     assert input_data.score_history[0]["adjusted_score"] == 62
+    assert input_data.score_history_warning == "score history 일부 기간 부족"
+    assert input_data.aggregation_trace[0]["rule"] == "overextended_penalty"

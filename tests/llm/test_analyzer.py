@@ -110,6 +110,10 @@ async def test_generate_technical_summary():
         assert result.summary == "AAPL은 강한 상승 추세입니다."
         assert result.recommendation == "매수"
         assert result.confidence == 0.75
+        prompt_messages = mock_prompt_class.from_messages.call_args.args[0]
+        user_prompt = prompt_messages[1][1]
+        assert "Do not derive a new recommendation" in user_prompt
+        assert "recommendation must describe the provided verdict" in user_prompt
         mock_chain.ainvoke.assert_awaited_once_with(
             {
                 "ticker": "AAPL",

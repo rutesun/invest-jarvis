@@ -711,3 +711,38 @@ def test_build_analyze_decision_bundle_uses_technical_verdict_when_present():
     technical = next(a for a in bundle.factor_assessments if a.factor_type == "technical")
     assert technical.total_score <= 6
     assert "하락 추세의 반전 신호" in technical.evidence
+
+
+def test_build_analyze_decision_bundle_does_not_fallback_to_raw_score_for_low_adjusted_buy():
+    technical_data = SimpleNamespace(
+        total_score=120,
+        adjusted_score=40,
+        indicators=None,
+        snapshot=SimpleNamespace(rsi=55.0),
+        technical_verdict=TechnicalVerdict(
+            action="buy",
+            entry_mode="starter",
+            confidence="low",
+            new_entry_allowed=True,
+            reasons=["초기 반등 신호"],
+            cautions=["확인 부족"],
+            invalidation_level=None,
+        ),
+    )
+
+    bundle = build_analyze_decision_bundle(
+        technical_data=technical_data,
+        technical_summary=None,
+        news_articles=[],
+        news_analysis=None,
+        fundamental_summary=None,
+        disclosure_items=[],
+        flow_data=None,
+        chart_patterns={},
+        price_levels=None,
+    )
+
+    technical = next(a for a in bundle.factor_assessments if a.factor_type == "technical")
+    assert technical.total_score == 6
+    assert technical.bias == "bullish"
+    assert "초기 반등 신호" in technical.evidence

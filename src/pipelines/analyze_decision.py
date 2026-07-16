@@ -262,8 +262,12 @@ def _technical_factor_score_from_verdict(technical_data) -> int | None:
     adjusted = getattr(technical_data, "adjusted_score", None)
     if verdict.action in {"avoid", "reduce"}:
         return 8
-    if verdict.action in {"buy", "add"} and adjusted is not None and adjusted >= 55:
-        return 11 if adjusted >= 75 else 8
+    if verdict.action in {"buy", "add"}:
+        if adjusted is not None and adjusted >= 75:
+            return 11
+        if adjusted is not None and adjusted >= 55:
+            return 8
+        return 6
     if verdict.action == "hold":
         return 6
     if verdict.action == "watch":

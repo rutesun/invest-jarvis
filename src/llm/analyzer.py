@@ -249,12 +249,13 @@ async def generate_technical_summary(
 {aggregation_trace}
 
 Treat the rule-based technical verdict, score history, and aggregation trace as fixed rule output.
-Do not change the score or action. Explain these facts in Korean only.
+Do not change the score or action. Do not derive a new recommendation.
+Explain these facts in Korean only; recommendation must describe the provided verdict when it exists.
 
 Provide summary with:
 - summary: brief overall summary in Korean
 - key_insights: list of 2-3 key insights
-- recommendation: "매수", "매도", or "중립"
+- recommendation: Korean wording that explains the provided verdict action; if no verdict is provided, use "매수", "매도", or "중립"
 - confidence: 0.0-1.0
 - rationale: reasoning in Korean""",
             ),
