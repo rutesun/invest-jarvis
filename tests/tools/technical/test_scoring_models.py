@@ -1,5 +1,7 @@
 from datetime import UTC, datetime
 
+import pytest
+
 from src.tools.technical.models import (
     AggregationTraceEntry,
     ComponentResult,
@@ -50,6 +52,40 @@ def test_technical_result_defaults_keep_total_score_contract():
     assert result.adjusted_score == 65
     assert result.technical_verdict is None
     assert result.score_history == []
+
+
+def test_technical_result_backfills_component_raw_total_from_component_scores():
+    snapshot = IndicatorSnapshot(price=100.0, change_pct=1.0)
+
+    result = TechnicalResult(
+        ticker="AAPL",
+        timestamp=datetime.now(UTC),
+        snapshot=snapshot,
+        components={
+            "trend": {"score": 20},
+            "momentum": {"score": -5},
+        },
+        total_score=99,
+    )
+
+    assert result.component_raw_total == 15
+
+
+def test_technical_result_rejects_component_raw_total_mismatch():
+    snapshot = IndicatorSnapshot(price=100.0, change_pct=1.0)
+
+    with pytest.raises(ValueError):
+        TechnicalResult(
+            ticker="AAPL",
+            timestamp=datetime.now(UTC),
+            snapshot=snapshot,
+            components={
+                "trend": {"score": 20},
+                "momentum": {"score": -5},
+            },
+            total_score=15,
+            component_raw_total=20,
+        )
 
 
 def test_technical_result_accepts_adjusted_contract_fields():
