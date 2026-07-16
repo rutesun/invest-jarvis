@@ -34,3 +34,20 @@
 - 선택: C — 구현자가 `total_score`, `component_raw_total`, `adjusted_score`, `technical_verdict`, `playbook` 경계를 혼동하지 않도록 ADR에서 결정 이유와 결과를 먼저 고정한다.
 - 기각: A(구현 중 계약 해석이 흔들릴 수 있음), B(구현 계획 단계에서 이미 결정 경계가 필요함).
 - ADR 후보? yes
+
+## (2026-07-16 18:57) [Bug] Deep Dive와 decision bundle의 technical verdict 연동 검증
+- 증상: LLM technical summary 입력에 verdict/score history가 없고, decision bundle은 `total_score`만 사용해 `technical_verdict`가 있어도 반영하지 않음.
+- 근원(root cause): 새 technical scoring 계약의 downstream 전달과 verdict 우선 평가가 구현되지 않음.
+- 수정: TechnicalSummaryInput과 prompt에 고정 rule facts를 추가하고, deep dive 전달 및 verdict 기반 factor score 매핑을 적용함.
+- 재발 방지 / 배운 것: `total_score` raw sum 계약은 유지하고, `adjusted_score`와 `technical_verdict`는 별도 필드로만 소비하도록 통합 테스트로 고정함.
+
+## (2026-07-16 19:01) [Friction] Serena symbol extraction 비활성 상태
+- 막힌 점: Task 7 review fix 중 Serena `get_symbols_overview`가 `Active languages: []`로 Python symbol extraction을 수행하지 못함.
+- 임시 대응: 변경 범위를 리뷰 지적 파일로 제한하고 `rg`/`sed`로 필요한 위치만 확인한 뒤 `apply_patch`로 좁게 수정한다.
+- 개선 아이디어 (스킬·훅·프롬프트): worktree 시작 시 Serena project/language activation 상태를 확인하는 preflight를 추가한다.
+
+## (2026-07-16 19:18) [Bug] Scoring regression fixture의 cutoff 계산 누수 제거
+- 증상: regression test가 fixture 전체에 indicator를 계산한 뒤 과거 날짜로 slice해 swing extrema 같은 미래 bar 기반 지표가 과거 verdict에 섞일 수 있음.
+- 근원(root cause): fixture loader와 cutoff scorer의 책임이 섞여 raw OHLCV cutoff보다 indicator 계산이 먼저 실행됨.
+- 수정: raw OHLCV를 먼저 cutoff 날짜까지 자른 뒤 `IndicatorCalculator`와 `TechnicalScorer`를 실행하도록 테스트 helper를 변경하고, PANW 2026-04-22/04-30의 entry eligibility를 명시적으로 고정함.
+- 재발 방지 / 배운 것: 과거 날짜 regression은 production `score_history`와 같은 원칙으로 raw slice → indicator calculate → score 순서를 따라야 함.

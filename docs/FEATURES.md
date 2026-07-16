@@ -12,7 +12,14 @@ LLM 없이 기술적 분석만 수행하는 빠른 진단 기능.
 
 **입출력:**
 - 입력: 티커 또는 종목명 (TickerResolver로 자동 변환)
-- 출력: 8개 컴포넌트 점수, 시그널, 경고, 20+ 원시 지표, 퍼포먼스 (1M/3M/6M/1Y)
+- 출력: 8개 컴포넌트 점수, context 조정 점수, technical verdict, 최근 점수 추이, 시그널, 경고, 20+ 원시 지표, 퍼포먼스 (1M/3M/6M/1Y)
+
+**기술 점수 계약:**
+
+- `total_score`와 `component_raw_total`은 8개 컴포넌트 raw 합계를 유지한다.
+- `adjusted_score`는 `MarketContext`와 structured signal metadata를 반영한 조정 점수다. raw OHLCV 별도 score는 만들지 않는다.
+- `technical_verdict`는 `buy/add/hold/watch/reduce/avoid` 중 하나의 technical-only hint와 판단 이유, 주의점, 무효화 가격, 최근 5거래일 점수 추이를 제공한다.
+- LLM은 확정된 score와 verdict를 재판단하지 않고 한국어로 설명만 한다.
 
 **8개 기술적 컴포넌트:**
 
@@ -81,6 +88,8 @@ LLM 없이 기술적 분석만 수행하는 빠른 진단 기능.
 
 **판단 우선 요약 규칙:**
 - 상단 `핵심 변수`는 장문 요약이 아니라 짧은 headline 라벨 2개만 노출
+- 기술 팩터는 `technical_verdict`가 있으면 이를 우선 반영하고, 없을 때만 기존 `total_score` 기반 판단으로 fallback
+- LLM technical summary는 `technical_verdict`, 최근 `score_history`, aggregation trace를 fixed rule facts로 받아 설명
 - `혼합` 구간에서는 가격 팩터를 약간 우선해 핵심 변수를 정렬
 - 오래된 차트 패턴은 headline이 아니라 상세 이유에서 감점 근거로 설명
 - 한국 주식 재무 지표가 부족하면 밸류 판단을 유보하고 원시 지표는 `N/A`로 표시
