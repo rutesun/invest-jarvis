@@ -106,6 +106,34 @@ def test_technical_result_rejects_component_raw_total_mismatch():
         )
 
 
+def test_technical_result_rejects_explicit_raw_total_for_empty_components():
+    snapshot = IndicatorSnapshot(price=100.0, change_pct=1.0)
+
+    with pytest.raises(ValueError, match="component_raw_total"):
+        TechnicalResult(
+            ticker="AAPL",
+            timestamp=datetime.now(UTC),
+            snapshot=snapshot,
+            components={},
+            total_score=80,
+            component_raw_total=20,
+        )
+
+
+def test_technical_result_rejects_explicit_raw_total_for_incomplete_components():
+    snapshot = IndicatorSnapshot(price=100.0, change_pct=1.0)
+
+    with pytest.raises(ValueError, match="component_raw_total"):
+        TechnicalResult(
+            ticker="AAPL",
+            timestamp=datetime.now(UTC),
+            snapshot=snapshot,
+            components={"trend": {}},
+            total_score=80,
+            component_raw_total=20,
+        )
+
+
 def test_technical_result_accepts_adjusted_contract_fields():
     snapshot = IndicatorSnapshot(price=100.0, change_pct=1.0)
     verdict = TechnicalVerdict(

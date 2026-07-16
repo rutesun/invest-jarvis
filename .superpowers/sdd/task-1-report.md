@@ -115,3 +115,44 @@ uv run pytest tests/tools/technical/test_models.py tests/tools/technical/test_sc
 결과: `21 passed, 2 warnings`
 
 경고는 기존 Pydantic `Config` deprecation과 `pandas_ta` `Copy-on-Write` deprecation입니다.
+
+## Review Fix: legacy component_raw_total fallback consistency
+
+### 수정 내용
+
+- `components`가 비어 있거나 score를 완전히 계산할 수 없는 경우에도 명시된 `component_raw_total`이 `total_score`와 다르면 `ValueError`를 발생시킵니다.
+- 모든 component score가 숫자인 경우의 합계 검증과 `adjusted_score` backfill 동작은 유지했습니다.
+- 빈 component에서 `component_raw_total`을 생략하는 기존 legacy fallback은 유지했습니다.
+
+### 추가 테스트
+
+- `components={}`, `total_score=80`, `component_raw_total=20` 지정 시 rejection
+- score가 없는 non-empty component에서 `component_raw_total`이 `total_score`와 다를 때 rejection
+
+### 검증
+
+RED:
+
+```bash
+uv run pytest tests/tools/technical/test_scoring_models.py -v
+```
+
+결과: 신규 rejection 테스트 2건이 기대대로 실패했습니다(`6 passed, 2 failed`).
+
+GREEN:
+
+```bash
+uv run pytest tests/tools/technical/test_scoring_models.py -v
+```
+
+결과: `8 passed, 1 warning`
+
+Focused regression:
+
+```bash
+uv run pytest tests/tools/technical/test_models.py tests/tools/technical/test_scorer.py tests/tools/technical/test_scoring_models.py -v
+```
+
+결과: `23 passed, 2 warnings`
+
+경고는 기존 Pydantic `Config` deprecation과 `pandas_ta` `Copy-on-Write` deprecation입니다.

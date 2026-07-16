@@ -442,7 +442,10 @@ class TechnicalResult(BaseModel):
         component_scores = [
             component.get("score") for component in self.components.values()
         ]
-        if component_scores and all(score is not None for score in component_scores):
+        if component_scores and all(
+            isinstance(score, (int, float)) and not isinstance(score, bool)
+            for score in component_scores
+        ):
             component_raw_total = sum(component_scores)
             if self.total_score != component_raw_total:
                 raise ValueError(
@@ -456,7 +459,13 @@ class TechnicalResult(BaseModel):
                     "component_raw_total must equal the sum of component scores"
                 )
             self.component_raw_total = component_raw_total
-        elif self.component_raw_total is None:
+        elif self.component_raw_total is not None:
+            if self.component_raw_total != self.total_score:
+                raise ValueError(
+                    "component_raw_total must equal total_score when component scores "
+                    "cannot be fully computed"
+                )
+        else:
             self.component_raw_total = self.total_score
         if self.adjusted_score is None:
             self.adjusted_score = self.total_score
