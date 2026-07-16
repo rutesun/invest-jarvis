@@ -1,6 +1,6 @@
 import pandas as pd
 
-from src.tools.technical.models import ComponentResult
+from src.tools.technical.models import ComponentResult, ComponentSignal
 
 
 def analyze_crsi(df: pd.DataFrame) -> ComponentResult:
@@ -36,6 +36,7 @@ def analyze_crsi(df: pd.DataFrame) -> ComponentResult:
 
     signals = []
     evidence = []
+    metadata = []
     score = 0
     metrics = {
         "crsi": round(crsi, 2),
@@ -50,12 +51,33 @@ def analyze_crsi(df: pd.DataFrame) -> ComponentResult:
         signals.append("cRSI Hook Down (매도 시그널)")
         evidence.append(f"cRSI {prev_crsi:.1f} → {crsi:.1f}, 상단밴드 {crsi_high:.1f} 하향 이탈")
         score -= 20
+        metadata.append(
+            ComponentSignal(
+                signal_type="overextension",
+                bias="bearish",
+                intent="risk",
+                severity="medium",
+                source="crsi",
+                reason="cRSI Hook Down",
+            )
+        )
 
     # Hook Up (매수 시그널)
     elif prev_crsi < crsi_low and crsi > crsi_low:
         signals.append("cRSI Hook Up (매수 시그널)")
         evidence.append(f"cRSI {prev_crsi:.1f} → {crsi:.1f}, 하단밴드 {crsi_low:.1f} 상향 돌파")
         score += 20
+        metadata.append(
+            ComponentSignal(
+                signal_type="pullback",
+                bias="bullish",
+                intent="entry",
+                severity="medium",
+                entry_eligible=True,
+                source="crsi",
+                reason="cRSI Hook Up",
+            )
+        )
 
     # Squeeze (에너지 응축)
     if band_width < 10:
@@ -76,4 +98,5 @@ def analyze_crsi(df: pd.DataFrame) -> ComponentResult:
         evidence=evidence,
         metrics=metrics,
         score=score,
+        signal_metadata=metadata,
     )

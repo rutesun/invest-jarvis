@@ -131,3 +131,30 @@ def test_supertrend_with_real_calculation():
     assert isinstance(result.signals, list)
     assert isinstance(result.evidence, list)
     assert isinstance(result.metrics, dict)
+
+
+@pytest.mark.parametrize(
+    ("directions", "signal_type", "bias", "intent", "severity"),
+    [
+        ((1, 1), "trend", "bullish", "hold", "medium"),
+        ((1, -1), "breakdown", "bearish", "risk", "high"),
+    ],
+)
+def test_supertrend_signal_metadata(directions, signal_type, bias, intent, severity):
+    df = pd.DataFrame(
+        {
+            "Close": [100, 95],
+            "SuperTrend_Dir": directions,
+            "SuperTrend_Up": [90, 90],
+            "SuperTrend_Dn": [110, 110],
+        }
+    )
+
+    result = analyze_supertrend(df)
+
+    metadata = next(item for item in result.signal_metadata if item.signal_type == signal_type)
+    assert metadata.source == "supertrend"
+    assert metadata.bias == bias
+    assert metadata.intent == intent
+    assert metadata.severity == severity
+    assert metadata.entry_eligible is False

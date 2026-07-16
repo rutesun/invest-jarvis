@@ -86,3 +86,27 @@ def test_divergence_metrics(bullish_divergence_df):
 
     # Should have some metrics
     assert isinstance(result.metrics, dict)
+
+
+@pytest.mark.parametrize(
+    ("price_values", "rsi_values", "bias", "intent"),
+    [
+        ((100, 90, 80), (50, 20, 30), "bullish", "watch"),
+        ((100, 110, 120), (50, 80, 70), "bearish", "risk"),
+    ],
+)
+def test_divergence_signal_metadata(price_values, rsi_values, bias, intent):
+    close = np.full(60, price_values[0], dtype=float)
+    rsi = np.full(60, rsi_values[0], dtype=float)
+    for index, price, rsi_value in zip((40, 55), price_values[1:], rsi_values[1:], strict=True):
+        close[index] = price
+        rsi[index] = rsi_value
+
+    result = analyze_divergence(pd.DataFrame({"Close": close, "RSI": rsi}))
+
+    metadata = next(item for item in result.signal_metadata if item.bias == bias)
+    assert metadata.source == "divergence"
+    assert metadata.signal_type == "reversal"
+    assert metadata.intent == intent
+    assert metadata.severity == "medium"
+    assert metadata.entry_eligible is False

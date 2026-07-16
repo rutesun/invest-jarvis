@@ -30,6 +30,10 @@ def test_minervini_stage2(stage2_df):
     result = analyze_minervini(stage2_df)
     assert result.score == 40
     assert "Stage 2" in result.signals[0]
+    assert result.signal_metadata[0].source == "minervini"
+    assert result.signal_metadata[0].signal_type == "trend"
+    assert result.signal_metadata[0].intent == "hold"
+    assert result.signal_metadata[0].entry_eligible is True
 
 
 def test_minervini_insufficient_data():

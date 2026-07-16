@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from src.tools.technical.models import ComponentResult
+from src.tools.technical.models import ComponentResult, ComponentSignal
 
 
 SLOPE_THRESHOLD = 0.05
@@ -50,6 +50,7 @@ def analyze_velocity(df: pd.DataFrame) -> ComponentResult:
     signals = []
     evidence = []
     score = 0
+    metadata = []
     metrics = {
         "norm_slope": round(norm_slope, 4),
         "slope_change": round(slope_change, 4),
@@ -89,15 +90,36 @@ def analyze_velocity(df: pd.DataFrame) -> ComponentResult:
     if previous_slope > 0 and current_slope < 0:
         signals.append("하락 전환점")
         score -= 15
+        metadata.append(
+            ComponentSignal(
+                signal_type="breakdown",
+                bias="bearish",
+                intent="risk",
+                severity="medium",
+                source="velocity",
+                reason="하락 전환점",
+            )
+        )
     elif previous_slope < 0 and current_slope > 0:
         signals.append("상승 전환점")
         score += 15
+        metadata.append(
+            ComponentSignal(
+                signal_type="trend",
+                bias="bullish",
+                intent="hold",
+                severity="medium",
+                source="velocity",
+                reason="상승 전환점",
+            )
+        )
 
     return ComponentResult(
         signals=signals,
         evidence=evidence,
         metrics=metrics,
         score=score,
+        signal_metadata=metadata,
     )
 
 

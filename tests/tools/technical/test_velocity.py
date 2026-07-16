@@ -36,3 +36,23 @@ def test_velocity_insufficient_data():
     df = pd.DataFrame({"Close": [100, 101], "SMA_20": [100, 101]})
     result = analyze_velocity(df)
     assert result.score == 0
+
+
+@pytest.mark.parametrize(
+    ("sma_20", "signal_type", "bias", "intent"),
+    [
+        ([100, 100, 100, 100, 100, 100, 99, 98, 97, 96, 96, 97, 98, 99, 100], "trend", "bullish", "hold"),
+        ([100, 100, 100, 100, 100, 100, 101, 102, 103, 104, 104, 103, 102, 101, 100], "breakdown", "bearish", "risk"),
+    ],
+)
+def test_velocity_turn_signal_metadata(sma_20, signal_type, bias, intent):
+    result = analyze_velocity(pd.DataFrame({"SMA_20": sma_20}))
+
+    assert result.signal_metadata
+    metadata = result.signal_metadata[0]
+    assert metadata.source == "velocity"
+    assert metadata.signal_type == signal_type
+    assert metadata.bias == bias
+    assert metadata.intent == intent
+    assert metadata.severity == "medium"
+    assert metadata.entry_eligible is False

@@ -92,6 +92,34 @@ def test_pocket_pivot_detected():
     )
     assert result.score >= 25, f"Expected Pocket Pivot score 25, got: {result.score}"
     assert any("거래량" in str(e) for e in result.evidence)
+    metadata = next(item for item in result.signal_metadata if item.signal_type == "pullback")
+    assert metadata.source == "volume"
+    assert metadata.bias == "bullish"
+    assert metadata.intent == "entry"
+    assert metadata.severity == "high"
+    assert metadata.entry_eligible is True
+
+
+def test_price_down_volume_surge_signal_metadata():
+    df = pd.DataFrame(
+        {
+            "Open": [100, 95],
+            "High": [101, 96],
+            "Low": [99, 89],
+            "Close": [100, 90],
+            "Volume": [100, 300],
+            "Vol_SMA_20": [100, 100],
+        }
+    )
+
+    result = analyze_volume(df)
+
+    metadata = next(item for item in result.signal_metadata if item.signal_type == "breakdown")
+    assert metadata.source == "volume"
+    assert metadata.bias == "bearish"
+    assert metadata.intent == "risk"
+    assert metadata.severity == "high"
+    assert metadata.entry_eligible is False
 
 
 def test_pocket_pivot_volume_not_exceeded():
