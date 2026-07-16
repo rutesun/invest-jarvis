@@ -27,3 +27,10 @@
 - 선택: C — `technical_verdict.reasons`, `cautions`, `invalidation_level`, `score_trend_summary`를 추가하고, 최근 5거래일 `score_history`를 해당 날짜까지의 데이터만 사용해 계산한다.
 - 기각: A(정보량은 많지만 행동 의미가 흐려짐), B(오늘 판단 이유는 알 수 있지만 점수 추세를 볼 수 없음).
 - ADR 후보? no
+
+## (2026-07-16 17:05) [Decision] scoring redesign ADR 승격 및 구현 계획 작성
+- 맥락: 사용자가 ADR 문서 생성과 implementation plan 전환을 요청함. 설계 문서의 ADR 후보 중 `total_score` 계약 확장과 technical verdict/playbook 책임 경계는 구현 범위에 직접 영향을 주는 아키텍처 결정임.
+- 후보: A) 설계 문서 후보로만 유지 / B) 구현 후 ADR 작성 / C) 구현 계획 전에 ADR-0010으로 수락 기록
+- 선택: C — 구현자가 `total_score`, `component_raw_total`, `adjusted_score`, `technical_verdict`, `playbook` 경계를 혼동하지 않도록 ADR에서 결정 이유와 결과를 먼저 고정한다.
+- 기각: A(구현 중 계약 해석이 흔들릴 수 있음), B(구현 계획 단계에서 이미 결정 경계가 필요함).
+- ADR 후보? yes
