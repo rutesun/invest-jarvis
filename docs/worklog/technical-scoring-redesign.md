@@ -88,3 +88,9 @@
 - 근원(root cause): previous/current component 이름 집합을 `set`으로 만든 뒤 절대 delta만으로 정렬해, 동점일 때 Python hash/order에 따라 top-N 선택이 달라짐.
 - 수정: 변화 정렬을 `abs(delta) desc, component name asc`로 고정하고, top-N 밖의 component delta는 `기타`로 합산해 adjusted delta 설명이 덜 끊기게 함.
 - 재발 방지 / 배운 것: 사용자 출력의 top-N은 동점 정렬 기준까지 명시해야 하며, 생략된 항목이 delta 해석을 바꿀 때는 `기타`로 합산해 보여준다.
+
+## (2026-07-16 23:06) [Bug] Negative action reason 우선순위 보정
+- 증상: BE score history에서 `avoid` action인데 top reason이 `지지 confluence`로 표시되어 매수 쪽 근거처럼 읽힘.
+- 근원(root cause): action-supporting caution이 없는 `reduce/avoid`에서는 기존 bullish/support reason 목록이 그대로 1순위로 유지됨.
+- 수정: 음수 adjusted score로 `reduce/avoid`가 선택된 경우 risk fallback reason을 bullish/support reason보다 먼저 배치하고, `지지 confluence`가 있어도 `avoid`의 첫 reason이 risk 우위 설명이 되는 회귀 테스트를 추가함.
+- 재발 방지 / 배운 것: action label과 첫 reason은 같은 방향을 가리켜야 하며, 반대 방향 신호는 보조 정보로만 뒤에 남겨야 함.

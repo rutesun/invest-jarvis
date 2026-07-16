@@ -101,6 +101,33 @@ def test_volume_breakdown_overrides_positive_score():
     assert result.adjusted_score < 40
 
 
+def test_negative_adjusted_avoid_reason_prioritizes_risk_over_bullish_support():
+    components = {
+        "patterns": _component(
+            10,
+            [
+                ComponentSignal(
+                    signal_type="support",
+                    bias="bullish",
+                    intent="watch",
+                    severity="medium",
+                    entry_eligible=False,
+                    source="patterns",
+                    reason="지지 confluence",
+                )
+            ],
+        ),
+        "risk": _component(-45, []),
+    }
+    context = MarketContext(close=100)
+
+    result = ScoreAggregator().aggregate(components, context)
+
+    assert result.technical_verdict.action == "avoid"
+    assert result.technical_verdict.reasons[0] == "조정 점수가 -25점 미만으로 리스크 우위"
+    assert "지지 confluence" in result.technical_verdict.reasons
+
+
 def test_aggregator_does_not_parse_signal_strings():
     components = {
         "fake": {

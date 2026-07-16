@@ -95,7 +95,7 @@ class ScoreAggregator:
             forced_action=forced_action,
             new_entry_allowed=new_entry_allowed,
         )
-        reasons = _prioritize_action_reasons(action, reasons, cautions)
+        reasons = _prioritize_action_reasons(action, reasons, cautions, adjusted)
         if action in {"hold", "watch", "reduce", "avoid"}:
             new_entry_allowed = False
 
@@ -226,11 +226,19 @@ def _prioritize_action_reasons(
     action: str,
     reasons: list[str],
     cautions: list[str],
+    adjusted: int,
 ) -> list[str]:
-    if action not in {"watch", "reduce", "avoid"} or not cautions:
+    if action not in {"watch", "reduce", "avoid"}:
         return reasons
 
     action_reasons = [_normalize_caution_as_reason(caution) for caution in cautions]
+    fallback = _negative_action_reason(action, adjusted)
+    if fallback is not None:
+        action_reasons.append(fallback)
+
+    if not action_reasons:
+        return reasons
+
     prioritized: list[str] = []
     for reason in [*action_reasons, *reasons]:
         if reason not in prioritized:
@@ -242,3 +250,11 @@ def _normalize_caution_as_reason(caution: str) -> str:
     if caution.startswith("하락 추세의 반전 신호"):
         return "하락 추세의 반전 신호라 확인 필요"
     return caution
+
+
+def _negative_action_reason(action: str, adjusted: int) -> str | None:
+    if action == "avoid" and adjusted < -25:
+        return "조정 점수가 -25점 미만으로 리스크 우위"
+    if action == "reduce" and adjusted < 0:
+        return "조정 점수가 0점 미만으로 리스크 관리 필요"
+    return None
