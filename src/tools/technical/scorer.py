@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 
 import pandas as pd
 
+from src.tools.technical.aggregator import ScoreAggregator
 from src.tools.technical.components.crsi import analyze_crsi
 from src.tools.technical.components.divergence import analyze_divergence
 from src.tools.technical.components.minervini import analyze_minervini
@@ -10,8 +11,9 @@ from src.tools.technical.components.risk import analyze_risk
 from src.tools.technical.components.supertrend import analyze_supertrend
 from src.tools.technical.components.velocity import analyze_velocity
 from src.tools.technical.components.volume import analyze_volume
+from src.tools.technical.context import build_market_context
 from src.tools.technical.indicators import IndicatorCalculator
-from src.tools.technical.models import TechnicalResult
+from src.tools.technical.models import ScoreHistoryPoint, TechnicalResult
 
 
 class TechnicalScorer:
@@ -19,9 +21,27 @@ class TechnicalScorer:
 
     def __init__(self):
         self.calculator = IndicatorCalculator()
+        self.aggregator = ScoreAggregator()
 
-    def score(self, df: pd.DataFrame, ticker: str | None = None) -> TechnicalResult:
+    def score(
+        self,
+        df: pd.DataFrame,
+        ticker: str | None = None,
+        include_history: bool = True,
+        history_days: int = 5,
+    ) -> TechnicalResult:
         """Calculate technical score from OHLCV data."""
+        result = self._score_current(df, ticker=ticker)
+        if include_history and history_days > 0:
+            history, warning = self._build_score_history(df, ticker=ticker, history_days=history_days)
+            result.score_history = history
+            result.score_history_warning = warning
+            if result.technical_verdict is not None:
+                result.technical_verdict.score_trend_summary = _summarize_score_history(history)
+        return result
+
+    def _score_current(self, df: pd.DataFrame, ticker: str | None = None) -> TechnicalResult:
+        """Calculate the current score without building score history."""
         # Analyze with each component
         minervini_result = analyze_minervini(df)
         velocity_result = analyze_velocity(df)
@@ -39,56 +59,63 @@ class TechnicalScorer:
                 "signals": minervini_result.signals,
                 "evidence": minervini_result.evidence,
                 "metrics": minervini_result.metrics,
+                "signal_metadata": minervini_result.signal_metadata,
             },
             "velocity": {
                 "score": velocity_result.score,
                 "signals": velocity_result.signals,
                 "evidence": velocity_result.evidence,
                 "metrics": velocity_result.metrics,
+                "signal_metadata": velocity_result.signal_metadata,
             },
             "crsi": {
                 "score": crsi_result.score,
                 "signals": crsi_result.signals,
                 "evidence": crsi_result.evidence,
                 "metrics": crsi_result.metrics,
+                "signal_metadata": crsi_result.signal_metadata,
             },
             "volume": {
                 "score": volume_result.score,
                 "signals": volume_result.signals,
                 "evidence": volume_result.evidence,
                 "metrics": volume_result.metrics,
+                "signal_metadata": volume_result.signal_metadata,
             },
             "patterns": {
                 "score": patterns_result.score,
                 "signals": patterns_result.signals,
                 "evidence": patterns_result.evidence,
                 "metrics": patterns_result.metrics,
+                "signal_metadata": patterns_result.signal_metadata,
             },
             "supertrend": {
                 "score": supertrend_result.score,
                 "signals": supertrend_result.signals,
                 "evidence": supertrend_result.evidence,
                 "metrics": supertrend_result.metrics,
+                "signal_metadata": supertrend_result.signal_metadata,
             },
             "divergence": {
                 "score": divergence_result.score,
                 "signals": divergence_result.signals,
                 "evidence": divergence_result.evidence,
                 "metrics": divergence_result.metrics,
+                "signal_metadata": divergence_result.signal_metadata,
             },
             "risk": {
                 "score": risk_result.score,
                 "signals": risk_result.signals,
                 "evidence": risk_result.evidence,
                 "metrics": risk_result.metrics,
+                "signal_metadata": risk_result.signal_metadata,
             },
         }
 
-        # Calculate total score
-        total_score = sum(comp["score"] for comp in components.values())
-
-        # Create snapshot
+        component_raw_total = sum(comp["score"] for comp in components.values())
         snapshot = self.calculator.create_snapshot(df)
+        context = build_market_context(df)
+        aggregation = self.aggregator.aggregate(components, context)
 
         return TechnicalResult.from_analysis(
             df,
@@ -96,5 +123,54 @@ class TechnicalScorer:
             timestamp=datetime.now(UTC),
             snapshot=snapshot,
             components=components,
-            total_score=total_score,
+            total_score=component_raw_total,
+            component_raw_total=aggregation.component_raw_total,
+            adjusted_score=aggregation.adjusted_score,
+            technical_verdict=aggregation.technical_verdict,
+            aggregation_trace=aggregation.aggregation_trace,
         )
+
+    def _build_score_history(
+        self,
+        df: pd.DataFrame,
+        ticker: str | None,
+        history_days: int,
+    ) -> tuple[list[ScoreHistoryPoint], str | None]:
+        valid_df = df.dropna(subset=["Close"])
+        recent_dates = list(valid_df.index[-history_days:])
+        history: list[ScoreHistoryPoint] = []
+        failures: list[str] = []
+
+        for date in recent_dates:
+            try:
+                sliced = df.loc[:date].copy()
+                daily = self._score_current(sliced, ticker=ticker)
+                first_reason = (
+                    daily.technical_verdict.reasons[0]
+                    if daily.technical_verdict and daily.technical_verdict.reasons
+                    else "핵심 reason 없음"
+                )
+                history.append(
+                    ScoreHistoryPoint(
+                        date=str(date.date()) if hasattr(date, "date") else str(date),
+                        close=float(sliced.dropna(subset=["Close"]).iloc[-1]["Close"]),
+                        component_raw_total=daily.component_raw_total,
+                        adjusted_score=daily.adjusted_score,
+                        verdict_action=daily.technical_verdict.action,
+                        one_line_reason=first_reason,
+                    )
+                )
+            except Exception as exc:
+                failures.append(f"{date}: {exc}")
+
+        warning = "; ".join(failures) if failures else None
+        return history, warning
+
+
+def _summarize_score_history(history: list[ScoreHistoryPoint]) -> str | None:
+    if len(history) < 2:
+        return None
+    first = history[0].adjusted_score
+    last = history[-1].adjusted_score
+    direction = "개선" if last > first else "악화" if last < first else "정체"
+    return f"최근 {len(history)}거래일 adjusted score는 {first}에서 {last}로 {direction}"
