@@ -3,7 +3,7 @@ import pandas as pd
 import pytest
 
 from src.tools.technical.indicators import IndicatorCalculator
-from src.tools.technical.scorer import TechnicalScorer
+from src.tools.technical.scorer import TechnicalScorer, _top_component_changes
 
 
 @pytest.fixture
@@ -106,7 +106,28 @@ def test_technical_scorer_score_history_uses_recent_trading_days(sample_df):
 
     assert len(result.score_history) == 5
     assert all(point.verdict_action for point in result.score_history)
+    assert all(point.new_entry_allowed is not None for point in result.score_history)
+    assert all(len(point.cautions) <= 2 for point in result.score_history)
     assert result.technical_verdict.score_trend_summary is not None
+
+
+def test_score_history_change_drivers_use_component_delta():
+    previous = {
+        "minervini": {"score": 40},
+        "supertrend": {"score": 25},
+        "divergence": {"score": -35},
+        "volume": {"score": 0},
+    }
+    current = {
+        "minervini": {"score": 25},
+        "supertrend": {"score": -40},
+        "divergence": {"score": 0},
+        "volume": {"score": None},
+    }
+
+    changes = _top_component_changes(previous, current)
+
+    assert changes == ["supertrend -65 악화", "divergence +35 개선"]
 
 
 def test_score_history_matches_freshly_calculated_cutoff_score(swing_sensitive_raw_df):

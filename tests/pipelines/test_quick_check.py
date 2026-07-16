@@ -159,7 +159,7 @@ def test_quick_check_format_output_shows_compact_score_history_context():
                     "verdict_action": "watch",
                     "one_line_reason": "가격이 주요 이동평균 위에서 상승 추세를 유지",
                     "new_entry_allowed": True,
-                    "driver_components": ["minervini +25", "supertrend +25"],
+                    "change_drivers": [],
                     "cautions": [],
                 },
                 {
@@ -170,7 +170,7 @@ def test_quick_check_format_output_shows_compact_score_history_context():
                     "verdict_action": "reduce",
                     "one_line_reason": "강세 (Stage 2 미충족)",
                     "new_entry_allowed": False,
-                    "driver_components": ["supertrend -40", "minervini +25"],
+                    "change_drivers": ["supertrend -40 신규 악화", "minervini -15 약화"],
                     "cautions": ["Supertrend가 매도 전환"],
                 },
             ],
@@ -178,9 +178,9 @@ def test_quick_check_format_output_shows_compact_score_history_context():
     )
 
     assert "adjusted -25 (Δ -50)" in output
-    assert "driver: supertrend -40, minervini +25" in output
-    assert "entry: yes→no" in output
-    assert "caution: Supertrend가 매도 전환" in output
+    assert "변화: supertrend -40 신규 악화, minervini -15 약화" in output
+    assert "신규진입: yes→no" in output
+    assert "주의:" not in output
 
 
 def test_quick_check_format_output_shows_detailed_score_history_context():
@@ -202,7 +202,7 @@ def test_quick_check_format_output_shows_detailed_score_history_context():
                     "verdict_action": "reduce",
                     "one_line_reason": "강세 (Stage 2 미충족)",
                     "new_entry_allowed": False,
-                    "driver_components": ["supertrend -40", "minervini +25"],
+                    "change_drivers": ["supertrend -40 신규 악화", "minervini -15 약화"],
                     "cautions": ["Supertrend가 매도 전환"],
                 }
             ],
@@ -211,6 +211,38 @@ def test_quick_check_format_output_shows_detailed_score_history_context():
     )
 
     assert "  - reason: 강세 (Stage 2 미충족)" in output
-    assert "  - driver: supertrend -40, minervini +25" in output
-    assert "  - entry: no" in output
-    assert "  - caution: Supertrend가 매도 전환" in output
+    assert "  - 변화: supertrend -40 신규 악화, minervini -15 약화" in output
+    assert "  - 신규진입: no" in output
+    assert "  - 주의: Supertrend가 매도 전환" in output
+
+
+def test_quick_check_format_output_shows_all_minervini_conditions():
+    pipeline = QuickCheckPipeline(technical_tool=None)
+    output = pipeline.format_output(
+        {
+            "success": True,
+            "ticker": "ALAB",
+            "price": 350.62,
+            "change_pct": -3.08,
+            "total_score": 25,
+            "components": [
+                {
+                    "name": "minervini",
+                    "score": 25,
+                    "signals": ["강세 (Stage 2 미충족)"],
+                    "evidence": [
+                        "ma_stack: 충족",
+                        "ma_50_stack: 충족",
+                        "sma_150_rising: 충족",
+                        "sma_200_rising: 충족",
+                        "above_50: 충족",
+                        "above_52w_low_30pct: 충족",
+                        "within_52w_high_25pct: 미충족",
+                    ],
+                }
+            ],
+        }
+    )
+
+    assert "above_52w_low_30pct: 충족" in output
+    assert "within_52w_high_25pct: 미충족" in output

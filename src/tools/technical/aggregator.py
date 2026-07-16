@@ -95,6 +95,7 @@ class ScoreAggregator:
             forced_action=forced_action,
             new_entry_allowed=new_entry_allowed,
         )
+        reasons = _prioritize_action_reasons(action, reasons, cautions)
         if action in {"hold", "watch", "reduce", "avoid"}:
             new_entry_allowed = False
 
@@ -219,3 +220,25 @@ def _build_reasons(
     if not reasons:
         reasons.append(f"component raw total {raw_total}점")
     return reasons
+
+
+def _prioritize_action_reasons(
+    action: str,
+    reasons: list[str],
+    cautions: list[str],
+) -> list[str]:
+    if action not in {"watch", "reduce", "avoid"} or not cautions:
+        return reasons
+
+    action_reasons = [_normalize_caution_as_reason(caution) for caution in cautions]
+    prioritized: list[str] = []
+    for reason in [*action_reasons, *reasons]:
+        if reason not in prioritized:
+            prioritized.append(reason)
+    return prioritized
+
+
+def _normalize_caution_as_reason(caution: str) -> str:
+    if caution.startswith("하락 추세의 반전 신호"):
+        return "하락 추세의 반전 신호라 확인 필요"
+    return caution

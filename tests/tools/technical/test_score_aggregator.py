@@ -30,6 +30,7 @@ def test_downtrend_reversal_is_capped_to_watch():
     assert result.adjusted_score <= 35
     assert result.technical_verdict.action == "watch"
     assert result.technical_verdict.new_entry_allowed is False
+    assert result.technical_verdict.reasons[0] == "하락 추세의 반전 신호라 확인 필요"
     assert any(trace.rule == "downtrend_reversal_cap" for trace in result.aggregation_trace)
 
 

@@ -76,3 +76,9 @@
 - 선택: C — 기본 출력의 스캔 속도를 유지하면서, 상세 모드에서는 reason/driver/entry/caution을 날짜별로 분리해 읽기 쉽게 만든다.
 - 기각: A(점수 변화 원인 파악이 어려움), B(기본 CLI가 과하게 길어짐)
 - ADR 후보? no
+
+## (2026-07-16 22:52) [Bug] Score history 리뷰 지적 반영
+- 증상: subagent 리뷰에서 `driver`가 전일 대비 변화 원인이 아니라 해당 날짜 절대 점수 상위 component라 `Δ` 원인처럼 오해될 수 있고, `avoid` 상단 reason이 반등 신호만 보여 판단과 반대로 읽히며, Minervini 7조건 중 5개만 출력된다고 지적됨.
+- 근원(root cause): history point에 previous/current component delta가 없었고, Aggregator reason은 bullish signal을 action-supporting caution보다 먼저 쌓았으며, quick check component evidence는 일괄 5개로 제한됨.
+- 수정: `change_drivers`를 전일 대비 component score 변화로 계산해 `변화`로 표시하고, risk action에서는 caution-derived reason을 먼저 배치하며, Minervini evidence는 7조건 전체를 출력하도록 변경함.
+- 재발 방지 / 배운 것: score delta 근처의 라벨은 snapshot contributor가 아니라 실제 변화 원인을 나타내야 하며, Stage 2처럼 조건 개수가 계약인 component는 truncation 없이 검증 가능하게 보여줘야 함.

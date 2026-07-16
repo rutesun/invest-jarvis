@@ -144,6 +144,7 @@ class TechnicalScorer:
         recent_dates = list(valid_df.index[-history_days:])
         history: list[ScoreHistoryPoint] = []
         failures: list[str] = []
+        previous_components: dict[str, dict] | None = None
 
         for date in recent_dates:
             try:
@@ -164,9 +165,11 @@ class TechnicalScorer:
                         one_line_reason=first_reason,
                         new_entry_allowed=daily.technical_verdict.new_entry_allowed,
                         driver_components=_top_component_drivers(daily.components),
+                        change_drivers=_top_component_changes(previous_components, daily.components),
                         cautions=daily.technical_verdict.cautions[:2],
                     )
                 )
+                previous_components = daily.components
             except Exception as exc:
                 failures.append(f"{date}: {exc}")
 
@@ -184,10 +187,37 @@ def _summarize_score_history(history: list[ScoreHistoryPoint]) -> str | None:
 
 
 def _top_component_drivers(components: dict[str, dict], limit: int = 2) -> list[str]:
-    scored = [
-        (name, int(component.get("score", 0)))
-        for name, component in components.items()
-        if int(component.get("score", 0)) != 0
-    ]
+    scored = [(name, score) for name, score in _component_scores(components).items() if score != 0]
     scored.sort(key=lambda item: abs(item[1]), reverse=True)
     return [f"{name} {score:+d}" for name, score in scored[:limit]]
+
+
+def _top_component_changes(
+    previous_components: dict[str, dict] | None,
+    current_components: dict[str, dict],
+    limit: int = 2,
+) -> list[str]:
+    if previous_components is None:
+        return []
+    previous_scores = _component_scores(previous_components)
+    current_scores = _component_scores(current_components)
+    component_names = set(previous_scores) | set(current_scores)
+    changes = [
+        (name, current_scores.get(name, 0) - previous_scores.get(name, 0))
+        for name in component_names
+    ]
+    changes = [(name, delta) for name, delta in changes if delta != 0]
+    changes.sort(key=lambda item: abs(item[1]), reverse=True)
+    return [f"{name} {delta:+d} {_change_label(delta)}" for name, delta in changes[:limit]]
+
+
+def _component_scores(components: dict[str, dict]) -> dict[str, int]:
+    scores: dict[str, int] = {}
+    for name, component in components.items():
+        score = component.get("score", 0)
+        scores[name] = int(score) if score is not None else 0
+    return scores
+
+
+def _change_label(delta: int) -> str:
+    return "개선" if delta > 0 else "악화"

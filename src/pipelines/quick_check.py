@@ -170,7 +170,8 @@ class QuickCheckPipeline:
                         if comp.get("signals"):
                             lines.append("")  # Blank line between signals and evidence
                         lines.append("  **근거:**")  # 2-space indent (same level as signals)
-                        for ev in comp["evidence"][:5]:  # Top 5 evidence per component
+                        evidence_limit = 7 if comp["name"] == "minervini" else 5
+                        for ev in comp["evidence"][:evidence_limit]:
                             lines.append(f"    - {ev}")  # 4-space indent for evidence items
                     # Add blank line between components (not after last one)
                     if (comp.get("signals") or comp.get("evidence")) and i < len(components) - 1:
@@ -221,15 +222,12 @@ def _format_compact_history_point(
     adjusted = point["adjusted_score"]
     delta = _score_delta(adjusted, previous_point)
     details = []
-    drivers = point.get("driver_components") or []
-    if drivers:
-        details.append(f"driver: {', '.join(drivers)}")
+    changes = point.get("change_drivers") or []
+    if changes:
+        details.append(f"변화: {', '.join(changes)}")
     entry = _entry_transition(point, previous_point)
     if entry:
-        details.append(f"entry: {entry}")
-    cautions = point.get("cautions") or []
-    if cautions:
-        details.append(f"caution: {cautions[0]}")
+        details.append(f"신규진입: {entry}")
 
     suffix = f" | {' | '.join(details)}" if details else ""
     return (
@@ -253,15 +251,15 @@ def _format_detailed_history_point(
         ),
         f"  - reason: {point['one_line_reason']}",
     ]
-    drivers = point.get("driver_components") or []
-    if drivers:
-        lines.append(f"  - driver: {', '.join(drivers)}")
+    changes = point.get("change_drivers") or []
+    if changes:
+        lines.append(f"  - 변화: {', '.join(changes)}")
     entry = _entry_transition(point, previous_point)
     if entry:
-        lines.append(f"  - entry: {entry}")
+        lines.append(f"  - 신규진입: {entry}")
     cautions = point.get("cautions") or []
     if cautions:
-        lines.append(f"  - caution: {', '.join(cautions)}")
+        lines.append(f"  - 주의: {', '.join(cautions)}")
     return lines
 
 
