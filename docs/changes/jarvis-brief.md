@@ -1,7 +1,7 @@
 # Change Record: jarvis brief — 일일 포트 액션 종합
 
 **Status**: Draft
-**Date**: 2026-07-14
+**Date**: 2026-07-16
 **PRs**: #{PR 번호}
 **Type**: feat
 
@@ -23,6 +23,8 @@
 6. **`playbook.yaml` watchlist 섹션 + 로더 확장**: `WatchEntry` 추가, holdings 우선 중복 제거, 스키마 오류를 항목 인덱스와 함께 즉시 예외로 표면화.
 7. **선행 버그픽스 — exit_rules SMA 컬럼 계약 불일치**: `exit_rules`는 `SMA20`을 찾는데 `IndicatorCalculator`는 `SMA_20`을 생성해, 실경로(`analyze` 포함)에서 SMA 매도신호·trailing_stop이 침묵 누락되고 있었다. `_get_ma`가 양쪽 컬럼명을 조회하도록 수정하고 실경로 회귀 테스트 추가.
 8. **`PortfolioPipeline` 제거**: KIS 잔고 전제가 소멸해 brief가 역할을 대체. 파이프라인·`PortfolioTool`·`jarvis portfolio` 명령·관련 테스트 삭제. provider 레이어(`KISProvider.get_balance()`, `kis_models`)는 재활용 여지가 있어 보존.
+9. **SMA_LONG 매도신호 — 전환(턴어라운드) 국면 강등**: 실사용 피드백 — 200일선 아래지만 150일선을 회복한 전환 선취매 종목(PGY·TEM)이 `SMA_LONG`(strong) 단독으로 "청산" 오분류. 와인스타인 Stage 기준선은 30주선(SMA150)이므로 종가가 SMA150 위로 회복하면 SMA200 이탈을 strong→weak로 강등하고 "전환 시도 국면"으로 표기. SMA150 이탈은 여전히 strong(방어선 유지). 1차 시도(SMA150 상승 조건 추가)는 실데이터 검증에서 대상 종목의 SMA150이 아직 하락 중이라 미발화 — 사용자 결정으로 가격 회복만 조건으로 채택, 기울기는 "상승/하락 중(미확인)"으로 근거에 병기.
+10. **`is_korean_ticker` — KRX 신형 영숫자 단축코드 인식**: 실보유 ETF `0167A0` 같은 신형 코드(숫자 시작 6자리, 영문 혼용)가 `^\d{6}$`(순수 숫자) 패턴에 안 걸려 US 경로(yfinance)로 오라우팅되어 "데이터 조회 실패"가 났다. 패턴을 `^\d[0-9A-Z]{5}$`(숫자 시작 6자리 영숫자)로 확장 — 미국 티커는 문자로 시작해 오탐 없음. `extract_kr_code`는 대문자 정규화 추가. 이 함수는 deep_dive·flow·screener·brief가 공유하는 경계 함수라 전 기능에 적용됨.
 
 ## Before / After
 
@@ -39,12 +41,23 @@ Before(exit_rules): _get_ma(df, "SMA50")  # indicators는 "SMA_50" 생성 → �
 After(exit_rules):  _get_ma가 "SMA50"·"SMA_50" 양쪽 조회 → 실경로에서 SMA 신호 정상 발화
 ```
 
+```
+Before(exit_rules): 종가<SMA150 또는 종가<SMA200 → 항상 strong (전환 국면도 "청산")
+After(exit_rules):  종가>=SMA150이면 SMA200 이탈만 weak로 강등 + "전환 시도 국면" 표기
+                    (SMA150 이탈은 여전히 strong)
+```
+
+```
+Before(is_korean_ticker): re.match(r"^\d{6}$", ticker)         # "0167A0" → False → yfinance 404
+After(is_korean_ticker):  re.match(r"^\d[0-9A-Z]{5}$", ...)    # "0167A0" → True → KIS 정상 조회
+```
+
 ## Impact
 
 - **신규 명령**: `jarvis brief [--provider openai|anthropic] [--no-llm]`. `--no-llm`은 LLM 키 없이 규칙 원문만 출력.
 - **제거된 명령**: `jarvis portfolio` (대체: `jarvis brief`).
 - **설정**: `playbook.yaml`에 `watchlist:` 섹션 추가 가능(티커만 필수, `note` 선택). holdings 형식은 기존과 동일.
-- **부수 효과(버그픽스)**: 기존 `analyze`의 보유 종목 매도 판정에서 SMA_SHORT/SMA_LONG 신호·trailing_stop이 이제 정상 동작.
+- **부수 효과(버그픽스)**: 기존 `analyze`의 보유 종목 매도 판정에서 SMA_SHORT/SMA_LONG 신호·trailing_stop이 이제 정상 동작. 전환 국면 강등과 KRX 영숫자 코드 인식도 `analyze`·`deep_dive`·`screener`·`flow`에 함께 적용됨(공유 함수).
 - **출력물**: `reports/YYYY-MM/brief_YYYY-MM-DD.md` 신규 생성.
 
 ## Constraints
@@ -59,7 +72,7 @@ After(exit_rules):  _get_ma가 "SMA50"·"SMA_50" 양쪽 조회 → 실경로에�
 ## Related
 
 - 설계: [docs/superpowers/specs/2026-07-14-jarvis-brief-design.md](../superpowers/specs/2026-07-14-jarvis-brief-design.md), [docs/superpowers/plans/2026-07-14-jarvis-brief.md](../superpowers/plans/2026-07-14-jarvis-brief.md)
-- ADR: 없음 (설계 문서 D9·D10에 리뷰 반영 기록)
+- ADR: 없음 (설계 문서 D9·D10·D11에 리뷰 반영 기록)
 - FEATURES.md: `brief` 섹션 추가, `portfolio` 섹션 제거
 - worklog: [docs/worklog/jarvis-brief.md](../worklog/jarvis-brief.md)
 - 후속: 실계정 스모크 테스트 · 2차 의사결정 피드백 루프 · 3차 발굴 엔진
