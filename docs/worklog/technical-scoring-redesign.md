@@ -57,3 +57,9 @@
 - 근원(root cause): prompt에는 재해석 금지를 지시했지만, 반환값을 rule verdict로 강제 보정하지 않았고 decision bundle도 LLM summary가 verdict summary를 덮을 수 있었음.
 - 수정: verdict가 있으면 technical recommendation을 rule action 기반 tri-state label로 강제하고, Deep Dive에서도 방어적으로 재적용함. analyze decision은 verdict summary를 LLM summary로 교체하지 않고 adjusted score와 score history를 rule evidence로 남김.
 - 재발 방지 / 배운 것: "LLM은 설명만" 계약은 prompt 문구만으로는 부족하며, downstream에 전달되는 structured field를 rule output으로 직접 고정해야 함.
+
+## (2026-07-16 19:53) [Bug] PANW pullback add regression 계약 복구
+- 증상: PANW 2026-04-30 regression이 설계 spec의 `action=add`, `entry_mode=pullback_add`, `confidence=high`와 달리 `watch`를 고정함.
+- 근원(root cause): 4/30은 Supertrend 상승과 20일선 위 눌림 상태지만 component metadata에 pullback entry signal이 없어 Aggregator가 add 조건을 만족하지 못함.
+- 수정: MarketContext 기반 contextual pullback add 조건을 추가해 과열/이탈이 아니고 20일선 위에서 20일 고점 대비 -2~-8% 눌림, 10일 수익률 양수, Supertrend 상승이면 `pullback_add`로 판정함. PANW 4/30 regression과 aggregator 단위 테스트를 spec 기대값으로 고정함.
+- 재발 방지 / 배운 것: real regression fixture는 spec의 대표 사례와 정확히 일치해야 하며, 실제 결과가 다르면 test를 넓히기보다 rule 또는 spec을 함께 정렬해야 함.

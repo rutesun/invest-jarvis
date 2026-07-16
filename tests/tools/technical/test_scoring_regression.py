@@ -26,8 +26,10 @@ def test_panw_entry_window_regression():
 
     assert april_22.technical_verdict.action in {"buy", "add"}
     assert april_22.technical_verdict.new_entry_allowed is True
-    assert april_30.technical_verdict.action == "watch"
-    assert april_30.technical_verdict.new_entry_allowed is False
+    assert april_30.technical_verdict.action == "add"
+    assert april_30.technical_verdict.entry_mode == "pullback_add"
+    assert april_30.technical_verdict.confidence == "high"
+    assert april_30.technical_verdict.new_entry_allowed is True
     assert april_30.adjusted_score == 55
 
 
