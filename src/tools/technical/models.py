@@ -444,6 +444,10 @@ class TechnicalResult(BaseModel):
         ]
         if component_scores and all(score is not None for score in component_scores):
             component_raw_total = sum(component_scores)
+            if self.total_score != component_raw_total:
+                raise ValueError(
+                    "total_score must equal the sum of component scores"
+                )
             if (
                 self.component_raw_total is not None
                 and self.component_raw_total != component_raw_total

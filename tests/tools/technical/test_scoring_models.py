@@ -65,10 +65,28 @@ def test_technical_result_backfills_component_raw_total_from_component_scores():
             "trend": {"score": 20},
             "momentum": {"score": -5},
         },
-        total_score=99,
+        total_score=15,
     )
 
+    assert result.total_score == 15
     assert result.component_raw_total == 15
+    assert result.adjusted_score == 15
+
+
+def test_technical_result_rejects_total_score_mismatch():
+    snapshot = IndicatorSnapshot(price=100.0, change_pct=1.0)
+
+    with pytest.raises(ValueError, match="total_score"):
+        TechnicalResult(
+            ticker="AAPL",
+            timestamp=datetime.now(UTC),
+            snapshot=snapshot,
+            components={
+                "trend": {"score": 20},
+                "momentum": {"score": -5},
+            },
+            total_score=99,
+        )
 
 
 def test_technical_result_rejects_component_raw_total_mismatch():
