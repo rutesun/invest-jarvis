@@ -81,6 +81,10 @@ async def test_generate_technical_summary():
             "sma_50": 170.0,
             "rsi": 58.3,
         },
+        technical_verdict={"action": "hold", "new_entry_allowed": False},
+        score_history=[{"adjusted_score": 62}],
+        score_history_warning="최근 점수가 하락했습니다.",
+        aggregation_trace=[{"rule": "cap", "before": 70, "after": 62}],
     )
 
     mock_output = TechnicalSummaryOutput(
@@ -106,6 +110,19 @@ async def test_generate_technical_summary():
         assert result.summary == "AAPL은 강한 상승 추세입니다."
         assert result.recommendation == "매수"
         assert result.confidence == 0.75
+        mock_chain.ainvoke.assert_awaited_once_with(
+            {
+                "ticker": "AAPL",
+                "price": 178.50,
+                "change_pct": 2.5,
+                "strategies_text": "- trend: 강세 (신뢰도: 75%)\n  시그널: 골든크로스\n  근거: 20일선 > 50일선",
+                "indicators_text": "- sma_20: 175.00\n- sma_50: 170.00\n- rsi: 58.30",
+                "technical_verdict": {"action": "hold", "new_entry_allowed": False},
+                "score_history": [{"adjusted_score": 62}],
+                "score_history_warning": "최근 점수가 하락했습니다.",
+                "aggregation_trace": [{"rule": "cap", "before": 70, "after": 62}],
+            }
+        )
 
 
 @pytest.mark.asyncio

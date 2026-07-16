@@ -362,6 +362,14 @@ class DeepDivePipeline:
             change_pct=snapshot.change_pct,
             strategies=strategies,
             indicators=indicators,
+            technical_verdict=(
+                technical_data.technical_verdict.model_dump()
+                if technical_data.technical_verdict is not None
+                else None
+            ),
+            score_history=[point.model_dump() for point in technical_data.score_history],
+            score_history_warning=technical_data.score_history_warning,
+            aggregation_trace=[entry.model_dump() for entry in technical_data.aggregation_trace],
         )
 
         return await analyzer.generate_technical_summary(input_data, self.llm)

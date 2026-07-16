@@ -236,6 +236,21 @@ async def generate_technical_summary(
 **Key Indicators**:
 {indicators_text}
 
+**Rule-based technical verdict**:
+{technical_verdict}
+
+**Recent score history**:
+{score_history}
+
+**Score history warning**:
+{score_history_warning}
+
+**Aggregation trace**:
+{aggregation_trace}
+
+Treat the rule-based technical verdict, score history, and aggregation trace as fixed rule output.
+Do not change the score or action. Explain these facts in Korean only.
+
 Provide summary with:
 - summary: brief overall summary in Korean
 - key_insights: list of 2-3 key insights
@@ -255,6 +270,10 @@ Provide summary with:
             "change_pct": input_data.change_pct,
             "strategies_text": strategies_text,
             "indicators_text": indicators_text,
+            "technical_verdict": input_data.technical_verdict,
+            "score_history": input_data.score_history,
+            "score_history_warning": input_data.score_history_warning,
+            "aggregation_trace": input_data.aggregation_trace,
         }
     )
 

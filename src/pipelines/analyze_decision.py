@@ -254,6 +254,23 @@ def build_technical_assessment(
     )
 
 
+def _technical_factor_score_from_verdict(technical_data) -> int | None:
+    verdict = getattr(technical_data, "technical_verdict", None)
+    if verdict is None:
+        return None
+
+    adjusted = getattr(technical_data, "adjusted_score", None)
+    if verdict.action in {"avoid", "reduce"}:
+        return 8
+    if verdict.action in {"buy", "add"} and adjusted is not None and adjusted >= 55:
+        return 11 if adjusted >= 75 else 8
+    if verdict.action == "hold":
+        return 6
+    if verdict.action == "watch":
+        return 4
+    return None
+
+
 def build_event_assessment(
     news_titles: list[str],
     disclosure_items: list[dict] | None,
@@ -659,6 +676,26 @@ def build_analyze_decision_bundle(
             for result in chart_patterns.values()
         ],
     )
+    verdict_score = _technical_factor_score_from_verdict(technical_data)
+    verdict = getattr(technical_data, "technical_verdict", None)
+    if verdict is not None and verdict_score is not None:
+        technical_assessment = technical_assessment.model_copy(
+            update={
+                "total_score": verdict_score,
+                "role": "보조" if verdict_score >= 7 else "참고",
+                "headline": f"technical verdict: {verdict.action}",
+                "summary": verdict.reasons[0] if verdict.reasons else technical_assessment.summary,
+                "role_reason": "technical_verdict를 우선 반영",
+                "evidence": technical_assessment.evidence + verdict.reasons + verdict.cautions,
+                "bias": (
+                    "bearish"
+                    if verdict.action in {"reduce", "avoid"}
+                    else "bullish"
+                    if verdict.action in {"buy", "add"}
+                    else "neutral"
+                ),
+            }
+        )
     if technical_summary is not None:
         technical_summary_text = (
             technical_summary.key_insights[0]

@@ -20,10 +20,12 @@ from src.tools.technical.models import (
     IndicatorSnapshot,
     InvalidationLevelView,
     LevelPayload,
+    ScoreHistoryPoint,
     StrategyResult,
     StructureLevelsPayloadV2,
     StructureLevelView,
     TechnicalResult,
+    TechnicalVerdict,
 )
 
 
@@ -598,3 +600,87 @@ async def test_deep_dive_pipeline_without_playbook_engine_returns_none_verdict(
         result = await pipeline.run("AAPL")
 
     assert result.get("playbook_verdict") is None
+
+
+@pytest.mark.asyncio
+async def test_deep_dive_passes_verdict_and_score_history_to_technical_summary(
+    mock_technical_tool,
+    mock_news_tool,
+    mock_llm,
+):
+    tech = mock_technical_tool.execute.return_value.data
+    tech.adjusted_score = 62
+    tech.technical_verdict = TechnicalVerdict(
+        action="hold",
+        entry_mode="extended_hold",
+        confidence="medium",
+        new_entry_allowed=False,
+        reasons=["상승 추세 유지"],
+        cautions=["단기 과열"],
+        invalidation_level=170.0,
+        score_trend_summary="최근 5거래일 adjusted score는 70에서 62로 악화",
+    )
+    tech.score_history = [
+        ScoreHistoryPoint(
+            date="2026-07-16",
+            close=178.5,
+            component_raw_total=75,
+            adjusted_score=62,
+            verdict_action="hold",
+            one_line_reason="단기 과열",
+        )
+    ]
+
+    with (
+        patch("src.llm.analyzer.generate_technical_summary", new_callable=AsyncMock) as mock_tech_summary,
+        patch("src.llm.analyzer.analyze_news", new_callable=AsyncMock) as mock_news_analysis,
+        patch("src.llm.analyzer.generate_actionable_signal", new_callable=AsyncMock) as mock_signal,
+        patch("src.pipelines.deep_dive.StructureZoneDetector") as mock_zone_detector_cls,
+        patch("src.pipelines.deep_dive.compose_level_payload") as mock_compose_levels,
+    ):
+        mock_tech_summary.return_value = TechnicalSummaryOutput(
+            summary="강세",
+            key_insights=["상승 추세 유지"],
+            recommendation="중립",
+            confidence=0.7,
+            rationale="rule output 설명",
+        )
+        mock_news_analysis.return_value = NewsAnalysisOutput(
+            sentiment="중립",
+            confidence=0.5,
+            key_themes=[],
+            summary="뉴스 제한적",
+            impact_assessment="영향 제한",
+        )
+        mock_signal.return_value = ActionableSignalOutput(
+            action="관망",
+            timing="보류",
+            signal_strength=5,
+            headline="관망",
+            primary_reason="단기 과열",
+            supporting_reasons=["상승 추세 유지"],
+            risks=["추격 매수 리스크"],
+            confidence=0.7,
+        )
+        mock_zone_detector_cls.return_value.detect.return_value = object()
+        mock_compose_levels.return_value = LevelPayload(
+            structure_levels=StructureLevelsPayloadV2(
+                summary_label="no_clear_structure",
+                headline="명확한 구조 없음",
+                why="테스트 기본값",
+            ),
+            execution_levels=[],
+            structure_summary="명확한 구조 없음",
+            execution_summary="실행 레벨 없음",
+        )
+
+        pipeline = DeepDivePipeline(
+            technical_tool=mock_technical_tool,
+            news_tool=mock_news_tool,
+            llm=mock_llm,
+        )
+        await pipeline.run("AAPL")
+
+    input_data = mock_tech_summary.call_args.args[0]
+    assert input_data.technical_verdict["action"] == "hold"
+    assert input_data.score_history[0]["adjusted_score"] == 62
