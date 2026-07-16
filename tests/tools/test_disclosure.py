@@ -384,3 +384,29 @@ async def test_disclosure_tool_wraps_exceptions():
 
     assert result.success is False
     assert "network timeout" in result.error
+
+
+# ── KRX 신형 영숫자 코드 (예: 0167A0 — 숫자 시작 6자리, 영문 혼용) ──────────
+
+
+def test_is_korean_ticker_alnum_code():
+    assert is_korean_ticker("0167A0") is True
+
+
+def test_is_korean_ticker_alnum_code_lowercase():
+    assert is_korean_ticker("0167a0") is True
+
+
+def test_is_korean_ticker_alnum_with_suffix():
+    assert is_korean_ticker("0167A0.KS") is True
+
+
+def test_is_korean_ticker_rejects_letter_start():
+    """미국 티커(문자 시작)는 6자여도 한국 코드가 아니다."""
+    assert is_korean_ticker("ABCDEF") is False
+    assert is_korean_ticker("GOOGL") is False
+
+
+def test_extract_kr_code_alnum_uppercased():
+    assert extract_kr_code("0167a0") == "0167A0"
+    assert extract_kr_code("0167A0.KS") == "0167A0"

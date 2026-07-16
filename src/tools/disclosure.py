@@ -26,16 +26,21 @@ class DisclosureItem(BaseModel):
 
 
 def is_korean_ticker(ticker: str) -> bool:
-    """한국주식 여부 판별 (.KS/.KQ 접미사 또는 6자리 숫자)."""
+    """한국주식 여부 판별.
+
+    .KS/.KQ 접미사, 또는 숫자로 시작하는 6자리 영숫자 KRX 단축코드.
+    (KRX 신형 코드는 영문 혼용 — 예: 0167A0. 미국 티커는 숫자로 시작하지
+    않으므로 '숫자 시작' 조건이 오탐을 막는다.)
+    """
     if re.search(r"\.(KS|KQ)$", ticker, re.IGNORECASE):
         return True
-    return bool(re.match(r"^\d{6}$", ticker))
+    return bool(re.match(r"^\d[0-9A-Z]{5}$", ticker, re.IGNORECASE))
 
 
 def extract_kr_code(ticker: str) -> str:
-    """한국 티커 문자열에서 6자리 KRX 종목코드 추출."""
+    """한국 티커 문자열에서 6자리 KRX 종목코드 추출 (영숫자 코드는 대문자 정규화)."""
     cleaned = re.sub(r"\.(KS|KQ)$", "", ticker, flags=re.IGNORECASE)
-    return cleaned.zfill(6)
+    return cleaned.upper().zfill(6)
 
 
 _SEC_USER_AGENT = "invest-jarvis research@example.com"
