@@ -21,3 +21,9 @@
 - 기각: A(리뷰 지적을 반영하지 않아 downstream 혼선 가능), B(analyze_decision·tests·playbook 연동 파급이 커서 위험).
 - ADR 후보? yes
 
+## (2026-07-16 16:56) [Decision] ticker 분석 reason과 5거래일 점수 추이 추가
+- 맥락: 사용자가 ticker 분석에서 판단 이유와 최근 5일 정도의 점수 추이를 함께 보고 싶다고 요청함. 이는 점수의 신뢰도를 높이고, 현재 점수가 개선 중인지 악화 중인지 구분하는 데 필요함.
+- 후보: A) component evidence만 그대로 노출 / B) 최종 verdict reason만 추가 / C) 최종 verdict reason + 최근 5거래일 score history 추가
+- 선택: C — `technical_verdict.reasons`, `cautions`, `invalidation_level`, `score_trend_summary`를 추가하고, 최근 5거래일 `score_history`를 해당 날짜까지의 데이터만 사용해 계산한다.
+- 기각: A(정보량은 많지만 행동 의미가 흐려짐), B(오늘 판단 이유는 알 수 있지만 점수 추세를 볼 수 없음).
+- ADR 후보? no
