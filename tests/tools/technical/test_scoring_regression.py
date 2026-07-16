@@ -10,12 +10,11 @@ FIXTURE_DIR = Path("tests/fixtures/technical/scoring")
 
 
 def _load_fixture(name: str) -> pd.DataFrame:
-    df = pd.read_csv(FIXTURE_DIR / name, parse_dates=["Date"], index_col="Date")
-    return IndicatorCalculator().calculate(df)
+    return pd.read_csv(FIXTURE_DIR / name, parse_dates=["Date"], index_col="Date")
 
 
 def _score_until(df: pd.DataFrame, date: str):
-    sliced = df.loc[:pd.Timestamp(date)]
+    sliced = IndicatorCalculator().calculate(df.loc[: pd.Timestamp(date)])
     return TechnicalScorer().score(sliced, include_history=False)
 
 
@@ -25,10 +24,11 @@ def test_panw_entry_window_regression():
     april_22 = _score_until(df, "2026-04-22")
     april_30 = _score_until(df, "2026-04-30")
 
-    assert april_22.technical_verdict.action in {"buy", "add", "watch"}
-    assert april_22.technical_verdict.action != "avoid"
-    assert april_30.technical_verdict.action in {"add", "hold", "buy", "watch"}
-    assert april_30.adjusted_score >= 35
+    assert april_22.technical_verdict.action in {"buy", "add"}
+    assert april_22.technical_verdict.new_entry_allowed is True
+    assert april_30.technical_verdict.action == "watch"
+    assert april_30.technical_verdict.new_entry_allowed is False
+    assert april_30.adjusted_score == 55
 
 
 def test_be_overextension_then_breakdown_regression():
