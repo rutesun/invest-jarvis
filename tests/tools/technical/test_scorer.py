@@ -127,7 +127,24 @@ def test_score_history_change_drivers_use_component_delta():
 
     changes = _top_component_changes(previous, current)
 
-    assert changes == ["supertrend -65 악화", "divergence +35 개선"]
+    assert changes == ["supertrend -65 악화", "divergence +35 개선", "기타 -15 악화"]
+
+
+def test_score_history_change_drivers_are_deterministic_for_ties():
+    previous = {
+        "velocity": {"score": -20},
+        "patterns": {"score": 10},
+        "risk": {"score": 0},
+    }
+    current = {
+        "velocity": {"score": -35},
+        "patterns": {"score": -5},
+        "risk": {"score": -15},
+    }
+
+    changes = _top_component_changes(previous, current)
+
+    assert changes == ["patterns -15 악화", "risk -15 악화", "기타 -15 악화"]
 
 
 def test_score_history_matches_freshly_calculated_cutoff_score(swing_sensitive_raw_df):

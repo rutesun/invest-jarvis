@@ -207,8 +207,14 @@ def _top_component_changes(
         for name in component_names
     ]
     changes = [(name, delta) for name, delta in changes if delta != 0]
-    changes.sort(key=lambda item: abs(item[1]), reverse=True)
-    return [f"{name} {delta:+d} {_change_label(delta)}" for name, delta in changes[:limit]]
+    changes.sort(key=lambda item: (-abs(item[1]), item[0]))
+
+    selected = changes[:limit]
+    remaining_delta = sum(delta for _, delta in changes[limit:])
+    formatted = [f"{name} {delta:+d} {_change_label(delta)}" for name, delta in selected]
+    if remaining_delta:
+        formatted.append(f"기타 {remaining_delta:+d} {_change_label(remaining_delta)}")
+    return formatted
 
 
 def _component_scores(components: dict[str, dict]) -> dict[str, int]:

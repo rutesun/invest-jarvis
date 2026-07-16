@@ -82,3 +82,9 @@
 - 근원(root cause): history point에 previous/current component delta가 없었고, Aggregator reason은 bullish signal을 action-supporting caution보다 먼저 쌓았으며, quick check component evidence는 일괄 5개로 제한됨.
 - 수정: `change_drivers`를 전일 대비 component score 변화로 계산해 `변화`로 표시하고, risk action에서는 caution-derived reason을 먼저 배치하며, Minervini evidence는 7조건 전체를 출력하도록 변경함.
 - 재발 방지 / 배운 것: score delta 근처의 라벨은 snapshot contributor가 아니라 실제 변화 원인을 나타내야 하며, Stage 2처럼 조건 개수가 계약인 component는 truncation 없이 검증 가능하게 보여줘야 함.
+
+## (2026-07-16 22:58) [Bug] Score history 변화 tie 정렬 안정화
+- 증상: BE compact/detail 리포트를 별도 프로세스로 생성하면 같은 날짜의 `변화` 상위 component가 다르게 보일 수 있음.
+- 근원(root cause): previous/current component 이름 집합을 `set`으로 만든 뒤 절대 delta만으로 정렬해, 동점일 때 Python hash/order에 따라 top-N 선택이 달라짐.
+- 수정: 변화 정렬을 `abs(delta) desc, component name asc`로 고정하고, top-N 밖의 component delta는 `기타`로 합산해 adjusted delta 설명이 덜 끊기게 함.
+- 재발 방지 / 배운 것: 사용자 출력의 top-N은 동점 정렬 기준까지 명시해야 하며, 생략된 항목이 delta 해석을 바꿀 때는 `기타`로 합산해 보여준다.
