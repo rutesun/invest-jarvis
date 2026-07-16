@@ -170,7 +170,12 @@ async def test_sec_fetcher_uses_cache(sec_fetcher, sec_submissions_response, tmp
     sec_fetcher.CACHE_PATH.write_text(json.dumps(cache_data))
     sec_fetcher.CACHE_PATH.touch()
 
-    with patch("httpx.AsyncClient") as mock_client_cls:
+    fixed_now = datetime(2026, 6, 20)
+    with (
+        patch("src.tools.disclosure.datetime") as mock_dt,
+        patch("httpx.AsyncClient") as mock_client_cls,
+    ):
+        mock_dt.now.return_value = fixed_now
         mock_client = AsyncMock()
         mock_client_cls.return_value.__aenter__.return_value = mock_client
 

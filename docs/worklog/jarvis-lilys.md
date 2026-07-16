@@ -24,3 +24,9 @@
 - 이전 접근: local main에 worklog 관련 커밋과 Lily 스킬 변경이 섞여 있었다.
 - 전환 이유: main에는 worklog 실험 커밋을 남기지 않고, 관련 변경을 feature 브랜치의 단일 커밋으로 관리하기 위해서다.
 - 새 접근: `feature/jarvis-lilys-worklog`를 `origin/main` 기준으로 만들고 worklog/Lily 관련 파일만 stage해 한 커밋으로 묶는다.
+
+## (2026-07-16 15:28) [Bug] SEC cache 테스트 날짜 의존 실패
+- 증상: PR #49의 `test` check에서 `tests/tools/test_disclosure.py::test_sec_fetcher_uses_cache`가 빈 결과를 반환해 실패했다.
+- 근원(root cause): 테스트가 현재 날짜를 고정하지 않아, 2026-07-16 기준 fixture 공시가 90일 cutoff 밖으로 밀렸다.
+- 수정: cache 경로 테스트도 다른 SEC 테스트와 동일하게 `src.tools.disclosure.datetime.now()`를 2026-06-20으로 고정했다.
+- 재발 방지 / 배운 것: 날짜 필터가 있는 테스트는 캐시 경로 여부와 무관하게 시간 고정을 일관되게 적용한다.
