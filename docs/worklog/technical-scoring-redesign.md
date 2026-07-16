@@ -51,3 +51,9 @@
 - 근원(root cause): fixture loader와 cutoff scorer의 책임이 섞여 raw OHLCV cutoff보다 indicator 계산이 먼저 실행됨.
 - 수정: raw OHLCV를 먼저 cutoff 날짜까지 자른 뒤 `IndicatorCalculator`와 `TechnicalScorer`를 실행하도록 테스트 helper를 변경하고, PANW 2026-04-22/04-30의 entry eligibility를 명시적으로 고정함.
 - 재발 방지 / 배운 것: 과거 날짜 regression은 production `score_history`와 같은 원칙으로 raw slice → indicator calculate → score 순서를 따라야 함.
+
+## (2026-07-16 19:42) [Bug] LLM technical recommendation 재해석 경로 차단
+- 증상: `technical_verdict=hold/watch`여도 LLM `TechnicalSummaryOutput.recommendation`이 `매수`를 반환하면 CLI와 integrated analysis 입력에서 rule verdict와 모순될 수 있음.
+- 근원(root cause): prompt에는 재해석 금지를 지시했지만, 반환값을 rule verdict로 강제 보정하지 않았고 decision bundle도 LLM summary가 verdict summary를 덮을 수 있었음.
+- 수정: verdict가 있으면 technical recommendation을 rule action 기반 tri-state label로 강제하고, Deep Dive에서도 방어적으로 재적용함. analyze decision은 verdict summary를 LLM summary로 교체하지 않고 adjusted score와 score history를 rule evidence로 남김.
+- 재발 방지 / 배운 것: "LLM은 설명만" 계약은 prompt 문구만으로는 부족하며, downstream에 전달되는 structured field를 rule output으로 직접 고정해야 함.

@@ -19,7 +19,7 @@ from src.pipelines.analyze_decision import (
     classify_leader_label,
 )
 from src.tools.flow import InvestorFlow, InvestorFlowEntry
-from src.tools.technical.models import TechnicalVerdict
+from src.tools.technical.models import ScoreHistoryPoint, TechnicalVerdict
 
 
 def test_factor_assessment_keeps_role_reason():
@@ -693,7 +693,18 @@ def test_build_analyze_decision_bundle_uses_technical_verdict_when_present():
             reasons=["하락 추세의 반전 신호"],
             cautions=["신규 진입 제한"],
             invalidation_level=None,
+            score_trend_summary="최근 5거래일 adjusted score는 70에서 35로 악화",
         ),
+        score_history=[
+            ScoreHistoryPoint(
+                date="2026-07-16",
+                close=178.5,
+                component_raw_total=80,
+                adjusted_score=35,
+                verdict_action="watch",
+                one_line_reason="확인 필요",
+            )
+        ],
     )
 
     bundle = build_analyze_decision_bundle(
@@ -710,7 +721,56 @@ def test_build_analyze_decision_bundle_uses_technical_verdict_when_present():
 
     technical = next(a for a in bundle.factor_assessments if a.factor_type == "technical")
     assert technical.total_score <= 6
+    assert technical.summary == "하락 추세의 반전 신호"
+    assert "adjusted_score=35" in technical.role_reason
+    assert "최근 5거래일 adjusted score는 70에서 35로 악화" in technical.role_reason
     assert "하락 추세의 반전 신호" in technical.evidence
+    assert "score_history 2026-07-16: adjusted_score=35, action=watch, reason=확인 필요" in (
+        technical.evidence
+    )
+
+
+def test_build_analyze_decision_bundle_does_not_replace_verdict_summary_with_llm_summary():
+    technical_data = SimpleNamespace(
+        total_score=120,
+        adjusted_score=35,
+        indicators=None,
+        snapshot=SimpleNamespace(rsi=55.0),
+        technical_verdict=TechnicalVerdict(
+            action="watch",
+            entry_mode="confirmation_needed",
+            confidence="medium",
+            new_entry_allowed=False,
+            reasons=["하락 추세의 반전 신호"],
+            cautions=[],
+            invalidation_level=None,
+        ),
+        score_history=[],
+    )
+    technical_summary = TechnicalSummaryOutput(
+        summary="LLM은 매수라고 해석함",
+        key_insights=["강력 매수"],
+        recommendation="매수",
+        confidence=0.9,
+        rationale="LLM 판단",
+    )
+
+    bundle = build_analyze_decision_bundle(
+        technical_data=technical_data,
+        technical_summary=technical_summary,
+        news_articles=[],
+        news_analysis=None,
+        fundamental_summary=None,
+        disclosure_items=[],
+        flow_data=None,
+        chart_patterns={},
+        price_levels=None,
+    )
+
+    technical = next(a for a in bundle.factor_assessments if a.factor_type == "technical")
+    assert technical.summary == "하락 추세의 반전 신호"
+    assert "강력 매수" not in technical.summary
+    assert "LLM은 매수라고 해석함" not in technical.evidence
 
 
 def test_build_analyze_decision_bundle_does_not_fallback_to_raw_score_for_low_adjusted_buy():

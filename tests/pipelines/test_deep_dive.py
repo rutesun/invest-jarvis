@@ -5,7 +5,12 @@ import pandas as pd
 import pytest
 
 from src.core.models import ToolResult
-from src.llm.models import ActionableSignalOutput, NewsAnalysisOutput, TechnicalSummaryOutput
+from src.llm.models import (
+    ActionableSignalOutput,
+    IntegratedAnalysisOutput,
+    NewsAnalysisOutput,
+    TechnicalSummaryOutput,
+)
 from src.pipelines.analyze_decision import (
     AnalyzeDecisionBundle,
     AnalyzeDecisionSummary,
@@ -13,6 +18,7 @@ from src.pipelines.analyze_decision import (
     FactorAssessment,
 )
 from src.pipelines.deep_dive import DeepDivePipeline
+from src.tools.disclosure import DisclosureItem
 from src.tools.fundamental import FundamentalSnapshot
 from src.tools.news import NewsArticle
 from src.tools.technical.models import (
@@ -300,6 +306,100 @@ async def test_deep_dive_pipeline_returns_decision_bundle(
         assert result["scenarios"][0].name == "기본 시나리오"
         assert bundle_kwargs["technical_summary"].summary == "강세"
         assert bundle_kwargs["news_analysis"].summary == "긍정적"
+
+
+@pytest.mark.asyncio
+async def test_deep_dive_uses_rule_verdict_recommendation_for_integrated_analysis(
+    mock_technical_tool,
+    mock_news_tool,
+    mock_llm,
+):
+    tech = mock_technical_tool.execute.return_value.data
+    tech.technical_verdict = TechnicalVerdict(
+        action="hold",
+        entry_mode="extended_hold",
+        confidence="medium",
+        new_entry_allowed=False,
+        reasons=["상승 추세 유지"],
+        cautions=["단기 과열"],
+        invalidation_level=None,
+    )
+    disclosure_tool = AsyncMock()
+    disclosure_tool.execute.return_value = ToolResult(
+        success=True,
+        data=[
+            DisclosureItem(
+                form_type="8-K",
+                date="2026-07-16",
+                description="테스트 공시",
+                url="https://example.com",
+            )
+        ],
+    )
+
+    with (
+        patch("src.llm.analyzer.generate_technical_summary", new_callable=AsyncMock) as mock_tech_summary,
+        patch("src.llm.analyzer.analyze_news", new_callable=AsyncMock) as mock_news_analysis,
+        patch(
+            "src.llm.analyzer.generate_integrated_analysis", new_callable=AsyncMock
+        ) as mock_integrated,
+        patch("src.llm.analyzer.generate_actionable_signal", new_callable=AsyncMock) as mock_signal,
+        patch("src.pipelines.deep_dive.StructureZoneDetector") as mock_zone_detector_cls,
+        patch("src.pipelines.deep_dive.compose_level_payload") as mock_compose_levels,
+    ):
+        mock_tech_summary.return_value = TechnicalSummaryOutput(
+            summary="LLM은 매수라고 해석함",
+            key_insights=["강력 매수"],
+            recommendation="매수",
+            confidence=0.9,
+            rationale="LLM 판단",
+        )
+        mock_news_analysis.return_value = NewsAnalysisOutput(
+            sentiment="중립",
+            confidence=0.5,
+            key_themes=[],
+            summary="뉴스 제한적",
+            impact_assessment="영향 제한",
+        )
+        mock_integrated.return_value = IntegratedAnalysisOutput(
+            recommendation="중립",
+            rationale=["기술적: rule verdict 우선"],
+            risks=[],
+            action_summary="보유 관리",
+        )
+        mock_signal.return_value = ActionableSignalOutput(
+            action="관망",
+            timing="보류",
+            signal_strength=5,
+            headline="관망",
+            primary_reason="단기 과열",
+            supporting_reasons=["상승 추세 유지"],
+            risks=[],
+            confidence=0.7,
+        )
+        mock_zone_detector_cls.return_value.detect.return_value = object()
+        mock_compose_levels.return_value = LevelPayload(
+            structure_levels=StructureLevelsPayloadV2(
+                summary_label="no_clear_structure",
+                headline="명확한 구조 없음",
+                why="테스트 기본값",
+            ),
+            execution_levels=[],
+            structure_summary="명확한 구조 없음",
+            execution_summary="실행 레벨 없음",
+        )
+
+        pipeline = DeepDivePipeline(
+            technical_tool=mock_technical_tool,
+            news_tool=mock_news_tool,
+            llm=mock_llm,
+            disclosure_tool=disclosure_tool,
+        )
+        result = await pipeline.run("AAPL")
+
+    assert result["technical_summary"].recommendation == "중립"
+    input_data = mock_integrated.call_args.args[0]
+    assert input_data.technical_recommendation == "중립"
 
 
 @pytest.mark.asyncio

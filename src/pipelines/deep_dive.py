@@ -54,6 +54,18 @@ _FUNDAMENTAL_SIGNAL_FIELDS = (
 )
 
 
+def _apply_rule_technical_recommendation(
+    technical_summary: TechnicalSummaryOutput,
+    technical_data: TechnicalResult,
+) -> TechnicalSummaryOutput:
+    rule_recommendation = analyzer.technical_recommendation_from_verdict(
+        technical_data.technical_verdict
+    )
+    if rule_recommendation is None:
+        return technical_summary
+    return technical_summary.model_copy(update={"recommendation": rule_recommendation})
+
+
 def _compute_eps_cagr(newest: float, oldest: float, n_years: int) -> float | None:
     """Annual EPS CAGR for a given period.
 
@@ -137,6 +149,10 @@ class DeepDivePipeline:
         news_articles: list[NewsArticle] = news_result.data
 
         technical_summary = await self._generate_technical_summary(technical_data)
+        technical_summary = _apply_rule_technical_recommendation(
+            technical_summary,
+            technical_data,
+        )
 
         news_analysis = None
         if news_articles:

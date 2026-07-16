@@ -11,7 +11,13 @@ from src.pipelines.analyze_decision import (
     AnalyzeScenario,
     FactorAssessment,
 )
-from src.tools.technical.models import ChartPatternResult, IndicatorSnapshot, TechnicalResult
+from src.tools.technical.models import (
+    ChartPatternResult,
+    IndicatorSnapshot,
+    ScoreHistoryPoint,
+    TechnicalResult,
+    TechnicalVerdict,
+)
 
 
 def test_format_deep_dive_output_shows_top_summary_and_factor_reasons():
@@ -23,6 +29,28 @@ def test_format_deep_dive_output_shows_top_summary_and_factor_reasons():
         indicators=snapshot,
         components={},
         total_score=140,
+        component_raw_total=140,
+        adjusted_score=62,
+        technical_verdict=TechnicalVerdict(
+            action="hold",
+            entry_mode="extended_hold",
+            confidence="medium",
+            new_entry_allowed=False,
+            reasons=["상승 추세 유지"],
+            cautions=["단기 과열"],
+            invalidation_level=88000.0,
+            score_trend_summary="최근 5거래일 adjusted score 둔화",
+        ),
+        score_history=[
+            ScoreHistoryPoint(
+                date="2026-07-16",
+                close=91500.0,
+                component_raw_total=140,
+                adjusted_score=62,
+                verdict_action="hold",
+                one_line_reason="단기 과열",
+            )
+        ],
         strategies=[],
         overall_assessment="매수",
         confidence_score=75.0,
@@ -150,6 +178,13 @@ def test_format_deep_dive_output_shows_top_summary_and_factor_reasons():
     assert "전환 레벨" in output
     assert "88000.00~89500.00" in output
     assert "피봇 S1" in output
+    assert "**Component Raw Total**: 140" in output
+    assert "**Adjusted Score**: 62" in output
+    assert "**기술 Verdict**: hold" in output
+    assert "상승 추세 유지" in output
+    assert "주의: 단기 과열" in output
+    assert "최근 5거래일 adjusted score 둔화" in output
+    assert "2026-07-16: close 91,500.00, raw 140, adjusted 62, hold — 단기 과열" in output
     assert "조정 대기" in output
     assert "RSI 과열로 추격 부담" in output
     assert "신규 정보가 부족해 actionability가 낮음" in output

@@ -18,6 +18,26 @@ from src.llm.models import (
 from src.tools.technical.models import ChartPatternResult, PriceLevels
 
 
+_TECHNICAL_RECOMMENDATION_BY_VERDICT = {
+    "buy": "매수",
+    "add": "매수",
+    "hold": "중립",
+    "watch": "중립",
+    "reduce": "매도",
+    "avoid": "매도",
+}
+
+
+def technical_recommendation_from_verdict(verdict) -> str | None:
+    """Map rule-based technical verdict action to the tri-state LLM recommendation label."""
+    if verdict is None:
+        return None
+    action = verdict.get("action") if isinstance(verdict, dict) else getattr(verdict, "action", None)
+    if action is None:
+        return None
+    return _TECHNICAL_RECOMMENDATION_BY_VERDICT.get(str(action))
+
+
 def format_patterns_for_llm(patterns: dict[str, ChartPatternResult]) -> str:
     """패턴 결과를 LLM용 텍스트로 변환"""
     lines = []
@@ -277,6 +297,10 @@ Provide summary with:
             "aggregation_trace": input_data.aggregation_trace,
         }
     )
+
+    rule_recommendation = technical_recommendation_from_verdict(input_data.technical_verdict)
+    if rule_recommendation is not None:
+        result = result.model_copy(update={"recommendation": rule_recommendation})
 
     return result
 
