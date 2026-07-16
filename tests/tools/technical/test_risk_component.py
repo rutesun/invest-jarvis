@@ -120,3 +120,39 @@ def test_risk_support_confluence_signal_metadata():
     assert metadata.intent == "hold"
     assert metadata.severity == "medium"
     assert metadata.entry_eligible is False
+
+
+def test_risk_resistance_confluence_signal_metadata():
+    df = pd.DataFrame(
+        {
+            "Close": [100] * 20,
+            "SMA_20": [101] * 20,
+            "SMA_50": [102] * 20,
+            "SMA_150": [101] * 20,
+        }
+    )
+
+    result = analyze_risk(df)
+
+    metadata = next(item for item in result.signal_metadata if item.signal_type == "resistance")
+    assert metadata.source == "risk"
+    assert metadata.bias == "bearish"
+    assert metadata.intent == "risk"
+    assert metadata.severity == "medium"
+    assert metadata.entry_eligible is False
+
+
+def test_risk_supertrend_down_breakdown_signal_metadata():
+    df = pd.DataFrame({"Close": [100] * 20, "SuperTrend_Dir": [-1] * 20})
+
+    result = analyze_risk(df)
+
+    metadata = next(
+        item for item in result.signal_metadata if item.reason == "Supertrend 하락"
+    )
+    assert metadata.source == "risk"
+    assert metadata.signal_type == "breakdown"
+    assert metadata.bias == "bearish"
+    assert metadata.intent == "risk"
+    assert metadata.severity == "medium"
+    assert metadata.entry_eligible is False

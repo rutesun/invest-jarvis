@@ -60,6 +60,12 @@ def test_supertrend_downtrend(downtrend_df):
     assert result.score < 0
     assert any("하락" in sig or "매도" in sig for sig in result.signals)
     assert result.metrics["supertrend_direction"] == -1
+    metadata = next(item for item in result.signal_metadata if item.reason == "Supertrend 하락")
+    assert metadata.signal_type == "trend"
+    assert metadata.bias == "bearish"
+    assert metadata.intent == "risk"
+    assert metadata.severity == "medium"
+    assert metadata.entry_eligible is False
 
 
 def test_supertrend_direction_change():
@@ -86,6 +92,27 @@ def test_supertrend_direction_change():
     # Should detect current trend
     assert isinstance(result.score, int)
     assert "supertrend_direction" in result.metrics
+
+
+def test_supertrend_buy_transition_signal_metadata():
+    df = pd.DataFrame(
+        {
+            "Close": [95, 100],
+            "SuperTrend_Dir": [-1, 1],
+            "SuperTrend_Up": [105, 95],
+            "SuperTrend_Dn": [105, 95],
+        }
+    )
+
+    result = analyze_supertrend(df)
+
+    metadata = next(item for item in result.signal_metadata if item.reason == "Supertrend 매수 전환")
+    assert metadata.source == "supertrend"
+    assert metadata.signal_type == "breakout"
+    assert metadata.bias == "bullish"
+    assert metadata.intent == "entry"
+    assert metadata.severity == "high"
+    assert metadata.entry_eligible is True
 
 
 def test_supertrend_no_data():

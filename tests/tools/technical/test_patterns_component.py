@@ -19,6 +19,13 @@ def test_analyze_patterns_vcp_detection():
     assert "VCP (에너지 응축)" in result.signals
     assert result.score > 0
     assert "ATR" in str(result.evidence)
+    metadata = next(item for item in result.signal_metadata if item.reason == "VCP (에너지 응축)")
+    assert metadata.source == "patterns"
+    assert metadata.signal_type == "support"
+    assert metadata.bias == "neutral"
+    assert metadata.intent == "watch"
+    assert metadata.severity == "medium"
+    assert metadata.entry_eligible is False
 
 
 def test_analyze_patterns_vcp_strong_both_conditions():

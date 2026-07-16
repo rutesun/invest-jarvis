@@ -122,6 +122,31 @@ def test_price_down_volume_surge_signal_metadata():
     assert metadata.entry_eligible is False
 
 
+def test_price_up_volume_surge_signal_metadata():
+    df = pd.DataFrame(
+        {
+            "Open": [100, 101],
+            "High": [101, 111],
+            "Low": [99, 100],
+            "Close": [100, 110],
+            "Volume": [100, 300],
+            "Vol_SMA_20": [100, 100],
+        }
+    )
+
+    result = analyze_volume(df)
+
+    metadata = next(
+        item for item in result.signal_metadata if item.reason == "가격 상승 + 거래량 급증"
+    )
+    assert metadata.source == "volume"
+    assert metadata.signal_type == "volume_confirmation"
+    assert metadata.bias == "bullish"
+    assert metadata.intent == "hold"
+    assert metadata.severity == "medium"
+    assert metadata.entry_eligible is False
+
+
 def test_pocket_pivot_volume_not_exceeded():
     """Pocket Pivot Failed: Down-day volume does NOT exceed max of last 10 down-days."""
     dates = pd.date_range("2024-01-01", periods=60, freq="D")
@@ -364,6 +389,13 @@ def test_power_gap_up_detected():
         f"Expected Power Gap Up, got: {result.signals}"
     )
     assert result.score >= 20, f"Expected Power Gap Up score 20, got: {result.score}"
+    metadata = next(item for item in result.signal_metadata if item.reason == "Power Gap Up")
+    assert metadata.source == "volume"
+    assert metadata.signal_type == "breakout"
+    assert metadata.bias == "bullish"
+    assert metadata.intent == "entry"
+    assert metadata.severity == "high"
+    assert metadata.entry_eligible is True
 
 
 def test_power_gap_up_insufficient_volume():
