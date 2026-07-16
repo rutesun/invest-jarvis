@@ -9,7 +9,7 @@ Korean/US 주식 투자 분석 CLI 도구
 | **Quick Check** | `jarvis check AAPL` | LLM 없이 빠른 기술적 분석 (5-전략 시스템) |
 | **Deep Dive** | `jarvis analyze AAPL` | 기술 + 뉴스 + LLM 종합 분석 |
 | **Daily Report** | `jarvis report` | 매크로 지표 + 다중 종목 리포트 |
-| **Portfolio** | `jarvis portfolio` | KIS API 포트폴리오 모니터링 |
+| **Daily Brief** | `jarvis brief` | playbook.yaml(보유+워치) 기반 일일 액션 브리핑 |
 | **Screener** | `jarvis screen` | 시장 스크리닝 (Naver + KIS 랭킹) |
 | **Telegram** | `jarvis telegram fetch` | 텔레그램 채널 메시지 수집 |
 | **Cache** | `jarvis cache list` | 티커 캐시 관리 |
