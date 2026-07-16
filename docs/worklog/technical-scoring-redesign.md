@@ -69,3 +69,10 @@
 - 근원(root cause): PANW 4/30 복구 과정에서 Supertrend 상승, 20일선 위, 20일 고점 대비 눌림, 10일 수익률 양수 조건만 보았고 하락 추세 가드를 별도로 두지 않음.
 - 수정: `pullback_add` 판정과 contextual pullback helper 모두 `not context.is_downtrend`를 요구하도록 좁히고, 동일한 눌림 조건이라도 downtrend에서는 `watch`가 되는 회귀 테스트를 추가함.
 - 재발 방지 / 배운 것: early trend 전환 사례(PANW)는 유지하되, downtrend에서는 buy/add를 만들지 않는 spec 가드를 별도 테스트로 고정해야 함.
+
+## (2026-07-16 22:40) [Decision] Score history 기본/상세 출력 분리
+- 맥락: 최근 점수 추이가 raw/adjusted/action/reason만 보여줘 점수 변화 원인과 신규 진입 가능 여부 변화를 한눈에 보기 어려움.
+- 후보: A) 기존 한 줄 유지 / B) 항상 여러 줄 상세 출력 / C) 기본은 한 줄에 delta·driver·entry·caution을 압축하고 `--detail-history`에서 여러 줄로 확장
+- 선택: C — 기본 출력의 스캔 속도를 유지하면서, 상세 모드에서는 reason/driver/entry/caution을 날짜별로 분리해 읽기 쉽게 만든다.
+- 기각: A(점수 변화 원인 파악이 어려움), B(기본 CLI가 과하게 길어짐)
+- ADR 후보? no

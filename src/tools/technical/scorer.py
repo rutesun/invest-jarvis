@@ -162,6 +162,9 @@ class TechnicalScorer:
                         adjusted_score=daily.adjusted_score,
                         verdict_action=daily.technical_verdict.action,
                         one_line_reason=first_reason,
+                        new_entry_allowed=daily.technical_verdict.new_entry_allowed,
+                        driver_components=_top_component_drivers(daily.components),
+                        cautions=daily.technical_verdict.cautions[:2],
                     )
                 )
             except Exception as exc:
@@ -178,3 +181,13 @@ def _summarize_score_history(history: list[ScoreHistoryPoint]) -> str | None:
     last = history[-1].adjusted_score
     direction = "개선" if last > first else "악화" if last < first else "정체"
     return f"최근 {len(history)}거래일 adjusted score는 {first}에서 {last}로 {direction}"
+
+
+def _top_component_drivers(components: dict[str, dict], limit: int = 2) -> list[str]:
+    scored = [
+        (name, int(component.get("score", 0)))
+        for name, component in components.items()
+        if int(component.get("score", 0)) != 0
+    ]
+    scored.sort(key=lambda item: abs(item[1]), reverse=True)
+    return [f"{name} {score:+d}" for name, score in scored[:limit]]

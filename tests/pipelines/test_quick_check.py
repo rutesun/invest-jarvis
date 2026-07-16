@@ -138,3 +138,79 @@ async def test_quick_check_format_output_shows_verdict_reasons_and_history(
     assert "상승 추세 유지" in output
     assert "최근 5거래일" in output
     assert "2026-07-10" in output
+
+
+def test_quick_check_format_output_shows_compact_score_history_context():
+    pipeline = QuickCheckPipeline(technical_tool=None)
+    output = pipeline.format_output(
+        {
+            "success": True,
+            "ticker": "ALAB",
+            "price": 350.62,
+            "change_pct": -3.08,
+            "total_score": -5,
+            "adjusted_score": -25,
+            "score_history": [
+                {
+                    "date": "2026-07-14",
+                    "close": 361.78,
+                    "component_raw_total": 25,
+                    "adjusted_score": 25,
+                    "verdict_action": "watch",
+                    "one_line_reason": "가격이 주요 이동평균 위에서 상승 추세를 유지",
+                    "new_entry_allowed": True,
+                    "driver_components": ["minervini +25", "supertrend +25"],
+                    "cautions": [],
+                },
+                {
+                    "date": "2026-07-15",
+                    "close": 350.62,
+                    "component_raw_total": -5,
+                    "adjusted_score": -25,
+                    "verdict_action": "reduce",
+                    "one_line_reason": "강세 (Stage 2 미충족)",
+                    "new_entry_allowed": False,
+                    "driver_components": ["supertrend -40", "minervini +25"],
+                    "cautions": ["Supertrend가 매도 전환"],
+                },
+            ],
+        }
+    )
+
+    assert "adjusted -25 (Δ -50)" in output
+    assert "driver: supertrend -40, minervini +25" in output
+    assert "entry: yes→no" in output
+    assert "caution: Supertrend가 매도 전환" in output
+
+
+def test_quick_check_format_output_shows_detailed_score_history_context():
+    pipeline = QuickCheckPipeline(technical_tool=None)
+    output = pipeline.format_output(
+        {
+            "success": True,
+            "ticker": "ALAB",
+            "price": 350.62,
+            "change_pct": -3.08,
+            "total_score": -5,
+            "adjusted_score": -25,
+            "score_history": [
+                {
+                    "date": "2026-07-15",
+                    "close": 350.62,
+                    "component_raw_total": -5,
+                    "adjusted_score": -25,
+                    "verdict_action": "reduce",
+                    "one_line_reason": "강세 (Stage 2 미충족)",
+                    "new_entry_allowed": False,
+                    "driver_components": ["supertrend -40", "minervini +25"],
+                    "cautions": ["Supertrend가 매도 전환"],
+                }
+            ],
+        },
+        detailed_history=True,
+    )
+
+    assert "  - reason: 강세 (Stage 2 미충족)" in output
+    assert "  - driver: supertrend -40, minervini +25" in output
+    assert "  - entry: no" in output
+    assert "  - caution: Supertrend가 매도 전환" in output

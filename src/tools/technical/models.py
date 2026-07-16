@@ -93,6 +93,9 @@ class ScoreHistoryPoint(BaseModel):
     adjusted_score: int
     verdict_action: VerdictAction
     one_line_reason: str
+    new_entry_allowed: bool | None = None
+    driver_components: list[str] = Field(default_factory=list)
+    cautions: list[str] = Field(default_factory=list)
 
 
 class ComponentResult(BaseModel):

@@ -84,7 +84,7 @@ class QuickCheckPipeline:
             "components": components_list,
         }
 
-    def format_output(self, result: dict[str, Any]) -> str:
+    def format_output(self, result: dict[str, Any], detailed_history: bool = False) -> str:
         """Format result as readable string."""
         if not result.get("success", False):
             return f"Error: {result.get('error', 'Unknown error')}"
@@ -124,12 +124,13 @@ class QuickCheckPipeline:
         history = result.get("score_history") or []
         if history:
             lines.extend(["", "### 최근 점수 추이"])
+            previous_point = None
             for point in history:
-                lines.append(
-                    f"- {point['date']}: close {point['close']:.2f}, "
-                    f"raw {point['component_raw_total']}, adjusted {point['adjusted_score']}, "
-                    f"{point['verdict_action']} — {point['one_line_reason']}"
-                )
+                if detailed_history:
+                    lines.extend(_format_detailed_history_point(point, previous_point))
+                else:
+                    lines.append(_format_compact_history_point(point, previous_point))
+                previous_point = point
         if result.get("score_history_warning"):
             lines.append(f"- score history warning: {result['score_history_warning']}")
 
@@ -211,3 +212,77 @@ class QuickCheckPipeline:
                 lines.append(f"- {warning}")
 
         return "\n".join(lines)
+
+
+def _format_compact_history_point(
+    point: dict[str, Any],
+    previous_point: dict[str, Any] | None,
+) -> str:
+    adjusted = point["adjusted_score"]
+    delta = _score_delta(adjusted, previous_point)
+    details = []
+    drivers = point.get("driver_components") or []
+    if drivers:
+        details.append(f"driver: {', '.join(drivers)}")
+    entry = _entry_transition(point, previous_point)
+    if entry:
+        details.append(f"entry: {entry}")
+    cautions = point.get("cautions") or []
+    if cautions:
+        details.append(f"caution: {cautions[0]}")
+
+    suffix = f" | {' | '.join(details)}" if details else ""
+    return (
+        f"- {point['date']}: close {point['close']:.2f}, "
+        f"raw {point['component_raw_total']}, adjusted {adjusted}{delta}, "
+        f"{point['verdict_action']} — {point['one_line_reason']}{suffix}"
+    )
+
+
+def _format_detailed_history_point(
+    point: dict[str, Any],
+    previous_point: dict[str, Any] | None,
+) -> list[str]:
+    adjusted = point["adjusted_score"]
+    delta = _score_delta(adjusted, previous_point)
+    lines = [
+        (
+            f"- {point['date']}: close {point['close']:.2f}, "
+            f"raw {point['component_raw_total']}, adjusted {adjusted}{delta}, "
+            f"{point['verdict_action']}"
+        ),
+        f"  - reason: {point['one_line_reason']}",
+    ]
+    drivers = point.get("driver_components") or []
+    if drivers:
+        lines.append(f"  - driver: {', '.join(drivers)}")
+    entry = _entry_transition(point, previous_point)
+    if entry:
+        lines.append(f"  - entry: {entry}")
+    cautions = point.get("cautions") or []
+    if cautions:
+        lines.append(f"  - caution: {', '.join(cautions)}")
+    return lines
+
+
+def _score_delta(adjusted: int, previous_point: dict[str, Any] | None) -> str:
+    if previous_point is None:
+        return ""
+    delta = adjusted - int(previous_point["adjusted_score"])
+    return f" (Δ {delta:+d})"
+
+
+def _entry_transition(
+    point: dict[str, Any],
+    previous_point: dict[str, Any] | None,
+) -> str | None:
+    current = point.get("new_entry_allowed")
+    if current is None:
+        return None
+    current_label = "yes" if current else "no"
+    if previous_point is None or previous_point.get("new_entry_allowed") is None:
+        return current_label
+    previous_label = "yes" if previous_point.get("new_entry_allowed") else "no"
+    if previous_label == current_label:
+        return current_label
+    return f"{previous_label}→{current_label}"

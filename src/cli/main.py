@@ -219,6 +219,11 @@ async def run_quick_check(ticker_or_name: str) -> dict:
 @app.command()
 def check(
     query: str = typer.Argument(..., help="Stock ticker or company name (e.g., AAPL, Apple, 구글)"),
+    detail_history: bool = typer.Option(
+        False,
+        "--detail-history",
+        help="Show multi-line score history context",
+    ),
 ):
     """Quick check - technical analysis without LLM."""
     console.print(f"[bold]Resolving '{query}'...[/bold]")
@@ -238,7 +243,7 @@ def check(
         raise typer.Exit(1) from None
 
     pipeline = QuickCheckPipeline(technical_tool=None)  # Just for formatting
-    output = pipeline.format_output(result)
+    output = pipeline.format_output(result, detailed_history=detail_history)
     console.print(Markdown(output))
 
 
