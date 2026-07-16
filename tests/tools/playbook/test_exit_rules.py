@@ -396,7 +396,7 @@ def test_sma_signals_fire_with_underscore_columns():
 
 
 def test_sma_long_downgraded_to_weak_in_turnaround_phase():
-    """종가>SMA150 + SMA150 상승이면 SMA200 이탈은 약신호 — 전환 선취매 국면."""
+    """종가>SMA150이면 SMA200 이탈은 약신호 — 전환 선취매 국면. 기울기 상승은 근거에 병기."""
     from src.tools.playbook.exit_rules import evaluate_exit
 
     df = pd.DataFrame({"Close": [100.0] * 60})
@@ -411,11 +411,12 @@ def test_sma_long_downgraded_to_weak_in_turnaround_phase():
     sma_long = next(s for s in verdict.signals if s.code == "SMA_LONG")
     assert sma_long.severity == "weak"
     assert "전환 시도" in sma_long.detail
+    assert "SMA150 상승" in sma_long.detail
     assert verdict.action == "hold"  # 약신호만으로는 청산/축소 아님
 
 
-def test_sma_long_stays_strong_when_sma150_falling():
-    """종가>SMA150이라도 SMA150이 하락 중이면 강등하지 않는다."""
+def test_sma_long_downgraded_even_when_sma150_falling():
+    """가격 회복만으로 강등(사용자 결정) — 기울기 하락 중이면 '미확인 전환'으로 병기."""
     from src.tools.playbook.exit_rules import evaluate_exit
 
     df = pd.DataFrame({"Close": [100.0] * 60})
@@ -428,8 +429,10 @@ def test_sma_long_stays_strong_when_sma150_falling():
     )
 
     sma_long = next(s for s in verdict.signals if s.code == "SMA_LONG")
-    assert sma_long.severity == "strong"
-    assert verdict.action == "liquidate"
+    assert sma_long.severity == "weak"
+    assert "전환 시도" in sma_long.detail
+    assert "SMA150 하락 중" in sma_long.detail
+    assert verdict.action == "hold"
 
 
 def test_sma_long_stays_strong_when_below_sma150():

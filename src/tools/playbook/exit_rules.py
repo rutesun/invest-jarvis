@@ -6,9 +6,10 @@
   3. DISTRIBUTION      매집/분산 분석 결과 분산 우세 (medium)
   4. RS_WEAKENING      RS 음전환 (weak)
   5. SMA_LONG          종가 < SMA150 또는 종가 < SMA200 (strong)
-                       단, 종가 > SMA150 이고 SMA150이 상승 중이면 weak로 강등
-                       (와인스타인 Stage 기준선은 30주선(SMA150) — 150선 회복+상승은
-                        Stage2 전환 시도 국면이라 SMA200 이탈만으로 청산하지 않음)
+                       단, 종가 > SMA150 이면(SMA200 이탈만 남음) weak로 강등하고
+                       SMA150 기울기(상승/하락 중)는 확인 여부로만 병기
+                       (와인스타인 Stage 기준선은 30주선(SMA150) — 150선 위 회복은
+                        전환 시도 국면이라 SMA200 이탈만으로 청산하지 않음. 스펙 D11)
 
 매핑:
   - 강(strong) 신호 1개 → 청산
@@ -118,12 +119,14 @@ def evaluate_exit(
         long_parts.append(f"종가<SMA200({sma200:.2f})")
     if long_parts:
         # 전환 시도 국면 강등: 와인스타인 Stage 기준선은 30주선(SMA150).
-        # 종가가 SMA150 위에 있고 SMA150이 상승 중이면 Stage2 전환 시도 국면 —
-        # SMA200 이탈만으로는 "추세 붕괴"가 아니므로 weak로 강등한다.
+        # 종가가 SMA150 위로 회복했으면(SMA200 이탈만 남음) Stage2 전환 시도 국면 —
+        # 청산 신호의 목적인 "추세 붕괴"는 이미 지난 국면이므로 weak로 강등한다.
+        # SMA150 기울기는 판정에 쓰지 않고 확인 여부로만 병기한다 (사용자 결정, 스펙 D11).
         severity = "strong"
-        if sma150 is not None and close >= sma150 and _is_ma_rising(df, "SMA150"):
+        if sma150 is not None and close >= sma150:
             severity = "weak"
-            long_parts.append(f"단, 종가>SMA150({sma150:.2f})·SMA150 상승 — 전환 시도 국면")
+            slope_note = "SMA150 상승" if _is_ma_rising(df, "SMA150") else "SMA150 하락 중(미확인)"
+            long_parts.append(f"단, 종가>SMA150({sma150:.2f})·{slope_note} — 전환 시도 국면")
         signals.append(
             ExitSignal(
                 code="SMA_LONG",
