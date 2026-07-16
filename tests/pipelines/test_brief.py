@@ -63,8 +63,12 @@ def _verdict_watch(ticker: str, met: dict[str, bool]) -> PlaybookVerdict:
         ),
         sector_strength=None,
         canslim=None,
-        gate=GateResult(passed=passed, checklist=checklist, quality_grade="A" if passed else None,
-                        veto_reason=None if passed else "E: 미충족"),
+        gate=GateResult(
+            passed=passed,
+            checklist=checklist,
+            quality_grade="A" if passed else None,
+            veto_reason=None if passed else "E: 미충족",
+        ),
         position_plan=None,
         exit_verdict=None,
         headline="",
@@ -73,8 +77,15 @@ def _verdict_watch(ticker: str, met: dict[str, bool]) -> PlaybookVerdict:
 
 def _config() -> HoldingsConfig:
     return HoldingsConfig(
-        krw_capital=None, krw_risk_pct=None, usd_capital=None, usd_risk_pct=None,
-        holdings=[HoldingEntry(ticker="AAPL", quantity=5, avg_price=150.0, stop_price=None, currency="USD")],
+        krw_capital=None,
+        krw_risk_pct=None,
+        usd_capital=None,
+        usd_risk_pct=None,
+        holdings=[
+            HoldingEntry(
+                ticker="AAPL", quantity=5, avg_price=150.0, stop_price=None, currency="USD"
+            )
+        ],
         watchlist=[WatchEntry(ticker="NVDA", note=None, currency="USD")],
     )
 
@@ -85,9 +96,18 @@ def _pipeline(engine, tech_us=None, llm=None) -> BriefPipeline:
         return_value=ToolResult(
             success=True,
             data=TickerMacroSnapshot(
-                timestamp=datetime(2026, 7, 14), vix=14.0, vix_change=0.1,
-                fear_greed=60, fear_greed_label="Greed", wti=70.0, wti_change=0.0,
-                us_10y=4.1, us_2y=4.0, yield_spread=0.1, dxy=104.0, dxy_change=0.0,
+                timestamp=datetime(2026, 7, 14),
+                vix=14.0,
+                vix_change=0.1,
+                fear_greed=60,
+                fear_greed_label="Greed",
+                wti=70.0,
+                wti_change=0.0,
+                us_10y=4.1,
+                us_2y=4.0,
+                yield_spread=0.1,
+                dxy=104.0,
+                dxy_change=0.0,
             ),
         )
     )
@@ -139,9 +159,11 @@ async def test_run_isolates_per_ticker_failure():
     """한 종목 기술분석 실패가 나머지 종목을 막지 않는다."""
     engine = MagicMock()
     engine.evaluate = AsyncMock(
-        side_effect=lambda *, ticker, holding, **kw: _verdict_holding(ticker, "hold")
-        if holding
-        else _verdict_watch(ticker, {"A": True, "B": True, "C": True, "E": True})
+        side_effect=lambda *, ticker, holding, **kw: (
+            _verdict_holding(ticker, "hold")
+            if holding
+            else _verdict_watch(ticker, {"A": True, "B": True, "C": True, "E": True})
+        )
     )
     tech = MagicMock()
 
@@ -165,12 +187,16 @@ async def test_run_isolates_per_ticker_failure():
 async def test_run_macro_failure_does_not_block():
     engine = MagicMock()
     engine.evaluate = AsyncMock(
-        side_effect=lambda *, ticker, holding, **kw: _verdict_holding(ticker, "hold")
-        if holding
-        else _verdict_watch(ticker, {"A": True, "B": True, "C": True, "E": True})
+        side_effect=lambda *, ticker, holding, **kw: (
+            _verdict_holding(ticker, "hold")
+            if holding
+            else _verdict_watch(ticker, {"A": True, "B": True, "C": True, "E": True})
+        )
     )
     pipeline = _pipeline(engine)
-    pipeline.macro_tool.execute = AsyncMock(return_value=ToolResult(success=False, data=None, error="down"))
+    pipeline.macro_tool.execute = AsyncMock(
+        return_value=ToolResult(success=False, data=None, error="down")
+    )
 
     result = await pipeline.run(_config())
 
@@ -183,9 +209,11 @@ async def test_llm_failure_falls_back_to_rule_text():
     """LLM 실패 시 narrative 없이 완성 — 규칙 원문 fallback (스펙 §7)."""
     engine = MagicMock()
     engine.evaluate = AsyncMock(
-        side_effect=lambda *, ticker, holding, **kw: _verdict_holding(ticker, "hold")
-        if holding
-        else _verdict_watch(ticker, {"A": True, "B": True, "C": True, "E": True})
+        side_effect=lambda *, ticker, holding, **kw: (
+            _verdict_holding(ticker, "hold")
+            if holding
+            else _verdict_watch(ticker, {"A": True, "B": True, "C": True, "E": True})
+        )
     )
     failing_llm = MagicMock()
     failing_llm.with_structured_output.side_effect = RuntimeError("LLM down")

@@ -95,7 +95,9 @@ def _item_section(item: BriefItem) -> list[str]:
         lines.append(f"- **판정 근거**: {exit_v.detail}" + (f" — {sig_text}" if sig_text else ""))
     elif gate is not None:
         req = [c for c in gate.checklist if c.required]
-        check_text = " · ".join(f"{c.name}{'✅' if c.met else '❌' if c.met is False else '—'}" for c in req)
+        check_text = " · ".join(
+            f"{c.name}{'✅' if c.met else '❌' if c.met is False else '—'}" for c in req
+        )
         reason = gate.veto_reason or "전 조건 충족"
         lines.append(f"- **판정 근거**: {check_text} — {reason}")
     if item.remaining_condition:
@@ -123,9 +125,7 @@ def _item_section(item: BriefItem) -> list[str]:
     # 수급 (KR만, 데이터 있을 때만)
     flow_note = getattr(narrative, "flow_note", None) if narrative else None
     if item.flow is not None:
-        fallback = (
-            f"외국인 5일 {item.flow.foreign_direction_5d} · 기관 5일 {item.flow.institution_direction_5d}"
-        )
+        fallback = f"외국인 5일 {item.flow.foreign_direction_5d} · 기관 5일 {item.flow.institution_direction_5d}"
         lines.append(f"- **수급(KR)**: {flow_note or fallback}")
 
     # 뉴스 (있을 때만)
@@ -143,7 +143,9 @@ def _item_section(item: BriefItem) -> list[str]:
     if item.holding is not None and item.holding.stop_price and item.price:
         dist_pct = (item.price - item.holding.stop_price) / item.holding.stop_price * 100
         near = " ⚠근접" if "스탑 근접" in item.markers else ""
-        lines.append(f"- **스탑 상태**: 스탑 {item.holding.stop_price:,.2f} 대비 {dist_pct:+.1f}%{near}")
+        lines.append(
+            f"- **스탑 상태**: 스탑 {item.holding.stop_price:,.2f} 대비 {dist_pct:+.1f}%{near}"
+        )
 
     # 다음 확인 지점 — narrative 있으면 문장, 없으면 trailing_stop 원문
     next_check = getattr(narrative, "next_check", None) if narrative else None

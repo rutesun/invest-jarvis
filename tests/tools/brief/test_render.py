@@ -14,17 +14,29 @@ from src.tools.brief.render import render_markdown
 def _items():
     return [
         BriefItem(
-            ticker="NVDA", kind="watch", action="eligible",
-            bucket=BUCKET_BUY_ELIGIBLE, price=165.2, change_pct=1.2,
+            ticker="NVDA",
+            kind="watch",
+            action="eligible",
+            bucket=BUCKET_BUY_ELIGIBLE,
+            price=165.2,
+            change_pct=1.2,
         ),
         BriefItem(
-            ticker="005930", kind="holding", action="reduce",
-            bucket=BUCKET_REDUCE, price=71200.0, change_pct=-1.1,
+            ticker="005930",
+            kind="holding",
+            action="reduce",
+            bucket=BUCKET_REDUCE,
+            price=71200.0,
+            change_pct=-1.1,
             markers=["스탑 근접"],
         ),
         BriefItem(
-            ticker="AAPL", kind="holding", action="hold",
-            bucket=BUCKET_HOLD_OK, price=210.0, change_pct=0.3,
+            ticker="AAPL",
+            kind="holding",
+            action="hold",
+            bucket=BUCKET_HOLD_OK,
+            price=210.0,
+            change_pct=0.3,
         ),
     ]
 
@@ -55,8 +67,11 @@ def test_render_marker_shown():
 def test_render_error_item():
     items = [
         BriefItem(
-            ticker="FAIL", kind="watch", action="error",
-            bucket=BUCKET_HOLD_OK, error="기술분석 실패: timeout",
+            ticker="FAIL",
+            kind="watch",
+            action="error",
+            bucket=BUCKET_HOLD_OK,
+            error="기술분석 실패: timeout",
         )
     ]
     md = render_markdown(datetime(2026, 7, 14), macro=None, items=items)
