@@ -24,3 +24,6 @@ anon.session-journal
 .obsidian/
 .docker/postgres-data/
 notebook/
+
+# 개인 보유/워치 설정 (금융정보 — 커밋 금지)
+playbook.yaml

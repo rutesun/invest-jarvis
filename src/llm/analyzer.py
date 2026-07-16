@@ -5,6 +5,7 @@ from langchain_core.prompts import ChatPromptTemplate
 
 from src.llm.models import (
     ActionableSignalOutput,
+    BriefNarrativesOutput,
     FundamentalSummaryInput,
     FundamentalSummaryOutput,
     IntegratedAnalysisInput,
@@ -511,3 +512,34 @@ async def generate_actionable_signal(
     )
 
     return result
+
+
+async def generate_brief_narratives(
+    facts_json: str,
+    llm: BaseChatModel,
+) -> BriefNarrativesOutput:
+    """전 종목 규칙 판정 사실(JSON)을 배치 1콜로 문장화한다.
+
+    액션·순위·근거는 이미 규칙이 확정 — LLM은 서술만 담당하며,
+    사실에 없는 수치·사건을 만들면 안 된다 (스펙 §6.1).
+    """
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                "당신은 한국어 투자 브리핑 작성자다. 제공된 '규칙 판정 사실'만 사용해 "
+                "각 종목의 서술 슬롯을 채운다. 사실에 없는 수치·사건·전망을 만들지 마라. "
+                "모든 종목에 대해 하나씩 narrative를 반환하라.",
+            ),
+            (
+                "user",
+                "다음은 종목별 규칙 판정 결과 JSON이다:\n\n{facts_json}\n\n"
+                "각 종목에 대해 technical_note(기술적 근거 1-2문장), "
+                "flow_note(수급 사실이 있으면 1문장, 없으면 null), "
+                "news_note(뉴스가 있으면 해석 1문장, 없으면 null), "
+                "next_check(다음 확인 지점 1문장)를 작성하라.",
+            ),
+        ]
+    )
+    chain = prompt | llm.with_structured_output(BriefNarrativesOutput)
+    return await chain.ainvoke({"facts_json": facts_json})

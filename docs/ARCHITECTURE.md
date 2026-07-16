@@ -36,7 +36,7 @@ Providers → Tools → Pipelines → CLI
 | `quick_check.py` | 빠른 기술적 분석 (LLM 불필요) |
 | `deep_dive.py` | 심층 분석 (기술 + 뉴스 + LLM) |
 | `ticker_report.py` | 매크로 + 다중 종목 리포트 |
-| `portfolio.py` | 포트폴리오 모니터링 |
+| `brief.py` | playbook.yaml(보유+워치) 기반 일일 액션 브리핑 |
 | `screener.py` | 시장 스크리너 |
 | `daily_report/` | 텔레그램 메시지 MapReduce 파이프라인 |
 

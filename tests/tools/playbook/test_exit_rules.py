@@ -368,3 +368,86 @@ def test_exit_trailing_stop_is_sma50():
         holding=_holding(avg=100.0),
     )
     assert result.trailing_stop == pytest.approx(sma50_last, rel=1e-4)
+
+
+def test_sma_signals_fire_with_underscore_columns():
+    """indicators.py 실제 컬럼명(SMA_50 형식)으로도 SMA 신호가 발화해야 한다 (계약 회귀)."""
+    from src.tools.playbook.exit_rules import evaluate_exit
+
+    df = pd.DataFrame({"Close": [100.0] * 60})
+    df.loc[df.index[-1], "Close"] = 80.0
+    df["SMA_20"] = 90.0
+    df["SMA_50"] = 85.0
+    df["SMA_150"] = 95.0
+    df["SMA_200"] = 96.0
+
+    verdict = evaluate_exit(
+        df=df, snapshot=None, relative_strength=None, accumulation=None, holding=None
+    )
+
+    codes = {s.code for s in verdict.signals}
+    assert "SMA_SHORT" in codes
+    assert "SMA_LONG" in codes
+    assert verdict.trailing_stop == 85.0
+    assert verdict.action == "liquidate"  # strong 1개(SMA_LONG) → 청산
+
+
+# ── SMA_LONG 전환 시도 국면 강등 (와인스타인 Stage 기준선 = SMA150) ──────────
+
+
+def test_sma_long_downgraded_to_weak_in_turnaround_phase():
+    """종가>SMA150이면 SMA200 이탈은 약신호 — 전환 선취매 국면. 기울기 상승은 근거에 병기."""
+    from src.tools.playbook.exit_rules import evaluate_exit
+
+    df = pd.DataFrame({"Close": [100.0] * 60})
+    df.loc[df.index[-1], "Close"] = 95.0
+    df["SMA_150"] = np.linspace(80.0, 90.0, 60)  # 상승 중, 종가(95) > SMA150(90)
+    df["SMA_200"] = 96.0  # 종가 95 < SMA200
+
+    verdict = evaluate_exit(
+        df=df, snapshot=None, relative_strength=None, accumulation=None, holding=None
+    )
+
+    sma_long = next(s for s in verdict.signals if s.code == "SMA_LONG")
+    assert sma_long.severity == "weak"
+    assert "전환 시도" in sma_long.detail
+    assert "SMA150 상승" in sma_long.detail
+    assert verdict.action == "hold"  # 약신호만으로는 청산/축소 아님
+
+
+def test_sma_long_downgraded_even_when_sma150_falling():
+    """가격 회복만으로 강등(사용자 결정) — 기울기 하락 중이면 '미확인 전환'으로 병기."""
+    from src.tools.playbook.exit_rules import evaluate_exit
+
+    df = pd.DataFrame({"Close": [100.0] * 60})
+    df.loc[df.index[-1], "Close"] = 95.0
+    df["SMA_150"] = np.linspace(94.0, 90.0, 60)  # 하락 중
+    df["SMA_200"] = 96.0
+
+    verdict = evaluate_exit(
+        df=df, snapshot=None, relative_strength=None, accumulation=None, holding=None
+    )
+
+    sma_long = next(s for s in verdict.signals if s.code == "SMA_LONG")
+    assert sma_long.severity == "weak"
+    assert "전환 시도" in sma_long.detail
+    assert "SMA150 하락 중" in sma_long.detail
+    assert verdict.action == "hold"
+
+
+def test_sma_long_stays_strong_when_below_sma150():
+    """종가 < SMA150이면 (SMA150 상승 여부와 무관하게) 강신호 유지."""
+    from src.tools.playbook.exit_rules import evaluate_exit
+
+    df = pd.DataFrame({"Close": [100.0] * 60})
+    df.loc[df.index[-1], "Close"] = 85.0
+    df["SMA_150"] = np.linspace(80.0, 90.0, 60)  # 상승 중이지만 종가(85) < SMA150(90)
+    df["SMA_200"] = 96.0
+
+    verdict = evaluate_exit(
+        df=df, snapshot=None, relative_strength=None, accumulation=None, holding=None
+    )
+
+    sma_long = next(s for s in verdict.signals if s.code == "SMA_LONG")
+    assert sma_long.severity == "strong"
+    assert verdict.action == "liquidate"
