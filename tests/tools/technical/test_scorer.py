@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -23,6 +24,24 @@ def sample_df():
 
     calculator = IndicatorCalculator()
     return calculator.calculate(df)
+
+
+@pytest.fixture
+def swing_sensitive_raw_df():
+    """Create deterministic OHLCV data whose swings need future bars to confirm."""
+    rng = np.random.default_rng(0)
+    close = 100 + np.cumsum(rng.normal(0.08, 1.0, 250))
+    spread = rng.uniform(0.5, 2.0, 250)
+
+    return pd.DataFrame(
+        {
+            "Open": close + rng.normal(0, 0.5, 250),
+            "High": close + spread,
+            "Low": close - spread,
+            "Close": close,
+            "Volume": rng.integers(900_000, 1_100_000, 250),
+        }
+    )
 
 
 def test_technical_scorer_basic(sample_df):
@@ -90,16 +109,36 @@ def test_technical_scorer_score_history_uses_recent_trading_days(sample_df):
     assert result.technical_verdict.score_trend_summary is not None
 
 
-def test_score_history_does_not_use_future_rows(sample_df):
+def test_score_history_matches_freshly_calculated_cutoff_score(swing_sensitive_raw_df):
+    calculator = IndicatorCalculator()
     scorer = TechnicalScorer()
-    baseline = scorer.score(sample_df, ticker="AAPL", history_days=5)
+    result = scorer.score(calculator.calculate(swing_sensitive_raw_df), ticker="AAPL", history_days=5)
 
-    changed = sample_df.copy()
-    changed.loc[changed.index[-1], "Close"] = changed.loc[changed.index[-1], "Close"] * 1.5
-    changed.loc[changed.index[-1], "Volume"] = changed.loc[changed.index[-1], "Volume"] * 4
-    mutated = scorer.score(changed, ticker="AAPL", history_days=5)
+    cutoff = swing_sensitive_raw_df.index[-3]
+    expected = scorer._score_current(
+        calculator.calculate(swing_sensitive_raw_df.loc[:cutoff]), ticker="AAPL"
+    )
+    history_point = result.score_history[-3]
 
-    assert baseline.score_history[-2] == mutated.score_history[-2]
+    assert history_point.component_raw_total == expected.component_raw_total
+    assert history_point.adjusted_score == expected.adjusted_score
+    assert history_point.verdict_action == expected.technical_verdict.action
+
+
+def test_score_history_does_not_use_future_rows(swing_sensitive_raw_df):
+    calculator = IndicatorCalculator()
+    scorer = TechnicalScorer()
+    baseline = scorer.score(calculator.calculate(swing_sensitive_raw_df), ticker="AAPL", history_days=5)
+
+    changed = swing_sensitive_raw_df.copy()
+    for index in changed.index[-2:]:
+        changed.loc[index, "High"] = changed.loc[index, "High"] * 1.5
+        changed.loc[index, "Low"] = changed.loc[index, "Low"] / 1.5
+        changed.loc[index, "Close"] = changed.loc[index, "Close"] * 1.5
+        changed.loc[index, "Volume"] = changed.loc[index, "Volume"] * 4
+    mutated = scorer.score(calculator.calculate(changed), ticker="AAPL", history_days=5)
+
+    assert baseline.score_history[-3] == mutated.score_history[-3]
 
 
 def test_technical_scorer_insufficient_data():

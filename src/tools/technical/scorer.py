@@ -16,6 +16,9 @@ from src.tools.technical.indicators import IndicatorCalculator
 from src.tools.technical.models import ScoreHistoryPoint, TechnicalResult
 
 
+_OHLCV_COLUMNS = ["Open", "High", "Low", "Close", "Volume"]
+
+
 class TechnicalScorer:
     """Unified scoring system for technical analysis."""
 
@@ -136,15 +139,16 @@ class TechnicalScorer:
         ticker: str | None,
         history_days: int,
     ) -> tuple[list[ScoreHistoryPoint], str | None]:
-        valid_df = df.dropna(subset=["Close"])
+        raw_ohlcv = df.loc[:, _OHLCV_COLUMNS].copy()
+        valid_df = raw_ohlcv.dropna(subset=["Close"])
         recent_dates = list(valid_df.index[-history_days:])
         history: list[ScoreHistoryPoint] = []
         failures: list[str] = []
 
         for date in recent_dates:
             try:
-                sliced = df.loc[:date].copy()
-                daily = self._score_current(sliced, ticker=ticker)
+                raw_slice = raw_ohlcv.loc[:date].copy()
+                daily = self._score_current(self.calculator.calculate(raw_slice), ticker=ticker)
                 first_reason = (
                     daily.technical_verdict.reasons[0]
                     if daily.technical_verdict and daily.technical_verdict.reasons
@@ -153,7 +157,7 @@ class TechnicalScorer:
                 history.append(
                     ScoreHistoryPoint(
                         date=str(date.date()) if hasattr(date, "date") else str(date),
-                        close=float(sliced.dropna(subset=["Close"]).iloc[-1]["Close"]),
+                        close=float(raw_slice.dropna(subset=["Close"]).iloc[-1]["Close"]),
                         component_raw_total=daily.component_raw_total,
                         adjusted_score=daily.adjusted_score,
                         verdict_action=daily.technical_verdict.action,
