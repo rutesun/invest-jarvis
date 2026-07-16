@@ -11,6 +11,7 @@ from src.tools.news import NewsArticle
 from src.tools.playbook.holdings import HoldingEntry
 from src.tools.playbook.models import PlaybookVerdict
 
+
 # 버킷 순서 = 절대 우선순위 (낮을수록 상단). 스펙 §5.2
 BUCKET_LIQUIDATE = 1  # 청산 — "놓치면 손실"
 BUCKET_BUY_ELIGIBLE = 2  # 매수 적격 — "놓치면 기회"

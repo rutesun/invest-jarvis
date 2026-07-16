@@ -10,6 +10,7 @@ import yaml
 
 from src.tools.disclosure import is_korean_ticker
 
+
 logger = logging.getLogger(__name__)
 
 

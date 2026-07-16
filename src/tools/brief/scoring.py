@@ -18,6 +18,7 @@ from src.tools.brief.models import (
 )
 from src.tools.playbook.models import GateResult
 
+
 BONUS_STOP_PROXIMITY = 30
 BONUS_SURGE = 20
 STOP_PROXIMITY_RATIO = 1.03  # 현재가 <= 스탑 × 1.03 → 근접(이탈 포함)

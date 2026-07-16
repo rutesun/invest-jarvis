@@ -30,6 +30,7 @@ from src.tools.brief.scoring import (
 from src.tools.disclosure import extract_kr_code, is_korean_ticker
 from src.tools.playbook.holdings import HoldingEntry, HoldingsConfig
 
+
 logger = logging.getLogger(__name__)
 
 
