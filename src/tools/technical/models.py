@@ -1,7 +1,98 @@
 from datetime import datetime
+from typing import Literal, Self
 
 import pandas as pd
 from pydantic import BaseModel, Field, model_validator
+
+
+SignalType = Literal[
+    "breakout",
+    "pullback",
+    "reversal",
+    "breakdown",
+    "overextension",
+    "support",
+    "resistance",
+    "trend",
+    "volume_confirmation",
+]
+SignalBias = Literal["bullish", "bearish", "neutral"]
+SignalIntent = Literal["entry", "hold", "risk", "watch"]
+SignalSeverity = Literal["low", "medium", "high"]
+VerdictAction = Literal["buy", "add", "hold", "watch", "reduce", "avoid"]
+VerdictConfidence = Literal["low", "medium", "high"]
+
+
+class ComponentSignal(BaseModel):
+    """Structured signal metadata consumed by ScoreAggregator."""
+
+    signal_type: SignalType
+    bias: SignalBias
+    intent: SignalIntent
+    severity: SignalSeverity = "medium"
+    entry_eligible: bool = False
+    source: str | None = None
+    reason: str | None = None
+
+
+class MarketContext(BaseModel):
+    """Derived OHLCV state used for score aggregation."""
+
+    close: float
+    close_above_sma20: bool = False
+    close_above_sma50: bool = False
+    close_above_sma150: bool = False
+    close_above_sma200: bool = False
+    sma20_above_sma50: bool = False
+    ret_1d: float | None = None
+    ret_5d: float | None = None
+    ret_10d: float | None = None
+    distance_from_20d_high_pct: float | None = None
+    distance_from_sma20_pct: float | None = None
+    distance_from_sma50_pct: float | None = None
+    volume_ratio_20d: float | None = None
+    rsi: float | None = None
+    atr_pct: float | None = None
+    supertrend_direction: int | None = None
+    supertrend_sell_transition: bool = False
+    is_overextended: bool = False
+    is_breakdown: bool = False
+    is_uptrend: bool = False
+    is_downtrend: bool = False
+    nearest_support: float | None = None
+
+
+class AggregationTraceEntry(BaseModel):
+    """One score adjustment made by ScoreAggregator."""
+
+    rule: str
+    before: int
+    after: int
+    reason: str
+
+
+class TechnicalVerdict(BaseModel):
+    """Technical-only action hint. Playbook remains the final decision layer."""
+
+    action: VerdictAction
+    entry_mode: str
+    confidence: VerdictConfidence
+    new_entry_allowed: bool
+    reasons: list[str] = Field(default_factory=list)
+    cautions: list[str] = Field(default_factory=list)
+    invalidation_level: float | None = None
+    score_trend_summary: str | None = None
+
+
+class ScoreHistoryPoint(BaseModel):
+    """Recent per-day score and verdict summary."""
+
+    date: str
+    close: float
+    component_raw_total: int
+    adjusted_score: int
+    verdict_action: VerdictAction
+    one_line_reason: str
 
 
 class ComponentResult(BaseModel):
@@ -11,6 +102,7 @@ class ComponentResult(BaseModel):
     evidence: list[str]
     metrics: dict[str, float]
     score: int
+    signal_metadata: list[ComponentSignal] = Field(default_factory=list)
 
 
 class IndicatorSnapshot(BaseModel):
@@ -324,6 +416,12 @@ class TechnicalResult(BaseModel):
     snapshot: IndicatorSnapshot
     components: dict[str, dict]
     total_score: int = 0
+    component_raw_total: int | None = None
+    adjusted_score: int | None = None
+    technical_verdict: TechnicalVerdict | None = None
+    score_history: list[ScoreHistoryPoint] = Field(default_factory=list)
+    score_history_warning: str | None = None
+    aggregation_trace: list[AggregationTraceEntry] = Field(default_factory=list)
 
     # NEW: Pattern detection requires OHLC data
     raw_dataframe: pd.DataFrame | None = None
@@ -338,6 +436,14 @@ class TechnicalResult(BaseModel):
 
     class Config:
         arbitrary_types_allowed = True
+
+    @model_validator(mode="after")
+    def _backfill_score_contract_fields(self) -> Self:
+        if self.component_raw_total is None:
+            self.component_raw_total = self.total_score
+        if self.adjusted_score is None:
+            self.adjusted_score = self.total_score
+        return self
 
     @classmethod
     def from_analysis(cls, df: pd.DataFrame, **kwargs):
