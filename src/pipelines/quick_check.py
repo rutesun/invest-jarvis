@@ -56,12 +56,19 @@ class QuickCheckPipeline:
                 for s in tech.strategies
             ]
 
+        verdict = tech.technical_verdict.model_dump() if tech.technical_verdict else None
+
         return {
             "ticker": ticker,
             "success": True,
             "price": snapshot.price,
             "change_pct": snapshot.change_pct,
             "total_score": tech.total_score,
+            "component_raw_total": tech.component_raw_total,
+            "adjusted_score": tech.adjusted_score,
+            "technical_verdict": verdict,
+            "score_history": [point.model_dump() for point in tech.score_history],
+            "score_history_warning": tech.score_history_warning,
             "assessment": tech.overall_assessment or "N/A",
             "confidence": tech.confidence_score or 0,
             "signals": signals[:10],  # Limit to top 10
@@ -89,6 +96,42 @@ class QuickCheckPipeline:
             f"**총점**: {result['total_score']}",
             "",
         ]
+
+        if result.get("adjusted_score") is not None:
+            lines.append(f"**Adjusted Score**: {result['adjusted_score']}")
+
+        verdict = result.get("technical_verdict")
+        if verdict:
+            lines.extend(
+                [
+                    "",
+                    "### Technical Verdict",
+                    f"- Action: {verdict['action']} ({verdict['entry_mode']}, confidence={verdict['confidence']})",
+                    f"- 신규 진입 가능: {'yes' if verdict['new_entry_allowed'] else 'no'}",
+                ]
+            )
+            if verdict.get("reasons"):
+                lines.append("- Reasons:")
+                lines.extend(f"  - {reason}" for reason in verdict["reasons"])
+            if verdict.get("cautions"):
+                lines.append("- Cautions:")
+                lines.extend(f"  - {caution}" for caution in verdict["cautions"])
+            if verdict.get("invalidation_level") is not None:
+                lines.append(f"- Invalidation: {verdict['invalidation_level']:.2f}")
+            if verdict.get("score_trend_summary"):
+                lines.append(f"- Trend: {verdict['score_trend_summary']}")
+
+        history = result.get("score_history") or []
+        if history:
+            lines.extend(["", "### 최근 점수 추이"])
+            for point in history:
+                lines.append(
+                    f"- {point['date']}: close {point['close']:.2f}, "
+                    f"raw {point['component_raw_total']}, adjusted {point['adjusted_score']}, "
+                    f"{point['verdict_action']} — {point['one_line_reason']}"
+                )
+        if result.get("score_history_warning"):
+            lines.append(f"- score history warning: {result['score_history_warning']}")
 
         # Performance
         indicators = result.get("indicators", {})
