@@ -92,8 +92,26 @@ def test_render_markdown_shows_technical_verdict_reason():
 
     output = render_markdown(datetime(2026, 7, 16), None, [item])
 
+    assert "hold" in output
     assert "상승 추세 유지" in output
+    assert "주의: 단기 과열" in output
     assert "최근 5거래일" in output
+
+
+def test_render_markdown_shows_technical_verdict_action_without_details():
+    item = BriefItem(
+        ticker="AAPL",
+        kind="holding",
+        action="hold",
+        bucket=BUCKET_HOLD_OK,
+        price=210.0,
+        change_pct=0.3,
+        technical_verdict={"action": "watch"},
+    )
+
+    output = render_markdown(datetime(2026, 7, 16), None, [item])
+
+    assert "- **기술 Verdict**: watch" in output
 
 
 def test_render_error_item():
