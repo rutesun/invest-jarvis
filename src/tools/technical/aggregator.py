@@ -167,8 +167,13 @@ def _choose_action(
         return "hold", "extended_hold"
     if adjusted >= 75 and new_entry_allowed and _has_entry_signal(metadata, "breakout"):
         return "buy", "breakout_entry"
-    if adjusted >= 55 and new_entry_allowed and (
-        _has_entry_signal(metadata, "pullback") or _is_contextual_pullback_add(context)
+    if (
+        adjusted >= 55
+        and new_entry_allowed
+        and not context.is_downtrend
+        and (
+            _has_entry_signal(metadata, "pullback") or _is_contextual_pullback_add(context)
+        )
     ):
         return "add", "pullback_add"
     if adjusted >= 40 and context.is_uptrend:
@@ -180,7 +185,8 @@ def _is_contextual_pullback_add(context: MarketContext) -> bool:
     if context.distance_from_20d_high_pct is None or context.ret_10d is None:
         return False
     return (
-        context.close_above_sma20
+        not context.is_downtrend
+        and context.close_above_sma20
         and context.supertrend_direction == 1
         and -8 <= context.distance_from_20d_high_pct <= -2
         and context.ret_10d > 0

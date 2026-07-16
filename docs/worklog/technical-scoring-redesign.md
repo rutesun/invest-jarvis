@@ -63,3 +63,9 @@
 - 근원(root cause): 4/30은 Supertrend 상승과 20일선 위 눌림 상태지만 component metadata에 pullback entry signal이 없어 Aggregator가 add 조건을 만족하지 못함.
 - 수정: MarketContext 기반 contextual pullback add 조건을 추가해 과열/이탈이 아니고 20일선 위에서 20일 고점 대비 -2~-8% 눌림, 10일 수익률 양수, Supertrend 상승이면 `pullback_add`로 판정함. PANW 4/30 regression과 aggregator 단위 테스트를 spec 기대값으로 고정함.
 - 재발 방지 / 배운 것: real regression fixture는 spec의 대표 사례와 정확히 일치해야 하며, 실제 결과가 다르면 test를 넓히기보다 rule 또는 spec을 함께 정렬해야 함.
+
+## (2026-07-16 20:07) [Bug] Downtrend pullback add 차단
+- 증상: 최종 리뷰에서 contextual pullback add 조건이 `is_downtrend`를 확인하지 않아 하락 추세의 초기 반등도 `add`로 열릴 수 있다고 지적됨.
+- 근원(root cause): PANW 4/30 복구 과정에서 Supertrend 상승, 20일선 위, 20일 고점 대비 눌림, 10일 수익률 양수 조건만 보았고 하락 추세 가드를 별도로 두지 않음.
+- 수정: `pullback_add` 판정과 contextual pullback helper 모두 `not context.is_downtrend`를 요구하도록 좁히고, 동일한 눌림 조건이라도 downtrend에서는 `watch`가 되는 회귀 테스트를 추가함.
+- 재발 방지 / 배운 것: early trend 전환 사례(PANW)는 유지하되, downtrend에서는 buy/add를 만들지 않는 spec 가드를 별도 테스트로 고정해야 함.

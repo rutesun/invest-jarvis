@@ -152,6 +152,7 @@ def test_contextual_pullback_add_without_string_parsing():
     }
     context = MarketContext(
         close=100,
+        is_uptrend=True,
         close_above_sma20=True,
         distance_from_20d_high_pct=-3.5,
         ret_1d=-1.2,
@@ -168,3 +169,42 @@ def test_contextual_pullback_add_without_string_parsing():
     assert result.technical_verdict.entry_mode == "pullback_add"
     assert result.technical_verdict.confidence == "high"
     assert result.technical_verdict.new_entry_allowed is True
+
+
+def test_contextual_pullback_add_blocks_downtrend():
+    components = {
+        "velocity": _component(30, []),
+        "supertrend": _component(
+            25,
+            [
+                ComponentSignal(
+                    signal_type="trend",
+                    bias="bullish",
+                    intent="hold",
+                    severity="medium",
+                    entry_eligible=False,
+                    source="supertrend",
+                    reason="Supertrend 상승",
+                )
+            ],
+        ),
+    }
+    context = MarketContext(
+        close=100,
+        is_uptrend=False,
+        is_downtrend=True,
+        close_above_sma20=True,
+        distance_from_20d_high_pct=-3.5,
+        ret_1d=-1.2,
+        ret_10d=7.4,
+        supertrend_direction=1,
+        is_overextended=False,
+        is_breakdown=False,
+    )
+
+    result = ScoreAggregator().aggregate(components, context)
+
+    assert result.adjusted_score == 55
+    assert result.technical_verdict.action == "watch"
+    assert result.technical_verdict.entry_mode == "confirmation_needed"
+    assert result.technical_verdict.new_entry_allowed is False
