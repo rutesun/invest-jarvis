@@ -23,6 +23,7 @@
 |------|------|------|
 | `docs/FEATURES.md` | 현재 프로젝트가 지원하는 기능 설명 | "지금 이 프로젝트는 무엇을 할 수 있나?" |
 | `docs/superpowers/specs/` | 브레인스토밍/설계 탐색 결과 보관 | "무엇을 만들려고 고민했고 어떤 설계를 검토했나?" |
+| `docs/worklog/` | 작업 중 결정·버그·마찰·전환의 시간순 일지 | "작업 중 그 순간 무슨 판단을 했고 어디서 막혔나?" |
 | `docs/changes/` | PR 또는 머지 단위 변경 기록 | "이번 변경에서 실제로 무엇이 들어갔나?" |
 | `docs/adr/` | 중요한 아키텍처 의사결정 기록 | "왜 이 구조/방식을 선택했나?" |
 | `docs/CLI_USAGE.md` | CLI 명령 사용법 | "어떻게 실행하나?" |
@@ -68,6 +69,7 @@
 
 | 상황 | 액션 |
 |------|------|
+| 작업 중 결정/버그수정/마찰/방향전환이 발생함 | `work-log` 스킬로 `docs/worklog/<topic>.md`에 기록 |
 | 새로운 기능/동작이 사용자 관점에서 추가됨 | `docs/FEATURES.md` 업데이트 |
 | PR에서 의미 있는 변경 범위를 남겨야 함 | `docs/changes/{name}.md` 생성 또는 업데이트 |
 | 구현 전에 설계 탐색/브레인스토밍이 필요함 | `docs/superpowers/specs/...` 생성 또는 업데이트 |
@@ -75,6 +77,18 @@
 | CLI 명령/옵션이 바뀜 | `docs/CLI_USAGE.md` 업데이트 |
 | 구조/레이어/흐름이 바뀜 | `docs/ARCHITECTURE.md` 업데이트 |
 | 개발 프로세스/문서 규칙이 바뀜 | 이 문서와 `docs/DEVELOPMENT.md` 업데이트 |
+
+---
+
+## 4.5 `docs/worklog` 사용 원칙
+
+`docs/worklog/`는 작업 *중* 실시간으로 남기는 시간순 일지다. change-record/ADR이 끝나고 정제한 결과라면, worklog는 그 순간의 원재료다.
+
+- 기록 주체는 에이전트다. `work-log` 스킬을 체크포인트(결정 확정·버그수정 검증·막힘·접근 전환)에서 호출한다.
+- 파일 단위는 주제(topic) kebab-case. 브랜치는 헤더에 적는다.
+- 엔트리 타입은 `Decision` / `Bug` / `Friction` / `Pivot` 4종.
+- 소비 방향: `Decision`은 ADR 후보, `Friction`/`Pivot`은 harness 개선 소스, 전체는 change-record의 Why/What/Constraints 근거.
+- 강제 훅은 두지 않는다. 누락은 스킬 기반의 트레이드오프로 감수한다.
 
 ---
 

@@ -124,4 +124,16 @@ Providers → Tools → Pipelines → CLI (src/cli/main.py)
 ## Skills
 
 Location: `.claude/skills/`
-**Rule**: Simple CLI wrappers only. Show command + brief description + example. Keep under 20 lines.
+**Rule**: Simple CLI wrappers only. Show command + brief description + example. Keep under 40 lines.
+**Exception**: 워크플로를 담는 프로세스 스킬(예: `work-log`)은 허용하며 40줄을 넘어도 된다. 단, 하나의 워크플로에 집중한다.
+
+### Worklog (작업 일지)
+
+작업 중 아래 체크포인트에서 `work-log` 스킬을 호출해 `docs/worklog/<topic>.md`에 엔트리를 남긴다.
+
+- 설계 결정이 확정된 직후 → `[Decision]`
+- 버그 수정이 검증된 후 → `[Bug]`
+- 도구 부재로 막히거나 맥락을 잘못 잡았을 때 → `[Friction]`
+- 접근을 폐기·전환할 때 → `[Pivot]`
+
+worklog는 change-record/ADR의 1차 재료다. 누락은 감수하며(스킬 기반 트레이드오프), 강제 훅은 두지 않는다.
