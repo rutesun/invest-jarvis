@@ -94,3 +94,24 @@
 - 근원(root cause): action-supporting caution이 없는 `reduce/avoid`에서는 기존 bullish/support reason 목록이 그대로 1순위로 유지됨.
 - 수정: 음수 adjusted score로 `reduce/avoid`가 선택된 경우 risk fallback reason을 bullish/support reason보다 먼저 배치하고, `지지 confluence`가 있어도 `avoid`의 첫 reason이 risk 우위 설명이 되는 회귀 테스트를 추가함.
 - 재발 방지 / 배운 것: action label과 첫 reason은 같은 방향을 가리켜야 하며, 반대 방향 신호는 보조 정보로만 뒤에 남겨야 함.
+
+## (2026-07-20 14:39) [Decision] 모든 기술 분석 소비 경로를 3년 계약으로 통일
+- 맥락: `check`는 1년, `analyze`와 `brief`는 3년 OHLCV를 사용해 같은 `TechnicalScorer`라도 누적 지표와 최종 score/verdict가 달라질 수 있음. 사용자는 어떤 파이프라인에서도 동일한 기술 점수가 나와야 한다고 확정함.
+- 후보: A) 파이프라인별 기간 유지 / B) check와 analyze만 통일 / C) `TechnicalAnalysisTool`의 canonical period를 3년으로 정해 모든 소비 경로가 사용
+- 선택: C — 단일 source of truth로 미래 drift를 막고 component/raw/adjusted/verdict/history 계약을 동일하게 만든다.
+- 기각: A(동일성 요구 미충족), B(다른 소비 경로에 점수 차이가 남음)
+- ADR 후보? no
+
+## (2026-07-20 14:56) [Decision] Macro와 다중 ticker 명령 책임 확정
+- 맥락: `report ticker`가 다중 종목 check와 역할이 겹치고 사용되지 않는 LLM 의존을 가지며, Macro 표시와 LLM 사용 경계가 불명확함.
+- 후보: A) 모든 명령에 Macro / B) analyze에만 Macro / C) analyze·brief에 표시하고 analyze 종합 LLM 해설에 전달
+- 선택: C — check는 다중 ticker 기술 분석에 집중하고, analyze는 Macro를 종합 해설에 사용하며, brief는 기존 포트폴리오 Macro 표시를 유지한다.
+- 기각: A(check의 가벼운 역할과 충돌), B(brief의 기존 시장 요약을 제거할 이유가 없음)
+- ADR 후보? no
+
+## (2026-07-20 15:06) [Decision] report ticker 삭제와 장기 이동평균 slope 표기
+- 맥락: 사용자가 중복된 `report ticker` 삭제를 확정하고, 주요 지표에 SMA 100·200과 방향 아이콘을 항상 표시하도록 요청함. 코드 검증 결과 최종 종합 LLM에는 news와 Macro가 함께 전달되지 않는 공백도 확인됨.
+- 후보: A) report ticker alias 유지 / B) 완전 삭제, slope 단순 증감 / C) 완전 삭제, 21거래일 변화율에 보합 band 적용
+- 선택: C — 다중 ticker check가 기능을 대체하고, 기존 장기 추세 판정과 같은 21거래일 기준에 ±0.5% 보합 band를 적용한다. 최종 LLM에는 모든 분석 소스와 고정 decision을 전달한다.
+- 기각: A(명령 중복 지속), B(미세 노이즈도 상승·하락으로 과대 표시)
+- ADR 후보? no
