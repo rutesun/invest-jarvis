@@ -92,6 +92,59 @@ def test_pocket_pivot_detected():
     )
     assert result.score >= 25, f"Expected Pocket Pivot score 25, got: {result.score}"
     assert any("거래량" in str(e) for e in result.evidence)
+    metadata = next(item for item in result.signal_metadata if item.signal_type == "pullback")
+    assert metadata.source == "volume"
+    assert metadata.bias == "bullish"
+    assert metadata.intent == "entry"
+    assert metadata.severity == "high"
+    assert metadata.entry_eligible is True
+
+
+def test_price_down_volume_surge_signal_metadata():
+    df = pd.DataFrame(
+        {
+            "Open": [100, 95],
+            "High": [101, 96],
+            "Low": [99, 89],
+            "Close": [100, 90],
+            "Volume": [100, 300],
+            "Vol_SMA_20": [100, 100],
+        }
+    )
+
+    result = analyze_volume(df)
+
+    metadata = next(item for item in result.signal_metadata if item.signal_type == "breakdown")
+    assert metadata.source == "volume"
+    assert metadata.bias == "bearish"
+    assert metadata.intent == "risk"
+    assert metadata.severity == "high"
+    assert metadata.entry_eligible is False
+
+
+def test_price_up_volume_surge_signal_metadata():
+    df = pd.DataFrame(
+        {
+            "Open": [100, 101],
+            "High": [101, 111],
+            "Low": [99, 100],
+            "Close": [100, 110],
+            "Volume": [100, 300],
+            "Vol_SMA_20": [100, 100],
+        }
+    )
+
+    result = analyze_volume(df)
+
+    metadata = next(
+        item for item in result.signal_metadata if item.reason == "가격 상승 + 거래량 급증"
+    )
+    assert metadata.source == "volume"
+    assert metadata.signal_type == "volume_confirmation"
+    assert metadata.bias == "bullish"
+    assert metadata.intent == "hold"
+    assert metadata.severity == "medium"
+    assert metadata.entry_eligible is False
 
 
 def test_pocket_pivot_volume_not_exceeded():
@@ -336,6 +389,13 @@ def test_power_gap_up_detected():
         f"Expected Power Gap Up, got: {result.signals}"
     )
     assert result.score >= 20, f"Expected Power Gap Up score 20, got: {result.score}"
+    metadata = next(item for item in result.signal_metadata if item.reason == "Power Gap Up")
+    assert metadata.source == "volume"
+    assert metadata.signal_type == "breakout"
+    assert metadata.bias == "bullish"
+    assert metadata.intent == "entry"
+    assert metadata.severity == "high"
+    assert metadata.entry_eligible is True
 
 
 def test_power_gap_up_insufficient_volume():

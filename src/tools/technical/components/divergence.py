@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from scipy.signal import argrelextrema
 
-from src.tools.technical.models import ComponentResult
+from src.tools.technical.models import ComponentResult, ComponentSignal
 
 
 def analyze_divergence(df: pd.DataFrame) -> ComponentResult:
@@ -26,6 +26,7 @@ def analyze_divergence(df: pd.DataFrame) -> ComponentResult:
 
     signals = []
     evidence = []
+    metadata = []
     metrics = {}
     score = 0
 
@@ -52,6 +53,7 @@ def analyze_divergence(df: pd.DataFrame) -> ComponentResult:
         signals.append(bearish_div["signal"])
         evidence.append(bearish_div["evidence"])
         score += bearish_div["score"]
+        metadata.append(_divergence_metadata("bearish", bearish_div["signal"]))
 
     # Bullish divergence (가격 저점↓, RSI 저점↑)
     bullish_div = _detect_bullish_divergence(
@@ -61,6 +63,7 @@ def analyze_divergence(df: pd.DataFrame) -> ComponentResult:
         signals.append(bullish_div["signal"])
         evidence.append(bullish_div["evidence"])
         score += bullish_div["score"]
+        metadata.append(_divergence_metadata("bullish", bullish_div["signal"]))
 
     # MACD divergence (if available)
     if "MACD" in df.columns:
@@ -69,6 +72,7 @@ def analyze_divergence(df: pd.DataFrame) -> ComponentResult:
             signals.append(macd_div["signal"])
             evidence.append(macd_div["evidence"])
             score += macd_div["score"]
+            metadata.append(_divergence_metadata("bearish" if macd_div["score"] < 0 else "bullish", macd_div["signal"]))
 
     # cRSI divergence (if available)
     if "cRSI" in df.columns:
@@ -77,6 +81,7 @@ def analyze_divergence(df: pd.DataFrame) -> ComponentResult:
             signals.append(crsi_div["signal"])
             evidence.append(crsi_div["evidence"])
             score += crsi_div["score"]
+            metadata.append(_divergence_metadata("bearish" if crsi_div["score"] < 0 else "bullish", crsi_div["signal"]))
             # Stronger signal if both RSI and cRSI agree
             if (bearish_div and "bearish" in crsi_div["signal"].lower()) or (
                 bullish_div and "bullish" in crsi_div["signal"].lower()
@@ -89,6 +94,18 @@ def analyze_divergence(df: pd.DataFrame) -> ComponentResult:
         evidence=evidence,
         metrics=metrics,
         score=score,
+        signal_metadata=metadata,
+    )
+
+
+def _divergence_metadata(bias: str, reason: str) -> ComponentSignal:
+    return ComponentSignal(
+        signal_type="reversal",
+        bias=bias,
+        intent="watch" if bias == "bullish" else "risk",
+        severity="medium",
+        source="divergence",
+        reason=reason,
     )
 
 

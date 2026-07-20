@@ -50,6 +50,9 @@ class BriefItem:
     flow: InvestorFlow | None = None
     price: float | None = None
     change_pct: float | None = None
+    technical_verdict: dict[str, Any] | None = None
+    score_history: list[dict[str, Any]] = field(default_factory=list)
+    score_history_warning: str | None = None
     remaining_condition: str | None = None  # 임박 시 미충족 게이트 1개
     narrative: Any | None = None  # TickerNarrative (Task 4) — 순환 import 방지로 Any
     error: str | None = None

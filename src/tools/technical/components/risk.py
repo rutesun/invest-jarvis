@@ -1,6 +1,6 @@
 import pandas as pd
 
-from src.tools.technical.models import ComponentResult
+from src.tools.technical.models import ComponentResult, ComponentSignal
 
 
 def analyze_risk(df: pd.DataFrame) -> ComponentResult:
@@ -28,6 +28,7 @@ def analyze_risk(df: pd.DataFrame) -> ComponentResult:
     evidence = []
     metrics = {"close": close}
     score = 0
+    metadata = []
 
     # Collect support/resistance levels
     support_levels = []
@@ -112,20 +113,24 @@ def analyze_risk(df: pd.DataFrame) -> ComponentResult:
         signals.append("강력 지지 (3개 이상 confluence)")
         evidence.append(f"현재가 근처 지지선 {len(support_confluence)}개")
         score += 15
+        metadata.append(_support_metadata("강력 지지 (3개 이상 confluence)"))
     elif len(support_confluence) >= 2:
         signals.append("지지 confluence")
         evidence.append(f"지지선 {len(support_confluence)}개")
         score += 10
+        metadata.append(_support_metadata("지지 confluence"))
 
     # Near resistance = higher risk
     if len(resistance_confluence) >= 3:
         signals.append("강력 저항 (3개 이상 confluence)")
         evidence.append(f"현재가 근처 저항선 {len(resistance_confluence)}개")
         score -= 15
+        metadata.append(_resistance_metadata("강력 저항 (3개 이상 confluence)"))
     elif len(resistance_confluence) >= 2:
         signals.append("저항 confluence")
         evidence.append(f"저항선 {len(resistance_confluence)}개")
         score -= 10
+        metadata.append(_resistance_metadata("저항 confluence"))
 
     # Nearest support/resistance distance
     if support_levels:
@@ -152,12 +157,14 @@ def analyze_risk(df: pd.DataFrame) -> ComponentResult:
         if close < sma_50:
             evidence.append("가격이 SMA 50 아래 (리스크 증가)")
             score -= 5
+            metadata.append(_breakdown_metadata("가격이 SMA 50 아래"))
 
     if "SuperTrend_Dir" in df.columns and not pd.isna(latest.get("SuperTrend_Dir")):
         supertrend_dir = int(latest["SuperTrend_Dir"])
         if supertrend_dir == -1:
             evidence.append("Supertrend 하락 (리스크 증가)")
             score -= 5
+            metadata.append(_breakdown_metadata("Supertrend 하락"))
 
     # Stop loss calculation (price - 2×ATR)
     if "ATR" in df.columns and not pd.isna(latest.get("ATR")):
@@ -186,4 +193,38 @@ def analyze_risk(df: pd.DataFrame) -> ComponentResult:
         evidence=evidence,
         metrics=metrics,
         score=score,
+        signal_metadata=metadata,
+    )
+
+
+def _support_metadata(reason: str) -> ComponentSignal:
+    return ComponentSignal(
+        signal_type="support",
+        bias="bullish",
+        intent="hold",
+        severity="medium",
+        source="risk",
+        reason=reason,
+    )
+
+
+def _resistance_metadata(reason: str) -> ComponentSignal:
+    return ComponentSignal(
+        signal_type="resistance",
+        bias="bearish",
+        intent="risk",
+        severity="medium",
+        source="risk",
+        reason=reason,
+    )
+
+
+def _breakdown_metadata(reason: str) -> ComponentSignal:
+    return ComponentSignal(
+        signal_type="breakdown",
+        bias="bearish",
+        intent="risk",
+        severity="medium",
+        source="risk",
+        reason=reason,
     )

@@ -254,6 +254,78 @@ def build_technical_assessment(
     )
 
 
+def _technical_factor_score_from_verdict(technical_data) -> int | None:
+    verdict = getattr(technical_data, "technical_verdict", None)
+    if verdict is None:
+        return None
+
+    adjusted = getattr(technical_data, "adjusted_score", None)
+    if verdict.action in {"avoid", "reduce"}:
+        return 8
+    if verdict.action in {"buy", "add"}:
+        if adjusted is not None and adjusted >= 75:
+            return 11
+        if adjusted is not None and adjusted >= 55:
+            return 8
+        return 6
+    if verdict.action == "hold":
+        return 6
+    if verdict.action == "watch":
+        return 4
+    return None
+
+
+def _field(item, name: str, default=None):
+    if item is None:
+        return default
+    if isinstance(item, dict):
+        return item.get(name, default)
+    return getattr(item, name, default)
+
+
+def _technical_rule_evidence(technical_data) -> list[str]:
+    evidence = []
+    component_raw_total = getattr(technical_data, "component_raw_total", None)
+    adjusted_score = getattr(technical_data, "adjusted_score", None)
+    verdict = getattr(technical_data, "technical_verdict", None)
+
+    if component_raw_total is not None:
+        evidence.append(f"component_raw_total={component_raw_total}")
+    if adjusted_score is not None:
+        evidence.append(f"adjusted_score={adjusted_score}")
+    if verdict is not None:
+        evidence.append(f"technical_verdict={verdict.action}")
+        if verdict.score_trend_summary:
+            evidence.append(f"score_trend: {verdict.score_trend_summary}")
+
+    history = getattr(technical_data, "score_history", None) or []
+    if history:
+        latest = history[-1]
+        date = _field(latest, "date", "unknown")
+        adjusted = _field(latest, "adjusted_score", "N/A")
+        action = _field(latest, "verdict_action", "N/A")
+        reason = _field(latest, "one_line_reason", "N/A")
+        evidence.append(
+            f"score_history {date}: adjusted_score={adjusted}, action={action}, reason={reason}"
+        )
+
+    warning = getattr(technical_data, "score_history_warning", None)
+    if warning:
+        evidence.append(f"score_history_warning: {warning}")
+    return evidence
+
+
+def _technical_role_reason(base: str, rule_evidence: list[str]) -> str:
+    highlights = [
+        item
+        for item in rule_evidence
+        if item.startswith("adjusted_score=") or item.startswith("score_trend:")
+    ]
+    if not highlights:
+        return base
+    return f"{base}; {'; '.join(highlights)}"
+
+
 def build_event_assessment(
     news_titles: list[str],
     disclosure_items: list[dict] | None,
@@ -659,7 +731,34 @@ def build_analyze_decision_bundle(
             for result in chart_patterns.values()
         ],
     )
-    if technical_summary is not None:
+    verdict_score = _technical_factor_score_from_verdict(technical_data)
+    verdict = getattr(technical_data, "technical_verdict", None)
+    rule_evidence = _technical_rule_evidence(technical_data)
+    if verdict is not None and verdict_score is not None:
+        role_reason = _technical_role_reason("technical_verdict를 우선 반영", rule_evidence)
+        technical_assessment = technical_assessment.model_copy(
+            update={
+                "total_score": verdict_score,
+                "role": "보조" if verdict_score >= 7 else "참고",
+                "headline": f"technical verdict: {verdict.action}",
+                "summary": verdict.reasons[0] if verdict.reasons else technical_assessment.summary,
+                "role_reason": role_reason,
+                "evidence": (
+                    technical_assessment.evidence
+                    + rule_evidence
+                    + verdict.reasons
+                    + verdict.cautions
+                ),
+                "bias": (
+                    "bearish"
+                    if verdict.action in {"reduce", "avoid"}
+                    else "bullish"
+                    if verdict.action in {"buy", "add"}
+                    else "neutral"
+                ),
+            }
+        )
+    if technical_summary is not None and verdict is None:
         technical_summary_text = (
             technical_summary.key_insights[0]
             if technical_summary.key_insights

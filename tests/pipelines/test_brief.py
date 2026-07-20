@@ -18,7 +18,12 @@ from src.tools.playbook.models import (
     PlaybookVerdict,
     RelativeStrengthResult,
 )
-from src.tools.technical.models import IndicatorSnapshot, TechnicalResult
+from src.tools.technical.models import (
+    IndicatorSnapshot,
+    ScoreHistoryPoint,
+    TechnicalResult,
+    TechnicalVerdict,
+)
 
 
 def _technical(ticker: str, price: float = 100.0, change_pct: float = 1.0) -> TechnicalResult:
@@ -27,6 +32,26 @@ def _technical(ticker: str, price: float = 100.0, change_pct: float = 1.0) -> Te
         timestamp=datetime(2026, 7, 14),
         snapshot=IndicatorSnapshot(price=price, change_pct=change_pct),
         components={},
+        technical_verdict=TechnicalVerdict(
+            action="hold",
+            entry_mode="wait",
+            confidence="medium",
+            new_entry_allowed=False,
+            reasons=["상승 추세 유지"],
+            cautions=["단기 과열"],
+            score_trend_summary="최근 5거래일 adjusted score 둔화",
+        ),
+        score_history=[
+            ScoreHistoryPoint(
+                date="2026-07-16",
+                close=100.0,
+                component_raw_total=80,
+                adjusted_score=62,
+                verdict_action="hold",
+                one_line_reason="단기 과열",
+            )
+        ],
+        score_history_warning="최근 점수 변동성 확인 필요",
     )
 
 
@@ -152,6 +177,14 @@ async def test_run_all_targets_included_and_ranked():
     assert result["items"][0].bucket == BUCKET_LIQUIDATE
     assert result["items"][1].bucket == BUCKET_REJECTED
     assert result["macro"] is not None
+    item = result["items"][0]
+    assert item.technical_verdict["action"] == "hold"
+    assert item.score_history[0]["adjusted_score"] == 62
+    assert item.score_history_warning == "최근 점수 변동성 확인 필요"
+    facts = pipeline._facts_for(item)
+    assert facts["technical_verdict"] == item.technical_verdict
+    assert facts["score_history"] == item.score_history
+    assert facts["score_history_warning"] == item.score_history_warning
 
 
 @pytest.mark.asyncio

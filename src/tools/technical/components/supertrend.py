@@ -1,6 +1,6 @@
 import pandas as pd
 
-from src.tools.technical.models import ComponentResult
+from src.tools.technical.models import ComponentResult, ComponentSignal
 
 
 def analyze_supertrend(df: pd.DataFrame) -> ComponentResult:
@@ -51,6 +51,7 @@ def analyze_supertrend(df: pd.DataFrame) -> ComponentResult:
     signals = []
     evidence = []
     score = 0
+    metadata = []
     metrics = {"supertrend_direction": supertrend_dir}
 
     if not pd.isna(supertrend_value):
@@ -64,6 +65,16 @@ def analyze_supertrend(df: pd.DataFrame) -> ComponentResult:
         signals.append("Supertrend 상승")
         evidence.append("Supertrend가 매수 신호")
         score += 20
+        metadata.append(
+            ComponentSignal(
+                signal_type="trend",
+                bias="bullish",
+                intent="hold",
+                severity="medium",
+                source="supertrend",
+                reason="Supertrend 상승",
+            )
+        )
 
         if not pd.isna(close) and not pd.isna(supertrend_value):
             distance = ((float(close) - float(supertrend_value)) / float(supertrend_value)) * 100
@@ -77,6 +88,16 @@ def analyze_supertrend(df: pd.DataFrame) -> ComponentResult:
         signals.append("Supertrend 하락")
         evidence.append("Supertrend가 매도 신호")
         score -= 20
+        metadata.append(
+            ComponentSignal(
+                signal_type="trend",
+                bias="bearish",
+                intent="risk",
+                severity="medium",
+                source="supertrend",
+                reason="Supertrend 하락",
+            )
+        )
 
         if not pd.isna(close) and not pd.isna(supertrend_value):
             distance = ((float(supertrend_value) - float(close)) / float(supertrend_value)) * 100
@@ -92,14 +113,36 @@ def analyze_supertrend(df: pd.DataFrame) -> ComponentResult:
             signals.append("Supertrend 매수 전환")
             evidence.append("Supertrend 방향이 하락에서 상승으로 전환")
             score += 15
+            metadata.append(
+                ComponentSignal(
+                    signal_type="breakout",
+                    bias="bullish",
+                    intent="entry",
+                    severity="high",
+                    entry_eligible=True,
+                    source="supertrend",
+                    reason="Supertrend 매수 전환",
+                )
+            )
         else:
             signals.append("Supertrend 매도 전환")
             evidence.append("Supertrend 방향이 상승에서 하락으로 전환")
             score -= 15
+            metadata.append(
+                ComponentSignal(
+                    signal_type="breakdown",
+                    bias="bearish",
+                    intent="risk",
+                    severity="high",
+                    source="supertrend",
+                    reason="Supertrend 매도 전환",
+                )
+            )
 
     return ComponentResult(
         signals=signals,
         evidence=evidence,
         metrics=metrics,
         score=score,
+        signal_metadata=metadata,
     )

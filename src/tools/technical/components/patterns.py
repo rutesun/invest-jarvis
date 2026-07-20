@@ -1,6 +1,6 @@
 import pandas as pd
 
-from src.tools.technical.models import ComponentResult
+from src.tools.technical.models import ComponentResult, ComponentSignal
 
 
 class PatternThresholds:
@@ -61,6 +61,7 @@ def analyze_patterns(df: pd.DataFrame) -> ComponentResult:
 
     signals = []
     evidence = []
+    metadata = []
     score = 0
     metrics = {}
 
@@ -70,6 +71,17 @@ def analyze_patterns(df: pd.DataFrame) -> ComponentResult:
     evidence.extend(vcp_result["evidence"])
     score += vcp_result["score"]
     metrics.update(vcp_result["metrics"])
+    metadata.extend(
+        ComponentSignal(
+            signal_type="support",
+            bias="neutral",
+            intent="watch",
+            severity="medium",
+            source="patterns",
+            reason=signal,
+        )
+        for signal in vcp_result["signals"]
+    )
 
     # Breakout Detection
     breakout_result = _detect_breakout(df)
@@ -77,6 +89,18 @@ def analyze_patterns(df: pd.DataFrame) -> ComponentResult:
     evidence.extend(breakout_result["evidence"])
     score += breakout_result["score"]
     metrics.update(breakout_result["metrics"])
+    metadata.extend(
+        ComponentSignal(
+            signal_type="breakout",
+            bias="bullish",
+            intent="entry",
+            severity="high",
+            entry_eligible=True,
+            source="patterns",
+            reason=signal,
+        )
+        for signal in breakout_result["signals"]
+    )
 
     # Candlestick Patterns
     candle_result = _detect_candlestick_patterns(df)
@@ -84,12 +108,24 @@ def analyze_patterns(df: pd.DataFrame) -> ComponentResult:
     evidence.extend(candle_result["evidence"])
     score += candle_result["score"]
     metrics.update(candle_result["metrics"])
+    metadata.extend(
+        ComponentSignal(
+            signal_type="reversal",
+            bias="bullish",
+            intent="watch",
+            severity="medium",
+            source="patterns",
+            reason=signal,
+        )
+        for signal in candle_result["signals"]
+    )
 
     return ComponentResult(
         signals=signals,
         evidence=evidence,
         metrics=metrics,
         score=score,
+        signal_metadata=metadata,
     )
 
 

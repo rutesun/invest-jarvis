@@ -114,6 +114,23 @@ def _item_section(item: BriefItem) -> list[str]:
     if tech_line:
         lines.append(f"- **가격/기술**: {tech_line}")
 
+    if item.technical_verdict:
+        verdict = item.technical_verdict
+        reasons = verdict.get("reasons") or []
+        cautions = verdict.get("cautions") or []
+        trend = verdict.get("score_trend_summary")
+        detail_parts = []
+        if reasons:
+            detail_parts.append(reasons[0])
+        if cautions:
+            detail_parts.append(f"주의: {cautions[0]}")
+        if trend:
+            detail_parts.append(trend)
+        verdict_line = f"- **기술 Verdict**: {verdict.get('action')}"
+        if detail_parts:
+            verdict_line = f"{verdict_line} — {' / '.join(detail_parts)}"
+        lines.append(verdict_line)
+
     # 사이징 (게이트 통과 시)
     plan = item.verdict.position_plan if item.verdict else None
     if plan is not None and plan.error is None:

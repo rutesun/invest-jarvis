@@ -219,6 +219,11 @@ async def run_quick_check(ticker_or_name: str) -> dict:
 @app.command()
 def check(
     query: str = typer.Argument(..., help="Stock ticker or company name (e.g., AAPL, Apple, 구글)"),
+    detail_history: bool = typer.Option(
+        False,
+        "--detail-history",
+        help="Show multi-line score history context",
+    ),
 ):
     """Quick check - technical analysis without LLM."""
     console.print(f"[bold]Resolving '{query}'...[/bold]")
@@ -238,7 +243,7 @@ def check(
         raise typer.Exit(1) from None
 
     pipeline = QuickCheckPipeline(technical_tool=None)  # Just for formatting
-    output = pipeline.format_output(result)
+    output = pipeline.format_output(result, detailed_history=detail_history)
     console.print(Markdown(output))
 
 
@@ -657,6 +662,34 @@ def _format_raw_analysis_sections(result: dict) -> str:
 
     output += "### 기술 요약\n\n"
     output += f"**총점**: {technical.total_score}\n\n"
+    if getattr(technical, "component_raw_total", None) is not None:
+        output += f"**Component Raw Total**: {technical.component_raw_total}\n\n"
+    if getattr(technical, "adjusted_score", None) is not None:
+        output += f"**Adjusted Score**: {technical.adjusted_score}\n\n"
+    if getattr(technical, "technical_verdict", None):
+        verdict = technical.technical_verdict
+        output += f"**기술 Verdict**: {verdict.action}"
+        verdict_parts = []
+        if verdict.reasons:
+            verdict_parts.append(verdict.reasons[0])
+        if verdict.cautions:
+            verdict_parts.append(f"주의: {verdict.cautions[0]}")
+        if verdict.invalidation_level is not None:
+            verdict_parts.append(f"무효화: {verdict.invalidation_level:.2f}")
+        if verdict.score_trend_summary:
+            verdict_parts.append(verdict.score_trend_summary)
+        if verdict_parts:
+            output += f" — {' / '.join(verdict_parts)}"
+        output += "\n\n"
+    if getattr(technical, "score_history", None):
+        output += "**최근 점수 추이**:\n"
+        for point in technical.score_history:
+            output += (
+                f"- {point.date}: close {point.close:,.2f}, "
+                f"raw {point.component_raw_total}, adjusted {point.adjusted_score}, "
+                f"{point.verdict_action} — {point.one_line_reason}\n"
+            )
+        output += "\n"
     output += f"**요약**: {tech_summary.summary}\n\n"
     output += f"**추천**: {tech_summary.recommendation} (신뢰도: {tech_summary.confidence * 100:.0f}%)\n\n"
     output += f"**근거**: {tech_summary.rationale}\n\n"

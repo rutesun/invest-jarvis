@@ -5,7 +5,13 @@ import pytest
 
 from src.core.models import ToolResult
 from src.pipelines.quick_check import QuickCheckPipeline
-from src.tools.technical.models import IndicatorSnapshot, StrategyResult, TechnicalResult
+from src.tools.technical.models import (
+    IndicatorSnapshot,
+    ScoreHistoryPoint,
+    StrategyResult,
+    TechnicalResult,
+    TechnicalVerdict,
+)
 
 
 @pytest.fixture
@@ -63,3 +69,180 @@ async def test_quick_check_format_output(mock_technical_tool):
     assert "AAPL" in output
     assert "178.50" in output
     assert "매수" in output
+
+
+@pytest.mark.asyncio
+async def test_quick_check_run_includes_verdict_and_score_history(mock_technical_tool):
+    tech = mock_technical_tool.execute.return_value.data
+    tech.adjusted_score = 62
+    tech.technical_verdict = TechnicalVerdict(
+        action="hold",
+        entry_mode="extended_hold",
+        confidence="medium",
+        new_entry_allowed=False,
+        reasons=["상승 추세 유지"],
+        cautions=["단기 과열"],
+        invalidation_level=170.0,
+        score_trend_summary="최근 5거래일 adjusted score는 70에서 62로 악화",
+    )
+    tech.score_history = [
+        ScoreHistoryPoint(
+            date="2026-07-10",
+            close=178.5,
+            component_raw_total=75,
+            adjusted_score=62,
+            verdict_action="hold",
+            one_line_reason="단기 과열",
+        )
+    ]
+
+    pipeline = QuickCheckPipeline(technical_tool=mock_technical_tool)
+    result = await pipeline.run("AAPL")
+
+    assert result["adjusted_score"] == 62
+    assert result["technical_verdict"]["action"] == "hold"
+    assert result["score_history"][0]["adjusted_score"] == 62
+
+
+@pytest.mark.asyncio
+async def test_quick_check_format_output_shows_verdict_reasons_and_history(
+    mock_technical_tool,
+):
+    tech = mock_technical_tool.execute.return_value.data
+    tech.adjusted_score = 62
+    tech.technical_verdict = TechnicalVerdict(
+        action="hold",
+        entry_mode="extended_hold",
+        confidence="medium",
+        new_entry_allowed=False,
+        reasons=["상승 추세 유지"],
+        cautions=["단기 과열"],
+        invalidation_level=170.0,
+        score_trend_summary="최근 5거래일 adjusted score는 70에서 62로 악화",
+    )
+    tech.score_history = [
+        ScoreHistoryPoint(
+            date="2026-07-10",
+            close=178.5,
+            component_raw_total=75,
+            adjusted_score=62,
+            verdict_action="hold",
+            one_line_reason="단기 과열",
+        )
+    ]
+
+    pipeline = QuickCheckPipeline(technical_tool=mock_technical_tool)
+    output = pipeline.format_output(await pipeline.run("AAPL"))
+
+    assert "Adjusted Score" in output
+    assert "상승 추세 유지" in output
+    assert "최근 5거래일" in output
+    assert "2026-07-10" in output
+
+
+def test_quick_check_format_output_shows_compact_score_history_context():
+    pipeline = QuickCheckPipeline(technical_tool=None)
+    output = pipeline.format_output(
+        {
+            "success": True,
+            "ticker": "ALAB",
+            "price": 350.62,
+            "change_pct": -3.08,
+            "total_score": -5,
+            "adjusted_score": -25,
+            "score_history": [
+                {
+                    "date": "2026-07-14",
+                    "close": 361.78,
+                    "component_raw_total": 25,
+                    "adjusted_score": 25,
+                    "verdict_action": "watch",
+                    "one_line_reason": "가격이 주요 이동평균 위에서 상승 추세를 유지",
+                    "new_entry_allowed": True,
+                    "change_drivers": [],
+                    "cautions": [],
+                },
+                {
+                    "date": "2026-07-15",
+                    "close": 350.62,
+                    "component_raw_total": -5,
+                    "adjusted_score": -25,
+                    "verdict_action": "reduce",
+                    "one_line_reason": "강세 (Stage 2 미충족)",
+                    "new_entry_allowed": False,
+                    "change_drivers": ["supertrend -40 신규 악화", "minervini -15 약화"],
+                    "cautions": ["Supertrend가 매도 전환"],
+                },
+            ],
+        }
+    )
+
+    assert "adjusted -25 (Δ -50)" in output
+    assert "변화: supertrend -40 신규 악화, minervini -15 약화" in output
+    assert "신규진입: yes→no" in output
+    assert "주의:" not in output
+
+
+def test_quick_check_format_output_shows_detailed_score_history_context():
+    pipeline = QuickCheckPipeline(technical_tool=None)
+    output = pipeline.format_output(
+        {
+            "success": True,
+            "ticker": "ALAB",
+            "price": 350.62,
+            "change_pct": -3.08,
+            "total_score": -5,
+            "adjusted_score": -25,
+            "score_history": [
+                {
+                    "date": "2026-07-15",
+                    "close": 350.62,
+                    "component_raw_total": -5,
+                    "adjusted_score": -25,
+                    "verdict_action": "reduce",
+                    "one_line_reason": "강세 (Stage 2 미충족)",
+                    "new_entry_allowed": False,
+                    "change_drivers": ["supertrend -40 신규 악화", "minervini -15 약화"],
+                    "cautions": ["Supertrend가 매도 전환"],
+                }
+            ],
+        },
+        detailed_history=True,
+    )
+
+    assert "  - reason: 강세 (Stage 2 미충족)" in output
+    assert "  - 변화: supertrend -40 신규 악화, minervini -15 약화" in output
+    assert "  - 신규진입: no" in output
+    assert "  - 주의: Supertrend가 매도 전환" in output
+
+
+def test_quick_check_format_output_shows_all_minervini_conditions():
+    pipeline = QuickCheckPipeline(technical_tool=None)
+    output = pipeline.format_output(
+        {
+            "success": True,
+            "ticker": "ALAB",
+            "price": 350.62,
+            "change_pct": -3.08,
+            "total_score": 25,
+            "components": [
+                {
+                    "name": "minervini",
+                    "score": 25,
+                    "signals": ["강세 (Stage 2 미충족)"],
+                    "evidence": [
+                        "ma_stack: 충족",
+                        "ma_50_stack: 충족",
+                        "sma_150_rising: 충족",
+                        "sma_200_rising: 충족",
+                        "above_50: 충족",
+                        "above_52w_low_30pct: 충족",
+                        "within_52w_high_25pct: 미충족",
+                    ],
+                }
+            ],
+        }
+    )
+
+    assert "above_52w_low_30pct: 충족" in output
+    assert "within_52w_high_25pct: 미충족" in output

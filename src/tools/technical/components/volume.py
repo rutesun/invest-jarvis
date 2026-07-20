@@ -1,7 +1,7 @@
 import pandas as pd
 
 from src.tools.technical.components.patterns import PatternThresholds
-from src.tools.technical.models import ComponentResult
+from src.tools.technical.models import ComponentResult, ComponentSignal
 
 
 def analyze_volume(df: pd.DataFrame) -> ComponentResult:
@@ -38,6 +38,7 @@ def analyze_volume(df: pd.DataFrame) -> ComponentResult:
     signals = []
     evidence = []
     score = 0
+    metadata = []
     metrics = {"vol_ratio": round(vol_ratio, 2), "volume": volume, "vol_sma_20": vol_sma_20}
 
     # Price direction
@@ -56,6 +57,17 @@ def analyze_volume(df: pd.DataFrame) -> ComponentResult:
         evidence.extend(pocket_pivot_result["evidence"])
         score += pocket_pivot_result["score"]
         metrics.update(pocket_pivot_result["metrics"])
+        metadata.append(
+            ComponentSignal(
+                signal_type="pullback",
+                bias="bullish",
+                intent="entry",
+                severity="high",
+                entry_eligible=True,
+                source="volume",
+                reason="Pocket Pivot",
+            )
+        )
 
     # Pattern 2: Tennis Ball / Egg (평균회귀 신호)
     tennis_egg_result = _detect_tennis_ball_egg(df, latest, is_down_day)
@@ -64,6 +76,16 @@ def analyze_volume(df: pd.DataFrame) -> ComponentResult:
         evidence.extend(tennis_egg_result["evidence"])
         score += tennis_egg_result["score"]
         metrics.update(tennis_egg_result["metrics"])
+        metadata.append(
+            ComponentSignal(
+                signal_type="reversal" if tennis_egg_result["score"] > 0 else "breakdown",
+                bias="bullish" if tennis_egg_result["score"] > 0 else "bearish",
+                intent="watch" if tennis_egg_result["score"] > 0 else "risk",
+                severity="medium" if tennis_egg_result["score"] > 0 else "high",
+                source="volume",
+                reason=tennis_egg_result["signals"][0],
+            )
+        )
 
     # Pattern 3: Power Gap Up (갭업 + 거래량 폭발)
     power_gap_result = _detect_power_gap_up(df)
@@ -72,6 +94,17 @@ def analyze_volume(df: pd.DataFrame) -> ComponentResult:
         evidence.extend(power_gap_result["evidence"])
         score += power_gap_result["score"]
         metrics.update(power_gap_result["metrics"])
+        metadata.append(
+            ComponentSignal(
+                signal_type="breakout",
+                bias="bullish",
+                intent="entry",
+                severity="high",
+                entry_eligible=True,
+                source="volume",
+                reason="Power Gap Up",
+            )
+        )
 
     # Pattern 4: General Volume Surge (기존 로직 유지)
     if vol_ratio > PatternThresholds.VOLUME_SURGE_MULTIPLIER:
@@ -80,9 +113,29 @@ def analyze_volume(df: pd.DataFrame) -> ComponentResult:
         if price_up:
             signals.append("가격 상승 + 거래량 급증 (강세 확인)")
             score += 15
+            metadata.append(
+                ComponentSignal(
+                    signal_type="volume_confirmation",
+                    bias="bullish",
+                    intent="hold",
+                    severity="medium",
+                    source="volume",
+                    reason="가격 상승 + 거래량 급증",
+                )
+            )
         elif price_down:
             signals.append("가격 하락 + 거래량 급증 (경고)")
             score -= 10
+            metadata.append(
+                ComponentSignal(
+                    signal_type="breakdown",
+                    bias="bearish",
+                    intent="risk",
+                    severity="high",
+                    source="volume",
+                    reason="가격 하락 + 거래량 급증",
+                )
+            )
         else:
             score += 5
 
@@ -100,6 +153,7 @@ def analyze_volume(df: pd.DataFrame) -> ComponentResult:
         evidence=evidence,
         metrics=metrics,
         score=score,
+        signal_metadata=metadata,
     )
 
 

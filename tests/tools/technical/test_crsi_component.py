@@ -35,3 +35,32 @@ def test_crsi_no_data():
     df = pd.DataFrame({"Close": [100]})
     result = analyze_crsi(df)
     assert result.score == 0
+
+
+@pytest.mark.parametrize(
+    ("previous", "current", "signal_type", "bias", "intent", "entry_eligible"),
+    [
+        (10, 30, "pullback", "bullish", "entry", True),
+        (90, 70, "overextension", "bearish", "risk", False),
+    ],
+)
+def test_crsi_hook_signal_metadata(
+    previous, current, signal_type, bias, intent, entry_eligible
+):
+    df = pd.DataFrame(
+        {
+            "cRSI": [previous, current],
+            "cRSI_HighBand": [80, 80],
+            "cRSI_LowBand": [20, 20],
+        }
+    )
+
+    result = analyze_crsi(df)
+
+    assert result.signal_metadata
+    assert result.signal_metadata[0].source == "crsi"
+    assert result.signal_metadata[0].signal_type == signal_type
+    assert result.signal_metadata[0].bias == bias
+    assert result.signal_metadata[0].intent == intent
+    assert result.signal_metadata[0].severity == "medium"
+    assert result.signal_metadata[0].entry_eligible is entry_eligible

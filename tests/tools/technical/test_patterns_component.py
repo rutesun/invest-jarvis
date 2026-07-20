@@ -19,6 +19,13 @@ def test_analyze_patterns_vcp_detection():
     assert "VCP (에너지 응축)" in result.signals
     assert result.score > 0
     assert "ATR" in str(result.evidence)
+    metadata = next(item for item in result.signal_metadata if item.reason == "VCP (에너지 응축)")
+    assert metadata.source == "patterns"
+    assert metadata.signal_type == "support"
+    assert metadata.bias == "neutral"
+    assert metadata.intent == "watch"
+    assert metadata.severity == "medium"
+    assert metadata.entry_eligible is False
 
 
 def test_analyze_patterns_vcp_strong_both_conditions():
@@ -140,6 +147,12 @@ def test_analyze_patterns_breakout_rolling_high():
 
     assert "돌파 (신고가)" in result.signals or "상승 돌파" in result.signals
     assert result.score > 0
+    metadata = next(item for item in result.signal_metadata if item.signal_type == "breakout")
+    assert metadata.source == "patterns"
+    assert metadata.bias == "bullish"
+    assert metadata.intent == "entry"
+    assert metadata.severity == "high"
+    assert metadata.entry_eligible is True
 
 
 def test_analyze_patterns_breakout_swing_high():
@@ -176,6 +189,12 @@ def test_analyze_patterns_hammer():
 
     assert any("Hammer" in sig or "망치형" in sig for sig in result.signals)
     assert result.score > 0
+    metadata = next(item for item in result.signal_metadata if item.signal_type == "reversal")
+    assert metadata.source == "patterns"
+    assert metadata.bias == "bullish"
+    assert metadata.intent == "watch"
+    assert metadata.severity == "medium"
+    assert metadata.entry_eligible is False
 
 
 def test_analyze_patterns_bullish_engulfing():

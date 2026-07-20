@@ -144,6 +144,13 @@ class BriefPipeline:
                 flow=flow,
                 price=price,
                 change_pct=change_pct,
+                technical_verdict=(
+                    technical.technical_verdict.model_dump()
+                    if technical.technical_verdict is not None
+                    else None
+                ),
+                score_history=[point.model_dump() for point in technical.score_history],
+                score_history_warning=technical.score_history_warning,
                 remaining_condition=remaining_condition,
             )
         except Exception as e:
@@ -193,6 +200,9 @@ class BriefPipeline:
             "action": item.action,
             "price": item.price,
             "change_pct": item.change_pct,
+            "technical_verdict": item.technical_verdict,
+            "score_history": item.score_history,
+            "score_history_warning": item.score_history_warning,
             "markers": item.markers,
             "exit_detail": exit_v.detail if exit_v else None,
             "exit_signals": [f"{s.code}: {s.detail}" for s in exit_v.signals] if exit_v else [],

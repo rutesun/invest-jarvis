@@ -18,6 +18,26 @@ from src.llm.models import (
 from src.tools.technical.models import ChartPatternResult, PriceLevels
 
 
+_TECHNICAL_RECOMMENDATION_BY_VERDICT = {
+    "buy": "매수",
+    "add": "매수",
+    "hold": "중립",
+    "watch": "중립",
+    "reduce": "매도",
+    "avoid": "매도",
+}
+
+
+def technical_recommendation_from_verdict(verdict) -> str | None:
+    """Map rule-based technical verdict action to the tri-state LLM recommendation label."""
+    if verdict is None:
+        return None
+    action = verdict.get("action") if isinstance(verdict, dict) else getattr(verdict, "action", None)
+    if action is None:
+        return None
+    return _TECHNICAL_RECOMMENDATION_BY_VERDICT.get(str(action))
+
+
 def format_patterns_for_llm(patterns: dict[str, ChartPatternResult]) -> str:
     """패턴 결과를 LLM용 텍스트로 변환"""
     lines = []
@@ -236,10 +256,26 @@ async def generate_technical_summary(
 **Key Indicators**:
 {indicators_text}
 
+**Rule-based technical verdict**:
+{technical_verdict}
+
+**Recent score history**:
+{score_history}
+
+**Score history warning**:
+{score_history_warning}
+
+**Aggregation trace**:
+{aggregation_trace}
+
+Treat the rule-based technical verdict, score history, and aggregation trace as fixed rule output.
+Do not change the score or action. Do not derive a new recommendation.
+Explain these facts in Korean only; recommendation must describe the provided verdict when it exists.
+
 Provide summary with:
 - summary: brief overall summary in Korean
 - key_insights: list of 2-3 key insights
-- recommendation: "매수", "매도", or "중립"
+- recommendation: Korean wording that explains the provided verdict action; if no verdict is provided, use "매수", "매도", or "중립"
 - confidence: 0.0-1.0
 - rationale: reasoning in Korean""",
             ),
@@ -255,8 +291,16 @@ Provide summary with:
             "change_pct": input_data.change_pct,
             "strategies_text": strategies_text,
             "indicators_text": indicators_text,
+            "technical_verdict": input_data.technical_verdict,
+            "score_history": input_data.score_history,
+            "score_history_warning": input_data.score_history_warning,
+            "aggregation_trace": input_data.aggregation_trace,
         }
     )
+
+    rule_recommendation = technical_recommendation_from_verdict(input_data.technical_verdict)
+    if rule_recommendation is not None:
+        result = result.model_copy(update={"recommendation": rule_recommendation})
 
     return result
 
@@ -537,7 +581,9 @@ async def generate_brief_narratives(
                 "각 종목에 대해 technical_note(기술적 근거 1-2문장), "
                 "flow_note(수급 사실이 있으면 1문장, 없으면 null), "
                 "news_note(뉴스가 있으면 해석 1문장, 없으면 null), "
-                "next_check(다음 확인 지점 1문장)를 작성하라.",
+                "next_check(다음 확인 지점 1문장)를 작성하라. "
+                "technical_verdict와 score_history가 있으면 technical_note와 next_check에 반영하라. "
+                "제공된 score와 action을 바꾸지 마라.",
             ),
         ]
     )

@@ -49,6 +49,10 @@ class TechnicalSummaryInput(BaseModel):
     change_pct: float
     strategies: list[dict[str, Any]]
     indicators: dict[str, float]
+    technical_verdict: dict[str, Any] | None = None
+    score_history: list[dict[str, Any]] = Field(default_factory=list)
+    score_history_warning: str | None = None
+    aggregation_trace: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class TechnicalSummaryOutput(BaseModel):

@@ -1,6 +1,6 @@
 import pandas as pd
 
-from src.tools.technical.models import ComponentResult
+from src.tools.technical.models import ComponentResult, ComponentSignal
 
 
 STAGE2_CONDITION_LABELS: dict[str, str] = {
@@ -130,6 +130,17 @@ def analyze_minervini(df: pd.DataFrame) -> ComponentResult:
             evidence=evidence,
             metrics=metrics,
             score=40,
+            signal_metadata=[
+                ComponentSignal(
+                    signal_type="trend",
+                    bias="bullish",
+                    intent="hold",
+                    severity="medium",
+                    entry_eligible=True,
+                    source="minervini",
+                    reason="Stage 2",
+                )
+            ],
         )
     elif conditions["above_50"]:
         return ComponentResult(
@@ -137,6 +148,16 @@ def analyze_minervini(df: pd.DataFrame) -> ComponentResult:
             evidence=evidence,
             metrics=metrics,
             score=25,
+            signal_metadata=[
+                ComponentSignal(
+                    signal_type="trend",
+                    bias="bullish",
+                    intent="watch",
+                    severity="low",
+                    source="minervini",
+                    reason="강세 (Stage 2 미충족)",
+                )
+            ],
         )
     else:
         return ComponentResult(
@@ -144,4 +165,14 @@ def analyze_minervini(df: pd.DataFrame) -> ComponentResult:
             evidence=evidence,
             metrics=metrics,
             score=-20,
+            signal_metadata=[
+                ComponentSignal(
+                    signal_type="breakdown",
+                    bias="bearish",
+                    intent="risk",
+                    severity="medium",
+                    source="minervini",
+                    reason="약세/보합",
+                )
+            ],
         )

@@ -56,12 +56,19 @@ class QuickCheckPipeline:
                 for s in tech.strategies
             ]
 
+        verdict = tech.technical_verdict.model_dump() if tech.technical_verdict else None
+
         return {
             "ticker": ticker,
             "success": True,
             "price": snapshot.price,
             "change_pct": snapshot.change_pct,
             "total_score": tech.total_score,
+            "component_raw_total": tech.component_raw_total,
+            "adjusted_score": tech.adjusted_score,
+            "technical_verdict": verdict,
+            "score_history": [point.model_dump() for point in tech.score_history],
+            "score_history_warning": tech.score_history_warning,
             "assessment": tech.overall_assessment or "N/A",
             "confidence": tech.confidence_score or 0,
             "signals": signals[:10],  # Limit to top 10
@@ -77,7 +84,7 @@ class QuickCheckPipeline:
             "components": components_list,
         }
 
-    def format_output(self, result: dict[str, Any]) -> str:
+    def format_output(self, result: dict[str, Any], detailed_history: bool = False) -> str:
         """Format result as readable string."""
         if not result.get("success", False):
             return f"Error: {result.get('error', 'Unknown error')}"
@@ -89,6 +96,43 @@ class QuickCheckPipeline:
             f"**총점**: {result['total_score']}",
             "",
         ]
+
+        if result.get("adjusted_score") is not None:
+            lines.append(f"**Adjusted Score**: {result['adjusted_score']}")
+
+        verdict = result.get("technical_verdict")
+        if verdict:
+            lines.extend(
+                [
+                    "",
+                    "### Technical Verdict",
+                    f"- Action: {verdict['action']} ({verdict['entry_mode']}, confidence={verdict['confidence']})",
+                    f"- 신규 진입 가능: {'yes' if verdict['new_entry_allowed'] else 'no'}",
+                ]
+            )
+            if verdict.get("reasons"):
+                lines.append("- Reasons:")
+                lines.extend(f"  - {reason}" for reason in verdict["reasons"])
+            if verdict.get("cautions"):
+                lines.append("- Cautions:")
+                lines.extend(f"  - {caution}" for caution in verdict["cautions"])
+            if verdict.get("invalidation_level") is not None:
+                lines.append(f"- Invalidation: {verdict['invalidation_level']:.2f}")
+            if verdict.get("score_trend_summary"):
+                lines.append(f"- Trend: {verdict['score_trend_summary']}")
+
+        history = result.get("score_history") or []
+        if history:
+            lines.extend(["", "### 최근 점수 추이"])
+            previous_point = None
+            for point in history:
+                if detailed_history:
+                    lines.extend(_format_detailed_history_point(point, previous_point))
+                else:
+                    lines.append(_format_compact_history_point(point, previous_point))
+                previous_point = point
+        if result.get("score_history_warning"):
+            lines.append(f"- score history warning: {result['score_history_warning']}")
 
         # Performance
         indicators = result.get("indicators", {})
@@ -126,7 +170,8 @@ class QuickCheckPipeline:
                         if comp.get("signals"):
                             lines.append("")  # Blank line between signals and evidence
                         lines.append("  **근거:**")  # 2-space indent (same level as signals)
-                        for ev in comp["evidence"][:5]:  # Top 5 evidence per component
+                        evidence_limit = 7 if comp["name"] == "minervini" else 5
+                        for ev in comp["evidence"][:evidence_limit]:
                             lines.append(f"    - {ev}")  # 4-space indent for evidence items
                     # Add blank line between components (not after last one)
                     if (comp.get("signals") or comp.get("evidence")) and i < len(components) - 1:
@@ -168,3 +213,74 @@ class QuickCheckPipeline:
                 lines.append(f"- {warning}")
 
         return "\n".join(lines)
+
+
+def _format_compact_history_point(
+    point: dict[str, Any],
+    previous_point: dict[str, Any] | None,
+) -> str:
+    adjusted = point["adjusted_score"]
+    delta = _score_delta(adjusted, previous_point)
+    details = []
+    changes = point.get("change_drivers") or []
+    if changes:
+        details.append(f"변화: {', '.join(changes)}")
+    entry = _entry_transition(point, previous_point)
+    if entry:
+        details.append(f"신규진입: {entry}")
+
+    suffix = f" | {' | '.join(details)}" if details else ""
+    return (
+        f"- {point['date']}: close {point['close']:.2f}, "
+        f"raw {point['component_raw_total']}, adjusted {adjusted}{delta}, "
+        f"{point['verdict_action']} — {point['one_line_reason']}{suffix}"
+    )
+
+
+def _format_detailed_history_point(
+    point: dict[str, Any],
+    previous_point: dict[str, Any] | None,
+) -> list[str]:
+    adjusted = point["adjusted_score"]
+    delta = _score_delta(adjusted, previous_point)
+    lines = [
+        (
+            f"- {point['date']}: close {point['close']:.2f}, "
+            f"raw {point['component_raw_total']}, adjusted {adjusted}{delta}, "
+            f"{point['verdict_action']}"
+        ),
+        f"  - reason: {point['one_line_reason']}",
+    ]
+    changes = point.get("change_drivers") or []
+    if changes:
+        lines.append(f"  - 변화: {', '.join(changes)}")
+    entry = _entry_transition(point, previous_point)
+    if entry:
+        lines.append(f"  - 신규진입: {entry}")
+    cautions = point.get("cautions") or []
+    if cautions:
+        lines.append(f"  - 주의: {', '.join(cautions)}")
+    return lines
+
+
+def _score_delta(adjusted: int, previous_point: dict[str, Any] | None) -> str:
+    if previous_point is None:
+        return ""
+    delta = adjusted - int(previous_point["adjusted_score"])
+    return f" (Δ {delta:+d})"
+
+
+def _entry_transition(
+    point: dict[str, Any],
+    previous_point: dict[str, Any] | None,
+) -> str | None:
+    current = point.get("new_entry_allowed")
+    if current is None:
+        return None
+    current_label = "yes" if current else "no"
+    if previous_point is None or previous_point.get("new_entry_allowed") is None:
+        return current_label
+    previous_label = "yes" if previous_point.get("new_entry_allowed") else "no"
+    if previous_label == current_label:
+        return current_label
+    return f"{previous_label}→{current_label}"

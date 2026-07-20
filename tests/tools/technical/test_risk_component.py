@@ -87,3 +87,72 @@ def test_risk_stop_loss_calculation(strong_support_df):
     # If ATR is available, should have stop loss
     if "stop_loss" in result.metrics:
         assert result.metrics["stop_loss"] > 0
+
+
+def test_risk_below_sma50_signal_metadata():
+    df = pd.DataFrame({"Close": [90] * 20, "SMA_50": [100] * 20})
+
+    result = analyze_risk(df)
+
+    metadata = next(item for item in result.signal_metadata if item.signal_type == "breakdown")
+    assert metadata.source == "risk"
+    assert metadata.bias == "bearish"
+    assert metadata.intent == "risk"
+    assert metadata.severity == "medium"
+    assert metadata.entry_eligible is False
+
+
+def test_risk_support_confluence_signal_metadata():
+    df = pd.DataFrame(
+        {
+            "Close": [100] * 20,
+            "SMA_20": [99] * 20,
+            "SMA_50": [98] * 20,
+            "SMA_150": [99] * 20,
+        }
+    )
+
+    result = analyze_risk(df)
+
+    metadata = next(item for item in result.signal_metadata if item.signal_type == "support")
+    assert metadata.source == "risk"
+    assert metadata.bias == "bullish"
+    assert metadata.intent == "hold"
+    assert metadata.severity == "medium"
+    assert metadata.entry_eligible is False
+
+
+def test_risk_resistance_confluence_signal_metadata():
+    df = pd.DataFrame(
+        {
+            "Close": [100] * 20,
+            "SMA_20": [101] * 20,
+            "SMA_50": [102] * 20,
+            "SMA_150": [101] * 20,
+        }
+    )
+
+    result = analyze_risk(df)
+
+    metadata = next(item for item in result.signal_metadata if item.signal_type == "resistance")
+    assert metadata.source == "risk"
+    assert metadata.bias == "bearish"
+    assert metadata.intent == "risk"
+    assert metadata.severity == "medium"
+    assert metadata.entry_eligible is False
+
+
+def test_risk_supertrend_down_breakdown_signal_metadata():
+    df = pd.DataFrame({"Close": [100] * 20, "SuperTrend_Dir": [-1] * 20})
+
+    result = analyze_risk(df)
+
+    metadata = next(
+        item for item in result.signal_metadata if item.reason == "Supertrend 하락"
+    )
+    assert metadata.source == "risk"
+    assert metadata.signal_type == "breakdown"
+    assert metadata.bias == "bearish"
+    assert metadata.intent == "risk"
+    assert metadata.severity == "medium"
+    assert metadata.entry_eligible is False
