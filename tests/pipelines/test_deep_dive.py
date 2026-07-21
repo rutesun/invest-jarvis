@@ -202,7 +202,7 @@ async def test_deep_dive_pipeline_success(mock_technical_tool, mock_news_tool, m
 
         result = await pipeline.run("AAPL")
 
-        mock_technical_tool.execute.assert_awaited_once_with("AAPL", period="3y")
+        mock_technical_tool.execute.assert_awaited_once_with("AAPL")
         assert result["ticker"] == "AAPL"
         assert result["technical"] is not None
         assert result["technical_summary"].summary == "강세"

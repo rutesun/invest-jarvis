@@ -68,6 +68,7 @@ class QuickCheckPipeline:
             "adjusted_score": tech.adjusted_score,
             "technical_verdict": verdict,
             "score_history": [point.model_dump() for point in tech.score_history],
+            "aggregation_trace": [entry.model_dump() for entry in tech.aggregation_trace],
             "score_history_warning": tech.score_history_warning,
             "assessment": tech.overall_assessment or "N/A",
             "confidence": tech.confidence_score or 0,

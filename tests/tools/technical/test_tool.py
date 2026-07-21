@@ -44,6 +44,17 @@ async def test_technical_tool_execute(mock_provider, scorer):
 
 
 @pytest.mark.asyncio
+async def test_technical_tool_uses_canonical_three_year_period_by_default(
+    mock_provider, scorer
+):
+    tool = TechnicalAnalysisTool(provider=mock_provider, scorer=scorer)
+
+    await tool.execute("AAPL")
+
+    mock_provider.get_price_history.assert_awaited_once_with("AAPL", "3y")
+
+
+@pytest.mark.asyncio
 async def test_technical_tool_has_indicators(mock_provider, scorer):
     tool = TechnicalAnalysisTool(provider=mock_provider, scorer=scorer)
     result = await tool.execute("AAPL")

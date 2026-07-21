@@ -1,4 +1,5 @@
 import logging
+from typing import Final
 
 from src.core.interfaces import BaseProvider, BaseTool
 from src.core.models import ToolResult
@@ -7,6 +8,9 @@ from src.tools.technical.scorer import TechnicalScorer
 
 
 logger = logging.getLogger(__name__)
+
+
+CANONICAL_TECHNICAL_PERIOD: Final[str] = "3y"
 
 
 class TechnicalAnalysisTool(BaseTool):
@@ -20,7 +24,12 @@ class TechnicalAnalysisTool(BaseTool):
         self.scorer = scorer
         self.calculator = IndicatorCalculator()
 
-    async def execute(self, ticker: str, period: str = "1y", **kwargs) -> ToolResult:
+    async def execute(
+        self,
+        ticker: str,
+        period: str = CANONICAL_TECHNICAL_PERIOD,
+        **kwargs,
+    ) -> ToolResult:
         """Execute technical analysis on ticker."""
         try:
             logger.debug("Fetching price history: %s (period=%s)", ticker, period)
