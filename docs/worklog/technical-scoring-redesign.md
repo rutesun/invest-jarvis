@@ -115,3 +115,10 @@
 - 선택: C — 다중 ticker check가 기능을 대체하고, 기존 장기 추세 판정과 같은 21거래일 기준에 ±0.5% 보합 band를 적용한다. 최종 LLM에는 모든 분석 소스와 고정 decision을 전달한다.
 - 기각: A(명령 중복 지속), B(미세 노이즈도 상승·하락으로 과대 표시)
 - ADR 후보? no
+
+## (2026-07-21 11:33) [Decision] Playbook 이후 시나리오 재생성과 two-stage prompt 경계
+- 맥락: 실행계획 독립 리뷰에서 Playbook veto가 summary만 바꿔 기본 scenario에 이전 action이 남는 문제와 raw news가 보호되지 않은 선행 LLM prompt를 통과하는 경로가 확인됨.
+- 후보: A) 최종 explanation prompt만 보호 / B) veto 후 summary만 교체하고 scenario에 주의 문구 추가 / C) veto 후 scenario를 재생성하고 news 분석·최종 explanation 모두 delimiter-safe untrusted JSON 경계 적용
+- 선택: C — rule action, CLI scenario, 최종 LLM 입력을 같은 decision으로 고정하고 외부 문자열이 어느 LLM 단계에서도 prompt 구조를 닫지 못하게 한다.
+- 기각: A(news 분석 결과가 rule decision에 들어가기 전 경로가 남음), B(서로 다른 action source를 유지해 사용자 출력이 모순될 수 있음)
+- ADR 후보? no
