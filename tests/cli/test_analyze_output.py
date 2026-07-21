@@ -242,6 +242,62 @@ def test_format_deep_dive_output_warns_when_presented_structure_missing():
     assert "presenter payload 누락" in output
 
 
+def test_format_deep_dive_output_uses_snapshot_for_long_sma_rows():
+    legacy_indicators = IndicatorSnapshot(
+        price=100.0,
+        change_pct=1.0,
+        sma_100=90.0,
+        sma_100_slope_pct=-0.75,
+        sma_200=80.0,
+        sma_200_slope_pct=0.12,
+    )
+    canonical_snapshot = IndicatorSnapshot(
+        price=100.0,
+        change_pct=1.0,
+        sma_100=110.0,
+        sma_100_slope_pct=0.82,
+        sma_200=120.0,
+        sma_200_slope_pct=-0.75,
+    )
+    technical = TechnicalResult(
+        ticker="ALAB",
+        timestamp=datetime.now(),
+        snapshot=canonical_snapshot,
+        indicators=legacy_indicators,
+        components={},
+        total_score=0,
+        strategies=[],
+        overall_assessment="관망",
+        confidence_score=0.0,
+        key_insights=[],
+        warnings=[],
+    )
+    result = {
+        "ticker": "ALAB",
+        "technical": technical,
+        "technical_summary": type(
+            "TechSummary",
+            (),
+            {
+                "summary": "중립",
+                "key_insights": [],
+                "recommendation": "관망",
+                "confidence": 0.0,
+                "rationale": "장기 이동평균 확인",
+            },
+        )(),
+        "factor_assessments": [],
+        "scenarios": [],
+    }
+
+    output = format_deep_dive_output(result)
+
+    assert "**SMA 100**: $110.00 · ↗ 상승 (+0.82%/21일)" in output
+    assert "**SMA 200**: $120.00 · ↘ 하락 (-0.75%/21일)" in output
+    assert "$90.00 · ↘ 하락 (-0.75%/21일)" not in output
+    assert "$80.00 · → 보합 (+0.12%/21일)" not in output
+
+
 def test_format_deep_dive_output_shows_defer_reason():
     summary = AnalyzeDecisionSummary(
         leader="판단 보류",

@@ -584,6 +584,7 @@ def _format_raw_analysis_sections(result: dict) -> str:
     fundamental = result.get("fundamental")
     fundamental_summary = result.get("fundamental_summary")
     snapshot = technical.indicators or technical.snapshot
+    long_sma_snapshot = technical.snapshot
 
     output = ""
 
@@ -607,12 +608,12 @@ def _format_raw_analysis_sections(result: dict) -> str:
     if snapshot.sma_50 is not None:
         output += f"- **50일 이동평균선**: ${snapshot.sma_50:.2f}\n"
     output += (
-        f"- **SMA 100**: {format_long_sma(snapshot.sma_100, snapshot.sma_100_slope_pct)}\n"
+        f"- **SMA 100**: {format_long_sma(long_sma_snapshot.sma_100, long_sma_snapshot.sma_100_slope_pct)}\n"
     )
     if snapshot.sma_150 is not None:
         output += f"- **150일 이동평균선**: ${snapshot.sma_150:.2f}\n"
     output += (
-        f"- **SMA 200**: {format_long_sma(snapshot.sma_200, snapshot.sma_200_slope_pct)}\n"
+        f"- **SMA 200**: {format_long_sma(long_sma_snapshot.sma_200, long_sma_snapshot.sma_200_slope_pct)}\n"
     )
 
     output += "\n"
