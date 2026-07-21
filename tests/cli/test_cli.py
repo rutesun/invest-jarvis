@@ -4,10 +4,9 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from typer.testing import CliRunner
 
-from src.cli.main import app, run_deep_dive
+from src.cli.main import app, run_deep_dive, run_quick_check, run_quick_checks
 from src.llm.models import ActionableSignalOutput, NewsAnalysisOutput, TechnicalSummaryOutput
 from src.pipelines.analyze_decision import AnalyzeDecisionSummary, AnalyzeScenario, FactorAssessment
-from src.tools.macro import TickerMacroSnapshot
 from src.tools.technical.models import IndicatorSnapshot, TechnicalResult
 
 
@@ -29,12 +28,7 @@ def test_cli_check_command():
         "total_score": 75,
     }
 
-    with (
-        patch("src.cli.main.run_quick_check", new_callable=AsyncMock) as mock_run,
-        patch("src.cli.main.resolve_ticker", new_callable=AsyncMock) as mock_resolve,
-    ):
-        mock_resolve.return_value = "AAPL"
-        mock_run.return_value = mock_result
+    with patch("src.cli.main.run_quick_checks", new=AsyncMock(return_value=[mock_result])):
         result = runner.invoke(app, ["check", "AAPL"])
 
     assert result.exit_code == 0
@@ -144,62 +138,82 @@ def test_cli_analyze_command():
     assert "실행 가능한 투자 시그널" not in result.stdout
 
 
-def test_cli_report_command():
-    mock_macro = TickerMacroSnapshot(
-        timestamp=datetime.now(),
-        vix=15.5,
-        vix_change=-0.5,
-        fear_greed=65,
-        fear_greed_label="Greed",
-        wti=75.0,
-        wti_change=1.0,
-        us_10y=4.5,
-        us_2y=4.2,
-        yield_spread=0.3,
-        dxy=103.5,
-        dxy_change=0.2,
-    )
+@pytest.mark.asyncio
+async def test_run_quick_checks_isolates_failures_and_preserves_input_order():
+    success_aapl = {"success": True, "ticker": "AAPL"}
+    success_msft = {"success": True, "ticker": "MSFT"}
 
-    mock_snapshot = IndicatorSnapshot(
-        price=178.50,
-        change_pct=2.5,
-        sma_20=175.0,
-        sma_50=170.0,
-        rsi=58.3,
-    )
-    mock_technical = TechnicalResult(
-        ticker="AAPL",
-        timestamp=datetime.now(),
-        snapshot=mock_snapshot,
-        indicators=mock_snapshot,
-        components={},
-        total_score=75,
-        strategies=[],
-        overall_assessment="매수",
-        confidence_score=75.0,
-        key_insights=["골든크로스"],
-        warnings=[],
-    )
+    with patch(
+        "src.cli.main.run_quick_check",
+        new=AsyncMock(
+            side_effect=[
+                success_aapl,
+                RuntimeError("resolver down"),
+                success_msft,
+            ]
+        ),
+    ) as quick_check:
+        results = await run_quick_checks(["AAPL", "INVALID", "MSFT"])
 
-    mock_result = {
-        "date": datetime.now(),
-        "macro": mock_macro,
-        "tickers": [
-            {
-                "ticker": "AAPL",
-                "technical": mock_technical,
-                "error": None,
-            }
-        ],
-    }
+    assert results == [
+        success_aapl,
+        {
+            "success": False,
+            "ticker": "INVALID",
+            "error": "resolver down",
+        },
+        success_msft,
+    ]
+    assert [call.args[0] for call in quick_check.await_args_list] == [
+        "AAPL",
+        "INVALID",
+        "MSFT",
+    ]
 
-    with patch("src.cli.main.run_daily_report", new_callable=AsyncMock) as mock_run:
-        mock_run.return_value = mock_result
-        result = runner.invoke(app, ["report", "ticker", "--tickers", "AAPL"])
+
+def test_check_accepts_multiple_tickers():
+    results = [
+        {"success": True, "ticker": "AAPL", "price": 100.0, "change_pct": 1.0},
+        {"success": True, "ticker": "MSFT", "price": 200.0, "change_pct": -1.0},
+    ]
+    with (
+        patch("src.cli.main.run_quick_checks", new=AsyncMock(return_value=results)),
+        patch(
+            "src.pipelines.quick_check.QuickCheckPipeline.format_output",
+            side_effect=["AAPL result", "MSFT result"],
+        ),
+    ):
+        result = runner.invoke(app, ["check", "AAPL", "MSFT"])
 
     assert result.exit_code == 0
-    assert "Daily Market Report" in result.stdout
-    assert "Macro Snapshot" in result.stdout
+    assert "AAPL result" in result.stdout
+    assert "MSFT result" in result.stdout
+
+
+def test_check_reports_all_results_then_exits_nonzero_on_partial_failure():
+    results = [
+        {"success": True, "ticker": "AAPL", "price": 100.0, "change_pct": 1.0},
+        {"success": False, "ticker": "INVALID", "error": "No data"},
+    ]
+    with (
+        patch("src.cli.main.run_quick_checks", new=AsyncMock(return_value=results)),
+        patch(
+            "src.pipelines.quick_check.QuickCheckPipeline.format_output",
+            return_value="AAPL result",
+        ),
+    ):
+        result = runner.invoke(app, ["check", "AAPL", "INVALID"])
+
+    assert result.exit_code == 1
+    assert "AAPL result" in result.stdout
+    assert "INVALID" in result.stdout
+    assert "No data" in result.stdout
+
+
+def test_report_ticker_command_is_removed():
+    result = runner.invoke(app, ["report", "ticker"])
+    assert result.exit_code != 0
+    assert "No such command" in result.stderr
 
 
 def test_cli_version():

@@ -18,7 +18,6 @@ from src.pipelines.brief import BriefPipeline
 from src.pipelines.deep_dive import DeepDivePipeline
 from src.pipelines.quick_check import QuickCheckPipeline
 from src.pipelines.screener import ScreenerPipeline
-from src.pipelines.ticker_report import TickerReportPipeline
 from src.providers.kis import KISProvider
 from src.providers.naver import NaverProvider
 from src.providers.ticker_resolver import TickerResolver
@@ -217,35 +216,51 @@ async def run_quick_check(ticker_or_name: str) -> dict:
     return await pipeline.run(ticker)
 
 
+async def run_quick_checks(queries: list[str]) -> list[dict]:
+    """Run quick checks independently for each query."""
+    results: list[dict] = []
+    for query in queries:
+        try:
+            results.append(await run_quick_check(query))
+        except Exception as exc:
+            results.append(
+                {
+                    "ticker": query,
+                    "error": str(exc),
+                    "success": False,
+                }
+            )
+    return results
+
+
 @app.command()
 def check(
-    query: str = typer.Argument(..., help="Stock ticker or company name (e.g., AAPL, Apple, 구글)"),
+    queries: list[str] = typer.Argument(
+        ..., help="One or more stock tickers or company names"
+    ),
     detail_history: bool = typer.Option(
         False,
         "--detail-history",
         help="Show multi-line score history context",
     ),
 ):
-    """Quick check - technical analysis without LLM."""
-    console.print(f"[bold]Resolving '{query}'...[/bold]")
+    """Quick check - multi-ticker technical analysis without LLM or Macro."""
+    results = asyncio.run(run_quick_checks(queries))
+    formatter = QuickCheckPipeline(technical_tool=None)
+    failed = False
 
-    try:
-        ticker = asyncio.run(resolve_ticker(query))
-        console.print(f"[green]✓ Resolved to: {ticker}[/green]\n")
-        console.print(f"[bold]Analyzing {ticker}...[/bold]\n")
-    except ValueError as e:
-        console.print(f"[red]{e}[/red]")
-        raise typer.Exit(1) from None
+    for result in results:
+        if result.get("success", False):
+            console.print(
+                Markdown(formatter.format_output(result, detailed_history=detail_history))
+            )
+        else:
+            failed = True
+            ticker = result.get("ticker", "UNKNOWN")
+            console.print(f"[red]{ticker}: {result.get('error', 'Unknown error')}[/red]")
 
-    result = asyncio.run(run_quick_check(query))
-
-    if not result.get("success", False):
-        console.print(f"[red]Error: {result.get('error', 'Unknown error')}[/red]")
-        raise typer.Exit(1) from None
-
-    pipeline = QuickCheckPipeline(technical_tool=None)  # Just for formatting
-    output = pipeline.format_output(result, detailed_history=detail_history)
-    console.print(Markdown(output))
+    if failed:
+        raise typer.Exit(1)
 
 
 async def run_deep_dive(ticker_or_name: str, provider: str) -> dict:
@@ -1098,121 +1113,6 @@ def analyze(
                 subprocess.run(["xdg-open", chart_result.path], check=False)
         elif chart_result and not chart_result.success:
             console.print(f"\n[yellow]⚠️  차트 생성 실패: {chart_result.error}[/yellow]")
-    except ValueError as e:
-        console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(1) from None
-    except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(1) from None
-
-
-async def run_daily_report(tickers: list[str], provider: str) -> dict:
-    """Run daily report pipeline."""
-    api_key_env = "OPENAI_API_KEY" if provider == "openai" else "ANTHROPIC_API_KEY"
-    base_url_env = "OPENAI_BASE_URL" if provider == "openai" else "ANTHROPIC_BASE_URL"
-    api_key = os.getenv(api_key_env)
-    base_url = os.getenv(base_url_env)
-    if not api_key:
-        raise ValueError(f"Missing {api_key_env} environment variable")
-
-    yf_provider = YFinanceProvider()
-    scorer = TechnicalScorer()
-    technical_tool = TechnicalAnalysisTool(provider=yf_provider, scorer=scorer)
-    macro_tool = MacroTool()
-    llm = LLMProvider.create(
-        provider=provider,
-        api_key=api_key,
-        base_url=base_url,
-        temperature=0,
-    )
-
-    pipeline = TickerReportPipeline(
-        macro_tool=macro_tool,
-        technical_tool=technical_tool,
-        llm=llm,
-    )
-
-    return await pipeline.run(tickers)
-
-
-def format_daily_report_output(result: dict) -> str:
-    """Format daily report result as markdown."""
-    date = result["date"].strftime("%Y-%m-%d %H:%M")
-    macro = result["macro"]
-    tickers = result["tickers"]
-
-    output = "# Daily Market Report\n\n"
-    output += f"**Date**: {date}\n\n"
-
-    output += "## Macro Snapshot\n\n"
-    output += f"- **VIX**: {macro.vix:.2f} ({macro.vix_change:+.2f})\n"
-    output += f"- **Fear & Greed**: {macro.fear_greed} ({macro.fear_greed_label})\n"
-    output += f"- **WTI Oil**: ${macro.wti:.2f} ({macro.wti_change:+.2f})\n"
-    output += f"- **US 10Y Yield**: {macro.us_10y:.2f}%\n"
-    output += f"- **US 2Y Yield**: {macro.us_2y:.2f}%\n"
-    output += f"- **Yield Spread**: {macro.yield_spread:.2f}%\n"
-    output += f"- **DXY**: {macro.dxy:.2f} ({macro.dxy_change:+.2f})\n\n"
-
-    output += "## Ticker Analysis\n\n"
-
-    for ticker_data in tickers:
-        ticker = ticker_data["ticker"]
-        technical = ticker_data.get("technical")
-        error = ticker_data.get("error")
-
-        output += f"### {ticker}\n\n"
-
-        if error:
-            output += f"**Error**: {error}\n\n"
-            continue
-
-        if technical:
-            # Support both old (indicators) and new (snapshot) field
-            snapshot = technical.indicators or technical.snapshot
-            price = snapshot.price
-            change_pct = snapshot.change_pct
-
-            output += f"**Price**: ${price:.2f} ({change_pct:+.2f}%)\n"
-            output += f"**Total Score**: {technical.total_score}\n"
-
-            # Collect signals from components (new format) or key_insights (old format)
-            if technical.components:
-                all_signals = []
-                for comp in technical.components.values():
-                    all_signals.extend(comp.get("signals", []))
-                if all_signals:
-                    output += f"**Signals**: {', '.join(all_signals[:5])}\n"  # Limit to 5
-            elif technical.key_insights:
-                output += f"**Signals**: {', '.join(technical.key_insights)}\n"
-
-            if technical.warnings:
-                output += f"**Warnings**: {', '.join(technical.warnings)}\n"
-
-            output += "\n"
-
-    return output
-
-
-@report_app.command("ticker")
-def report_ticker(
-    tickers: str = typer.Option(
-        "AAPL,MSFT,NVDA",
-        "--tickers",
-        "-t",
-        help="Comma-separated ticker symbols",
-    ),
-    provider: Literal["openai", "anthropic"] = typer.Option(
-        "openai", "--provider", "-p", help="LLM provider"
-    ),
-):
-    """티커 기반 시장 리포트 (매크로 + 티커 분석)."""
-    ticker_list = [t.strip() for t in tickers.split(",")]
-    console.print(f"[bold]Generating daily report for {len(ticker_list)} tickers...[/bold]\n")
-
-    try:
-        result = asyncio.run(run_daily_report(ticker_list, provider))
-        output = format_daily_report_output(result)
-        console.print(Markdown(output))
     except ValueError as e:
         console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1) from None
