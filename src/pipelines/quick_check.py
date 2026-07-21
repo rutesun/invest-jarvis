@@ -1,5 +1,6 @@
 from typing import Any
 
+from src.tools.technical.presentation import format_long_sma
 from src.tools.technical.tool import TechnicalAnalysisTool
 
 
@@ -77,7 +78,11 @@ class QuickCheckPipeline:
             "indicators": {
                 "sma_20": snapshot.sma_20,
                 "sma_50": snapshot.sma_50,
+                "sma_100": snapshot.sma_100,
                 "sma_150": snapshot.sma_150,
+                "sma_200": snapshot.sma_200,
+                "sma_100_slope_pct": snapshot.sma_100_slope_pct,
+                "sma_200_slope_pct": snapshot.sma_200_slope_pct,
                 "rsi": snapshot.rsi,
                 "adx": snapshot.adx,
                 "crsi": snapshot.crsi,
@@ -190,8 +195,14 @@ class QuickCheckPipeline:
             lines.append(f"- SMA 20: ${indicators['sma_20']:.2f}")
         if indicators.get("sma_50"):
             lines.append(f"- SMA 50: ${indicators['sma_50']:.2f}")
+        lines.append(
+            f"- **SMA 100**: {format_long_sma(indicators.get('sma_100'), indicators.get('sma_100_slope_pct'))}"
+        )
         if indicators.get("sma_150"):
             lines.append(f"- SMA 150: ${indicators['sma_150']:.2f}")
+        lines.append(
+            f"- **SMA 200**: {format_long_sma(indicators.get('sma_200'), indicators.get('sma_200_slope_pct'))}"
+        )
         if indicators.get("rsi"):
             lines.append(f"- RSI: {indicators['rsi']:.1f}")
         if indicators.get("crsi"):

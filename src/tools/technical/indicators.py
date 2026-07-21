@@ -24,6 +24,7 @@ class IndicatorCalculator:
         df["SMA_10"] = ta.sma(df["Close"], length=10)
         df["SMA_20"] = ta.sma(df["Close"], length=20)
         df["SMA_50"] = ta.sma(df["Close"], length=50)
+        df["SMA_100"] = ta.sma(df["Close"], length=100)
         df["SMA_120"] = ta.sma(df["Close"], length=120)
         df["SMA_150"] = ta.sma(df["Close"], length=150)
         df["SMA_200"] = ta.sma(df["Close"], length=200)
@@ -197,8 +198,11 @@ class IndicatorCalculator:
             sma_10=safe_get("SMA_10"),
             sma_20=safe_get("SMA_20"),
             sma_50=safe_get("SMA_50"),
+            sma_100=safe_get("SMA_100"),
             sma_120=safe_get("SMA_120"),
             sma_200=safe_get("SMA_200"),
+            sma_100_slope_pct=self._slope_pct(df, "SMA_100"),
+            sma_200_slope_pct=self._slope_pct(df, "SMA_200"),
             rsi=safe_get("RSI"),
             macd=safe_get("MACD"),
             macd_signal=safe_get("MACD_Signal"),
@@ -237,6 +241,16 @@ class IndicatorCalculator:
             macd_fast_signal=safe_get("MACD_Fast_Signal"),
             macd_fast_histogram=safe_get("MACD_Fast_Hist"),
         )
+
+    @staticmethod
+    def _slope_pct(df: pd.DataFrame, column: str, lookback: int = 21) -> float | None:
+        if column not in df.columns or len(df) <= lookback:
+            return None
+        current = df[column].iloc[-1]
+        previous = df[column].iloc[-lookback - 1]
+        if pd.isna(current) or pd.isna(previous) or previous == 0:
+            return None
+        return float((current / previous - 1.0) * 100.0)
 
     def _calculate_performance(
         self, df: pd.DataFrame, current_price: float, days: int

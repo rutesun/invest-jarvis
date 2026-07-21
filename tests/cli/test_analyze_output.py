@@ -191,6 +191,8 @@ def test_format_deep_dive_output_shows_top_summary_and_factor_reasons():
     assert "technical" not in output
     assert "event" not in output
     assert "조정_대기" not in output
+    assert "**SMA 100**: N/A · — 데이터 부족" in output
+    assert "**SMA 200**: N/A · — 데이터 부족" in output
 
 
 def test_format_deep_dive_output_warns_when_presented_structure_missing():
