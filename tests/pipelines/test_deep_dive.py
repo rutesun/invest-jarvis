@@ -20,6 +20,7 @@ from src.pipelines.analyze_decision import (
 from src.pipelines.deep_dive import DeepDivePipeline
 from src.tools.disclosure import DisclosureItem
 from src.tools.fundamental import FundamentalSnapshot
+from src.tools.macro import TickerMacroSnapshot
 from src.tools.news import NewsArticle
 from src.tools.technical.models import (
     AggregationTraceEntry,
@@ -103,8 +104,31 @@ def mock_llm():
     return llm
 
 
+@pytest.fixture
+def mock_macro_tool():
+    tool = AsyncMock()
+    snapshot = TickerMacroSnapshot(
+        timestamp=datetime(2026, 7, 22),
+        vix=18.5,
+        vix_change=1.2,
+        fear_greed=55,
+        fear_greed_label="Neutral",
+        wti=68.4,
+        wti_change=-0.7,
+        us_10y=4.25,
+        us_2y=3.85,
+        yield_spread=0.4,
+        dxy=101.2,
+        dxy_change=0.3,
+    )
+    tool.execute.return_value = ToolResult(success=True, data=snapshot)
+    return tool
+
+
 @pytest.mark.asyncio
-async def test_deep_dive_pipeline_success(mock_technical_tool, mock_news_tool, mock_llm):
+async def test_deep_dive_pipeline_success(
+    mock_technical_tool, mock_news_tool, mock_llm, mock_macro_tool
+):
     """Test successful deep dive analysis."""
     with (
         patch(
@@ -198,6 +222,7 @@ async def test_deep_dive_pipeline_success(mock_technical_tool, mock_news_tool, m
             technical_tool=mock_technical_tool,
             news_tool=mock_news_tool,
             llm=mock_llm,
+            macro_tool=mock_macro_tool,
         )
 
         result = await pipeline.run("AAPL")
@@ -206,8 +231,12 @@ async def test_deep_dive_pipeline_success(mock_technical_tool, mock_news_tool, m
         assert result["ticker"] == "AAPL"
         assert result["technical"] is not None
         assert result["technical_summary"].summary == "강세"
+        assert result["technical_summary"].recommendation == "매수"
+        assert result["technical"].total_score == 75
         assert result["news"] is not None
         assert result["news_analysis"].sentiment == "긍정"
+        mock_macro_tool.execute.assert_awaited_once_with()
+        assert result["macro"] is mock_macro_tool.execute.return_value.data
         assert result["actionable_signal"] is not None
         assert result["actionable_signal"].action == "매수"
         assert result["actionable_signal"].timing == "지금"
@@ -219,6 +248,58 @@ async def test_deep_dive_pipeline_success(mock_technical_tool, mock_news_tool, m
         assert result["scenarios"]
         assert result["chart_patterns"]
         assert "170.00~172.00" in mock_signal.await_args.kwargs["structure_context"]
+
+
+@pytest.mark.asyncio
+async def test_deep_dive_continues_when_macro_fails(
+    mock_technical_tool,
+    mock_news_tool,
+    mock_llm,
+):
+    macro_tool = AsyncMock()
+    macro_tool.execute.return_value = ToolResult(success=False, data=None, error="macro down")
+
+    with (
+        patch(
+            "src.llm.analyzer.generate_technical_summary", new_callable=AsyncMock
+        ) as mock_tech_summary,
+        patch("src.llm.analyzer.analyze_news", new_callable=AsyncMock) as mock_news_analysis,
+        patch("src.llm.analyzer.generate_actionable_signal", new_callable=AsyncMock) as mock_signal,
+    ):
+        mock_tech_summary.return_value = TechnicalSummaryOutput(
+            summary="강세",
+            key_insights=["골든크로스"],
+            recommendation="매수",
+            confidence=0.75,
+            rationale="좋음",
+        )
+        mock_news_analysis.return_value = NewsAnalysisOutput(
+            sentiment="긍정",
+            confidence=0.85,
+            key_themes=["신제품"],
+            summary="긍정적",
+            impact_assessment="좋음",
+        )
+        mock_signal.return_value = ActionableSignalOutput(
+            action="매수",
+            timing="지금",
+            signal_strength=8,
+            headline="매수",
+            primary_reason="골든크로스",
+            supporting_reasons=[],
+            risks=[],
+            confidence=0.75,
+        )
+        pipeline = DeepDivePipeline(
+            technical_tool=mock_technical_tool,
+            news_tool=mock_news_tool,
+            llm=mock_llm,
+            macro_tool=macro_tool,
+        )
+        result = await pipeline.run("AAPL")
+
+    assert result["macro"] is None
+    assert result["technical"] is not None
 
 
 @pytest.mark.asyncio

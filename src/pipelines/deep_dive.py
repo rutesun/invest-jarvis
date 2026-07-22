@@ -20,6 +20,7 @@ from src.pipelines.analyze_decision import apply_playbook_veto, build_analyze_de
 from src.tools.disclosure import DisclosureItem, DisclosureTool, extract_kr_code, is_korean_ticker
 from src.tools.flow import FlowTool, InvestorFlow
 from src.tools.fundamental import FundamentalSnapshot, FundamentalTool
+from src.tools.macro import MacroTool, TickerMacroSnapshot
 from src.tools.news import NewsArticle, NewsTool
 from src.tools.playbook.holdings import load_holdings
 from src.tools.technical.charting import render_technical_chart
@@ -101,6 +102,7 @@ class DeepDivePipeline:
         level_payload_composer: Callable | None = None,
         structure_presentation_adapter: Callable | None = None,
         playbook_engine=None,
+        macro_tool: MacroTool | None = None,
     ):
         self.technical_tool = technical_tool
         self.news_tool = news_tool
@@ -115,6 +117,7 @@ class DeepDivePipeline:
             structure_presentation_adapter or build_structure_presentation
         )
         self.playbook_engine = playbook_engine
+        self.macro_tool = macro_tool
 
     async def run(self, ticker: str) -> dict:
         """Run deep dive analysis for a ticker.
@@ -133,6 +136,7 @@ class DeepDivePipeline:
                 - fundamental_summary: FundamentalSummaryOutput | None
                 - disclosure: list[DisclosureItem] | None (SEC 10-Q/8-K or OpenDART)
                 - flow: InvestorFlow | None (외국인/기관 순매수 동향, 한국주식만)
+                - macro: TickerMacroSnapshot | None (시장 매크로 지표)
                 - integrated_analysis: IntegratedAnalysisOutput | None (종합 인사이트)
                 - actionable_signal: ActionableSignalOutput | None (실행 가능한 투자 시그널)
         """
@@ -182,6 +186,10 @@ class DeepDivePipeline:
             optional_coros.append(self.flow_tool.execute(extract_kr_code(ticker)))
             optional_keys.append("flow")
 
+        if self.macro_tool is not None:
+            optional_coros.append(self.macro_tool.execute())
+            optional_keys.append("macro")
+
         optional_data: dict = {}
         if optional_coros:
             opt_results = await asyncio.gather(*optional_coros, return_exceptions=True)
@@ -194,6 +202,7 @@ class DeepDivePipeline:
 
         disclosure_items: list[DisclosureItem] | None = optional_data.get("disclosure")
         flow_data: InvestorFlow | None = optional_data.get("flow")
+        macro_data: TickerMacroSnapshot | None = optional_data.get("macro")
 
         # 공시 또는 수급 데이터가 있을 때만 종합 인사이트 생성
         integrated_analysis = None
@@ -310,6 +319,7 @@ class DeepDivePipeline:
             "fundamental_summary": fundamental_summary,
             "disclosure": disclosure_items,
             "flow": flow_data,
+            "macro": macro_data,
             "integrated_analysis": integrated_analysis,
             "actionable_signal": actionable_signal,
             "structure_levels": structure_levels,

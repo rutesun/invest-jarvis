@@ -24,7 +24,7 @@ from src.providers.ticker_resolver import TickerResolver
 from src.providers.yfinance_provider import YFinanceProvider
 from src.tools.disclosure import DARTDisclosureFetcher, DisclosureTool, SECDisclosureFetcher
 from src.tools.fundamental import FundamentalTool
-from src.tools.macro import MacroTool
+from src.tools.macro import MacroTool, TickerMacroSnapshot
 from src.tools.news import NewsTool
 from src.tools.screener.evidence import EvidenceCollector
 from src.tools.screener.universe import UniverseBuilder
@@ -385,6 +385,7 @@ async def run_deep_dive(ticker_or_name: str, provider: str) -> dict:
         disclosure_tool=disclosure_tool,
         flow_tool=flow_tool,
         playbook_engine=playbook_engine,
+        macro_tool=MacroTool(),
     )
 
     return await pipeline.run(ticker)
@@ -427,6 +428,23 @@ def _format_top_summary(decision_summary) -> str:
         lines.append(f"- **보류 이유**: {decision_summary.defer_reason}")
     lines.append("")
     return "\n".join(lines)
+
+
+def _format_macro_section(macro: TickerMacroSnapshot | None) -> str:
+    if macro is None:
+        return ""
+    return "\n".join(
+        [
+            "## Macro",
+            f"- **VIX**: {macro.vix:.2f} ({macro.vix_change:+.2f})",
+            f"- **Fear & Greed**: {macro.fear_greed} ({macro.fear_greed_label})",
+            f"- **WTI**: ${macro.wti:.2f} ({macro.wti_change:+.2f})",
+            f"- **US 10Y**: {macro.us_10y:.2f}%",
+            f"- **US 2Y**: {macro.us_2y:.2f}%",
+            f"- **10Y-2Y Spread**: {macro.yield_spread:+.2f}%p",
+            f"- **DXY**: {macro.dxy:.2f} ({macro.dxy_change:+.2f})",
+        ]
+    )
 
 
 def _format_factor_section(factor_assessments: list) -> str:
@@ -981,6 +999,9 @@ def format_deep_dive_output(result: dict) -> str:
 
     output = f"# Deep Dive Analysis: {ticker}\n\n"
     output += f"## 가격: ${snapshot.price:.2f} ({snapshot.change_pct:+.2f}%)\n\n"
+    macro_section = _format_macro_section(result.get("macro"))
+    if macro_section:
+        output += f"{macro_section}\n\n"
 
     if decision_summary:
         output += _format_top_summary(decision_summary)

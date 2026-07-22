@@ -11,6 +11,7 @@ from src.pipelines.analyze_decision import (
     AnalyzeScenario,
     FactorAssessment,
 )
+from src.tools.macro import TickerMacroSnapshot
 from src.tools.technical.models import (
     ChartPatternResult,
     IndicatorSnapshot,
@@ -155,6 +156,20 @@ def test_format_deep_dive_output_shows_top_summary_and_factor_reasons():
             ],
             "llm_context": "구조 레벨",
         },
+        "macro": TickerMacroSnapshot(
+            timestamp=datetime(2026, 7, 22),
+            vix=18.5,
+            vix_change=1.2,
+            fear_greed=55,
+            fear_greed_label="Neutral",
+            wti=68.4,
+            wti_change=-0.7,
+            us_10y=4.25,
+            us_2y=3.85,
+            yield_spread=0.4,
+            dxy=101.2,
+            dxy_change=0.3,
+        ),
     }
 
     output = format_deep_dive_output(result)
@@ -163,11 +178,20 @@ def test_format_deep_dive_output_shows_top_summary_and_factor_reasons():
     assert "핵심 변수" in output
     assert "액션" in output
     assert "## 판단 요약" in output
+    assert "## Macro" in output
+    assert "VIX" in output
+    assert "Fear & Greed" in output
+    assert "WTI" in output
+    assert "US 10Y" in output
+    assert "US 2Y" in output
+    assert "10Y-2Y Spread" in output
+    assert "DXY" in output
     assert "## 구조 레벨" in output
     assert "## 실행 레벨" in output
     assert "## 패턴 분석" in output
     assert "## 원시 데이터" in output
     assert output.index("## 판단 요약") < output.index("## 원시 데이터")
+    assert output.index("## Macro") < output.index("## 판단 요약")
     assert "- **주도 팩터**: 혼합" in output
     assert "- **가격**: 신고가 돌파" in output
     assert "- **이벤트**: 반복 기대 기사" in output

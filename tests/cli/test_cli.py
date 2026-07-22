@@ -36,6 +36,66 @@ def test_cli_check_command():
     assert "178.50" in result.stdout
 
 
+@pytest.mark.asyncio
+async def test_run_quick_check_never_constructs_macro():
+    with (
+        patch("src.cli.main.resolve_ticker", new=AsyncMock(return_value="AAPL")),
+        patch("src.cli.main.YFinanceProvider"),
+        patch("src.cli.main.TechnicalScorer"),
+        patch("src.cli.main.TechnicalAnalysisTool"),
+        patch("src.cli.main.QuickCheckPipeline") as pipeline_cls,
+        patch("src.cli.main.MacroTool") as macro_cls,
+    ):
+        pipeline_cls.return_value.run = AsyncMock(
+            return_value={"success": True, "ticker": "AAPL"}
+        )
+        result = await run_quick_check("AAPL")
+
+    macro_cls.assert_not_called()
+    assert result["ticker"] == "AAPL"
+
+
+def test_check_output_never_displays_macro():
+    success = {
+        "ticker": "AAPL",
+        "success": True,
+        "price": 178.5,
+        "change_pct": 1.2,
+        "total_score": 42,
+        "component_raw_total": 42,
+        "adjusted_score": 35,
+        "technical_verdict": None,
+        "score_history": [],
+        "score_history_warning": None,
+        "assessment": "관망",
+        "confidence": 0,
+        "signals": [],
+        "warnings": [],
+        "indicators": {
+            "sma_20": 175.0,
+            "sma_50": 170.0,
+            "sma_100": 165.0,
+            "sma_100_slope_pct": 0.2,
+            "sma_150": 160.0,
+            "sma_200": 155.0,
+            "sma_200_slope_pct": -0.1,
+            "rsi": 55.0,
+            "adx": 20.0,
+            "crsi": 50.0,
+        },
+        "components": [],
+    }
+    with patch(
+        "src.cli.main.run_quick_checks",
+        new=AsyncMock(return_value=[success]),
+    ):
+        result = runner.invoke(app, ["check", "AAPL"])
+
+    assert result.exit_code == 0
+    assert "AAPL Quick Check" in result.stdout
+    assert "Macro" not in result.stdout
+
+
 def test_cli_analyze_command():
     mock_snapshot = IndicatorSnapshot(
         price=178.50,
@@ -245,10 +305,15 @@ async def test_run_deep_dive_korean_stock_without_kis_credentials_uses_yfinance(
         patch("src.tools.disclosure.DARTDisclosureFetcher", return_value=object()),
         patch("src.tools.disclosure.DisclosureTool", return_value=object()),
         patch("src.tools.flow.FlowTool", return_value=object()),
-        patch("src.cli.main.DeepDivePipeline", return_value=mock_pipeline),
+        patch("src.cli.main.MacroTool") as mock_macro_tool,
+        patch(
+            "src.cli.main.DeepDivePipeline", return_value=mock_pipeline
+        ) as mock_pipeline_cls,
     ):
         result = await run_deep_dive("엘앤에프", "openai")
 
     assert result == expected
     mock_yfinance_provider.assert_called_once()
     mock_fundamental_tool.assert_called_once_with(kis_provider=None)
+    mock_macro_tool.assert_called_once_with()
+    assert mock_pipeline_cls.call_args.kwargs["macro_tool"] is mock_macro_tool.return_value
