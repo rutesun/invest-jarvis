@@ -5,14 +5,14 @@ import pandas as pd
 import pytest
 
 from src.core.models import ToolResult
-from src.llm.models import ActionableSignalOutput, TechnicalSummaryOutput
+from src.llm.models import IntegratedExplanationOutput, TechnicalSummaryOutput
 from src.pipelines.deep_dive import DeepDivePipeline
 from src.tools.news import NewsArticle
 from src.tools.technical.models import IndicatorSnapshot, StrategyResult, TechnicalResult
 
 
 @pytest.mark.asyncio
-async def test_deep_dive_pipeline_passes_presented_structure_context_to_actionable_signal():
+async def test_deep_dive_pipeline_passes_presented_structure_to_integrated_explanation():
     technical_tool = AsyncMock()
     news_tool = AsyncMock()
     llm = AsyncMock()
@@ -63,7 +63,9 @@ async def test_deep_dive_pipeline_passes_presented_structure_context_to_actionab
     with (
         patch("src.llm.analyzer.generate_technical_summary", new_callable=AsyncMock) as mock_tech,
         patch("src.llm.analyzer.analyze_news", new_callable=AsyncMock) as mock_news,
-        patch("src.llm.analyzer.generate_actionable_signal", new_callable=AsyncMock) as mock_signal,
+        patch(
+            "src.llm.analyzer.generate_integrated_explanation", new_callable=AsyncMock
+        ) as mock_explanation,
     ):
         mock_tech.return_value = TechnicalSummaryOutput(
             summary="강세",
@@ -73,15 +75,11 @@ async def test_deep_dive_pipeline_passes_presented_structure_context_to_actionab
             rationale="r",
         )
         mock_news.return_value = None
-        mock_signal.return_value = ActionableSignalOutput(
-            action="관망",
-            timing="보류",
-            signal_strength=5,
-            headline="h",
-            primary_reason="p",
-            supporting_reasons=[],
+        mock_explanation.return_value = IntegratedExplanationOutput(
+            decision_explanation="해설",
+            rationale=[],
             risks=[],
-            confidence=0.5,
+            monitoring_points=[],
         )
 
         result = await DeepDivePipeline(
@@ -90,7 +88,16 @@ async def test_deep_dive_pipeline_passes_presented_structure_context_to_actionab
             llm=llm,
         ).run("AAPL")
 
-    assert result["presented_structure"] is not None
-    assert "llm_context" in result["presented_structure"].model_dump()
-    assert mock_signal.await_args.kwargs["structure_context"]
-    assert "구조 레벨" in mock_signal.await_args.kwargs["structure_context"]
+    presented = result["presented_structure"]
+    assert presented is not None
+    assert "llm_context" in presented.model_dump()
+
+    # presenter의 structure/execution 요약이 최종 해설 입력의 level_context에 도달한다
+    explanation_input = mock_explanation.await_args.args[0]
+    assert explanation_input.level_context["structure_summary"] == (
+        presented.structure_summary or explanation_input.level_context["structure_summary"]
+    )
+    assert (
+        explanation_input.level_context["structure_levels"]
+        == result["structure_levels"].model_dump(mode="json")
+    )

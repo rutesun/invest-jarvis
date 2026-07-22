@@ -6,18 +6,13 @@ from langchain_core.runnables import RunnableLambda
 from src.llm.analyzer import (
     analyze_news,
     format_structure_context_for_llm,
-    generate_actionable_signal,
     generate_fundamental_summary,
-    generate_integrated_analysis,
     generate_integrated_explanation,
     generate_technical_summary,
 )
 from src.llm.models import (
-    ActionableSignalOutput,
     FundamentalSummaryInput,
     FundamentalSummaryOutput,
-    IntegratedAnalysisInput,
-    IntegratedAnalysisOutput,
     IntegratedExplanationInput,
     IntegratedExplanationOutput,
     NewsAnalysisInput,
@@ -293,45 +288,6 @@ async def test_generate_fundamental_summary_with_no_metrics():
 
 
 @pytest.mark.asyncio
-async def test_generate_integrated_analysis_calls_llm():
-    """generate_integrated_analysis가 모든 팩터를 LLM에 전달하고 구조화된 결과를 반환한다."""
-    mock_llm = AsyncMock()
-    expected_output = IntegratedAnalysisOutput(
-        recommendation="매수",
-        rationale=["기술적: 골든크로스", "공시: 수주계약 체결"],
-        risks=["RSI 과열 구간 접근"],
-        action_summary="단기 매수 기회 포착",
-    )
-
-    with patch("src.llm.analyzer.ChatPromptTemplate") as mock_template:
-        mock_chain = AsyncMock()
-        mock_chain.ainvoke.return_value = expected_output
-        mock_template.from_messages.return_value.__or__ = MagicMock(return_value=mock_chain)
-
-        input_data = IntegratedAnalysisInput(
-            ticker="AAPL",
-            technical_recommendation="매수",
-            technical_rationale="골든크로스 발생",
-            fundamental_valuation="저평가",
-            disclosure_items=[
-                {
-                    "form_type": "8-K",
-                    "date": "2026-04-05",
-                    "description": "Q1 results",
-                    "url": "https://sec.gov/...",
-                }
-            ],
-            flow_summary=None,
-        )
-
-        result = await generate_integrated_analysis(input_data, mock_llm)
-
-    assert result.recommendation == "매수"
-    assert len(result.rationale) == 2
-    assert result.action_summary == "단기 매수 기회 포착"
-
-
-@pytest.mark.asyncio
 async def test_format_structure_context_for_llm():
     structure_levels = {
         "support_zones": [
@@ -382,145 +338,6 @@ async def test_format_structure_context_for_llm():
     assert "실행 레벨" in text
     assert "$146.00" in text
     assert "피봇 S1" in text
-
-
-@pytest.mark.asyncio
-async def test_generate_actionable_signal():
-    """Test generate_actionable_signal with Phase 2 pattern and price inputs."""
-    from src.tools.technical.models import ChartPatternResult, PriceLevel, PriceLevels
-
-    # Mock chart patterns
-    chart_patterns = {
-        "cup_and_handle": ChartPatternResult(
-            pattern_name="Cup & Handle",
-            detected=True,
-            confidence=0.85,
-            completed_date="2024-01-15",
-            days_ago=8,
-            current_price=150.0,
-            breakout_level=155.0,
-            support_level=145.0,
-            description="Cup & Handle pattern completed 8 days ago",
-            key_levels={"target": 165.0},
-        ),
-    }
-
-    # Mock price levels
-    price_levels = PriceLevels(
-        current_price=150.0,
-        support_levels=[
-            PriceLevel(price=145.0, type="sma_50", distance_pct=-3.3, description="50일선"),
-            PriceLevel(price=140.0, type="swing_low", distance_pct=-6.7, description="스윙 저점"),
-        ],
-        resistance_levels=[
-            PriceLevel(price=155.0, type="pivot_r1", distance_pct=+3.3, description="피봇 저항"),
-            PriceLevel(price=160.0, type="sma_200", distance_pct=+6.7, description="200일선"),
-        ],
-        targets={"cup_and_handle_target": 165.0},
-    )
-    structure_levels = {
-        "support_zones": [
-            {
-                "lower_bound": 145.0,
-                "upper_bound": 147.0,
-                "strength": "core",
-                "reasons": ["반복 지지"],
-            },
-            {
-                "lower_bound": 140.0,
-                "upper_bound": 142.0,
-                "strength": "secondary",
-                "reasons": ["보조"],
-            },
-        ],
-        "resistance_zones": [
-            {"lower_bound": 155.0, "upper_bound": 157.0, "strength": "core", "reasons": ["공급"]},
-            {
-                "lower_bound": 160.0,
-                "upper_bound": 162.0,
-                "strength": "secondary",
-                "reasons": ["보조"],
-            },
-        ],
-        "former_levels": [],
-        "invalidation": {
-            "label": "145.00~147.00 + 150일선 146.00 하향 이탈",
-            "reasons": ["core demand zone", "150일선 근접"],
-        },
-    }
-    execution_levels = [
-        {
-            "type": "pivot_s1",
-            "description": "피봇 S1",
-            "price": 146.0,
-            "distance_pct": -2.7,
-        },
-        {
-            "type": "sma_50",
-            "description": "50일선",
-            "price": 145.0,
-            "distance_pct": -3.3,
-        },
-    ]
-
-    expected_output = ActionableSignalOutput(
-        action="매수",
-        timing="지금",
-        signal_strength=8,
-        headline="Cup & Handle 돌파 직전, RSI 과매도 회복",
-        primary_reason="Cup & Handle 패턴 완성 + 돌파 대기 ($155)",
-        supporting_reasons=["RSI 과매도 회복", "50일선 지지"],
-        risks=["돌파 실패 시 $145 이탈 위험"],
-        invalidation_point="$145.00",
-        confidence=0.85,
-        pattern_insight="Cup & Handle 8일 전 완성, 돌파 준비",
-        target_price="돌파 시 $165, 조정 시 $145 지지",
-        entry_zone="현재 $150 대기, 조정 시 $145-147 분할 매수",
-        key_levels="지지: $145/$140, 저항: $155/$160",
-    )
-
-    # Use patch to intercept the actual chain.ainvoke call
-    captured_payload = {}
-
-    async def capture_ainvoke(payload):
-        captured_payload.update(payload)
-        return expected_output
-
-    with patch("src.llm.analyzer.ChatPromptTemplate") as mock_prompt_cls:
-        mock_chain = AsyncMock()
-        mock_chain.ainvoke = AsyncMock(side_effect=capture_ainvoke)
-        mock_prompt_instance = MagicMock()
-        mock_prompt_instance.__or__ = MagicMock(return_value=mock_chain)
-        mock_prompt_cls.from_messages.return_value = mock_prompt_instance
-
-        mock_llm = MagicMock()
-        mock_llm.with_structured_output.return_value = MagicMock()
-
-        result = await generate_actionable_signal(
-            ticker="AAPL",
-            technical_summary="RSI 과매도 회복, 50일선 지지 확인",
-            chart_patterns=chart_patterns,
-            price_levels=price_levels,
-            structure_levels=structure_levels,
-            execution_levels=execution_levels,
-            llm=mock_llm,
-        )
-
-        assert result.action == "매수"
-        assert result.timing == "지금"
-        assert result.signal_strength == 8
-        assert "Cup & Handle" in result.headline
-        assert result.pattern_insight is not None
-        assert result.target_price is not None
-        assert result.entry_zone is not None
-        assert result.key_levels is not None
-        assert mock_chain.ainvoke.called
-        assert "구조 레벨" in captured_payload["structure_context"]
-        assert "145.00~147.00" in captured_payload["structure_context"]
-        assert "피봇 S1" in captured_payload["structure_context"]
-        assert captured_payload["structure_summary"]
-        assert captured_payload["execution_summary"]
-        assert "levels_text" not in captured_payload
 
 
 def _full_explanation_input() -> IntegratedExplanationInput:

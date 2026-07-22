@@ -9,7 +9,7 @@ import pandas as pd
 import pytest
 
 from src.core.models import ToolResult
-from src.llm.models import ActionableSignalOutput, TechnicalSummaryOutput
+from src.llm.models import IntegratedExplanationOutput, TechnicalSummaryOutput
 from src.pipelines.brief import BriefPipeline
 from src.pipelines.deep_dive import DeepDivePipeline
 from src.pipelines.quick_check import QuickCheckPipeline
@@ -20,7 +20,7 @@ from src.tools.playbook.models import (
     PlaybookVerdict,
     RelativeStrengthResult,
 )
-from src.tools.technical.models import TechnicalResult
+from src.tools.technical.models import StructureLevelsPayloadV2, TechnicalResult
 from src.tools.technical.scorer import TechnicalScorer
 from src.tools.technical.tool import TechnicalAnalysisTool
 
@@ -115,7 +115,11 @@ async def test_technical_contract_is_identical_across_check_analyze_and_brief(
         structure_zone_detector=MagicMock(detect=MagicMock(return_value=MagicMock())),
         level_payload_composer=MagicMock(
             return_value=SimpleNamespace(
-                structure_levels=[],
+                structure_levels=StructureLevelsPayloadV2(
+                    summary_label="no_clear_structure",
+                    headline="명확한 구조 없음",
+                    why="parity 테스트 기본값",
+                ),
                 execution_levels=[],
                 structure_summary=None,
                 execution_summary=None,
@@ -141,17 +145,13 @@ async def test_technical_contract_is_identical_across_check_analyze_and_brief(
 
     with (
         patch(
-            "src.pipelines.deep_dive.analyzer.generate_actionable_signal",
+            "src.pipelines.deep_dive.analyzer.generate_integrated_explanation",
             new=AsyncMock(
-                return_value=ActionableSignalOutput(
-                    action="관망",
-                    timing="보류",
-                    signal_strength=1,
-                    headline="test",
-                    primary_reason="test",
-                    supporting_reasons=[],
+                return_value=IntegratedExplanationOutput(
+                    decision_explanation="test",
+                    rationale=[],
                     risks=[],
-                    confidence=0.5,
+                    monitoring_points=[],
                 )
             ),
         ),

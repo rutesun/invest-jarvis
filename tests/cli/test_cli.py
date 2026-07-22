@@ -5,7 +5,7 @@ import pytest
 from typer.testing import CliRunner
 
 from src.cli.main import app, run_deep_dive, run_quick_check, run_quick_checks
-from src.llm.models import ActionableSignalOutput, NewsAnalysisOutput, TechnicalSummaryOutput
+from src.llm.models import IntegratedExplanationOutput, NewsAnalysisOutput, TechnicalSummaryOutput
 from src.pipelines.analyze_decision import AnalyzeDecisionSummary, AnalyzeScenario, FactorAssessment
 from src.tools.technical.models import IndicatorSnapshot, TechnicalResult
 
@@ -168,15 +168,11 @@ def test_cli_analyze_command():
         ],
         "news": [],
         "news_analysis": mock_news_analysis,
-        "actionable_signal": ActionableSignalOutput(
-            action="매수",
-            timing="지금",
-            signal_strength=8,
-            headline="매수",
-            primary_reason="골든크로스",
-            supporting_reasons=[],
-            risks=[],
-            confidence=0.75,
+        "integrated_explanation": IntegratedExplanationOutput(
+            decision_explanation="규칙이 확정한 관망 판단 해설",
+            rationale=["기술적: 추세 유지"],
+            risks=["과열 부담"],
+            monitoring_points=["20일선 유지 여부"],
         ),
     }
 
@@ -196,6 +192,8 @@ def test_cli_analyze_command():
     assert "가격" in result.stdout
     assert "조정 대기" in result.stdout
     assert "실행 가능한 투자 시그널" not in result.stdout
+    assert "종합 해설" in result.stdout
+    assert "규칙이 확정한 관망 판단 해설" in result.stdout
 
 
 @pytest.mark.asyncio

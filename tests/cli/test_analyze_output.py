@@ -377,7 +377,7 @@ def test_format_disclosure_title_normalizes_sec_primary_document_name():
     assert title == "SEC 10-Q 공시"
 
 
-def test_format_deep_dive_output_hides_integrated_recommendation_labels():
+def test_format_deep_dive_output_renders_integrated_explanation_without_new_action():
     snapshot = IndicatorSnapshot(price=100.0, change_pct=1.0, rsi=55.0)
     technical = TechnicalResult(
         ticker="AAPL",
@@ -416,21 +416,25 @@ def test_format_deep_dive_output_hides_integrated_recommendation_labels():
         ),
         "factor_assessments": [],
         "scenarios": [],
-        "integrated_analysis": type(
-            "Integrated",
+        "integrated_explanation": type(
+            "Explanation",
             (),
             {
-                "recommendation": "매수",
-                "action_summary": "기존 LLM 요약",
+                "decision_explanation": "규칙이 확정한 관망 판단을 설명합니다.",
                 "rationale": ["기술적: 강세"],
-                "risks": [],
+                "risks": ["과열 부담"],
+                "monitoring_points": ["20일선 유지 여부"],
             },
         )(),
     }
 
     output = format_deep_dive_output(result)
 
-    assert "## 종합 인사이트 참고" in output
+    assert "## 종합 해설" in output
+    assert "규칙이 확정한 관망 판단을 설명합니다." in output
+    assert "모니터링 포인트" in output
+    assert "20일선 유지 여부" in output
+    # 설명 전용 — 새 액션/추천 라벨을 만들지 않는다
     assert "투자 추천" not in output
 
 

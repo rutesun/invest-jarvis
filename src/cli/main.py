@@ -10,9 +10,7 @@ import typer
 from dotenv import load_dotenv
 from rich.console import Console
 from rich.markdown import Markdown
-from rich.panel import Panel
 
-from src.llm.models import ActionableSignalOutput
 from src.llm.provider import LLMProvider
 from src.pipelines.brief import BriefPipeline
 from src.pipelines.deep_dive import DeepDivePipeline
@@ -887,19 +885,24 @@ def _format_raw_analysis_sections(result: dict) -> str:
         )
         output += "\n"
 
-    integrated = result.get("integrated_analysis")
-    if integrated:
-        output += "## 종합 인사이트 참고\n\n"
-        output += f"**요약 메모**: {integrated.action_summary}\n\n"
-        if integrated.rationale:
+    explanation = result.get("integrated_explanation")
+    if explanation:
+        output += "## 종합 해설\n\n"
+        output += f"{explanation.decision_explanation}\n\n"
+        if explanation.rationale:
             output += "**근거**:\n"
-            for r in integrated.rationale:
+            for r in explanation.rationale:
                 output += f"- {r}\n"
             output += "\n"
-        if integrated.risks:
+        if explanation.risks:
             output += "**리스크**:\n"
-            for r in integrated.risks:
+            for r in explanation.risks:
                 output += f"- {r}\n"
+            output += "\n"
+        if explanation.monitoring_points:
+            output += "**모니터링 포인트**:\n"
+            for m in explanation.monitoring_points:
+                output += f"- {m}\n"
             output += "\n"
 
     return output
@@ -1025,74 +1028,6 @@ def format_deep_dive_output(result: dict) -> str:
     return output
 
 
-def display_actionable_signal(signal: ActionableSignalOutput) -> Panel:
-    """Display actionable investment signal as Rich Panel."""
-    # Determine panel color based on action
-    color_map = {
-        "매수": "green",
-        "매도": "red",
-        "관망": "yellow",
-    }
-    border_color = color_map.get(signal.action, "white")
-
-    # Build panel content
-    content = []
-
-    # Headline
-    content.append(f"[bold]{signal.headline}[/bold]\n")
-
-    # Action and Timing
-    content.append(
-        f"🎯 **액션**: {signal.action} | ⏰ **타이밍**: {signal.timing} | 💪 **강도**: {signal.signal_strength}/10\n"
-    )
-
-    # Primary reason
-    content.append(f"🔑 **핵심 이유**: {signal.primary_reason}\n")
-
-    # Supporting reasons
-    if signal.supporting_reasons:
-        content.append("✅ **부차 이유**:")
-        for reason in signal.supporting_reasons:
-            content.append(f"  • {reason}")
-        content.append("")
-
-    # Risks
-    if signal.risks:
-        content.append("⚠️  **리스크**:")
-        for risk in signal.risks:
-            content.append(f"  • {risk}")
-        content.append("")
-
-    # Invalidation point
-    if signal.invalidation_point:
-        content.append(f"🛑 **손절/청산 가격**: {signal.invalidation_point}\n")
-
-    # Confidence
-    content.append(f"📊 **신뢰도**: {signal.confidence * 100:.0f}%")
-
-    # Phase 2 fields: Pattern insights and price levels
-    if signal.pattern_insight:
-        content.append(f"\n📈 **패턴 분석**: {signal.pattern_insight}")
-
-    if signal.target_price:
-        content.append(f"🎯 **목표가**: {signal.target_price}")
-
-    if signal.entry_zone:
-        content.append(f"✅ **진입 구간**: {signal.entry_zone}")
-
-    if signal.key_levels:
-        content.append(f"📍 **주요 레벨**: {signal.key_levels}")
-
-    panel = Panel(
-        "\n".join(content),
-        title="[bold]🚀 실행 가능한 투자 시그널[/bold]",
-        border_style=border_color,
-        expand=False,
-    )
-
-    return panel
-
-
 @app.command()
 def analyze(
     query: str = typer.Argument(..., help="Stock ticker or company name (e.g., AAPL, Apple, 구글)"),
@@ -1111,13 +1046,6 @@ def analyze(
         result = asyncio.run(run_deep_dive(query, provider))
         output = format_deep_dive_output(result)
         console.print(Markdown(output))
-
-        # Display actionable signal panel if available
-        actionable_signal = result.get("actionable_signal")
-        if actionable_signal and not result.get("decision_summary"):
-            console.print("\n")
-            panel = display_actionable_signal(actionable_signal)
-            console.print(panel)
 
         # Display chart path if available
         chart_result = result.get("chart")
