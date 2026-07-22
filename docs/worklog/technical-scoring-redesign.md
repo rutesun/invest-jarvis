@@ -122,3 +122,13 @@
 - 선택: C — rule action, CLI scenario, 최종 LLM 입력을 같은 decision으로 고정하고 외부 문자열이 어느 LLM 단계에서도 prompt 구조를 닫지 못하게 한다.
 - 기각: A(news 분석 결과가 rule decision에 들어가기 전 경로가 남음), B(서로 다른 action source를 유지해 사용자 출력이 모순될 수 있음)
 - ADR 후보? no
+
+## (2026-07-22 17:51) [Bug] 통합 기술 계약 구현 중 발견·수정한 4가지
+- 증상:
+  1. period drift — check/analyze/brief가 서로 다른 조회 기간을 써 같은 종목·시점에 점수·verdict가 달라질 수 있었다.
+  2. Playbook enum mismatch — exit 판정 정규화가 실제 Playbook action enum과 맞지 않아 매도 판정이 요약에 반영되지 않는 경로가 있었다.
+  3. 최종 LLM 입력 공백 — analyze 최종 LLM에 news·Macro·재무·공시·수급이 함께 전달되지 않아 "종합"이라는 이름과 실제 입력이 달랐다.
+  4. 경쟁 액션 경로 — 규칙이 확정한 decision_summary와 별개로 ActionableSignal이 자체 액션을 만들어 화면에 두 개의 액션이 공존했다.
+- 근원(root cause): analyze 파이프라인이 레벨·Playbook보다 먼저 통합 분석/시그널을 생성했고, veto가 summary만 바꿔 scenario에는 veto 이전 action이 남았다. 최종 LLM은 일부 소스만 받았고, ActionableSignal은 규칙과 무관하게 액션을 재생성했다.
+- 수정: 실행 순서를 레벨 → Playbook → decision 번들 → veto → veto 반영 시나리오 재구성 → 단일 generate_integrated_explanation 호출로 재배치. 최종 LLM을 설명 전용(IntegratedExplanationOutput)으로 전환하고 모든 소스+고정 decision을 한 번에 전달. ActionableSignal/IntegratedAnalysis 경로와 관련 모델·함수·CLI 패널 제거. news·최종 해설 LLM 모두 delimiter-safe untrusted_facts JSON 경계 적용.
+- 재발 방지 / 배운 것: DeepDive가 IntegratedExplanationInput의 모든 소스 매핑과 veto 반영 시나리오를 검증하는 계약 테스트를 추가. 검증 수치 — 대상 테스트 155 passed, 전체 회귀 1236 passed / 15 deselected, `ruff check src tests` All checks passed (check 명령의 기존 B008은 typer 관용구 noqa로 처리). ActionableSignal/report ticker 잔여 참조는 src·tests에서 0건.

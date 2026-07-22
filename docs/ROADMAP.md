@@ -195,15 +195,13 @@ Task 2 (프롬프트 개선)로 부족할 때만 진행.
 
 ---
 
-### ~~Task 8: Actionable Signal 고도화~~ ✅ 완료
+### ~~Task 8: Actionable Signal 고도화~~ ⛔ 제거됨 (설명 전용 종합 해설로 대체)
 
-**구현 완료됨:**
-- ✅ `ActionableSignalOutput` 모델 — `src/llm/models.py:122` (Phase 1 + Phase 2 필드)
-- ✅ `generate_actionable_signal()` — `src/llm/analyzer.py`
-- ✅ 파이프라인 통합 — `src/pipelines/deep_dive.py:148`
-- ✅ CLI Rich Panel 출력 — `src/cli/main.py:538`
-- ✅ Phase 2 확장: `pattern_insight`, `target_price`, `entry_zone`, `key_levels`
-- ✅ 테스트 — `tests/llm/test_analyzer.py:283`
+**히스토리:**
+별도의 LLM 액션 생성 경로는 규칙이 확정한 `decision_summary`와 액션이 충돌하는
+문제가 있어 제거되었다. 현재 Analyze는 규칙이 확정한 액션·타이밍을 그대로 두고,
+최종 LLM은 모든 소스와 고정 decision을 받아 **설명만** 하는 종합 해설을 생성한다.
+자세한 내용은 `docs/changes/unified-technical-analysis-contract.md` 참고.
 
 ---
 
@@ -225,7 +223,7 @@ Task 2 (프롬프트 개선)로 부족할 때만 진행.
 **상태:** 🟡 아이디어 (기존 ROADMAP Phase 2)
 **설계:** 없음 (설계 필요)
 **예상:** 3-4시간
-**의존성:** Task 8 (ActionableSignal 모델)
+**의존성:** `TechnicalResult`/`technical_verdict` 및 rule-owned `decision_summary`
 
 ---
 

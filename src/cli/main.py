@@ -233,7 +233,7 @@ async def run_quick_checks(queries: list[str]) -> list[dict]:
 
 @app.command()
 def check(
-    queries: list[str] = typer.Argument(
+    queries: list[str] = typer.Argument(  # noqa: B008 (typer 관용구)
         ..., help="One or more stock tickers or company names"
     ),
     detail_history: bool = typer.Option(
