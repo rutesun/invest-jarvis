@@ -4,6 +4,8 @@ from typing import TypedDict
 
 from pydantic import BaseModel, Field
 
+from src.tools.playbook.models import PlaybookVerdict
+
 
 class FactorAssessment(BaseModel):
     factor_type: str
@@ -64,6 +66,10 @@ _FACTOR_LABELS = {
     "flow": "수급",
     "event": "이벤트",
     "valuation": "밸류에이션",
+}
+_PLAYBOOK_EXIT_DECISIONS = {
+    "liquidate": ("매도", "지금", "청산"),
+    "reduce": ("매도", "지금", "비중축소"),
 }
 
 
@@ -832,13 +838,13 @@ def build_analyze_decision_bundle(
 
 def apply_playbook_veto(
     summary: AnalyzeDecisionSummary,
-    verdict,
+    verdict: PlaybookVerdict | None,
 ) -> AnalyzeDecisionSummary:
     """PlaybookVerdict를 기반으로 decision_summary를 후처리하는 순수 함수.
 
     - verdict=None → summary 원본 반환 (기존 동작 보존)
-    - 미보유 + gate FAIL → action='관망', veto_applied=True
-    - 보유 + 청산/비중축소 → action_sentence에 exit 내용 반영, veto_applied=True
+    - 미보유 + gate FAIL → 관망/보류, veto_applied=True
+    - 보유 + liquidate/reduce → 매도/지금, veto_applied=True
     - 그 외 → 변경 없음
     """
     if verdict is None:
@@ -850,23 +856,23 @@ def apply_playbook_veto(
                 "action_original": summary.action,
                 "veto_applied": True,
                 "action": "관망",
+                "timing": "보류",
                 "action_sentence": f"신규진입 부적격: {verdict.gate.veto_reason}",
             }
         )
 
-    if (
-        verdict.holding
-        and verdict.exit_verdict is not None
-        and verdict.exit_verdict.action in ("청산", "비중축소")
-    ):
-        return summary.model_copy(
-            update={
-                "action_original": summary.action,
-                "veto_applied": True,
-                "action_sentence": (
-                    f"보유 판정: {verdict.exit_verdict.action} ({verdict.exit_verdict.detail})"
-                ),
-            }
-        )
+    exit_verdict = verdict.exit_verdict if verdict.holding else None
+    normalized = _PLAYBOOK_EXIT_DECISIONS.get(exit_verdict.action) if exit_verdict else None
+    if normalized is None:
+        return summary
 
-    return summary
+    action, timing, label = normalized
+    return summary.model_copy(
+        update={
+            "action_original": summary.action,
+            "veto_applied": True,
+            "action": action,
+            "timing": timing,
+            "action_sentence": f"보유 판정: {label} ({exit_verdict.detail})",
+        }
+    )

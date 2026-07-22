@@ -1,5 +1,8 @@
 """Plan 8 모델 TDD — GateCheck/GateResult/PositionPlan/ExitSignal/ExitVerdict/PlaybookVerdict."""
 
+import pytest
+from pydantic import ValidationError
+
 
 # ---------------------------------------------------------------------------
 # GateCheck / GateResult
@@ -154,6 +157,20 @@ def test_exit_verdict_hold():
     )
     assert v.action == "hold"
     assert v.current_r is None
+
+
+@pytest.mark.parametrize("action", ["청산", "비중축소", "sell"])
+def test_exit_verdict_rejects_non_domain_action(action):
+    from src.tools.playbook.models import ExitVerdict
+
+    with pytest.raises(ValidationError):
+        ExitVerdict(
+            action=action,
+            signals=[],
+            current_r=None,
+            trailing_stop=None,
+            detail="invalid",
+        )
 
 
 # ---------------------------------------------------------------------------
