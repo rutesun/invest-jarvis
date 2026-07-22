@@ -5,6 +5,8 @@ from src.llm.models import (
     ActionableSignalOutput,
     FundamentalSummaryInput,
     FundamentalSummaryOutput,
+    IntegratedExplanationInput,
+    IntegratedExplanationOutput,
     LLMRequest,
     LLMResponse,
     NewsAnalysisInput,
@@ -195,6 +197,34 @@ def test_actionable_signal_output_invalid_action():
         )
 
     assert "Invalid action" in str(exc_info.value)
+
+
+def test_integrated_explanation_output_has_no_decision_fields():
+    """설명 전용 출력은 새 action/timing/recommendation을 만들 수 없어야 한다."""
+    assert set(IntegratedExplanationOutput.model_fields) == {
+        "decision_explanation",
+        "rationale",
+        "risks",
+        "monitoring_points",
+    }
+
+
+def test_integrated_explanation_input_accepts_all_sources():
+    """모든 분석 소스와 고정 decision을 입력으로 받는다."""
+    input_data = IntegratedExplanationInput(
+        ticker="AAPL",
+        fixed_action="관망",
+        fixed_timing="조정_대기",
+        fixed_action_sentence="조정 확인 후 접근이 유리",
+        technical_context={"adjusted_score": 35},
+        level_context={"structure_summary": "핵심 지지 180~185"},
+    )
+    assert input_data.ticker == "AAPL"
+    assert input_data.fixed_action == "관망"
+    assert input_data.disclosure_items == []
+    assert input_data.factor_assessments == []
+    assert input_data.scenarios == []
+    assert input_data.news_analysis is None
 
 
 def test_actionable_signal_output_invalid_timing():
