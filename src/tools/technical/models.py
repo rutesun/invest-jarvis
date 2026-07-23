@@ -130,7 +130,10 @@ class IndicatorSnapshot(BaseModel):
     sma_120: float | None = None
     sma_150: float | None = None
     sma_200: float | None = None
+    sma_20_slope_pct: float | None = None
+    sma_50_slope_pct: float | None = None
     sma_100_slope_pct: float | None = None
+    sma_150_slope_pct: float | None = None
     sma_200_slope_pct: float | None = None
 
     # Momentum

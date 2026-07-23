@@ -322,6 +322,55 @@ def test_format_deep_dive_output_uses_snapshot_for_long_sma_rows():
     assert "$80.00 · → 보합 (+0.12%/21일)" not in output
 
 
+def test_format_deep_dive_output_shows_slope_for_short_and_mid_sma_rows():
+    canonical_snapshot = IndicatorSnapshot(
+        price=100.0,
+        change_pct=1.0,
+        sma_20=105.0,
+        sma_20_slope_pct=1.23,
+        sma_50=98.0,
+        sma_50_slope_pct=-0.10,
+        sma_150=90.0,
+        sma_150_slope_pct=-0.80,
+    )
+    technical = TechnicalResult(
+        ticker="ALAB",
+        timestamp=datetime.now(),
+        snapshot=canonical_snapshot,
+        indicators=canonical_snapshot,
+        components={},
+        total_score=0,
+        strategies=[],
+        overall_assessment="관망",
+        confidence_score=0.0,
+        key_insights=[],
+        warnings=[],
+    )
+    result = {
+        "ticker": "ALAB",
+        "technical": technical,
+        "technical_summary": type(
+            "TechSummary",
+            (),
+            {
+                "summary": "중립",
+                "key_insights": [],
+                "recommendation": "관망",
+                "confidence": 0.0,
+                "rationale": "이동평균 방향 확인",
+            },
+        )(),
+        "factor_assessments": [],
+        "scenarios": [],
+    }
+
+    output = format_deep_dive_output(result)
+
+    assert "**20일 이동평균선**: $105.00 · ↗ 상승 (+1.23%/21일)" in output
+    assert "**50일 이동평균선**: $98.00 · → 보합 (-0.10%/21일)" in output
+    assert "**150일 이동평균선**: $90.00 · ↘ 하락 (-0.80%/21일)" in output
+
+
 def test_format_deep_dive_output_shows_defer_reason():
     summary = AnalyzeDecisionSummary(
         leader="판단 보류",
