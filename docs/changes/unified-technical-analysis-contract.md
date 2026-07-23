@@ -1,8 +1,8 @@
 # Change Record: Unified Technical Analysis Contract
 
-**Status**: Draft
+**Status**: Merged
 **Date**: 2026-07-22
-**PRs**: -
+**PRs**: #51
 **Type**: feat
 
 > 이 문서는 PR/머지 단위 변경 기록입니다. 현재 기능 상태는 `docs/FEATURES.md`를 기준으로 봅니다.

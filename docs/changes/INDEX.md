@@ -4,7 +4,7 @@
 
 | Date | Type | Status | 변경 | PR | Record |
 |------|------|--------|------|----|--------|
-| 2026-07-22 | feat | Draft | Unified Technical Analysis Contract — check/analyze/brief 공통 3년 계약, 다중 티커 check, 설명 전용 종합 해설(ActionableSignal 제거), report ticker 제거 | - | [unified-technical-analysis-contract.md](unified-technical-analysis-contract.md) |
+| 2026-07-22 | feat | Merged | Unified Technical Analysis Contract — check/analyze/brief 공통 3년 계약, 다중 티커 check, 설명 전용 종합 해설(ActionableSignal 제거), report ticker 제거 | #51 | [unified-technical-analysis-contract.md](unified-technical-analysis-contract.md) |
 | 2026-07-16 | feat | Draft | Technical Scoring Redesign — raw 합계와 adjusted verdict 분리 | - | [technical-scoring-redesign.md](technical-scoring-redesign.md) |
 | 2026-07-16 | feat | Draft | jarvis brief — 일일 포트 액션 종합 CLI (+ PortfolioPipeline 제거, exit_rules SMA 버그픽스, SMA_LONG 전환국면 강등, KRX 영숫자 코드 인식) | #48 | [jarvis-brief.md](jarvis-brief.md) |
 | 2026-06-17 | feat | Merged | Stock Report V2 Phase 2 — PDF ingest + semantic search | #41 | [stock-report-v2-pdf-ingest.md](stock-report-v2-pdf-ingest.md) |
