@@ -5,7 +5,6 @@ from langchain_core.runnables import RunnableLambda
 
 from src.llm.analyzer import (
     analyze_news,
-    format_structure_context_for_llm,
     generate_fundamental_summary,
     generate_integrated_explanation,
     generate_technical_summary,
@@ -287,59 +286,6 @@ async def test_generate_fundamental_summary_with_no_metrics():
         assert "No financial metrics available" in captured_metrics_text
 
 
-@pytest.mark.asyncio
-async def test_format_structure_context_for_llm():
-    structure_levels = {
-        "support_zones": [
-            {
-                "lower_bound": 145.0,
-                "upper_bound": 147.0,
-                "strength": "core",
-                "reasons": ["반복 지지"],
-            },
-            {
-                "lower_bound": 140.0,
-                "upper_bound": 142.0,
-                "strength": "secondary",
-                "reasons": ["보조"],
-            },
-        ],
-        "resistance_zones": [
-            {"lower_bound": 155.0, "upper_bound": 157.0, "strength": "core", "reasons": ["매물대"]},
-        ],
-        "former_levels": [],
-        "invalidation": {
-            "label": "145.00~147.00 + 150일선 146.00 하향 이탈",
-            "reasons": ["core demand zone", "150일선 근접"],
-        },
-    }
-    execution_levels = [
-        {
-            "type": "pivot_s1",
-            "description": "피봇 S1",
-            "price": 146.0,
-            "distance_pct": -2.7,
-        },
-        {
-            "type": "sma_50",
-            "description": "50일선",
-            "price": 145.0,
-            "distance_pct": -3.3,
-        },
-    ]
-
-    text = format_structure_context_for_llm(structure_levels, execution_levels)
-
-    assert "구조 레벨" in text
-    assert "support_zones: 145.00~147.00, 140.00~142.00" in text
-    assert "resistance_zones: 155.00~157.00" in text
-    assert "former_levels: 없음" in text
-    assert "invalidation: 145.00~147.00 + 150일선 146.00 하향 이탈" in text
-    assert "실행 레벨" in text
-    assert "$146.00" in text
-    assert "피봇 S1" in text
-
-
 def _full_explanation_input() -> IntegratedExplanationInput:
     return IntegratedExplanationInput(
         ticker="AAPL",
@@ -399,7 +345,7 @@ async def test_generate_integrated_explanation_prompt_carries_all_sources():
 
     assert "관망" in user_message
     for field in IntegratedExplanationInput.model_fields:
-        assert field in user_message, f"{field} 누락"
+        assert f'"{field}"' in user_message, f"{field} 누락"
 
     assert "untrusted_facts" in system_message
     assert "do not select, rename, or recommend another action" in system_message.lower()

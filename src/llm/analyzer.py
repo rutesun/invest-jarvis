@@ -17,7 +17,6 @@ from src.llm.models import (
     TechnicalSummaryInput,
     TechnicalSummaryOutput,
 )
-from src.tools.technical.models import PriceLevels
 
 
 def _serialize_untrusted_facts(input_data: BaseModel) -> str:
@@ -52,122 +51,6 @@ def technical_recommendation_from_verdict(verdict) -> str | None:
     if action is None:
         return None
     return _TECHNICAL_RECOMMENDATION_BY_VERDICT.get(str(action))
-
-
-def format_levels_for_llm(levels: PriceLevels) -> str:
-    """가격 레벨을 LLM용 텍스트로 변환"""
-    lines = [f"현재가: ${levels.current_price:.2f}\n"]
-    if levels.support_levels:
-        lines.append("지지선 (가까운 순):")
-        for i, support in enumerate(levels.support_levels, 1):
-            lines.append(
-                f"  {i}. ${support.price:.2f} ({support.description}, {support.distance_pct:+.1f}%)"
-            )
-        lines.append("")
-    if levels.resistance_levels:
-        lines.append("저항선 (가까운 순):")
-        for i, resistance in enumerate(levels.resistance_levels, 1):
-            lines.append(
-                f"  {i}. ${resistance.price:.2f} ({resistance.description}, {resistance.distance_pct:+.1f}%)"
-            )
-        lines.append("")
-    if levels.targets:
-        lines.append("타겟 (상승 시나리오):")
-        for target_name, target_price in levels.targets.items():
-            readable_name = target_name.replace("_", " ").title()
-            lines.append(f"  - {readable_name}: ${target_price:.2f}")
-    return "\n".join(lines)
-
-
-def _as_dict(item):
-    if item is None:
-        return None
-    return item if isinstance(item, dict) else item.model_dump()
-
-
-def _format_zone_range(zone: dict) -> str:
-    return f"{zone['lower_bound']:.2f}~{zone['upper_bound']:.2f}"
-
-
-def format_structure_context_for_llm(
-    structure_levels,
-    execution_levels,
-) -> str:
-    """구조/실행 레벨을 LLM용 컨텍스트 문자열로 변환"""
-    if isinstance(structure_levels, str):
-        return structure_levels
-
-    structure_dict = _as_dict(structure_levels)
-    if structure_dict and "llm_context" in structure_dict:
-        return str(structure_dict["llm_context"])
-
-    lines: list[str] = ["구조 레벨:"]
-
-    if structure_dict:
-        support_zones = structure_dict.get("support_zones")
-        resistance_zones = structure_dict.get("resistance_zones")
-        former_levels = structure_dict.get("former_levels")
-        active_box = structure_dict.get("active_box")
-        invalidation_value = structure_dict.get("invalidation")
-        invalidation = _as_dict(invalidation_value) if invalidation_value else None
-
-        if support_zones is None or resistance_zones is None:
-            lines.append("- presenter contract missing (support_zones/resistance_zones)")
-            lines.append("")
-            lines.append("실행 레벨:")
-            if execution_levels:
-                for index, level in enumerate(execution_levels, start=1):
-                    level_dict = _as_dict(level)
-                    lines.append(
-                        f"{index}. ${level_dict['price']:.2f} ({level_dict['description']}, {level_dict['distance_pct']:+.1f}%)"
-                    )
-            else:
-                lines.append("- 실행 레벨 데이터 없음")
-            return "\n".join(lines)
-
-        support_text = (
-            ", ".join(_format_zone_range(zone) for zone in support_zones)
-            if support_zones
-            else "없음"
-        )
-        resistance_text = (
-            ", ".join(_format_zone_range(zone) for zone in resistance_zones)
-            if resistance_zones
-            else "없음"
-        )
-        former_text = (
-            ", ".join(_format_zone_range(zone) for zone in former_levels)
-            if former_levels
-            else "없음"
-        )
-        active_box_text = _format_zone_range(active_box) if active_box else "없음"
-
-        if structure_dict.get("summary_label"):
-            lines.append(f"- summary_label: {structure_dict['summary_label']}")
-        if structure_dict.get("headline"):
-            lines.append(f"- headline: {structure_dict['headline']}")
-        if structure_dict.get("why"):
-            lines.append(f"- why: {structure_dict['why']}")
-        lines.append(f"- active_box: {active_box_text}")
-        lines.append(f"- support_zones: {support_text}")
-        lines.append(f"- resistance_zones: {resistance_text}")
-        lines.append(f"- former_levels: {former_text}")
-        lines.append(f"- invalidation: {invalidation['label'] if invalidation else '없음'}")
-    else:
-        lines.append("- 구조 존 데이터 없음")
-
-    lines.append("")
-    lines.append("실행 레벨:")
-    if execution_levels:
-        for index, level in enumerate(execution_levels, start=1):
-            level_dict = _as_dict(level)
-            lines.append(
-                f"{index}. ${level_dict['price']:.2f} ({level_dict['description']}, {level_dict['distance_pct']:+.1f}%)"
-            )
-    else:
-        lines.append("- 실행 레벨 데이터 없음")
-
-    return "\n".join(lines)
 
 
 async def analyze_news(
