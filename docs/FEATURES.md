@@ -78,8 +78,8 @@ LLM 없이 기술적 분석만 수행하는 빠른 진단 기능.
 | 뉴스 | yfinance 뉴스 | NewsAnalysisOutput |
 | 공시 | SEC EDGAR / OpenDART (선택) | - |
 | 수급 | KIS API (한국주식 전용) | - |
-| **종합** | 위 전체 통합 | IntegratedAnalysisOutput |
-| **실행 시그널** | 기술 + 패턴 + 가격 레벨 | ActionableSignalOutput |
+| **Macro** | VIX·F&G·금리·DXY·WTI (Analyze/Brief 전용) | TickerMacroSnapshot |
+| **종합 해설** | 위 전체 + 규칙이 확정한 decision 설명 (새 액션/타이밍 생성 안 함) | IntegratedExplanationOutput |
 
 **데이터 소스 자동 선택:**
 - 한국 주식 (`.KS`, `.KQ`) 감지 시 → KIS API 사용 (실시간)
@@ -483,15 +483,16 @@ synthesis(map) 단계가 `search_documents`를 LLM tool로 직접 호출해 PDF 
 
 ---
 
-## 6. Ticker Report (`jarvis report ticker`)
+## 6. Multi-ticker Quick Check (`jarvis check`)
 
-지정 티커의 매크로 + 기술적 분석 스냅샷.
+여러 티커의 공통 3년 기술 분석을 LLM 없이 한 번에 확인한다.
+(과거 티커 리포트의 기술 배치 역할을 대체 — 마이그레이션 경로는 change record 참고)
 
 **입출력:**
-- 입력: 티커 목록 (기본: AAPL,MSFT,NVDA)
-- 출력: 매크로 (VIX, F&G, 금리, DXY, WTI) + 종목별 기술 점수
+- 입력: 티커 목록 (예: `jarvis check AAPL MSFT NVDA`)
+- 출력: 종목별 8개 컴포넌트 점수 + technical_verdict (Macro 미포함)
 
-**의존성:** yfinance, MacroTool
+**의존성:** yfinance / KIS API
 
 ---
 

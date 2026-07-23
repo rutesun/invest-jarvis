@@ -6,6 +6,61 @@ from src.tools.technical.indicators import IndicatorCalculator
 from src.tools.technical.models import IndicatorSnapshot
 
 
+def _trend_df(step: float, rows: int = 260) -> pd.DataFrame:
+    close = 100.0 + np.arange(rows) * step
+    return pd.DataFrame(
+        {
+            "Open": close,
+            "High": close + 1.0,
+            "Low": close - 1.0,
+            "Close": close,
+            "Volume": np.full(rows, 1_000_000),
+        }
+    )
+
+
+def _snapshot(df: pd.DataFrame) -> IndicatorSnapshot:
+    calculator = IndicatorCalculator()
+    return calculator.create_snapshot(calculator.calculate(df))
+
+
+def test_snapshot_includes_sma_100_and_long_sma_slopes():
+    snapshot = _snapshot(_trend_df(0.5))
+
+    assert snapshot.sma_100 is not None
+    assert snapshot.sma_200 is not None
+    assert snapshot.sma_100_slope_pct > 0.5
+    assert snapshot.sma_200_slope_pct > 0.5
+
+
+def test_sma_200_slope_requires_221_original_rows():
+    assert _snapshot(_trend_df(0.5, rows=220)).sma_200_slope_pct is None
+    assert _snapshot(_trend_df(0.5, rows=221)).sma_200_slope_pct is not None
+
+
+def test_slope_keeps_original_trading_row_positions_with_middle_nan():
+    frame = pd.DataFrame({"SMA_100": np.arange(100.0, 130.0)})
+    expected = IndicatorCalculator._slope_pct(frame, "SMA_100")
+    frame.iloc[-10, frame.columns.get_loc("SMA_100")] = np.nan
+
+    assert IndicatorCalculator._slope_pct(frame, "SMA_100") == expected
+
+
+@pytest.mark.parametrize("endpoint", [-1, -22])
+def test_slope_returns_none_when_original_endpoint_is_nan(endpoint: int):
+    frame = pd.DataFrame({"SMA_100": np.arange(100.0, 130.0)})
+    frame.iloc[endpoint, frame.columns.get_loc("SMA_100")] = np.nan
+
+    assert IndicatorCalculator._slope_pct(frame, "SMA_100") is None
+
+
+def test_slope_returns_none_when_previous_value_is_zero():
+    frame = pd.DataFrame({"SMA_100": np.arange(100.0, 130.0)})
+    frame.iloc[-22, frame.columns.get_loc("SMA_100")] = 0.0
+
+    assert IndicatorCalculator._slope_pct(frame, "SMA_100") is None
+
+
 @pytest.fixture
 def sample_df():
     """Create sample OHLCV DataFrame."""

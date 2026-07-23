@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field, computed_field
 
 
@@ -151,7 +153,7 @@ class ExitSignal(BaseModel):
 class ExitVerdict(BaseModel):
     """보유 종목 매도 판정."""
 
-    action: str  # "liquidate" | "reduce" | "hold"
+    action: Literal["liquidate", "reduce", "hold"]
     signals: list[ExitSignal]
     current_r: float | None  # stop_price 있을 때만
     trailing_stop: float | None  # SMA50 기반

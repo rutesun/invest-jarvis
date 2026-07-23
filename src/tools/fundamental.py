@@ -352,7 +352,13 @@ class FundamentalTool(BaseTool):
             industry=info.get("industry"),
             pe_ratio=info.get("trailingPE"),
             forward_pe=info.get("forwardPE"),
-            peg_ratio=info.get("pegRatio"),
+            # yfinance는 pegRatio를 deprecated 처리하고 trailingPegRatio로 대체함.
+            # 최신 키를 우선하되 값이 없으면 구 키로 fallback한다.
+            peg_ratio=(
+                info.get("trailingPegRatio")
+                if info.get("trailingPegRatio") is not None
+                else info.get("pegRatio")
+            ),
             pb_ratio=info.get("priceToBook"),
             ps_ratio=info.get("priceToSalesTrailing12Months"),
             ev_ebitda=info.get("enterpriseToEbitda"),

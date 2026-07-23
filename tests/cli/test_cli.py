@@ -4,10 +4,9 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from typer.testing import CliRunner
 
-from src.cli.main import app, run_deep_dive
-from src.llm.models import ActionableSignalOutput, NewsAnalysisOutput, TechnicalSummaryOutput
+from src.cli.main import app, run_deep_dive, run_quick_check, run_quick_checks
+from src.llm.models import IntegratedExplanationOutput, NewsAnalysisOutput, TechnicalSummaryOutput
 from src.pipelines.analyze_decision import AnalyzeDecisionSummary, AnalyzeScenario, FactorAssessment
-from src.tools.macro import TickerMacroSnapshot
 from src.tools.technical.models import IndicatorSnapshot, TechnicalResult
 
 
@@ -29,17 +28,72 @@ def test_cli_check_command():
         "total_score": 75,
     }
 
-    with (
-        patch("src.cli.main.run_quick_check", new_callable=AsyncMock) as mock_run,
-        patch("src.cli.main.resolve_ticker", new_callable=AsyncMock) as mock_resolve,
-    ):
-        mock_resolve.return_value = "AAPL"
-        mock_run.return_value = mock_result
+    with patch("src.cli.main.run_quick_checks", new=AsyncMock(return_value=[mock_result])):
         result = runner.invoke(app, ["check", "AAPL"])
 
     assert result.exit_code == 0
     assert "AAPL" in result.stdout
     assert "178.50" in result.stdout
+
+
+@pytest.mark.asyncio
+async def test_run_quick_check_never_constructs_macro():
+    with (
+        patch("src.cli.main.resolve_ticker", new=AsyncMock(return_value="AAPL")),
+        patch("src.cli.main.YFinanceProvider"),
+        patch("src.cli.main.TechnicalScorer"),
+        patch("src.cli.main.TechnicalAnalysisTool"),
+        patch("src.cli.main.QuickCheckPipeline") as pipeline_cls,
+        patch("src.cli.main.MacroTool") as macro_cls,
+    ):
+        pipeline_cls.return_value.run = AsyncMock(
+            return_value={"success": True, "ticker": "AAPL"}
+        )
+        result = await run_quick_check("AAPL")
+
+    macro_cls.assert_not_called()
+    assert result["ticker"] == "AAPL"
+
+
+def test_check_output_never_displays_macro():
+    success = {
+        "ticker": "AAPL",
+        "success": True,
+        "price": 178.5,
+        "change_pct": 1.2,
+        "total_score": 42,
+        "component_raw_total": 42,
+        "adjusted_score": 35,
+        "technical_verdict": None,
+        "score_history": [],
+        "score_history_warning": None,
+        "assessment": "관망",
+        "confidence": 0,
+        "signals": [],
+        "warnings": [],
+        "indicators": {
+            "sma_20": 175.0,
+            "sma_50": 170.0,
+            "sma_100": 165.0,
+            "sma_100_slope_pct": 0.2,
+            "sma_150": 160.0,
+            "sma_200": 155.0,
+            "sma_200_slope_pct": -0.1,
+            "rsi": 55.0,
+            "adx": 20.0,
+            "crsi": 50.0,
+        },
+        "components": [],
+    }
+    with patch(
+        "src.cli.main.run_quick_checks",
+        new=AsyncMock(return_value=[success]),
+    ):
+        result = runner.invoke(app, ["check", "AAPL"])
+
+    assert result.exit_code == 0
+    assert "AAPL Quick Check" in result.stdout
+    assert "Macro" not in result.stdout
 
 
 def test_cli_analyze_command():
@@ -114,15 +168,11 @@ def test_cli_analyze_command():
         ],
         "news": [],
         "news_analysis": mock_news_analysis,
-        "actionable_signal": ActionableSignalOutput(
-            action="매수",
-            timing="지금",
-            signal_strength=8,
-            headline="매수",
-            primary_reason="골든크로스",
-            supporting_reasons=[],
-            risks=[],
-            confidence=0.75,
+        "integrated_explanation": IntegratedExplanationOutput(
+            decision_explanation="규칙이 확정한 관망 판단 해설",
+            rationale=["기술적: 추세 유지"],
+            risks=["과열 부담"],
+            monitoring_points=["20일선 유지 여부"],
         ),
     }
 
@@ -142,64 +192,86 @@ def test_cli_analyze_command():
     assert "가격" in result.stdout
     assert "조정 대기" in result.stdout
     assert "실행 가능한 투자 시그널" not in result.stdout
+    assert "종합 해설" in result.stdout
+    assert "규칙이 확정한 관망 판단 해설" in result.stdout
 
 
-def test_cli_report_command():
-    mock_macro = TickerMacroSnapshot(
-        timestamp=datetime.now(),
-        vix=15.5,
-        vix_change=-0.5,
-        fear_greed=65,
-        fear_greed_label="Greed",
-        wti=75.0,
-        wti_change=1.0,
-        us_10y=4.5,
-        us_2y=4.2,
-        yield_spread=0.3,
-        dxy=103.5,
-        dxy_change=0.2,
-    )
+@pytest.mark.asyncio
+async def test_run_quick_checks_isolates_failures_and_preserves_input_order():
+    success_aapl = {"success": True, "ticker": "AAPL"}
+    success_msft = {"success": True, "ticker": "MSFT"}
 
-    mock_snapshot = IndicatorSnapshot(
-        price=178.50,
-        change_pct=2.5,
-        sma_20=175.0,
-        sma_50=170.0,
-        rsi=58.3,
-    )
-    mock_technical = TechnicalResult(
-        ticker="AAPL",
-        timestamp=datetime.now(),
-        snapshot=mock_snapshot,
-        indicators=mock_snapshot,
-        components={},
-        total_score=75,
-        strategies=[],
-        overall_assessment="매수",
-        confidence_score=75.0,
-        key_insights=["골든크로스"],
-        warnings=[],
-    )
+    with patch(
+        "src.cli.main.run_quick_check",
+        new=AsyncMock(
+            side_effect=[
+                success_aapl,
+                RuntimeError("resolver down"),
+                success_msft,
+            ]
+        ),
+    ) as quick_check:
+        results = await run_quick_checks(["AAPL", "INVALID", "MSFT"])
 
-    mock_result = {
-        "date": datetime.now(),
-        "macro": mock_macro,
-        "tickers": [
-            {
-                "ticker": "AAPL",
-                "technical": mock_technical,
-                "error": None,
-            }
-        ],
-    }
+    assert results == [
+        success_aapl,
+        {
+            "success": False,
+            "ticker": "INVALID",
+            "error": "resolver down",
+        },
+        success_msft,
+    ]
+    assert [call.args[0] for call in quick_check.await_args_list] == [
+        "AAPL",
+        "INVALID",
+        "MSFT",
+    ]
 
-    with patch("src.cli.main.run_daily_report", new_callable=AsyncMock) as mock_run:
-        mock_run.return_value = mock_result
-        result = runner.invoke(app, ["report", "ticker", "--tickers", "AAPL"])
+
+def test_check_accepts_multiple_tickers():
+    results = [
+        {"success": True, "ticker": "AAPL", "price": 100.0, "change_pct": 1.0},
+        {"success": True, "ticker": "MSFT", "price": 200.0, "change_pct": -1.0},
+    ]
+    with (
+        patch("src.cli.main.run_quick_checks", new=AsyncMock(return_value=results)),
+        patch(
+            "src.pipelines.quick_check.QuickCheckPipeline.format_output",
+            side_effect=["AAPL result", "MSFT result"],
+        ),
+    ):
+        result = runner.invoke(app, ["check", "AAPL", "MSFT"])
 
     assert result.exit_code == 0
-    assert "Daily Market Report" in result.stdout
-    assert "Macro Snapshot" in result.stdout
+    assert "AAPL result" in result.stdout
+    assert "MSFT result" in result.stdout
+
+
+def test_check_reports_all_results_then_exits_nonzero_on_partial_failure():
+    results = [
+        {"success": True, "ticker": "AAPL", "price": 100.0, "change_pct": 1.0},
+        {"success": False, "ticker": "INVALID", "error": "No data"},
+    ]
+    with (
+        patch("src.cli.main.run_quick_checks", new=AsyncMock(return_value=results)),
+        patch(
+            "src.pipelines.quick_check.QuickCheckPipeline.format_output",
+            return_value="AAPL result",
+        ),
+    ):
+        result = runner.invoke(app, ["check", "AAPL", "INVALID"])
+
+    assert result.exit_code == 1
+    assert "AAPL result" in result.stdout
+    assert "INVALID" in result.stdout
+    assert "No data" in result.stdout
+
+
+def test_report_ticker_command_is_removed():
+    result = runner.invoke(app, ["report", "ticker"])
+    assert result.exit_code != 0
+    assert "No such command" in result.stderr
 
 
 def test_cli_version():
@@ -231,10 +303,15 @@ async def test_run_deep_dive_korean_stock_without_kis_credentials_uses_yfinance(
         patch("src.tools.disclosure.DARTDisclosureFetcher", return_value=object()),
         patch("src.tools.disclosure.DisclosureTool", return_value=object()),
         patch("src.tools.flow.FlowTool", return_value=object()),
-        patch("src.cli.main.DeepDivePipeline", return_value=mock_pipeline),
+        patch("src.cli.main.MacroTool") as mock_macro_tool,
+        patch(
+            "src.cli.main.DeepDivePipeline", return_value=mock_pipeline
+        ) as mock_pipeline_cls,
     ):
         result = await run_deep_dive("엘앤에프", "openai")
 
     assert result == expected
     mock_yfinance_provider.assert_called_once()
     mock_fundamental_tool.assert_called_once_with(kis_provider=None)
+    mock_macro_tool.assert_called_once_with()
+    assert mock_pipeline_cls.call_args.kwargs["macro_tool"] is mock_macro_tool.return_value

@@ -32,23 +32,26 @@ jarvis report
 
 ## 명령어 상세
 
-### 1. check - 빠른 기술적 분석
+### 1. check - 빠른 기술적 분석 (다중 티커)
 
 **특징:**
 - LLM 불필요 (빠른 응답)
-- 8개 컴포넌트 기반 분석
-- 주요 기술 지표만 출력
+- 공통 3년 데이터 기반 8개 컴포넌트 분석 (SMA 100·200 방향 포함)
+- 주요 기술 지표만 출력, Macro 미포함
+- 여러 티커를 한 번에 전달 가능 (일부 실패해도 나머지는 계속 출력)
 
 **사용법:**
 ```bash
-uv run jarvis check <TICKER>
+uv run jarvis check <TICKER> [TICKER ...]
 ```
 
 **예시:**
 ```bash
+# 단일 티커
 uv run jarvis check AAPL
-uv run jarvis check MSFT
-uv run jarvis check NVDA
+
+# 여러 티커 한 번에 (한국·미국 혼합 가능)
+uv run jarvis check AAPL MSFT 005930.KS
 ```
 
 ---
@@ -56,9 +59,9 @@ uv run jarvis check NVDA
 ### 2. analyze - 심층 분석 (LLM)
 
 **특징:**
-- 기술적 분석 + LLM 해석
-- 최근 뉴스 감성 분석
-- 투자 추천 및 근거
+- 공통 3년 기술 분석 + 뉴스·재무·공시·수급·Macro 통합
+- 액션·타이밍은 규칙(`decision_summary`)이 확정 — LLM은 그 결정을 **설명만** 하고 새 액션을 만들지 않음
+- 최종 LLM에 모든 소스와 고정 decision을 한 번에 전달해 `종합 해설` 생성
 
 **요구사항:**
 - `OPENAI_API_KEY` 또는 `ANTHROPIC_API_KEY` 필요
@@ -81,10 +84,11 @@ uv run jarvis analyze AAPL --provider anthropic
 ```
 
 **출력 내용:**
+- Macro 스냅샷 (VIX·Fear&Greed·WTI·US 10Y/2Y·10Y-2Y Spread·DXY) — Analyze/Brief 전용
 - 상단 판단 요약
   - `주도 팩터`
   - `핵심 변수` (짧은 headline 기준)
-  - `액션`
+  - `액션` (규칙이 확정 — Playbook veto가 반영된 최종 값)
   - 판단이 약하면 `판단 보류`와 이유 표시
 - 구조 레벨
   - 장기 구조 구간 기준 `수요 존 / 공급 존 / 무효화 기준`
@@ -105,7 +109,7 @@ uv run jarvis analyze AAPL --provider anthropic
   - 뉴스 감성 분석 / 영향 평가 / 주요 테마
   - **공시 분석** (최근 3개월 주요 공시, SEC/DART)
   - **수급 동향** (외인/기관 1d/5d/10d 순매수, 한국주식 전용)
-  - **종합 인사이트** (모든 팩터 통합 추천 + 리스크)
+  - **종합 해설** (모든 소스 + 고정 decision 설명 — 근거 / 리스크 / 모니터링 포인트, 새 액션 생성 안 함)
   - **차트 시각화**: 기술적 차트 PNG 자동 생성 (`charts/` 디렉토리)
   - 캔들스틱 + MA 라인 (20/50/150/200일)
   - Supertrend 추세선
@@ -131,40 +135,9 @@ uv run jarvis analyze AAPL --provider anthropic
 
 ### 3. report - 일일 시장 리포트
 
-#### 3-1. report ticker - 티커 기반 리포트
+> 다중 티커 기술 스냅샷은 `jarvis check <TICKER ...>`로 대체되었습니다 (아래 `check` 참고).
 
-**특징:**
-- 매크로 지표 스냅샷
-- 다중 종목 기술적 분석
-- 시장 전반 요약
-
-**요구사항:**
-- `OPENAI_API_KEY` 또는 `ANTHROPIC_API_KEY` 필요
-
-**사용법:**
-```bash
-uv run jarvis report ticker [OPTIONS]
-```
-
-**옵션:**
-- `--tickers, -t`: 분석할 티커 목록 (쉼표로 구분, 기본값: AAPL,MSFT,NVDA)
-- `--provider, -p`: LLM 제공자 선택 (openai|anthropic, 기본값: openai)
-
-**예시:**
-```bash
-# 기본 티커 사용
-uv run jarvis report ticker
-
-# 커스텀 티커
-uv run jarvis report ticker --tickers "AAPL,GOOGL,META,TSLA"
-
-# Anthropic 사용
-uv run jarvis report ticker --provider anthropic
-```
-
----
-
-#### 3-2. report daily - 텔레그램 기반 일일 리포트
+#### 3-1. report daily - 텔레그램 기반 일일 리포트
 
 **특징:**
 - 텔레그램 채널 메시지 자동 수집 및 분석
@@ -254,7 +227,7 @@ uv run python -m src.pipelines.daily_report.stages.wrapup_stage 2026-04-17
 
 ---
 
-#### 3-3. report daily-v2 - Stock Report Engine V2 실행 (Phase 1)
+#### 3-2. report daily-v2 - Stock Report Engine V2 실행 (Phase 1)
 
 **특징:**
 - LLM semantic extraction 기반 `canonical_summary`/`evidence_items` 생성
@@ -295,7 +268,7 @@ uv run jarvis report daily-v2 2026-05-19 --google-grounding
 
 ---
 
-#### 3-4. report daily-v2-google - DB 데이터로 Google Grounding 리포트만 생성 (T09-B 단독)
+#### 3-3. report daily-v2-google - DB 데이터로 Google Grounding 리포트만 생성 (T09-B 단독)
 
 **특징:**
 - DB에 이미 적재된 `knowledge_chunks`만 사용 — ingest/classify 단계를 생략한다
@@ -322,7 +295,7 @@ uv run jarvis report daily-v2-google 2026-05-28
 
 ---
 
-#### 3-5. report upload - 기존 리포트 일괄 업로드
+#### 3-4. report upload - 기존 리포트 일괄 업로드
 
 **특징:**
 - `reports/` 디렉토리의 기존 MD 파일을 Notion에 업로드
@@ -372,7 +345,7 @@ uv run jarvis report upload 2026-04-18 --type screener
 
 ---
 
-#### 3-6. V2 튜닝/DB 확인 스크립트
+#### 3-5. V2 튜닝/DB 확인 스크립트
 
 **Prompt 튜닝 (실데이터 샘플 기반):**
 ```bash
@@ -710,14 +683,14 @@ uv run jarvis analyze AAPL
 
 ### 2. 여러 종목 동시 분석
 ```bash
-# report로 한 번에 여러 종목 체크
-uv run jarvis report ticker --tickers "AAPL,MSFT,GOOGL,AMZN,META"
+# check로 한 번에 여러 종목 기술 체크 (LLM 없이)
+uv run jarvis check AAPL MSFT GOOGL AMZN META
 ```
 
 ### 3. 정기적인 모니터링
 ```bash
 # cron이나 스케줄러로 자동화
-0 9 * * 1-5 cd /path/to/invest-jarvis && uv run jarvis report ticker
+0 9 * * 1-5 cd /path/to/invest-jarvis && uv run jarvis check AAPL MSFT NVDA
 ```
 
 ### 4. 출력 저장

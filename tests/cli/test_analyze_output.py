@@ -11,6 +11,7 @@ from src.pipelines.analyze_decision import (
     AnalyzeScenario,
     FactorAssessment,
 )
+from src.tools.macro import TickerMacroSnapshot
 from src.tools.technical.models import (
     ChartPatternResult,
     IndicatorSnapshot,
@@ -155,6 +156,20 @@ def test_format_deep_dive_output_shows_top_summary_and_factor_reasons():
             ],
             "llm_context": "구조 레벨",
         },
+        "macro": TickerMacroSnapshot(
+            timestamp=datetime(2026, 7, 22),
+            vix=18.5,
+            vix_change=1.2,
+            fear_greed=55,
+            fear_greed_label="Neutral",
+            wti=68.4,
+            wti_change=-0.7,
+            us_10y=4.25,
+            us_2y=3.85,
+            yield_spread=0.4,
+            dxy=101.2,
+            dxy_change=0.3,
+        ),
     }
 
     output = format_deep_dive_output(result)
@@ -163,11 +178,20 @@ def test_format_deep_dive_output_shows_top_summary_and_factor_reasons():
     assert "핵심 변수" in output
     assert "액션" in output
     assert "## 판단 요약" in output
+    assert "## Macro" in output
+    assert "VIX" in output
+    assert "Fear & Greed" in output
+    assert "WTI" in output
+    assert "US 10Y" in output
+    assert "US 2Y" in output
+    assert "10Y-2Y Spread" in output
+    assert "DXY" in output
     assert "## 구조 레벨" in output
     assert "## 실행 레벨" in output
     assert "## 패턴 분석" in output
     assert "## 원시 데이터" in output
     assert output.index("## 판단 요약") < output.index("## 원시 데이터")
+    assert output.index("## Macro") < output.index("## 판단 요약")
     assert "- **주도 팩터**: 혼합" in output
     assert "- **가격**: 신고가 돌파" in output
     assert "- **이벤트**: 반복 기대 기사" in output
@@ -191,6 +215,8 @@ def test_format_deep_dive_output_shows_top_summary_and_factor_reasons():
     assert "technical" not in output
     assert "event" not in output
     assert "조정_대기" not in output
+    assert "**SMA 100**: N/A · — 데이터 부족" in output
+    assert "**SMA 200**: N/A · — 데이터 부족" in output
 
 
 def test_format_deep_dive_output_warns_when_presented_structure_missing():
@@ -238,6 +264,111 @@ def test_format_deep_dive_output_warns_when_presented_structure_missing():
     output = format_deep_dive_output(result)
 
     assert "presenter payload 누락" in output
+
+
+def test_format_deep_dive_output_uses_snapshot_for_long_sma_rows():
+    legacy_indicators = IndicatorSnapshot(
+        price=100.0,
+        change_pct=1.0,
+        sma_100=90.0,
+        sma_100_slope_pct=-0.75,
+        sma_200=80.0,
+        sma_200_slope_pct=0.12,
+    )
+    canonical_snapshot = IndicatorSnapshot(
+        price=100.0,
+        change_pct=1.0,
+        sma_100=110.0,
+        sma_100_slope_pct=0.82,
+        sma_200=120.0,
+        sma_200_slope_pct=-0.75,
+    )
+    technical = TechnicalResult(
+        ticker="ALAB",
+        timestamp=datetime.now(),
+        snapshot=canonical_snapshot,
+        indicators=legacy_indicators,
+        components={},
+        total_score=0,
+        strategies=[],
+        overall_assessment="관망",
+        confidence_score=0.0,
+        key_insights=[],
+        warnings=[],
+    )
+    result = {
+        "ticker": "ALAB",
+        "technical": technical,
+        "technical_summary": type(
+            "TechSummary",
+            (),
+            {
+                "summary": "중립",
+                "key_insights": [],
+                "recommendation": "관망",
+                "confidence": 0.0,
+                "rationale": "장기 이동평균 확인",
+            },
+        )(),
+        "factor_assessments": [],
+        "scenarios": [],
+    }
+
+    output = format_deep_dive_output(result)
+
+    assert "**SMA 100**: $110.00 · ↗ 상승 (+0.82%/21일)" in output
+    assert "**SMA 200**: $120.00 · ↘ 하락 (-0.75%/21일)" in output
+    assert "$90.00 · ↘ 하락 (-0.75%/21일)" not in output
+    assert "$80.00 · → 보합 (+0.12%/21일)" not in output
+
+
+def test_format_deep_dive_output_shows_slope_for_short_and_mid_sma_rows():
+    canonical_snapshot = IndicatorSnapshot(
+        price=100.0,
+        change_pct=1.0,
+        sma_20=105.0,
+        sma_20_slope_pct=1.23,
+        sma_50=98.0,
+        sma_50_slope_pct=-0.10,
+        sma_150=90.0,
+        sma_150_slope_pct=-0.80,
+    )
+    technical = TechnicalResult(
+        ticker="ALAB",
+        timestamp=datetime.now(),
+        snapshot=canonical_snapshot,
+        indicators=canonical_snapshot,
+        components={},
+        total_score=0,
+        strategies=[],
+        overall_assessment="관망",
+        confidence_score=0.0,
+        key_insights=[],
+        warnings=[],
+    )
+    result = {
+        "ticker": "ALAB",
+        "technical": technical,
+        "technical_summary": type(
+            "TechSummary",
+            (),
+            {
+                "summary": "중립",
+                "key_insights": [],
+                "recommendation": "관망",
+                "confidence": 0.0,
+                "rationale": "이동평균 방향 확인",
+            },
+        )(),
+        "factor_assessments": [],
+        "scenarios": [],
+    }
+
+    output = format_deep_dive_output(result)
+
+    assert "**20일 이동평균선**: $105.00 · ↗ 상승 (+1.23%/21일)" in output
+    assert "**50일 이동평균선**: $98.00 · → 보합 (-0.10%/21일)" in output
+    assert "**150일 이동평균선**: $90.00 · ↘ 하락 (-0.80%/21일)" in output
 
 
 def test_format_deep_dive_output_shows_defer_reason():
@@ -295,7 +426,7 @@ def test_format_disclosure_title_normalizes_sec_primary_document_name():
     assert title == "SEC 10-Q 공시"
 
 
-def test_format_deep_dive_output_hides_integrated_recommendation_labels():
+def test_format_deep_dive_output_renders_integrated_explanation_without_new_action():
     snapshot = IndicatorSnapshot(price=100.0, change_pct=1.0, rsi=55.0)
     technical = TechnicalResult(
         ticker="AAPL",
@@ -334,21 +465,25 @@ def test_format_deep_dive_output_hides_integrated_recommendation_labels():
         ),
         "factor_assessments": [],
         "scenarios": [],
-        "integrated_analysis": type(
-            "Integrated",
+        "integrated_explanation": type(
+            "Explanation",
             (),
             {
-                "recommendation": "매수",
-                "action_summary": "기존 LLM 요약",
+                "decision_explanation": "규칙이 확정한 관망 판단을 설명합니다.",
                 "rationale": ["기술적: 강세"],
-                "risks": [],
+                "risks": ["과열 부담"],
+                "monitoring_points": ["20일선 유지 여부"],
             },
         )(),
     }
 
     output = format_deep_dive_output(result)
 
-    assert "## 종합 인사이트 참고" in output
+    assert "## 종합 해설" in output
+    assert "규칙이 확정한 관망 판단을 설명합니다." in output
+    assert "모니터링 포인트" in output
+    assert "20일선 유지 여부" in output
+    # 설명 전용 — 새 액션/추천 라벨을 만들지 않는다
     assert "투자 추천" not in output
 
 

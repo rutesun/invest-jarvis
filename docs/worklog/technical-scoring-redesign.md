@@ -94,3 +94,41 @@
 - 근원(root cause): action-supporting caution이 없는 `reduce/avoid`에서는 기존 bullish/support reason 목록이 그대로 1순위로 유지됨.
 - 수정: 음수 adjusted score로 `reduce/avoid`가 선택된 경우 risk fallback reason을 bullish/support reason보다 먼저 배치하고, `지지 confluence`가 있어도 `avoid`의 첫 reason이 risk 우위 설명이 되는 회귀 테스트를 추가함.
 - 재발 방지 / 배운 것: action label과 첫 reason은 같은 방향을 가리켜야 하며, 반대 방향 신호는 보조 정보로만 뒤에 남겨야 함.
+
+## (2026-07-20 14:39) [Decision] 모든 기술 분석 소비 경로를 3년 계약으로 통일
+- 맥락: `check`는 1년, `analyze`와 `brief`는 3년 OHLCV를 사용해 같은 `TechnicalScorer`라도 누적 지표와 최종 score/verdict가 달라질 수 있음. 사용자는 어떤 파이프라인에서도 동일한 기술 점수가 나와야 한다고 확정함.
+- 후보: A) 파이프라인별 기간 유지 / B) check와 analyze만 통일 / C) `TechnicalAnalysisTool`의 canonical period를 3년으로 정해 모든 소비 경로가 사용
+- 선택: C — 단일 source of truth로 미래 drift를 막고 component/raw/adjusted/verdict/history 계약을 동일하게 만든다.
+- 기각: A(동일성 요구 미충족), B(다른 소비 경로에 점수 차이가 남음)
+- ADR 후보? no
+
+## (2026-07-20 14:56) [Decision] Macro와 다중 ticker 명령 책임 확정
+- 맥락: `report ticker`가 다중 종목 check와 역할이 겹치고 사용되지 않는 LLM 의존을 가지며, Macro 표시와 LLM 사용 경계가 불명확함.
+- 후보: A) 모든 명령에 Macro / B) analyze에만 Macro / C) analyze·brief에 표시하고 analyze 종합 LLM 해설에 전달
+- 선택: C — check는 다중 ticker 기술 분석에 집중하고, analyze는 Macro를 종합 해설에 사용하며, brief는 기존 포트폴리오 Macro 표시를 유지한다.
+- 기각: A(check의 가벼운 역할과 충돌), B(brief의 기존 시장 요약을 제거할 이유가 없음)
+- ADR 후보? no
+
+## (2026-07-20 15:06) [Decision] report ticker 삭제와 장기 이동평균 slope 표기
+- 맥락: 사용자가 중복된 `report ticker` 삭제를 확정하고, 주요 지표에 SMA 100·200과 방향 아이콘을 항상 표시하도록 요청함. 코드 검증 결과 최종 종합 LLM에는 news와 Macro가 함께 전달되지 않는 공백도 확인됨.
+- 후보: A) report ticker alias 유지 / B) 완전 삭제, slope 단순 증감 / C) 완전 삭제, 21거래일 변화율에 보합 band 적용
+- 선택: C — 다중 ticker check가 기능을 대체하고, 기존 장기 추세 판정과 같은 21거래일 기준에 ±0.5% 보합 band를 적용한다. 최종 LLM에는 모든 분석 소스와 고정 decision을 전달한다.
+- 기각: A(명령 중복 지속), B(미세 노이즈도 상승·하락으로 과대 표시)
+- ADR 후보? no
+
+## (2026-07-21 11:33) [Decision] Playbook 이후 시나리오 재생성과 two-stage prompt 경계
+- 맥락: 실행계획 독립 리뷰에서 Playbook veto가 summary만 바꿔 기본 scenario에 이전 action이 남는 문제와 raw news가 보호되지 않은 선행 LLM prompt를 통과하는 경로가 확인됨.
+- 후보: A) 최종 explanation prompt만 보호 / B) veto 후 summary만 교체하고 scenario에 주의 문구 추가 / C) veto 후 scenario를 재생성하고 news 분석·최종 explanation 모두 delimiter-safe untrusted JSON 경계 적용
+- 선택: C — rule action, CLI scenario, 최종 LLM 입력을 같은 decision으로 고정하고 외부 문자열이 어느 LLM 단계에서도 prompt 구조를 닫지 못하게 한다.
+- 기각: A(news 분석 결과가 rule decision에 들어가기 전 경로가 남음), B(서로 다른 action source를 유지해 사용자 출력이 모순될 수 있음)
+- ADR 후보? no
+
+## (2026-07-22 17:51) [Bug] 통합 기술 계약 구현 중 발견·수정한 4가지
+- 증상:
+  1. period drift — check/analyze/brief가 서로 다른 조회 기간을 써 같은 종목·시점에 점수·verdict가 달라질 수 있었다.
+  2. Playbook enum mismatch — exit 판정 정규화가 실제 Playbook action enum과 맞지 않아 매도 판정이 요약에 반영되지 않는 경로가 있었다.
+  3. 최종 LLM 입력 공백 — analyze 최종 LLM에 news·Macro·재무·공시·수급이 함께 전달되지 않아 "종합"이라는 이름과 실제 입력이 달랐다.
+  4. 경쟁 액션 경로 — 규칙이 확정한 decision_summary와 별개로 ActionableSignal이 자체 액션을 만들어 화면에 두 개의 액션이 공존했다.
+- 근원(root cause): analyze 파이프라인이 레벨·Playbook보다 먼저 통합 분석/시그널을 생성했고, veto가 summary만 바꿔 scenario에는 veto 이전 action이 남았다. 최종 LLM은 일부 소스만 받았고, ActionableSignal은 규칙과 무관하게 액션을 재생성했다.
+- 수정: 실행 순서를 레벨 → Playbook → decision 번들 → veto → veto 반영 시나리오 재구성 → 단일 generate_integrated_explanation 호출로 재배치. 최종 LLM을 설명 전용(IntegratedExplanationOutput)으로 전환하고 모든 소스+고정 decision을 한 번에 전달. ActionableSignal/IntegratedAnalysis 경로와 관련 모델·함수·CLI 패널 제거. news·최종 해설 LLM 모두 delimiter-safe untrusted_facts JSON 경계 적용.
+- 재발 방지 / 배운 것: DeepDive가 IntegratedExplanationInput의 모든 소스 매핑과 veto 반영 시나리오를 검증하는 계약 테스트를 추가. 검증 수치 — 대상 테스트 155 passed, 전체 회귀 1236 passed / 15 deselected, `ruff check src tests` All checks passed (check 명령의 기존 B008은 typer 관용구 noqa로 처리). ActionableSignal/report ticker 잔여 참조는 src·tests에서 0건.

@@ -10,25 +10,23 @@ import typer
 from dotenv import load_dotenv
 from rich.console import Console
 from rich.markdown import Markdown
-from rich.panel import Panel
 
-from src.llm.models import ActionableSignalOutput
 from src.llm.provider import LLMProvider
 from src.pipelines.brief import BriefPipeline
 from src.pipelines.deep_dive import DeepDivePipeline
 from src.pipelines.quick_check import QuickCheckPipeline
 from src.pipelines.screener import ScreenerPipeline
-from src.pipelines.ticker_report import TickerReportPipeline
 from src.providers.kis import KISProvider
 from src.providers.naver import NaverProvider
 from src.providers.ticker_resolver import TickerResolver
 from src.providers.yfinance_provider import YFinanceProvider
 from src.tools.disclosure import DARTDisclosureFetcher, DisclosureTool, SECDisclosureFetcher
 from src.tools.fundamental import FundamentalTool
-from src.tools.macro import MacroTool
+from src.tools.macro import MacroTool, TickerMacroSnapshot
 from src.tools.news import NewsTool
 from src.tools.screener.evidence import EvidenceCollector
 from src.tools.screener.universe import UniverseBuilder
+from src.tools.technical.presentation import format_long_sma
 from src.tools.technical.scorer import TechnicalScorer
 from src.tools.technical.tool import TechnicalAnalysisTool
 from src.utils.sector_metrics import SectorMetrics
@@ -216,35 +214,51 @@ async def run_quick_check(ticker_or_name: str) -> dict:
     return await pipeline.run(ticker)
 
 
+async def run_quick_checks(queries: list[str]) -> list[dict]:
+    """Run quick checks independently for each query."""
+    results: list[dict] = []
+    for query in queries:
+        try:
+            results.append(await run_quick_check(query))
+        except Exception as exc:
+            results.append(
+                {
+                    "ticker": query,
+                    "error": str(exc),
+                    "success": False,
+                }
+            )
+    return results
+
+
 @app.command()
 def check(
-    query: str = typer.Argument(..., help="Stock ticker or company name (e.g., AAPL, Apple, 구글)"),
+    queries: list[str] = typer.Argument(  # noqa: B008 (typer 관용구)
+        ..., help="One or more stock tickers or company names"
+    ),
     detail_history: bool = typer.Option(
         False,
         "--detail-history",
         help="Show multi-line score history context",
     ),
 ):
-    """Quick check - technical analysis without LLM."""
-    console.print(f"[bold]Resolving '{query}'...[/bold]")
+    """Quick check - multi-ticker technical analysis without LLM or Macro."""
+    results = asyncio.run(run_quick_checks(queries))
+    formatter = QuickCheckPipeline(technical_tool=None)
+    failed = False
 
-    try:
-        ticker = asyncio.run(resolve_ticker(query))
-        console.print(f"[green]✓ Resolved to: {ticker}[/green]\n")
-        console.print(f"[bold]Analyzing {ticker}...[/bold]\n")
-    except ValueError as e:
-        console.print(f"[red]{e}[/red]")
-        raise typer.Exit(1) from None
+    for result in results:
+        if result.get("success", False):
+            console.print(
+                Markdown(formatter.format_output(result, detailed_history=detail_history))
+            )
+        else:
+            failed = True
+            ticker = result.get("ticker", "UNKNOWN")
+            console.print(f"[red]{ticker}: {result.get('error', 'Unknown error')}[/red]")
 
-    result = asyncio.run(run_quick_check(query))
-
-    if not result.get("success", False):
-        console.print(f"[red]Error: {result.get('error', 'Unknown error')}[/red]")
-        raise typer.Exit(1) from None
-
-    pipeline = QuickCheckPipeline(technical_tool=None)  # Just for formatting
-    output = pipeline.format_output(result, detailed_history=detail_history)
-    console.print(Markdown(output))
+    if failed:
+        raise typer.Exit(1)
 
 
 async def run_deep_dive(ticker_or_name: str, provider: str) -> dict:
@@ -369,6 +383,7 @@ async def run_deep_dive(ticker_or_name: str, provider: str) -> dict:
         disclosure_tool=disclosure_tool,
         flow_tool=flow_tool,
         playbook_engine=playbook_engine,
+        macro_tool=MacroTool(),
     )
 
     return await pipeline.run(ticker)
@@ -411,6 +426,23 @@ def _format_top_summary(decision_summary) -> str:
         lines.append(f"- **보류 이유**: {decision_summary.defer_reason}")
     lines.append("")
     return "\n".join(lines)
+
+
+def _format_macro_section(macro: TickerMacroSnapshot | None) -> str:
+    if macro is None:
+        return ""
+    return "\n".join(
+        [
+            "## Macro",
+            f"- **VIX**: {macro.vix:.2f} ({macro.vix_change:+.2f})",
+            f"- **Fear & Greed**: {macro.fear_greed} ({macro.fear_greed_label})",
+            f"- **WTI**: ${macro.wti:.2f} ({macro.wti_change:+.2f})",
+            f"- **US 10Y**: {macro.us_10y:.2f}%",
+            f"- **US 2Y**: {macro.us_2y:.2f}%",
+            f"- **10Y-2Y Spread**: {macro.yield_spread:+.2f}%p",
+            f"- **DXY**: {macro.dxy:.2f} ({macro.dxy_change:+.2f})",
+        ]
+    )
 
 
 def _format_factor_section(factor_assessments: list) -> str:
@@ -583,6 +615,7 @@ def _format_raw_analysis_sections(result: dict) -> str:
     fundamental = result.get("fundamental")
     fundamental_summary = result.get("fundamental_summary")
     snapshot = technical.indicators or technical.snapshot
+    long_sma_snapshot = technical.snapshot
 
     output = ""
 
@@ -601,14 +634,27 @@ def _format_raw_analysis_sections(result: dict) -> str:
     output += "## 원시 데이터\n\n"
     output += "### 기술적 지표\n\n"
 
-    if snapshot.sma_20 is not None:
-        output += f"- **20일 이동평균선**: ${snapshot.sma_20:.2f}\n"
-    if snapshot.sma_50 is not None:
-        output += f"- **50일 이동평균선**: ${snapshot.sma_50:.2f}\n"
-    if snapshot.sma_150 is not None:
-        output += f"- **150일 이동평균선**: ${snapshot.sma_150:.2f}\n"
-    if snapshot.sma_200 is not None:
-        output += f"- **200일 이동평균선**: ${snapshot.sma_200:.2f}\n"
+    if long_sma_snapshot.sma_20 is not None:
+        output += (
+            f"- **20일 이동평균선**: "
+            f"{format_long_sma(long_sma_snapshot.sma_20, long_sma_snapshot.sma_20_slope_pct)}\n"
+        )
+    if long_sma_snapshot.sma_50 is not None:
+        output += (
+            f"- **50일 이동평균선**: "
+            f"{format_long_sma(long_sma_snapshot.sma_50, long_sma_snapshot.sma_50_slope_pct)}\n"
+        )
+    output += (
+        f"- **SMA 100**: {format_long_sma(long_sma_snapshot.sma_100, long_sma_snapshot.sma_100_slope_pct)}\n"
+    )
+    if long_sma_snapshot.sma_150 is not None:
+        output += (
+            f"- **150일 이동평균선**: "
+            f"{format_long_sma(long_sma_snapshot.sma_150, long_sma_snapshot.sma_150_slope_pct)}\n"
+        )
+    output += (
+        f"- **SMA 200**: {format_long_sma(long_sma_snapshot.sma_200, long_sma_snapshot.sma_200_slope_pct)}\n"
+    )
 
     output += "\n"
 
@@ -848,19 +894,24 @@ def _format_raw_analysis_sections(result: dict) -> str:
         )
         output += "\n"
 
-    integrated = result.get("integrated_analysis")
-    if integrated:
-        output += "## 종합 인사이트 참고\n\n"
-        output += f"**요약 메모**: {integrated.action_summary}\n\n"
-        if integrated.rationale:
+    explanation = result.get("integrated_explanation")
+    if explanation:
+        output += "## 종합 해설\n\n"
+        output += f"{explanation.decision_explanation}\n\n"
+        if explanation.rationale:
             output += "**근거**:\n"
-            for r in integrated.rationale:
+            for r in explanation.rationale:
                 output += f"- {r}\n"
             output += "\n"
-        if integrated.risks:
+        if explanation.risks:
             output += "**리스크**:\n"
-            for r in integrated.risks:
+            for r in explanation.risks:
                 output += f"- {r}\n"
+            output += "\n"
+        if explanation.monitoring_points:
+            output += "**모니터링 포인트**:\n"
+            for m in explanation.monitoring_points:
+                output += f"- {m}\n"
             output += "\n"
 
     return output
@@ -960,6 +1011,9 @@ def format_deep_dive_output(result: dict) -> str:
 
     output = f"# Deep Dive Analysis: {ticker}\n\n"
     output += f"## 가격: ${snapshot.price:.2f} ({snapshot.change_pct:+.2f}%)\n\n"
+    macro_section = _format_macro_section(result.get("macro"))
+    if macro_section:
+        output += f"{macro_section}\n\n"
 
     if decision_summary:
         output += _format_top_summary(decision_summary)
@@ -983,74 +1037,6 @@ def format_deep_dive_output(result: dict) -> str:
     return output
 
 
-def display_actionable_signal(signal: ActionableSignalOutput) -> Panel:
-    """Display actionable investment signal as Rich Panel."""
-    # Determine panel color based on action
-    color_map = {
-        "매수": "green",
-        "매도": "red",
-        "관망": "yellow",
-    }
-    border_color = color_map.get(signal.action, "white")
-
-    # Build panel content
-    content = []
-
-    # Headline
-    content.append(f"[bold]{signal.headline}[/bold]\n")
-
-    # Action and Timing
-    content.append(
-        f"🎯 **액션**: {signal.action} | ⏰ **타이밍**: {signal.timing} | 💪 **강도**: {signal.signal_strength}/10\n"
-    )
-
-    # Primary reason
-    content.append(f"🔑 **핵심 이유**: {signal.primary_reason}\n")
-
-    # Supporting reasons
-    if signal.supporting_reasons:
-        content.append("✅ **부차 이유**:")
-        for reason in signal.supporting_reasons:
-            content.append(f"  • {reason}")
-        content.append("")
-
-    # Risks
-    if signal.risks:
-        content.append("⚠️  **리스크**:")
-        for risk in signal.risks:
-            content.append(f"  • {risk}")
-        content.append("")
-
-    # Invalidation point
-    if signal.invalidation_point:
-        content.append(f"🛑 **손절/청산 가격**: {signal.invalidation_point}\n")
-
-    # Confidence
-    content.append(f"📊 **신뢰도**: {signal.confidence * 100:.0f}%")
-
-    # Phase 2 fields: Pattern insights and price levels
-    if signal.pattern_insight:
-        content.append(f"\n📈 **패턴 분석**: {signal.pattern_insight}")
-
-    if signal.target_price:
-        content.append(f"🎯 **목표가**: {signal.target_price}")
-
-    if signal.entry_zone:
-        content.append(f"✅ **진입 구간**: {signal.entry_zone}")
-
-    if signal.key_levels:
-        content.append(f"📍 **주요 레벨**: {signal.key_levels}")
-
-    panel = Panel(
-        "\n".join(content),
-        title="[bold]🚀 실행 가능한 투자 시그널[/bold]",
-        border_style=border_color,
-        expand=False,
-    )
-
-    return panel
-
-
 @app.command()
 def analyze(
     query: str = typer.Argument(..., help="Stock ticker or company name (e.g., AAPL, Apple, 구글)"),
@@ -1070,13 +1056,6 @@ def analyze(
         output = format_deep_dive_output(result)
         console.print(Markdown(output))
 
-        # Display actionable signal panel if available
-        actionable_signal = result.get("actionable_signal")
-        if actionable_signal and not result.get("decision_summary"):
-            console.print("\n")
-            panel = display_actionable_signal(actionable_signal)
-            console.print(panel)
-
         # Display chart path if available
         chart_result = result.get("chart")
         if chart_result and chart_result.success:
@@ -1092,121 +1071,6 @@ def analyze(
                 subprocess.run(["xdg-open", chart_result.path], check=False)
         elif chart_result and not chart_result.success:
             console.print(f"\n[yellow]⚠️  차트 생성 실패: {chart_result.error}[/yellow]")
-    except ValueError as e:
-        console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(1) from None
-    except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(1) from None
-
-
-async def run_daily_report(tickers: list[str], provider: str) -> dict:
-    """Run daily report pipeline."""
-    api_key_env = "OPENAI_API_KEY" if provider == "openai" else "ANTHROPIC_API_KEY"
-    base_url_env = "OPENAI_BASE_URL" if provider == "openai" else "ANTHROPIC_BASE_URL"
-    api_key = os.getenv(api_key_env)
-    base_url = os.getenv(base_url_env)
-    if not api_key:
-        raise ValueError(f"Missing {api_key_env} environment variable")
-
-    yf_provider = YFinanceProvider()
-    scorer = TechnicalScorer()
-    technical_tool = TechnicalAnalysisTool(provider=yf_provider, scorer=scorer)
-    macro_tool = MacroTool()
-    llm = LLMProvider.create(
-        provider=provider,
-        api_key=api_key,
-        base_url=base_url,
-        temperature=0,
-    )
-
-    pipeline = TickerReportPipeline(
-        macro_tool=macro_tool,
-        technical_tool=technical_tool,
-        llm=llm,
-    )
-
-    return await pipeline.run(tickers)
-
-
-def format_daily_report_output(result: dict) -> str:
-    """Format daily report result as markdown."""
-    date = result["date"].strftime("%Y-%m-%d %H:%M")
-    macro = result["macro"]
-    tickers = result["tickers"]
-
-    output = "# Daily Market Report\n\n"
-    output += f"**Date**: {date}\n\n"
-
-    output += "## Macro Snapshot\n\n"
-    output += f"- **VIX**: {macro.vix:.2f} ({macro.vix_change:+.2f})\n"
-    output += f"- **Fear & Greed**: {macro.fear_greed} ({macro.fear_greed_label})\n"
-    output += f"- **WTI Oil**: ${macro.wti:.2f} ({macro.wti_change:+.2f})\n"
-    output += f"- **US 10Y Yield**: {macro.us_10y:.2f}%\n"
-    output += f"- **US 2Y Yield**: {macro.us_2y:.2f}%\n"
-    output += f"- **Yield Spread**: {macro.yield_spread:.2f}%\n"
-    output += f"- **DXY**: {macro.dxy:.2f} ({macro.dxy_change:+.2f})\n\n"
-
-    output += "## Ticker Analysis\n\n"
-
-    for ticker_data in tickers:
-        ticker = ticker_data["ticker"]
-        technical = ticker_data.get("technical")
-        error = ticker_data.get("error")
-
-        output += f"### {ticker}\n\n"
-
-        if error:
-            output += f"**Error**: {error}\n\n"
-            continue
-
-        if technical:
-            # Support both old (indicators) and new (snapshot) field
-            snapshot = technical.indicators or technical.snapshot
-            price = snapshot.price
-            change_pct = snapshot.change_pct
-
-            output += f"**Price**: ${price:.2f} ({change_pct:+.2f}%)\n"
-            output += f"**Total Score**: {technical.total_score}\n"
-
-            # Collect signals from components (new format) or key_insights (old format)
-            if technical.components:
-                all_signals = []
-                for comp in technical.components.values():
-                    all_signals.extend(comp.get("signals", []))
-                if all_signals:
-                    output += f"**Signals**: {', '.join(all_signals[:5])}\n"  # Limit to 5
-            elif technical.key_insights:
-                output += f"**Signals**: {', '.join(technical.key_insights)}\n"
-
-            if technical.warnings:
-                output += f"**Warnings**: {', '.join(technical.warnings)}\n"
-
-            output += "\n"
-
-    return output
-
-
-@report_app.command("ticker")
-def report_ticker(
-    tickers: str = typer.Option(
-        "AAPL,MSFT,NVDA",
-        "--tickers",
-        "-t",
-        help="Comma-separated ticker symbols",
-    ),
-    provider: Literal["openai", "anthropic"] = typer.Option(
-        "openai", "--provider", "-p", help="LLM provider"
-    ),
-):
-    """티커 기반 시장 리포트 (매크로 + 티커 분석)."""
-    ticker_list = [t.strip() for t in tickers.split(",")]
-    console.print(f"[bold]Generating daily report for {len(ticker_list)} tickers...[/bold]\n")
-
-    try:
-        result = asyncio.run(run_daily_report(ticker_list, provider))
-        output = format_daily_report_output(result)
-        console.print(Markdown(output))
     except ValueError as e:
         console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1) from None

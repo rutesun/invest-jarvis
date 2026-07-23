@@ -102,7 +102,7 @@ def _make_verdict_holding_liquidate() -> PlaybookVerdict:
         gate=None,
         position_plan=None,
         exit_verdict=ExitVerdict(
-            action="청산",
+            action="liquidate",
             signals=[],
             current_r=-1.5,
             trailing_stop=None,
@@ -129,7 +129,7 @@ def _make_verdict_holding_reduce() -> PlaybookVerdict:
         gate=None,
         position_plan=None,
         exit_verdict=ExitVerdict(
-            action="비중축소",
+            action="reduce",
             signals=[],
             current_r=1.2,
             trailing_stop=170.0,
@@ -186,6 +186,7 @@ def test_apply_playbook_veto_not_holding_gate_fail_overrides_action():
     result = apply_playbook_veto(summary, verdict)
 
     assert result.action == "관망"
+    assert result.timing == "보류"
     assert result.veto_applied is True
     assert result.action_original == "매수"
     assert "시장 환경 불량" in result.action_sentence
@@ -203,25 +204,30 @@ def test_apply_playbook_veto_not_holding_gate_pass_no_change():
     assert result.action_original is None
 
 
-def test_apply_playbook_veto_holding_liquidate_adds_sentence():
-    """보유 + 청산 → veto_applied=True, action_original 보존, action_sentence에 청산 포함."""
+def test_apply_playbook_veto_holding_liquidate_normalizes_all_fields():
+    """보유 + liquidate → 매도/지금/청산으로 정규화한다."""
     summary = _make_summary("관망")
     verdict = _make_verdict_holding_liquidate()
 
     result = apply_playbook_veto(summary, verdict)
 
-    assert result.veto_applied is True
+    assert result.action == "매도"
+    assert result.timing == "지금"
     assert result.action_original == "관망"
+    assert result.veto_applied is True
     assert "청산" in result.action_sentence
 
 
-def test_apply_playbook_veto_holding_reduce_adds_sentence():
-    """보유 + 비중축소 → veto_applied=True."""
+def test_apply_playbook_veto_holding_reduce_normalizes_all_fields():
+    """보유 + reduce → 매도/지금/비중축소로 정규화한다."""
     summary = _make_summary("관망")
     verdict = _make_verdict_holding_reduce()
 
     result = apply_playbook_veto(summary, verdict)
 
+    assert result.action == "매도"
+    assert result.timing == "지금"
+    assert result.action_original == "관망"
     assert result.veto_applied is True
     assert "비중축소" in result.action_sentence
 

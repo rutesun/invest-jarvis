@@ -86,7 +86,7 @@ class BriefPipeline:
         kind = "holding" if holding is not None else "watch"
         try:
             tool = self.technical_tools["KR" if is_korean_ticker(ticker) else "US"]
-            tech_result = await tool.execute(ticker, period="3y")
+            tech_result = await tool.execute(ticker)
             if not tech_result.success:
                 raise RuntimeError(f"기술분석 실패: {tech_result.error}")
             technical = tech_result.data

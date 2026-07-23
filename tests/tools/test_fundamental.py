@@ -57,6 +57,48 @@ async def test_fundamental_tool_execute():
 
 
 @pytest.mark.asyncio
+async def test_fundamental_tool_reads_trailing_peg_ratio():
+    """yfinance 최신 스키마의 trailingPegRatio를 우선 읽는다 (pegRatio는 deprecated)."""
+    mock_info = {
+        "marketCap": 2800000000000,
+        "trailingPE": 28.5,
+        "trailingPegRatio": 1.46,
+        "freeCashflow": 100000000000,
+    }
+    mock_ticker = MagicMock()
+    mock_ticker.info = mock_info
+    mock_ticker.quarterly_financials = MagicMock()
+    mock_ticker.quarterly_financials.empty = True
+
+    with patch("yfinance.Ticker", return_value=mock_ticker):
+        result = await FundamentalTool().execute("AMZN")
+
+    assert result.success is True
+    assert result.data.peg_ratio == 1.46
+
+
+@pytest.mark.asyncio
+async def test_fundamental_tool_falls_back_to_legacy_peg_ratio():
+    """trailingPegRatio가 없으면 구 pegRatio 키로 fallback한다."""
+    mock_info = {
+        "marketCap": 2800000000000,
+        "trailingPE": 28.5,
+        "pegRatio": 1.8,
+        "freeCashflow": 100000000000,
+    }
+    mock_ticker = MagicMock()
+    mock_ticker.info = mock_info
+    mock_ticker.quarterly_financials = MagicMock()
+    mock_ticker.quarterly_financials.empty = True
+
+    with patch("yfinance.Ticker", return_value=mock_ticker):
+        result = await FundamentalTool().execute("AAPL")
+
+    assert result.success is True
+    assert result.data.peg_ratio == 1.8
+
+
+@pytest.mark.asyncio
 async def test_quarterly_data_parsing_with_data():
     mock_info = {
         "marketCap": 2800000000000,

@@ -1,7 +1,7 @@
 """BriefPipeline 조립 테스트 — 전 도구 목, 부분 실패 격리·LLM fallback 검증."""
 
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, call
 
 import pytest
 
@@ -177,6 +177,7 @@ async def test_run_all_targets_included_and_ranked():
     assert result["items"][0].bucket == BUCKET_LIQUIDATE
     assert result["items"][1].bucket == BUCKET_REJECTED
     assert result["macro"] is not None
+    pipeline.technical_tools["US"].execute.assert_has_awaits([call("AAPL"), call("NVDA")])
     item = result["items"][0]
     assert item.technical_verdict["action"] == "hold"
     assert item.score_history[0]["adjusted_score"] == 62

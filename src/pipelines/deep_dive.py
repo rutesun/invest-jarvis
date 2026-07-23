@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from collections.abc import Callable
+from dataclasses import asdict
 
 from langchain_core.language_models import BaseChatModel
 
@@ -9,17 +10,21 @@ from src.llm.analyzer import generate_fundamental_summary
 from src.llm.models import (
     FundamentalSummaryInput,
     FundamentalSummaryOutput,
-    IntegratedAnalysisInput,
-    IntegratedAnalysisOutput,
+    IntegratedExplanationInput,
     NewsAnalysisInput,
     NewsAnalysisOutput,
     TechnicalSummaryInput,
     TechnicalSummaryOutput,
 )
-from src.pipelines.analyze_decision import apply_playbook_veto, build_analyze_decision_bundle
+from src.pipelines.analyze_decision import (
+    apply_playbook_veto,
+    build_analyze_decision_bundle,
+    build_default_scenarios,
+)
 from src.tools.disclosure import DisclosureItem, DisclosureTool, extract_kr_code, is_korean_ticker
 from src.tools.flow import FlowTool, InvestorFlow
 from src.tools.fundamental import FundamentalSnapshot, FundamentalTool
+from src.tools.macro import MacroTool, TickerMacroSnapshot
 from src.tools.news import NewsArticle, NewsTool
 from src.tools.playbook.holdings import load_holdings
 from src.tools.technical.charting import render_technical_chart
@@ -85,6 +90,54 @@ def _compute_eps_cagr(newest: float, oldest: float, n_years: int) -> float | Non
     return ratio ** (1.0 / n_years) - 1
 
 
+def _flow_context(flow: InvestorFlow | None) -> dict | None:
+    """InvestorFlow(dataclass)를 최종 해설 입력용 dict로 직렬화한다."""
+    if flow is None:
+        return None
+    return {
+        "code": flow.code,
+        "entries": [asdict(entry) for entry in flow.entries],
+        "foreign": {
+            "direction_1d": flow.foreign_direction_1d,
+            "direction_5d": flow.foreign_direction_5d,
+            "direction_10d": flow.foreign_direction_10d,
+            "net_1d": flow.foreign_net_1d,
+            "net_5d": flow.foreign_net_5d,
+            "net_10d": flow.foreign_net_10d,
+            "buy_days": flow.foreign_buy_days,
+        },
+        "institution": {
+            "direction_1d": flow.institution_direction_1d,
+            "direction_5d": flow.institution_direction_5d,
+            "direction_10d": flow.institution_direction_10d,
+            "net_1d": flow.institution_net_1d,
+            "net_5d": flow.institution_net_5d,
+            "net_10d": flow.institution_net_10d,
+            "buy_days": flow.institution_buy_days,
+        },
+    }
+
+
+def _playbook_context(verdict, summary) -> dict | None:
+    """PlaybookVerdict와 veto가 반영된 summary를 최종 해설 입력용 dict로 직렬화한다."""
+    if verdict is None:
+        return None
+    return {
+        "headline": verdict.headline,
+        "holding": verdict.holding,
+        "market_regime": verdict.market_regime.model_dump(mode="json"),
+        "relative_strength": verdict.relative_strength.model_dump(mode="json"),
+        "gate": (verdict.gate.model_dump(mode="json") if verdict.gate is not None else None),
+        "exit_verdict": (
+            verdict.exit_verdict.model_dump(mode="json")
+            if verdict.exit_verdict is not None
+            else None
+        ),
+        "veto_applied": summary.veto_applied,
+        "action_original": summary.action_original,
+    }
+
+
 class DeepDivePipeline:
     """Deep dive analysis pipeline with LLM integration."""
 
@@ -101,6 +154,7 @@ class DeepDivePipeline:
         level_payload_composer: Callable | None = None,
         structure_presentation_adapter: Callable | None = None,
         playbook_engine=None,
+        macro_tool: MacroTool | None = None,
     ):
         self.technical_tool = technical_tool
         self.news_tool = news_tool
@@ -115,6 +169,7 @@ class DeepDivePipeline:
             structure_presentation_adapter or build_structure_presentation
         )
         self.playbook_engine = playbook_engine
+        self.macro_tool = macro_tool
 
     async def run(self, ticker: str) -> dict:
         """Run deep dive analysis for a ticker.
@@ -133,10 +188,10 @@ class DeepDivePipeline:
                 - fundamental_summary: FundamentalSummaryOutput | None
                 - disclosure: list[DisclosureItem] | None (SEC 10-Q/8-K or OpenDART)
                 - flow: InvestorFlow | None (외국인/기관 순매수 동향, 한국주식만)
-                - integrated_analysis: IntegratedAnalysisOutput | None (종합 인사이트)
-                - actionable_signal: ActionableSignalOutput | None (실행 가능한 투자 시그널)
+                - macro: TickerMacroSnapshot | None (시장 매크로 지표)
+                - integrated_explanation: IntegratedExplanationOutput (설명 전용 최종 해설)
         """
-        tech_result = await self.technical_tool.execute(ticker, period="3y")
+        tech_result = await self.technical_tool.execute(ticker)
         if not tech_result.success:
             raise RuntimeError(f"Technical analysis failed: {tech_result.error}")
 
@@ -182,6 +237,10 @@ class DeepDivePipeline:
             optional_coros.append(self.flow_tool.execute(extract_kr_code(ticker)))
             optional_keys.append("flow")
 
+        if self.macro_tool is not None:
+            optional_coros.append(self.macro_tool.execute())
+            optional_keys.append("macro")
+
         optional_data: dict = {}
         if optional_coros:
             opt_results = await asyncio.gather(*optional_coros, return_exceptions=True)
@@ -194,19 +253,9 @@ class DeepDivePipeline:
 
         disclosure_items: list[DisclosureItem] | None = optional_data.get("disclosure")
         flow_data: InvestorFlow | None = optional_data.get("flow")
+        macro_data: TickerMacroSnapshot | None = optional_data.get("macro")
 
-        # 공시 또는 수급 데이터가 있을 때만 종합 인사이트 생성
-        integrated_analysis = None
-        if disclosure_items is not None or flow_data is not None:
-            integrated_analysis = await self._generate_integrated_analysis(
-                ticker=ticker,
-                technical_summary=technical_summary,
-                fundamental_summary=fundamental_summary,
-                disclosure_items=disclosure_items,
-                flow_data=flow_data,
-            )
-
-        # Generate actionable investment signal
+        # 차트 패턴 + 가격/구조/실행 레벨 (Playbook·decision보다 먼저 확정)
         df = technical_data.raw_dataframe
         if df is None:
             raise ValueError("raw_dataframe required for pattern detection and charting")
@@ -232,19 +281,6 @@ class DeepDivePipeline:
             execution_levels,
         )
 
-        actionable_signal = await analyzer.generate_actionable_signal(
-            ticker=ticker,
-            technical_summary=f"{technical_summary.summary}\n\n{technical_summary.rationale}",
-            chart_patterns=chart_patterns,
-            price_levels=price_levels,
-            structure_context=presented_structure.llm_context,
-            structure_summary=presented_structure.structure_summary
-            or level_payload.structure_summary,
-            execution_summary=presented_structure.execution_summary
-            or level_payload.execution_summary,
-            llm=self.llm,
-        )
-
         # PlaybookEngine evaluation (optional)
         playbook_verdict = None
         if self.playbook_engine is not None:
@@ -261,6 +297,8 @@ class DeepDivePipeline:
             except Exception as e:
                 logger.warning("PlaybookEngine evaluation failed for %s: %s", ticker, e)
 
+        # 규칙 decision → Playbook veto → veto가 반영된 요약으로 시나리오 재구성.
+        # veto 이후의 시나리오만 노출/직렬화되도록 두 필드를 함께 교체한다.
         decision_bundle = build_analyze_decision_bundle(
             technical_data=technical_data,
             technical_summary=technical_summary,
@@ -272,10 +310,73 @@ class DeepDivePipeline:
             chart_patterns=chart_patterns,
             price_levels=price_levels,
         )
+        final_summary = apply_playbook_veto(decision_bundle.summary, playbook_verdict)
+        final_scenarios = build_default_scenarios(
+            final_summary,
+            price_levels,
+            decision_bundle.factor_assessments,
+            snapshot=technical_data.indicators or technical_data.snapshot,
+        )
         decision_bundle = decision_bundle.model_copy(
             update={
-                "summary": apply_playbook_veto(decision_bundle.summary, playbook_verdict),
+                "summary": final_summary,
+                "scenarios": final_scenarios,
             }
+        )
+
+        # 최종 종합 해설 (설명 전용 — 규칙이 확정한 decision을 바꾸지 않는다).
+        # 모든 분석 소스와 고정 decision을 한 번에 전달한다.
+        explanation_input = IntegratedExplanationInput(
+            ticker=ticker,
+            fixed_action=final_summary.action,
+            fixed_timing=final_summary.timing,
+            fixed_action_sentence=final_summary.action_sentence,
+            technical_context={
+                "components": technical_data.components,
+                "component_raw_total": technical_data.component_raw_total,
+                "adjusted_score": technical_data.adjusted_score,
+                "technical_verdict": (
+                    technical_data.technical_verdict.model_dump(mode="json")
+                    if technical_data.technical_verdict is not None
+                    else None
+                ),
+                "score_history": [
+                    point.model_dump(mode="json") for point in technical_data.score_history
+                ],
+                "aggregation_trace": [
+                    entry.model_dump(mode="json") for entry in technical_data.aggregation_trace
+                ],
+            },
+            news_analysis=news_analysis.model_dump(mode="json") if news_analysis else None,
+            fundamental_summary=(
+                fundamental_summary.model_dump(mode="json") if fundamental_summary else None
+            ),
+            disclosure_items=[item.model_dump(mode="json") for item in disclosure_items or []],
+            flow_context=_flow_context(flow_data),
+            macro_context=macro_data.model_dump(mode="json") if macro_data else None,
+            playbook_context=_playbook_context(playbook_verdict, final_summary),
+            factor_assessments=[
+                assessment.model_dump(mode="json")
+                for assessment in decision_bundle.factor_assessments
+            ],
+            scenarios=[scenario.model_dump(mode="json") for scenario in decision_bundle.scenarios],
+            level_context={
+                "chart_patterns": {
+                    name: pattern.model_dump(mode="json")
+                    for name, pattern in chart_patterns.items()
+                },
+                "price_levels": price_levels.model_dump(mode="json"),
+                "structure_levels": structure_levels.model_dump(mode="json"),
+                "execution_levels": [level.model_dump(mode="json") for level in execution_levels],
+                "structure_summary": presented_structure.structure_summary
+                or level_payload.structure_summary,
+                "execution_summary": presented_structure.execution_summary
+                or level_payload.execution_summary,
+            },
+        )
+        integrated_explanation = await analyzer.generate_integrated_explanation(
+            explanation_input,
+            self.llm,
         )
 
         # Render technical chart
@@ -310,8 +411,8 @@ class DeepDivePipeline:
             "fundamental_summary": fundamental_summary,
             "disclosure": disclosure_items,
             "flow": flow_data,
-            "integrated_analysis": integrated_analysis,
-            "actionable_signal": actionable_signal,
+            "macro": macro_data,
+            "integrated_explanation": integrated_explanation,
             "structure_levels": structure_levels,
             "execution_levels": execution_levels,
             "presented_structure": presented_structure,
@@ -470,57 +571,3 @@ class DeepDivePipeline:
 
         return await generate_fundamental_summary(input_data, self.llm)
 
-    def _format_flow_for_llm(self, flow: InvestorFlow) -> str:
-        """InvestorFlow를 LLM 컨텍스트용 마크다운 테이블 문자열로 변환."""
-        lines = [
-            "| 투자자 | 1일 | 5일 | 10일 | 10일 순매수 일수 |",
-            "|--------|-----|-----|------|-----------------|",
-            (
-                f"| 외국인 "
-                f"| {flow.foreign_direction_1d} ({flow.foreign_net_1d:+,}) "
-                f"| {flow.foreign_direction_5d} ({flow.foreign_net_5d:+,}) "
-                f"| {flow.foreign_direction_10d} ({flow.foreign_net_10d:+,}) "
-                f"| {flow.foreign_buy_days}/10일 |"
-            ),
-            (
-                f"| 기관 "
-                f"| {flow.institution_direction_1d} ({flow.institution_net_1d:+,}) "
-                f"| {flow.institution_direction_5d} ({flow.institution_net_5d:+,}) "
-                f"| {flow.institution_direction_10d} ({flow.institution_net_10d:+,}) "
-                f"| {flow.institution_buy_days}/10일 |"
-            ),
-        ]
-        return "\n".join(lines)
-
-    async def _generate_integrated_analysis(
-        self,
-        ticker: str,
-        technical_summary: TechnicalSummaryOutput,
-        fundamental_summary: FundamentalSummaryOutput | None,
-        disclosure_items: list[DisclosureItem] | None,
-        flow_data: InvestorFlow | None,
-    ) -> IntegratedAnalysisOutput:
-        # Convert DisclosureItem objects to dicts for LLM input
-        disclosure_dicts = []
-        if disclosure_items:
-            for item in disclosure_items:
-                disclosure_dicts.append(
-                    {
-                        "form_type": item.form_type,
-                        "date": item.date,
-                        "description": item.description,
-                        "url": item.url,
-                    }
-                )
-
-        input_data = IntegratedAnalysisInput(
-            ticker=ticker,
-            technical_recommendation=technical_summary.recommendation,
-            technical_rationale=technical_summary.rationale,
-            fundamental_valuation=(
-                fundamental_summary.valuation_assessment if fundamental_summary else None
-            ),
-            disclosure_items=disclosure_dicts,
-            flow_summary=self._format_flow_for_llm(flow_data) if flow_data else None,
-        )
-        return await analyzer.generate_integrated_analysis(input_data, self.llm)

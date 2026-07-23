@@ -69,6 +69,8 @@ async def test_quick_check_format_output(mock_technical_tool):
     assert "AAPL" in output
     assert "178.50" in output
     assert "매수" in output
+    assert "**SMA 100**: N/A · — 데이터 부족" in output
+    assert "**SMA 200**: N/A · — 데이터 부족" in output
 
 
 @pytest.mark.asyncio
@@ -102,6 +104,7 @@ async def test_quick_check_run_includes_verdict_and_score_history(mock_technical
     assert result["adjusted_score"] == 62
     assert result["technical_verdict"]["action"] == "hold"
     assert result["score_history"][0]["adjusted_score"] == 62
+    assert result["aggregation_trace"] == []
 
 
 @pytest.mark.asyncio
