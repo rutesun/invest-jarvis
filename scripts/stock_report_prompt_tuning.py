@@ -21,8 +21,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--data-dir", default="data", help="Data directory")
     parser.add_argument(
         "--provider",
-        default="openai",
-        help="실험용 LLM provider override (config.yaml 기본값 대신 적용). --model과 함께 사용할 때만 유효.",
+        default="",
+        help="실험용 LLM provider override. --model을 함께 지정할 때만 유효하며, 생략 시 config.yaml 기본값을 따른다.",
     )
     parser.add_argument(
         "--model",
