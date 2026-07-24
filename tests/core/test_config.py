@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from src.core.config import AppConfig, LLMConfig, get_app_config, load_config
@@ -100,3 +102,9 @@ def test_get_app_config_is_cached():
     get_app_config.cache_clear()
     assert get_app_config() is get_app_config()
     get_app_config.cache_clear()
+
+
+def test_repo_config_yaml_llm_section_matches_code_defaults():
+    repo_config = Path(__file__).resolve().parents[2] / "config.yaml"
+    config = load_config(repo_config)
+    assert config.llm.model_dump() == LLMConfig().model_dump()

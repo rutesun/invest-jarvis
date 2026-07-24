@@ -47,3 +47,19 @@ stock_report:
       - "hana_us_stock"
       - "kwusa"
       - "kiwoom_semibat"
+
+llm:
+  defaults:
+    provider: openai
+    model: gpt-5.6-terra
+    temperature: 0.0
+  daily:                 # jarvis report daily
+    map:     { model: gpt-5.6-luna, temperature: 0.2 }
+    shuffle: { model: gpt-5.6-luna, temperature: 0.1 }
+    reduce:  { temperature: 0.3 }
+    wrapup:  { temperature: 0.4 }
+  daily_v2:              # jarvis report daily-v2
+    extraction: { model: gpt-5.6-luna, temperature: 0.1 }
+    synthesis:  { model: gpt-5.6-sol,  temperature: 0.1 }
+  analyze: {}            # jarvis analyze → defaults(terra)
+  brief:   {}            # jarvis brief → defaults(terra)
