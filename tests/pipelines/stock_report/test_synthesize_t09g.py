@@ -370,7 +370,7 @@ def test_synthesize_overview_happy_path(monkeypatch) -> None:
     cats = [_cat_card("반도체", [1, 2]), _cat_card("AI인프라", [3, 4])]
     tickers = [_ticker_card("NVDA", [5])]
 
-    async def _fake_run(system, user, schema, provider):
+    async def _fake_run(system, user, schema):
         assert schema is OverviewLLMOutput
         return OverviewLLMOutput(
             pulse=[
@@ -408,7 +408,7 @@ def test_synthesize_overview_happy_path(monkeypatch) -> None:
         _fake_run,
     )
 
-    result = asyncio.run(synthesize_overview(cats, tickers, provider="openai"))
+    result = asyncio.run(synthesize_overview(cats, tickers))
 
     assert isinstance(result, OverviewResult)
     assert len(result.pulse) >= 3 or len(result.pulse) == 2  # LLM returned 2, that's OK
@@ -435,7 +435,7 @@ def test_synthesize_overview_openai_failure_deterministic_fallback(monkeypatch) 
     cats = [_cat_card("반도체", [1, 2], priority_score=0.9, title="HBM 강세")]
     tickers = [_ticker_card("NVDA", [3])]
 
-    result = asyncio.run(synthesize_overview(cats, tickers, provider="openai"))
+    result = asyncio.run(synthesize_overview(cats, tickers))
 
     assert isinstance(result, OverviewResult)
     assert len(result.pulse) >= 1
@@ -457,7 +457,7 @@ def test_synthesize_tiered_happy_path(monkeypatch) -> None:
 
     call_count = {"n": 0}
 
-    async def _fake_run(system, user, schema, provider):
+    async def _fake_run(system, user, schema):
         call_count["n"] += 1
         if schema is CategoryCardLLMOutput:
             return CategoryCardLLMOutput(
@@ -508,7 +508,7 @@ def test_synthesize_tiered_happy_path(monkeypatch) -> None:
         low_confidence_chunks=[],
     )
 
-    result = asyncio.run(synthesize_tiered(bundle, provider="openai"))
+    result = asyncio.run(synthesize_tiered(bundle))
 
     assert isinstance(result, StockReportArtifact)
     assert len(result.pulse) >= 1
@@ -534,7 +534,7 @@ def test_pulse_item_ids_are_per_item_not_union(monkeypatch) -> None:
     ]
     tickers: list[TickerCard] = []
 
-    async def _fake_run(system, user, schema, provider):
+    async def _fake_run(system, user, schema):
         return OverviewLLMOutput(
             pulse=[
                 OverviewPulseItemOutput(
@@ -567,7 +567,7 @@ def test_pulse_item_ids_are_per_item_not_union(monkeypatch) -> None:
         _fake_run,
     )
 
-    result = asyncio.run(synthesize_overview(cats, tickers, provider="openai"))
+    result = asyncio.run(synthesize_overview(cats, tickers))
 
     assert result.pulse[0].evidence_chunk_ids == [10, 11]
     assert result.pulse[1].evidence_chunk_ids == [20, 21]
@@ -590,7 +590,7 @@ def test_tiered_covers_all_categories_even_when_llm_fails(monkeypatch) -> None:
     coverage (one consolidated item), not whether it is present.
     """
 
-    async def _always_raise(system, user, schema, provider):
+    async def _always_raise(system, user, schema):
         raise RuntimeError("LLM down")
 
     monkeypatch.setattr("src.pipelines.stock_report.synthesize._run_synthesis_call", _always_raise)
@@ -613,7 +613,7 @@ def test_tiered_covers_all_categories_even_when_llm_fails(monkeypatch) -> None:
         low_confidence_chunks=[],
     )
 
-    result = asyncio.run(synthesize_tiered(bundle, provider="openai"))
+    result = asyncio.run(synthesize_tiered(bundle))
 
     assert isinstance(result, StockReportArtifact)
     covered = {item.key for item in result.category_summaries}
@@ -629,7 +629,7 @@ def test_tiered_covers_all_categories_even_when_llm_fails(monkeypatch) -> None:
 def test_tiered_evidence_refs_stay_within_bundle(monkeypatch) -> None:
     """Every report_evidence chunk_id must exist in the bundle (no dangling refs)."""
 
-    async def _always_raise(system, user, schema, provider):
+    async def _always_raise(system, user, schema):
         raise RuntimeError("LLM down")
 
     monkeypatch.setattr("src.pipelines.stock_report.synthesize._run_synthesis_call", _always_raise)
@@ -642,7 +642,7 @@ def test_tiered_evidence_refs_stay_within_bundle(monkeypatch) -> None:
         low_confidence_chunks=[],
     )
 
-    result = asyncio.run(synthesize_tiered(bundle, provider="openai"))
+    result = asyncio.run(synthesize_tiered(bundle))
 
     bundle_ids = {chunk.id for chunk in bundle.chunks}
     assert result.evidence_refs  # non-empty

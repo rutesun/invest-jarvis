@@ -225,14 +225,14 @@ def test_dedupe_ticker_buckets_keeps_co_mentioned_distinct_symbols() -> None:
 
 def test_synthesize_category_raw_fallback_below_threshold() -> None:
     bucket = _category_bucket([1, 2])  # < 3 chunks → raw fallback
-    card = asyncio.run(synthesize_category(bucket, provider="openai"))
+    card = asyncio.run(synthesize_category(bucket))
     assert isinstance(card, CategorySummaryCard)
     assert card.evidence_chunk_ids == [1, 2]
 
 
 def test_synthesize_category_raw_fallback_single_chunk() -> None:
     bucket = _category_bucket([7])
-    card = asyncio.run(synthesize_category(bucket, provider="openai"))
+    card = asyncio.run(synthesize_category(bucket))
     assert card.evidence_chunk_ids == [7]
 
 
@@ -244,7 +244,7 @@ def test_synthesize_category_raw_fallback_single_chunk() -> None:
 def test_synthesize_category_happy_path(monkeypatch) -> None:
     bucket = _category_bucket([1, 2, 3])
 
-    async def _fake_run(system, user, schema, provider):
+    async def _fake_run(system, user, schema):
         assert schema is CategoryCardLLMOutput
         assert "반도체" in user
         return CategoryCardLLMOutput(
@@ -263,7 +263,7 @@ def test_synthesize_category_happy_path(monkeypatch) -> None:
         _fake_run,
     )
 
-    card = asyncio.run(synthesize_category(bucket, provider="openai"))
+    card = asyncio.run(synthesize_category(bucket))
 
     assert card.title == "HBM 체인 강세"
     assert card.narrative == "HBM 수요가 집중됐다. NVDA +5%."
@@ -276,7 +276,7 @@ def test_synthesize_category_sanitizes_out_of_bundle_ids(monkeypatch) -> None:
     """LLM returns chunk id 99 which is not in the bucket — must be dropped."""
     bucket = _category_bucket([1, 2, 3])
 
-    async def _fake_run(system, user, schema, provider):
+    async def _fake_run(system, user, schema):
         return CategoryCardLLMOutput(
             category_key="반도체",
             title="테스트",
@@ -292,7 +292,7 @@ def test_synthesize_category_sanitizes_out_of_bundle_ids(monkeypatch) -> None:
         _fake_run,
     )
 
-    card = asyncio.run(synthesize_category(bucket, provider="openai"))
+    card = asyncio.run(synthesize_category(bucket))
 
     assert 99 not in card.evidence_chunk_ids
     assert card.evidence_chunk_ids == [1, 3]
@@ -316,7 +316,7 @@ def test_synthesize_category_normalizes_typo_in_prose(monkeypatch) -> None:
     """synthesize_category must scrub the observed '카테리' typo from synthesized prose."""
     bucket = _category_bucket([1, 2, 3])
 
-    async def _fake_run(system, user, schema, provider):
+    async def _fake_run(system, user, schema):
         return CategoryCardLLMOutput(
             category_key="반도체",
             title="반도체 카테리 요약",
@@ -332,7 +332,7 @@ def test_synthesize_category_normalizes_typo_in_prose(monkeypatch) -> None:
         _fake_run,
     )
 
-    card = asyncio.run(synthesize_category(bucket, provider="openai"))
+    card = asyncio.run(synthesize_category(bucket))
 
     assert "카테리" not in card.narrative
     assert "카테고리" in card.narrative
@@ -344,7 +344,7 @@ def test_synthesize_category_normalizes_typo_in_prose(monkeypatch) -> None:
 def test_synthesize_category_llm_failure_falls_back_to_raw(monkeypatch) -> None:
     bucket = _category_bucket([1, 2, 3])
 
-    async def _raise(system, user, schema, provider):
+    async def _raise(system, user, schema):
         raise RuntimeError("LLM unavailable")
 
     monkeypatch.setattr(
@@ -352,7 +352,7 @@ def test_synthesize_category_llm_failure_falls_back_to_raw(monkeypatch) -> None:
         _raise,
     )
 
-    card = asyncio.run(synthesize_category(bucket, provider="openai"))
+    card = asyncio.run(synthesize_category(bucket))
 
     # raw fallback — ids are bucket ids
     assert card.evidence_chunk_ids == [1, 2, 3]
@@ -366,7 +366,7 @@ def test_synthesize_category_llm_failure_falls_back_to_raw(monkeypatch) -> None:
 
 def test_synthesize_ticker_raw_fallback_below_threshold() -> None:
     bucket = _ticker_bucket([1])
-    card = asyncio.run(synthesize_ticker(bucket, provider="openai"))
+    card = asyncio.run(synthesize_ticker(bucket))
     assert isinstance(card, TickerCard)
     assert card.evidence_chunk_ids == [1]
 
@@ -374,7 +374,7 @@ def test_synthesize_ticker_raw_fallback_below_threshold() -> None:
 def test_synthesize_ticker_happy_path(monkeypatch) -> None:
     bucket = _ticker_bucket([1, 2, 3])
 
-    async def _fake_run(system, user, schema, provider):
+    async def _fake_run(system, user, schema):
         assert schema is TickerCardLLMOutput
         return TickerCardLLMOutput(
             ticker="NVDA",
@@ -390,7 +390,7 @@ def test_synthesize_ticker_happy_path(monkeypatch) -> None:
         _fake_run,
     )
 
-    card = asyncio.run(synthesize_ticker(bucket, provider="openai"))
+    card = asyncio.run(synthesize_ticker(bucket))
 
     assert card.ticker == "NVDA"
     assert card.investment_case == "AI 서버 수요로 HBM 전량 수주 확보"
@@ -401,7 +401,7 @@ def test_synthesize_ticker_happy_path(monkeypatch) -> None:
 def test_synthesize_ticker_llm_failure_falls_back_to_raw(monkeypatch) -> None:
     bucket = _ticker_bucket([10, 11, 12])
 
-    async def _raise(system, user, schema, provider):
+    async def _raise(system, user, schema):
         raise RuntimeError("timeout")
 
     monkeypatch.setattr(
@@ -409,7 +409,7 @@ def test_synthesize_ticker_llm_failure_falls_back_to_raw(monkeypatch) -> None:
         _raise,
     )
 
-    card = asyncio.run(synthesize_ticker(bucket, provider="openai"))
+    card = asyncio.run(synthesize_ticker(bucket))
 
     assert card.ticker == "NVDA"
     assert card.evidence_chunk_ids == [10, 11, 12]
@@ -418,7 +418,7 @@ def test_synthesize_ticker_llm_failure_falls_back_to_raw(monkeypatch) -> None:
 def test_synthesize_ticker_sanitizes_out_of_bundle_ids(monkeypatch) -> None:
     bucket = _ticker_bucket([1, 2, 3])
 
-    async def _fake_run(system, user, schema, provider):
+    async def _fake_run(system, user, schema):
         return TickerCardLLMOutput(
             ticker="NVDA",
             investment_case="테스트",
@@ -430,7 +430,7 @@ def test_synthesize_ticker_sanitizes_out_of_bundle_ids(monkeypatch) -> None:
         _fake_run,
     )
 
-    card = asyncio.run(synthesize_ticker(bucket, provider="openai"))
+    card = asyncio.run(synthesize_ticker(bucket))
 
     assert card.evidence_chunk_ids == [1, 3]
 

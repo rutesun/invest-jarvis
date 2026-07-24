@@ -38,9 +38,8 @@ def test_classify_normalizes_llm_output_into_canonical_fields(monkeypatch):
     taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
     row = _normalized_message("NVIDIA·IREN, 최대 5GW AI 인프라 구축 전략적 파트너십 발표")
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+    async def _fake_extract_message_semantics(*, row, taxonomy, llm_config, system_prompt):
         assert row.clean_text
-        assert provider == "openai"
         assert system_prompt
         return SemanticExtractionDraft(
             structure_type="single_topic_deep",
@@ -66,7 +65,7 @@ def test_classify_normalizes_llm_output_into_canonical_fields(monkeypatch):
         _fake_extract_message_semantics,
     )
 
-    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+    result = classify_messages([row], taxonomy=taxonomy)
 
     assert len(result) == 1
     assert result[0].structure_type == "single_topic_deep"
@@ -84,7 +83,7 @@ def test_classify_derives_supporting_facts_from_typed_evidence(monkeypatch):
     taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
     row = _normalized_message("Seagate 주가 8% 하락, 메모리 가격 전망은 견조")
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+    async def _fake_extract_message_semantics(*, row, taxonomy, llm_config, system_prompt):
         assert "evidence_items" in system_prompt
         assert "supporting_facts" not in system_prompt
         return SemanticExtractionDraft(
@@ -115,7 +114,7 @@ def test_classify_derives_supporting_facts_from_typed_evidence(monkeypatch):
         _fake_extract_message_semantics,
     )
 
-    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+    result = classify_messages([row], taxonomy=taxonomy)
 
     assert len(result) == 1
     assert result[0].supporting_facts == [
@@ -130,7 +129,7 @@ def test_classify_converts_legacy_supporting_facts_to_fact_evidence(monkeypatch)
     taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
     row = _normalized_message("NVIDIA·IREN 파트너십")
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+    async def _fake_extract_message_semantics(*, row, taxonomy, llm_config, system_prompt):
         return SemanticExtractionDraft(
             structure_type="single_topic_deep",
             units=[
@@ -152,7 +151,7 @@ def test_classify_converts_legacy_supporting_facts_to_fact_evidence(monkeypatch)
         _fake_extract_message_semantics,
     )
 
-    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+    result = classify_messages([row], taxonomy=taxonomy)
 
     assert len(result) == 1
     assert result[0].supporting_facts == ["최대 5GW 규모 AI 인프라 배치를 지원할 계획"]
@@ -165,7 +164,7 @@ def test_classify_maps_invalid_evidence_kind_to_fact_and_warns(monkeypatch):
     taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
     row = _normalized_message("메모리 가격 전망")
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+    async def _fake_extract_message_semantics(*, row, taxonomy, llm_config, system_prompt):
         return SemanticExtractionDraft(
             structure_type="single_topic_deep",
             units=[
@@ -189,7 +188,7 @@ def test_classify_maps_invalid_evidence_kind_to_fact_and_warns(monkeypatch):
         _fake_extract_message_semantics,
     )
 
-    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+    result = classify_messages([row], taxonomy=taxonomy)
 
     assert result[0].evidence_items == [EvidenceItem(kind="fact", text="메모리 가격 전망이 견조")]
     assert "unknown_evidence_kind" in [warning.code for warning in result[0].qa_warnings]
@@ -203,7 +202,7 @@ def test_classify_numeric_qa_ignores_noise_tokens(monkeypatch):
         "2026-05-19 07:09 원문 확인: https://example.com/file.pdf?attachmentId=351531"
     )
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+    async def _fake_extract_message_semantics(*, row, taxonomy, llm_config, system_prompt):
         return SemanticExtractionDraft(
             structure_type="market_wrap",
             units=[
@@ -227,7 +226,7 @@ def test_classify_numeric_qa_ignores_noise_tokens(monkeypatch):
         _fake_extract_message_semantics,
     )
 
-    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+    result = classify_messages([row], taxonomy=taxonomy)
 
     warning_codes = [warning.code for warning in result[0].qa_warnings]
     assert "missing_metric_candidate" not in warning_codes
@@ -238,7 +237,7 @@ def test_classify_numeric_qa_ignores_plain_six_digit_stock_code(monkeypatch):
     taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
     row = _normalized_message("오리온 271560 기업분석 리포트")
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+    async def _fake_extract_message_semantics(*, row, taxonomy, llm_config, system_prompt):
         return SemanticExtractionDraft(
             structure_type="single_topic_deep",
             units=[
@@ -260,7 +259,7 @@ def test_classify_numeric_qa_ignores_plain_six_digit_stock_code(monkeypatch):
         _fake_extract_message_semantics,
     )
 
-    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+    result = classify_messages([row], taxonomy=taxonomy)
 
     assert "missing_metric_candidate" not in [warning.code for warning in result[0].qa_warnings]
 
@@ -269,7 +268,7 @@ def test_classify_numeric_qa_accepts_equivalent_units(monkeypatch):
     taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
     row = _normalized_message("주가는 8퍼센트 하락했고 투자 규모는 $2B로 제시")
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+    async def _fake_extract_message_semantics(*, row, taxonomy, llm_config, system_prompt):
         return SemanticExtractionDraft(
             structure_type="single_topic_deep",
             units=[
@@ -294,7 +293,7 @@ def test_classify_numeric_qa_accepts_equivalent_units(monkeypatch):
         _fake_extract_message_semantics,
     )
 
-    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+    result = classify_messages([row], taxonomy=taxonomy)
 
     assert "unsupported_numeric" not in [warning.code for warning in result[0].qa_warnings]
 
@@ -303,7 +302,7 @@ def test_classify_numeric_qa_accepts_sign_and_currency_equivalence(monkeypatch):
     taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
     row = _normalized_message("가이던스는 +13.4% 상향, EPS는 $1.87로 제시")
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+    async def _fake_extract_message_semantics(*, row, taxonomy, llm_config, system_prompt):
         return SemanticExtractionDraft(
             structure_type="single_topic_deep",
             units=[
@@ -328,7 +327,7 @@ def test_classify_numeric_qa_accepts_sign_and_currency_equivalence(monkeypatch):
         _fake_extract_message_semantics,
     )
 
-    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+    result = classify_messages([row], taxonomy=taxonomy)
 
     assert "unsupported_numeric" not in [warning.code for warning in result[0].qa_warnings]
 
@@ -337,7 +336,7 @@ def test_classify_numeric_qa_accepts_negative_percent_decline_expression(monkeyp
     taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
     row = _normalized_message("출하량은 -14% 조정")
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+    async def _fake_extract_message_semantics(*, row, taxonomy, llm_config, system_prompt):
         return SemanticExtractionDraft(
             structure_type="single_topic_deep",
             units=[
@@ -359,7 +358,7 @@ def test_classify_numeric_qa_accepts_negative_percent_decline_expression(monkeyp
         _fake_extract_message_semantics,
     )
 
-    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+    result = classify_messages([row], taxonomy=taxonomy)
 
     assert "unsupported_numeric" not in [warning.code for warning in result[0].qa_warnings]
 
@@ -368,7 +367,7 @@ def test_classify_numeric_qa_flags_opposite_explicit_percent_sign(monkeypatch):
     taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
     row = _normalized_message("가이던스는 +13.4% 상향")
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+    async def _fake_extract_message_semantics(*, row, taxonomy, llm_config, system_prompt):
         return SemanticExtractionDraft(
             structure_type="single_topic_deep",
             units=[
@@ -390,7 +389,7 @@ def test_classify_numeric_qa_flags_opposite_explicit_percent_sign(monkeypatch):
         _fake_extract_message_semantics,
     )
 
-    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+    result = classify_messages([row], taxonomy=taxonomy)
 
     assert "unsupported_numeric" in [warning.code for warning in result[0].qa_warnings]
 
@@ -399,7 +398,7 @@ def test_classify_numeric_qa_accepts_two_digit_year_form(monkeypatch):
     taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
     row = _normalized_message("투자 회수 시점은 '27년으로 제시")
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+    async def _fake_extract_message_semantics(*, row, taxonomy, llm_config, system_prompt):
         return SemanticExtractionDraft(
             structure_type="single_topic_deep",
             units=[
@@ -421,7 +420,7 @@ def test_classify_numeric_qa_accepts_two_digit_year_form(monkeypatch):
         _fake_extract_message_semantics,
     )
 
-    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+    result = classify_messages([row], taxonomy=taxonomy)
 
     assert "unsupported_numeric" not in [warning.code for warning in result[0].qa_warnings]
 
@@ -430,7 +429,7 @@ def test_classify_numeric_qa_ignores_date_range_and_schedule_dates(monkeypatch):
     taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
     row = _normalized_message("공모 일정: 2026-05-21 ~ 2027-12-26, 청약일 5월 21일")
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+    async def _fake_extract_message_semantics(*, row, taxonomy, llm_config, system_prompt):
         return SemanticExtractionDraft(
             structure_type="single_topic_deep",
             units=[
@@ -452,7 +451,7 @@ def test_classify_numeric_qa_ignores_date_range_and_schedule_dates(monkeypatch):
         _fake_extract_message_semantics,
     )
 
-    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+    result = classify_messages([row], taxonomy=taxonomy)
 
     warning_codes = [warning.code for warning in result[0].qa_warnings]
     assert "unsupported_numeric" not in warning_codes
@@ -466,7 +465,7 @@ def test_classify_missing_metric_candidate_uses_unit_local_text_for_schedule(mon
         raw_text="- 엔비디아 가이던스 +13.4% 상향\n- DB손보, 미국 보험사 포테그라 인수 30일 마무리",
     )
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+    async def _fake_extract_message_semantics(*, row, taxonomy, llm_config, system_prompt):
         return SemanticExtractionDraft(
             structure_type="multi_item_digest",
             units=[
@@ -490,7 +489,7 @@ def test_classify_missing_metric_candidate_uses_unit_local_text_for_schedule(mon
         _fake_extract_message_semantics,
     )
 
-    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+    result = classify_messages([row], taxonomy=taxonomy)
 
     warning_codes = [warning.code for warning in result[0].qa_warnings]
     assert "missing_metric_candidate" not in warning_codes
@@ -500,7 +499,7 @@ def test_classify_schedule_fact_numeric_stays_fact(monkeypatch):
     taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
     row = _normalized_message("BAF 반영은 통상 12개월 지연")
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+    async def _fake_extract_message_semantics(*, row, taxonomy, llm_config, system_prompt):
         return SemanticExtractionDraft(
             structure_type="single_topic_deep",
             units=[
@@ -522,7 +521,7 @@ def test_classify_schedule_fact_numeric_stays_fact(monkeypatch):
         _fake_extract_message_semantics,
     )
 
-    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+    result = classify_messages([row], taxonomy=taxonomy)
 
     assert result[0].evidence_items == [
         EvidenceItem(kind="fact", text="BAF 반영은 통상 12개월 지연")
@@ -534,7 +533,7 @@ def test_classify_missing_metric_candidate_real_metric_in_local_text_warns(monke
     taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
     row = _normalized_message("미 법무부, 6710억 원 과징금 검토")
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+    async def _fake_extract_message_semantics(*, row, taxonomy, llm_config, system_prompt):
         return SemanticExtractionDraft(
             structure_type="single_topic_deep",
             units=[
@@ -556,7 +555,7 @@ def test_classify_missing_metric_candidate_real_metric_in_local_text_warns(monke
         _fake_extract_message_semantics,
     )
 
-    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+    result = classify_messages([row], taxonomy=taxonomy)
 
     assert "missing_metric_candidate" in [warning.code for warning in result[0].qa_warnings]
 
@@ -565,7 +564,7 @@ def test_classify_ordinal_schedule_number_does_not_warn_missing_metric_candidate
     taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
     row = _normalized_message("스페이스X 12차 비행 성공")
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+    async def _fake_extract_message_semantics(*, row, taxonomy, llm_config, system_prompt):
         return SemanticExtractionDraft(
             structure_type="single_topic_deep",
             units=[
@@ -589,7 +588,7 @@ def test_classify_ordinal_schedule_number_does_not_warn_missing_metric_candidate
         _fake_extract_message_semantics,
     )
 
-    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+    result = classify_messages([row], taxonomy=taxonomy)
 
     warning_codes = [warning.code for warning in result[0].qa_warnings]
     assert "missing_metric_candidate" not in warning_codes
@@ -603,7 +602,7 @@ def test_classify_missing_metric_uses_unit_local_numbers_not_whole_digest(monkey
         "2) Xreal 차세대 스마트 안경은 2026년 말 출시 예정"
     )
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+    async def _fake_extract_message_semantics(*, row, taxonomy, llm_config, system_prompt):
         return SemanticExtractionDraft(
             structure_type="multi_item_digest",
             units=[
@@ -627,7 +626,7 @@ def test_classify_missing_metric_uses_unit_local_numbers_not_whole_digest(monkey
         _fake_extract_message_semantics,
     )
 
-    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+    result = classify_messages([row], taxonomy=taxonomy)
 
     assert "missing_metric_candidate" not in [warning.code for warning in result[0].qa_warnings]
     assert result[0].evidence_items == [
@@ -639,7 +638,7 @@ def test_classify_missing_metric_warns_for_real_metric_in_unit_summary(monkeypat
     taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
     row = _normalized_message("공정위가 밀가루 담합에 6710억 원 과징금을 부과")
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+    async def _fake_extract_message_semantics(*, row, taxonomy, llm_config, system_prompt):
         return SemanticExtractionDraft(
             structure_type="single_topic_deep",
             units=[
@@ -661,7 +660,7 @@ def test_classify_missing_metric_warns_for_real_metric_in_unit_summary(monkeypat
         _fake_extract_message_semantics,
     )
 
-    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+    result = classify_messages([row], taxonomy=taxonomy)
 
     assert "missing_metric_candidate" in [warning.code for warning in result[0].qa_warnings]
 
@@ -673,7 +672,7 @@ def test_classify_temporal_numeric_facts_are_not_promoted_to_metric(monkeypatch)
         "ECB는 2026년 3분기까지 가이드라인 이행 지시."
     )
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+    async def _fake_extract_message_semantics(*, row, taxonomy, llm_config, system_prompt):
         return SemanticExtractionDraft(
             structure_type="multi_item_digest",
             units=[
@@ -717,7 +716,7 @@ def test_classify_temporal_numeric_facts_are_not_promoted_to_metric(monkeypatch)
         _fake_extract_message_semantics,
     )
 
-    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+    result = classify_messages([row], taxonomy=taxonomy)
 
     for unit in result:
         assert "missing_metric_candidate" not in [warning.code for warning in unit.qa_warnings]
@@ -728,7 +727,7 @@ def test_classify_promotes_single_digit_leverage_fact_to_metric(monkeypatch):
     taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
     row = _normalized_message("삼성전자·SK하이닉스 2배 레버리지 ETF 출시")
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+    async def _fake_extract_message_semantics(*, row, taxonomy, llm_config, system_prompt):
         return SemanticExtractionDraft(
             structure_type="single_topic_deep",
             units=[
@@ -752,7 +751,7 @@ def test_classify_promotes_single_digit_leverage_fact_to_metric(monkeypatch):
         _fake_extract_message_semantics,
     )
 
-    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+    result = classify_messages([row], taxonomy=taxonomy)
 
     assert result[0].evidence_items == [
         EvidenceItem(kind="metric", text="삼성전자·SK하이닉스 2배 레버리지 ETF 출시")
@@ -764,7 +763,7 @@ def test_classify_promotes_meaningful_numeric_fact_to_metric(monkeypatch):
     taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
     row = _normalized_message("1분기 매출 1.63억, 영업이익 2200만, YoY 85% 증가")
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+    async def _fake_extract_message_semantics(*, row, taxonomy, llm_config, system_prompt):
         return SemanticExtractionDraft(
             structure_type="single_topic_deep",
             units=[
@@ -790,7 +789,7 @@ def test_classify_promotes_meaningful_numeric_fact_to_metric(monkeypatch):
         _fake_extract_message_semantics,
     )
 
-    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+    result = classify_messages([row], taxonomy=taxonomy)
 
     assert result[0].evidence_items == [
         EvidenceItem(kind="metric", text="1분기 매출 1.63억, 영업이익 2200만, YoY 85% 증가")
@@ -802,7 +801,7 @@ def test_classify_flags_unsupported_numeric_in_non_metric_evidence(monkeypatch):
     taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
     row = _normalized_message("메타가 루이지애나에 초대형 AI 데이터센터를 건설 중")
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+    async def _fake_extract_message_semantics(*, row, taxonomy, llm_config, system_prompt):
         return SemanticExtractionDraft(
             structure_type="single_topic_deep",
             units=[
@@ -829,7 +828,7 @@ def test_classify_flags_unsupported_numeric_in_non_metric_evidence(monkeypatch):
         _fake_extract_message_semantics,
     )
 
-    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+    result = classify_messages([row], taxonomy=taxonomy)
 
     assert "unsupported_numeric" in [warning.code for warning in result[0].qa_warnings]
 
@@ -839,7 +838,7 @@ def test_classify_flags_long_evidence(monkeypatch):
     row = _normalized_message("긴 근거 테스트")
     long_text = "이 문장은 원문 근거라기보다 과도하게 긴 요약처럼 보이는 설명입니다. " * 5
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+    async def _fake_extract_message_semantics(*, row, taxonomy, llm_config, system_prompt):
         return SemanticExtractionDraft(
             structure_type="single_topic_deep",
             units=[
@@ -861,7 +860,7 @@ def test_classify_flags_long_evidence(monkeypatch):
         _fake_extract_message_semantics,
     )
 
-    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+    result = classify_messages([row], taxonomy=taxonomy)
 
     assert "long_evidence" in [warning.code for warning in result[0].qa_warnings]
 
@@ -887,7 +886,7 @@ def test_classify_admin_warning_only_when_normalized_non_admin(monkeypatch):
     taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
     row = _normalized_message("채널 공지: 라이브 일정 안내")
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+    async def _fake_extract_message_semantics(*, row, taxonomy, llm_config, system_prompt):
         return SemanticExtractionDraft(
             structure_type="notice",
             units=[
@@ -909,7 +908,7 @@ def test_classify_admin_warning_only_when_normalized_non_admin(monkeypatch):
         _fake_extract_message_semantics,
     )
 
-    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+    result = classify_messages([row], taxonomy=taxonomy)
 
     assert result[0].message_type == "admin"
     assert "admin_contradiction" not in [warning.code for warning in result[0].qa_warnings]
@@ -919,7 +918,7 @@ def test_classify_llm_failure_fallback_keeps_typed_fields_empty_and_warning_visi
     taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
     row = _normalized_message("NVIDIA AI 인프라 투자 확대")
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+    async def _fake_extract_message_semantics(*, row, taxonomy, llm_config, system_prompt):
         raise RuntimeError("boom")
 
     monkeypatch.setattr(
@@ -927,7 +926,7 @@ def test_classify_llm_failure_fallback_keeps_typed_fields_empty_and_warning_visi
         _fake_extract_message_semantics,
     )
 
-    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+    result = classify_messages([row], taxonomy=taxonomy)
 
     assert len(result) == 1
     assert result[0].evidence_items == []
@@ -939,7 +938,7 @@ def test_classify_splits_multi_item_digest_into_multiple_report_units(monkeypatc
     taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
     row = _normalized_message("신한 자동차 뉴스 digest")
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+    async def _fake_extract_message_semantics(*, row, taxonomy, llm_config, system_prompt):
         assert system_prompt
         return SemanticExtractionDraft(
             structure_type="multi_item_digest",
@@ -972,7 +971,7 @@ def test_classify_splits_multi_item_digest_into_multiple_report_units(monkeypatc
         _fake_extract_message_semantics,
     )
 
-    result = classify_messages([row], taxonomy=taxonomy, provider="anthropic")
+    result = classify_messages([row], taxonomy=taxonomy)
 
     assert len(result) == 2
     assert [item.structure_type for item in result] == ["multi_item_digest", "multi_item_digest"]
@@ -988,7 +987,7 @@ def test_classify_uses_theme_category_when_llm_category_is_missing(monkeypatch):
     taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
     row = _normalized_message("임상 결과 발표")
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+    async def _fake_extract_message_semantics(*, row, taxonomy, llm_config, system_prompt):
         assert system_prompt
         return SemanticExtractionDraft(
             structure_type="single_topic_deep",
@@ -1011,7 +1010,7 @@ def test_classify_uses_theme_category_when_llm_category_is_missing(monkeypatch):
         _fake_extract_message_semantics,
     )
 
-    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+    result = classify_messages([row], taxonomy=taxonomy)
 
     assert len(result) == 1
     assert result[0].category_key == "바이오/헬스케어"
@@ -1024,7 +1023,7 @@ def test_classify_filters_blank_units_from_llm_output(monkeypatch):
     taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
     row = _normalized_message("운영 공지")
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+    async def _fake_extract_message_semantics(*, row, taxonomy, llm_config, system_prompt):
         assert system_prompt
         return SemanticExtractionDraft(
             structure_type="notice",
@@ -1047,7 +1046,7 @@ def test_classify_filters_blank_units_from_llm_output(monkeypatch):
         _fake_extract_message_semantics,
     )
 
-    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+    result = classify_messages([row], taxonomy=taxonomy)
 
     assert result == []
 
@@ -1063,7 +1062,7 @@ def test_classify_warns_under_split_candidate_for_digest_like_message(monkeypatc
         "5) FOMC 발언 요약"
     )
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+    async def _fake_extract_message_semantics(*, row, taxonomy, llm_config, system_prompt):
         return SemanticExtractionDraft(
             structure_type="multi_item_digest",
             units=[
@@ -1088,7 +1087,7 @@ def test_classify_warns_under_split_candidate_for_digest_like_message(monkeypatc
         _fake_extract_message_semantics,
     )
 
-    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+    result = classify_messages([row], taxonomy=taxonomy)
 
     assert "under_split_candidate" in [warning.code for warning in result[0].qa_warnings]
 
@@ -1098,7 +1097,7 @@ def test_classify_does_not_double_count_identical_raw_and_clean_blocks_for_under
     text = "Daily Market Digest\n1) KOSPI 장중 흐름\n2) WTI 반등"
     row = _normalized_message(text, raw_text=text)
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+    async def _fake_extract_message_semantics(*, row, taxonomy, llm_config, system_prompt):
         return SemanticExtractionDraft(
             structure_type="multi_item_digest",
             units=[
@@ -1123,7 +1122,7 @@ def test_classify_does_not_double_count_identical_raw_and_clean_blocks_for_under
         _fake_extract_message_semantics,
     )
 
-    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+    result = classify_messages([row], taxonomy=taxonomy)
 
     assert "under_split_candidate" not in [warning.code for warning in result[0].qa_warnings]
 
@@ -1139,7 +1138,7 @@ def test_classify_warns_over_merged_unit_candidate(monkeypatch):
         "- TSLA 주가 등락률"
     )
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+    async def _fake_extract_message_semantics(*, row, taxonomy, llm_config, system_prompt):
         return SemanticExtractionDraft(
             structure_type="multi_item_digest",
             units=[
@@ -1168,7 +1167,7 @@ def test_classify_warns_over_merged_unit_candidate(monkeypatch):
         _fake_extract_message_semantics,
     )
 
-    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+    result = classify_messages([row], taxonomy=taxonomy)
 
     warning = next(
         warning for warning in result[0].qa_warnings if warning.code == "over_merged_unit_candidate"
@@ -1189,7 +1188,7 @@ def test_classify_warns_duplicate_unit_candidate_when_units_overlap_heavily(monk
     taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
     row = _normalized_message("Market wrap 중복 unit QA")
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+    async def _fake_extract_message_semantics(*, row, taxonomy, llm_config, system_prompt):
         return SemanticExtractionDraft(
             structure_type="market_wrap",
             units=[
@@ -1227,7 +1226,7 @@ def test_classify_warns_duplicate_unit_candidate_when_units_overlap_heavily(monk
         _fake_extract_message_semantics,
     )
 
-    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+    result = classify_messages([row], taxonomy=taxonomy)
 
     assert any(
         "duplicate_unit_candidate" in [warning.code for warning in unit.qa_warnings]
@@ -1239,7 +1238,7 @@ def test_classify_normalizes_convertible_bond_event_type(monkeypatch):
     taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
     row = _normalized_message("IREN, 20억달러 전환선순위채권 발행 추진")
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+    async def _fake_extract_message_semantics(*, row, taxonomy, llm_config, system_prompt):
         assert system_prompt
         return SemanticExtractionDraft(
             structure_type="single_topic_deep",
@@ -1262,7 +1261,7 @@ def test_classify_normalizes_convertible_bond_event_type(monkeypatch):
         _fake_extract_message_semantics,
     )
 
-    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+    result = classify_messages([row], taxonomy=taxonomy)
 
     assert len(result) == 1
     assert result[0].event_type == "자본조달"
@@ -1272,7 +1271,7 @@ def test_classify_warns_when_metric_candidate_is_missing_without_synthesizing_fa
     taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
     row = _normalized_message("1분기 매출 1.63억, 영업이익 2200만, YoY 85% 증가")
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+    async def _fake_extract_message_semantics(*, row, taxonomy, llm_config, system_prompt):
         assert system_prompt
         return SemanticExtractionDraft(
             structure_type="single_topic_deep",
@@ -1295,7 +1294,7 @@ def test_classify_warns_when_metric_candidate_is_missing_without_synthesizing_fa
         _fake_extract_message_semantics,
     )
 
-    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+    result = classify_messages([row], taxonomy=taxonomy)
 
     assert len(result) == 1
     joined = " ".join(result[0].supporting_facts)
@@ -1309,7 +1308,7 @@ def test_classify_does_not_append_message_level_numeric_fact_to_market_wrap(monk
         "S&P500 map\n\n반도체 중심 AI 하드웨어 하락\n\n소프트웨어는 순환매 상승"
     )
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+    async def _fake_extract_message_semantics(*, row, taxonomy, llm_config, system_prompt):
         assert system_prompt
         return SemanticExtractionDraft(
             structure_type="market_wrap",
@@ -1332,7 +1331,7 @@ def test_classify_does_not_append_message_level_numeric_fact_to_market_wrap(monk
         _fake_extract_message_semantics,
     )
 
-    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+    result = classify_messages([row], taxonomy=taxonomy)
 
     assert len(result) == 1
     joined = " ".join(result[0].supporting_facts)
@@ -1345,7 +1344,7 @@ def test_classify_preserves_deep_supporting_facts_up_to_safety_limit(monkeypatch
     row = _normalized_message("NEE가 Dominion을 인수해 데이터센터 전력 수요를 확보")
     facts = [f"근거 {idx}" for idx in range(1, 26)]
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+    async def _fake_extract_message_semantics(*, row, taxonomy, llm_config, system_prompt):
         assert "thesis" in system_prompt
         assert "market_context" in system_prompt
         return SemanticExtractionDraft(
@@ -1369,7 +1368,7 @@ def test_classify_preserves_deep_supporting_facts_up_to_safety_limit(monkeypatch
         _fake_extract_message_semantics,
     )
 
-    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+    result = classify_messages([row], taxonomy=taxonomy)
 
     assert len(result) == 1
     assert len(result[0].supporting_facts) == 20
@@ -1388,7 +1387,7 @@ def test_classify_does_not_synthesize_numeric_lead_comment(monkeypatch):
         ),
     )
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+    async def _fake_extract_message_semantics(*, row, taxonomy, llm_config, system_prompt):
         assert "작성자 코멘트" in system_prompt
         return SemanticExtractionDraft(
             structure_type="single_topic_deep",
@@ -1414,7 +1413,7 @@ def test_classify_does_not_synthesize_numeric_lead_comment(monkeypatch):
         _fake_extract_message_semantics,
     )
 
-    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+    result = classify_messages([row], taxonomy=taxonomy)
 
     assert len(result) == 1
     assert not any(fact.startswith("작성자 코멘트:") for fact in result[0].supporting_facts)
@@ -1438,7 +1437,7 @@ def test_classify_does_not_promote_report_title_or_byline_as_lead_comment(monkey
         ),
     )
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+    async def _fake_extract_message_semantics(*, row, taxonomy, llm_config, system_prompt):
         assert "하단 고지 때문에 `admin`으로 분류하지 않는다" in system_prompt
         return SemanticExtractionDraft(
             structure_type="single_topic_deep",
@@ -1464,7 +1463,7 @@ def test_classify_does_not_promote_report_title_or_byline_as_lead_comment(monkey
         _fake_extract_message_semantics,
     )
 
-    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+    result = classify_messages([row], taxonomy=taxonomy)
 
     assert len(result) == 1
     assert result[0].message_type == "opinion"
@@ -1476,7 +1475,7 @@ def test_classify_assigns_provisional_overlay_for_unclassified(monkeypatch):
     taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
     row = _normalized_message("PCTC 운임 강세와 유류할증료 상승, BAF 회수 시차가 관건")
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+    async def _fake_extract_message_semantics(*, row, taxonomy, llm_config, system_prompt):
         assert system_prompt
         return SemanticExtractionDraft(
             structure_type="single_topic_deep",
@@ -1499,7 +1498,7 @@ def test_classify_assigns_provisional_overlay_for_unclassified(monkeypatch):
         _fake_extract_message_semantics,
     )
 
-    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+    result = classify_messages([row], taxonomy=taxonomy)
 
     assert len(result) == 1
     assert result[0].category_key == "unclassified"
@@ -1512,7 +1511,7 @@ def test_classify_does_not_override_canonical_category_with_overlay(monkeypatch)
     taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
     row = _normalized_message("AI 데이터센터 투자 확대")
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+    async def _fake_extract_message_semantics(*, row, taxonomy, llm_config, system_prompt):
         assert system_prompt
         return SemanticExtractionDraft(
             structure_type="single_topic_deep",
@@ -1535,7 +1534,7 @@ def test_classify_does_not_override_canonical_category_with_overlay(monkeypatch)
         _fake_extract_message_semantics,
     )
 
-    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+    result = classify_messages([row], taxonomy=taxonomy)
 
     assert len(result) == 1
     assert result[0].category_key == "AI인프라"
@@ -1548,7 +1547,7 @@ def test_classify_overlay_ignores_short_english_alias_noise(monkeypatch):
     taxonomy = load_taxonomy_registry("config/stock_report_vocabulary.yaml")
     row = _normalized_message("AI 랠리 언급이 있었지만 구체 섹터 근거는 없는 일반 코멘트")
 
-    async def _fake_extract_message_semantics(*, row, taxonomy, provider, system_prompt):
+    async def _fake_extract_message_semantics(*, row, taxonomy, llm_config, system_prompt):
         assert system_prompt
         return SemanticExtractionDraft(
             structure_type="single_topic_deep",
@@ -1571,7 +1570,7 @@ def test_classify_overlay_ignores_short_english_alias_noise(monkeypatch):
         _fake_extract_message_semantics,
     )
 
-    result = classify_messages([row], taxonomy=taxonomy, provider="openai")
+    result = classify_messages([row], taxonomy=taxonomy)
 
     assert len(result) == 1
     assert result[0].category_key == "unclassified"

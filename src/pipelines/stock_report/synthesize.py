@@ -207,18 +207,17 @@ async def _run_synthesis_call(
     system: str,
     user: str,
     schema: type[BaseModel],
-    provider: str,
 ) -> BaseModel:
     """Shared helper: wraps invoke_llm_with_retry for per-category / per-ticker calls."""
-    llm_config = get_report_synthesis_llm_config(provider)
+    llm_config = get_report_synthesis_llm_config()
     llm = llm_config.create_llm()
     messages = llm_config.build_messages(system, user)
     config = {
-        "run_name": f"StockReport Per-Category Synthesis ({provider})",
-        "tags": ["stock_report", "daily_v2", "per_category_synthesis", f"provider:{provider}"],
+        "run_name": f"StockReport Per-Category Synthesis ({llm_config.provider})",
+        "tags": ["stock_report", "daily_v2", "per_category_synthesis", f"provider:{llm_config.provider}"],
         "metadata": {
             "stage": "per_category_synthesis",
-            "provider": provider,
+            "provider": llm_config.provider,
             "model": llm_config.model,
             "prompt_chars": len(user),
         },
@@ -360,7 +359,6 @@ def _log_pdf_trace(label: str, trace: ToolCallTrace) -> None:
 async def synthesize_category(
     bucket: CategoryBucket,
     *,
-    provider: str = "openai",
     search_fn=None,
 ) -> CategorySummaryCard:
     """Synthesize a single CategoryBucket into a CategorySummaryCard.
@@ -377,7 +375,7 @@ async def synthesize_category(
     user_prompt = build_category_synthesis_prompt(bucket)
     try:
         if search_fn is not None:
-            llm_config = get_report_synthesis_llm_config(provider)
+            llm_config = get_report_synthesis_llm_config()
             llm = llm_config.create_llm()
             system_prompt = (
                 f"{CATEGORY_SYNTHESIS_SYSTEM_PROMPT}\n\n{_SEARCH_DOCUMENTS_TOOL_ADDENDUM}"
@@ -396,7 +394,6 @@ async def synthesize_category(
                 CATEGORY_SYNTHESIS_SYSTEM_PROMPT,
                 user_prompt,
                 CategoryCardLLMOutput,
-                provider,
             )
             trace = None
         if not isinstance(output, CategoryCardLLMOutput):
@@ -425,9 +422,8 @@ async def synthesize_category(
         return enforce_high_impact_event_coverage(card, bucket.chunks)
     except Exception:
         logger.warning(
-            "synthesize_category LLM failed, using raw fallback: category=%s provider=%s",
+            "synthesize_category LLM failed, using raw fallback: category=%s",
             bucket.category_key,
-            provider,
             exc_info=True,
         )
         return _render_raw_category_card(bucket)
@@ -436,7 +432,6 @@ async def synthesize_category(
 async def synthesize_ticker(
     bucket: TickerBucket,
     *,
-    provider: str = "openai",
     search_fn=None,
 ) -> TickerCard:
     """Synthesize a single TickerBucket into a TickerCard.
@@ -453,7 +448,7 @@ async def synthesize_ticker(
     user_prompt = build_ticker_synthesis_prompt(bucket)
     try:
         if search_fn is not None:
-            llm_config = get_report_synthesis_llm_config(provider)
+            llm_config = get_report_synthesis_llm_config()
             llm = llm_config.create_llm()
             system_prompt = f"{TICKER_SYNTHESIS_SYSTEM_PROMPT}\n\n{_SEARCH_DOCUMENTS_TOOL_ADDENDUM}"
             messages = llm_config.build_messages(system_prompt, user_prompt)
@@ -470,7 +465,6 @@ async def synthesize_ticker(
                 TICKER_SYNTHESIS_SYSTEM_PROMPT,
                 user_prompt,
                 TickerCardLLMOutput,
-                provider,
             )
             trace = None
         if not isinstance(output, TickerCardLLMOutput):
@@ -488,9 +482,8 @@ async def synthesize_ticker(
         )
     except Exception:
         logger.warning(
-            "synthesize_ticker LLM failed, using raw fallback: ticker=%s provider=%s",
+            "synthesize_ticker LLM failed, using raw fallback: ticker=%s",
             bucket.ticker,
-            provider,
             exc_info=True,
         )
         return _render_raw_ticker_card(bucket)
@@ -614,8 +607,6 @@ def _build_deterministic_pulse(
 async def synthesize_overview(
     category_cards: list[CategorySummaryCard],
     ticker_cards: list[TickerCard],
-    *,
-    provider: str = "openai",
 ) -> OverviewResult:
     """Reduce per-category/per-ticker cards into an OverviewResult (Pulse + Core Themes).
 
@@ -631,7 +622,6 @@ async def synthesize_overview(
             OVERVIEW_SYNTHESIS_SYSTEM_PROMPT,
             user_prompt,
             OverviewLLMOutput,
-            provider,
         )
         assert isinstance(output, OverviewLLMOutput)
         return _build_overview_result_from_llm(output, category_cards, ticker_cards, allowed_ids)
@@ -969,7 +959,6 @@ def _assemble_tiered_artifact(
 async def synthesize_tiered(
     bundle: SameDayBundle,
     *,
-    provider: str = "openai",
     search_fn=None,
 ) -> StockReportArtifact:
     """Full map-reduce: per-category + top-N ticker map → reduce → StockReportArtifact.
@@ -993,16 +982,16 @@ async def synthesize_tiered(
 
     async def _cat(b: CategoryBucket) -> CategorySummaryCard:
         async with sem:
-            return await synthesize_category(b, provider=provider, search_fn=search_fn)
+            return await synthesize_category(b, search_fn=search_fn)
 
     async def _tic(b: TickerBucket) -> TickerCard:
         async with sem:
-            return await synthesize_ticker(b, provider=provider, search_fn=search_fn)
+            return await synthesize_ticker(b, search_fn=search_fn)
 
     try:
         category_cards = list(await asyncio.gather(*[_cat(b) for b in major_buckets]))
         ticker_cards = list(await asyncio.gather(*[_tic(b) for b in ticker_buckets]))
-        overview = await synthesize_overview(category_cards, ticker_cards, provider=provider)
+        overview = await synthesize_overview(category_cards, ticker_cards)
         minor_item = _build_minor_categories_item(minor_buckets)
         artifact = _assemble_tiered_artifact(
             bundle, category_cards, ticker_cards, overview, minor_item
@@ -1022,11 +1011,10 @@ async def synthesize_tiered(
 def synthesize_daily(
     bundle: SameDayBundle,
     *,
-    provider: str = "openai",
     search_fn=None,
 ) -> StockReportArtifact:
     """Sync entry point for the tiered pipeline (wraps asyncio.run)."""
-    return asyncio.run(synthesize_tiered(bundle, provider=provider, search_fn=search_fn))
+    return asyncio.run(synthesize_tiered(bundle, search_fn=search_fn))
 
 
 # ---------------------------------------------------------------------------
