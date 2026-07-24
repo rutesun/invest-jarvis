@@ -330,10 +330,10 @@ Deep Dive 분석 실행 시 자동으로 기술적 차트를 생성하여 `chart
 | Stage | 역할 | LLM | 입력 → 출력 |
 |-------|------|-----|------------|
 | **Ingest** | 메시지 + 매크로 로드 | X | CSV → IngestResult |
-| **Map** | 이슈 추출, 카테고리 분류 | Haiku 4.5 (temp 0.2) | messages → MappedIssue[] |
-| **Shuffle** | 카테고리 그룹핑 + 테마 정규화 | Haiku 4.5 (temp 0.1) | issues → ShuffleResult |
-| **Reduce** | 테마별 분석 리포트 | Haiku 4.5 (temp 0.3) | theme groups → NewsItem[] |
-| **Wrapup** | 크로스 테마 인사이트 | Haiku 4.5 (temp 0.4) | news items → DailyReport |
+| **Map** | 이슈 추출, 카테고리 분류 | gpt-5.6-luna (temp 0.2) | messages → MappedIssue[] |
+| **Shuffle** | 카테고리 그룹핑 + 테마 정규화 | gpt-5.6-luna (temp 0.1) | issues → ShuffleResult |
+| **Reduce** | 테마별 분석 리포트 | gpt-5.6-terra (temp 0.3) | theme groups → NewsItem[] |
+| **Wrapup** | 크로스 테마 인사이트 | gpt-5.6-terra (temp 0.4) | news items → DailyReport |
 
 **Map Stage 동작:**
 - 유사 메시지를 하나의 이슈로 클러스터링 (같은 기업/산업 트렌드/인과관계/복수 종목)
