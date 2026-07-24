@@ -63,7 +63,7 @@ LLM 없이 기술적 분석만 수행하는 빠른 진단 기능.
 기술적 분석 + 펀더멘탈 + 뉴스 + 공시 + 수급을 종합해 판단 우선 요약과 투자 해석을 생성.
 
 **입출력:**
-- 입력: 티커, LLM provider (openai/anthropic)
+- 입력: 티커 (분석 모델은 config.yaml `llm.analyze` 섹션에서 설정)
 - 출력: 판단 요약(주도 팩터, 핵심 변수, 액션, 보류 이유), 액션 시나리오, 원시 분석
 
 **분석 레이어:**
@@ -448,7 +448,7 @@ TelegramMessage → MappedIssue → ShuffleResult → ThemeAnalysis/NewsItem →
 - chat(분류/합성)은 사내 게이트웨이(`OPENAI_BASE_URL`)를 경유하지만, 게이트웨이가 임베딩 provider를 막는 경우가 있어 임베딩은 `OPEN_AI_EMBEDDING_KEY`(또는 `STOCK_REPORT_EMBED_API_KEY`)로 OpenAI 공식 엔드포인트를 직접 사용
 
 **옵션:**
-- `--input-dir`, `--provider`(분류 LLM, 기본 openai), `--use-hybrid`, `--ocr-lang`, `--embed-missing`(pending/failed 청크만 임베딩하는 backfill 경로), `--reembed`(멱등 skip 무시하고 전체 재적재)
+- `--input-dir`, `--use-hybrid`, `--ocr-lang`, `--embed-missing`(pending/failed 청크만 임베딩하는 backfill 경로), `--reembed`(멱등 skip 무시하고 전체 재적재) (분류 LLM은 config.yaml `llm.daily_v2.extraction` 설정을 따름)
 
 **제약:**
 - hybrid(docling) 통합은 `needs_hybrid=True` 문서 재처리 경로로 예정

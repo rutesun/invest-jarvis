@@ -351,7 +351,7 @@ uv run python scripts/stock_report_prompt_tuning.py 2026-05-19 \
 ```
 
 **핵심 옵션:**
-- `--model`: 실험용 모델 override (config.yaml 기본값 대신 적용). `--provider`와 함께 쓸 때만 유효.
+- `--model`: 실험용 모델 override (config.yaml 기본값 대신 적용). 단독으로 쓸 수 있으며, 이 경우 provider는 config 기본값을 유지. `--provider`는 `--model`을 함께 지정할 때만 유효.
 - `--pick`: 특정 메시지 강제 포함 (`channel_key:channel_message_id`, 반복 가능)
 - `--pick-file`: selector 파일로 일괄 지정
 - `--include-grouped-only`: grouped_only 후보도 샘플에 포함
