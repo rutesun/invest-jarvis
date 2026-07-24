@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 load_dotenv()
 from langsmith import traceable
 
-from src.pipelines.daily_report.config import SHUFFLE_LLM
+from src.pipelines.daily_report.config import get_stage_llm
 from src.pipelines.daily_report.llm_utils import invoke_llm_with_retry
 from src.pipelines.daily_report.models import MappedIssue, ShuffleResult, ThemeMapping
 from src.pipelines.daily_report.prompts import SHUFFLE_SYSTEM_PROMPT, SHUFFLE_USER_PROMPT
@@ -73,7 +73,7 @@ async def _normalize_themes_by_category(
     date: str,
 ) -> dict[str, dict[str, list[MappedIssue]]]:
     """카테고리별 병렬 테마 정규화."""
-    llm = SHUFFLE_LLM.create_llm()
+    llm = get_stage_llm("shuffle").create_llm()
     tasks = [
         _normalize_themes_for_category(llm, category, issues, date)
         for category, issues in category_buckets.items()
@@ -164,7 +164,7 @@ async def _normalize_themes(
         },
     }
 
-    messages = SHUFFLE_LLM.build_messages(system_prompt, user_prompt)
+    messages = get_stage_llm("shuffle").build_messages(system_prompt, user_prompt)
 
     try:
         response = await invoke_llm_with_retry(llm, ThemeMapping, messages, config)

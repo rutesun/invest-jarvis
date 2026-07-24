@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 load_dotenv()
 from langsmith import traceable
 
-from src.pipelines.daily_report.config import MAP_LLM, MAP_MAX_TOKENS_PER_CHUNK
+from src.pipelines.daily_report.config import MAP_MAX_TOKENS_PER_CHUNK, get_stage_llm
 from src.pipelines.daily_report.examples.map_examples import get_map_examples
 from src.pipelines.daily_report.llm_utils import invoke_llm_with_retry
 from src.pipelines.daily_report.models import MappedIssue, MappedIssueList, TelegramMessage
@@ -128,7 +128,7 @@ async def _analyze_chunks_parallel(
     date: str,
 ) -> list[list[MappedIssue]]:
     """asyncio로 청크를 병렬 분석."""
-    llm = MAP_LLM.create_llm()
+    llm = get_stage_llm("map").create_llm()
 
     tasks = [
         _analyze_chunk(chunk, llm, chunk_index, date) for chunk_index, chunk in enumerate(chunks)
@@ -175,7 +175,7 @@ async def _analyze_chunk(
         },
     }
 
-    messages = MAP_LLM.build_messages(system_prompt, user_prompt)
+    messages = get_stage_llm("map").build_messages(system_prompt, user_prompt)
 
     try:
         llm_start = time.time()

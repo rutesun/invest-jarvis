@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 load_dotenv()
 from langsmith import traceable
 
-from src.pipelines.daily_report.config import WRAPUP_LLM
+from src.pipelines.daily_report.config import get_stage_llm
 from src.pipelines.daily_report.examples.wrapup_examples import get_wrapup_examples
 from src.pipelines.daily_report.llm_utils import invoke_llm_with_retry
 from src.pipelines.daily_report.models import DailyReport, KeyInsightsList, MacroSnapshot, NewsItem
@@ -91,7 +91,7 @@ async def _wrapup_stage_async(
     date: str = None,
 ) -> DailyReport:
     """Async implementation of wrapup stage."""
-    llm = WRAPUP_LLM.create_llm()
+    llm = get_stage_llm("wrapup").create_llm()
 
     # 매크로 데이터 포맷팅
     macro_text = f"""VIX: {macro.vix}
@@ -121,7 +121,7 @@ KRW/USD: {macro.krw_usd}"""
         },
     }
 
-    messages = WRAPUP_LLM.build_messages(system_prompt, user_prompt)
+    messages = get_stage_llm("wrapup").build_messages(system_prompt, user_prompt)
 
     try:
         response = await invoke_llm_with_retry(llm, KeyInsightsList, messages, config)
