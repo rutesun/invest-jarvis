@@ -19,8 +19,16 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("date", nargs="?", default=None, help="Target date (YYYY-MM-DD)")
     parser.add_argument("--data-dir", default="data", help="Data directory")
-    parser.add_argument("--provider", default="openai", help="LLM provider")
-    parser.add_argument("--model", default="", help="Model override")
+    parser.add_argument(
+        "--provider",
+        default="openai",
+        help="실험용 LLM provider override (config.yaml 기본값 대신 적용). --model과 함께 사용할 때만 유효.",
+    )
+    parser.add_argument(
+        "--model",
+        default="",
+        help="실험용 모델 override (config.yaml 기본값 대신 적용).",
+    )
     parser.add_argument("--config-path", default="config.yaml", help="Config path")
     parser.add_argument(
         "--taxonomy-path",

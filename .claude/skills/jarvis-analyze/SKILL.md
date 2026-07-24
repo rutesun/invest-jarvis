@@ -13,8 +13,10 @@ args: ticker symbol (e.g., AAPL, MSFT, 005930.KS)
 ## Usage
 
 ```bash
-uv run jarvis analyze {ticker} [--provider openai|anthropic]
+uv run jarvis analyze {ticker}
 ```
+
+LLM 모델은 `config.yaml` `llm.analyze` 섹션에서 설정한다 (기본값: gpt-5.6-terra).
 
 ## What it does
 
@@ -26,5 +28,5 @@ uv run jarvis analyze {ticker} [--provider openai|anthropic]
 
 ```bash
 uv run jarvis analyze AAPL
-uv run jarvis analyze AAPL --provider anthropic
+uv run jarvis analyze 005930.KS
 ```

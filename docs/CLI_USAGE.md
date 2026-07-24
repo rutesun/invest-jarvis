@@ -64,23 +64,17 @@ uv run jarvis check AAPL MSFT 005930.KS
 - 최종 LLM에 모든 소스와 고정 decision을 한 번에 전달해 `종합 해설` 생성
 
 **요구사항:**
-- `OPENAI_API_KEY` 또는 `ANTHROPIC_API_KEY` 필요
+- `OPENAI_API_KEY` 필요 (LLM 모델은 `config.yaml` `llm:` 섹션에서 설정)
 
 **사용법:**
 ```bash
-uv run jarvis analyze <TICKER> [OPTIONS]
+uv run jarvis analyze <TICKER>
 ```
-
-**옵션:**
-- `--provider, -p`: LLM 제공자 선택 (openai|anthropic, 기본값: openai)
 
 **예시:**
 ```bash
-# OpenAI 사용
 uv run jarvis analyze AAPL
-
-# Anthropic 사용
-uv run jarvis analyze AAPL --provider anthropic
+uv run jarvis analyze 005930.KS
 ```
 
 **출력 내용:**
@@ -236,7 +230,7 @@ uv run python -m src.pipelines.daily_report.stages.wrapup_stage 2026-04-17
 
 **요구사항:**
 - 텔레그램 데이터 필요: `uv run jarvis telegram fetch <날짜>` 먼저 실행
-- LLM API 키 필요 (`OPENAI_API_KEY` 또는 provider에 맞는 키)
+- `OPENAI_API_KEY` 필요 (LLM 모델은 `config.yaml` `llm:` 섹션에서 설정)
 - Postgres 연결 필요 (`STOCK_REPORT_DB_DSN` 또는 `DATABASE_URL`)
 
 **사용법:**
@@ -246,7 +240,6 @@ uv run jarvis report daily-v2 [날짜] [OPTIONS]
 
 **옵션:**
 - `--data-dir, -d`: 데이터 디렉토리 (기본값: data)
-- `--provider, -p`: LLM provider (기본값: openai)
 - `--config-path`: stock report 설정 파일 경로 (기본값: config.yaml)
 - `--taxonomy-path`: taxonomy vocabulary 파일 경로 (기본값: config/stock_report_vocabulary.yaml)
 - `--preview-limit`: canonical_summary 미리보기 개수 (기본값: 12)
@@ -350,7 +343,6 @@ uv run jarvis report upload 2026-04-18 --type screener
 **Prompt 튜닝 (실데이터 샘플 기반):**
 ```bash
 uv run python scripts/stock_report_prompt_tuning.py 2026-05-19 \
-  --provider openai \
   --model gpt-5.4-mini \
   --sample-size 30 \
   --per-channel 2 \
@@ -359,7 +351,7 @@ uv run python scripts/stock_report_prompt_tuning.py 2026-05-19 \
 ```
 
 **핵심 옵션:**
-- `--model`: 모델 override
+- `--model`: 실험용 모델 override (config.yaml 기본값 대신 적용). `--provider`와 함께 쓸 때만 유효.
 - `--pick`: 특정 메시지 강제 포함 (`channel_key:channel_message_id`, 반복 가능)
 - `--pick-file`: selector 파일로 일괄 지정
 - `--include-grouped-only`: grouped_only 후보도 샘플에 포함
@@ -418,9 +410,8 @@ uv run pytest tests/pipelines/stock_report/test_golden_set.py
 
 **사용법:**
 ```bash
-uv run jarvis brief                # LLM 문장화 포함 (기본 openai)
+uv run jarvis brief                # LLM 문장화 포함
 uv run jarvis brief --no-llm       # 규칙 원문만 (LLM 키 불필요)
-uv run jarvis brief -p anthropic
 ```
 
 **playbook.yaml 예시:**
@@ -604,6 +595,38 @@ A: Telegram 앱에서 채널 정보 → "ID" 확인, 또는 `@channel_username` 
 
 **Q: 비공개 채널이 수집 안 됨**  
 A: 해당 Telegram 계정이 채널 멤버여야 수집 가능합니다
+
+---
+
+## LLM 모델 설정
+
+LLM 모델·provider·temperature는 `config.yaml`의 `llm:` 섹션에서 일괄 관리한다.
+CLI에 `--provider` 플래그는 없으며 (실험용 스크립트 제외), 모델 변경은 설정 파일만 수정하면 된다.
+
+### config.yaml 스키마
+
+```yaml
+llm:
+  defaults:
+    provider: openai
+    model: gpt-5.6-terra
+    temperature: 0.0
+  daily:                 # jarvis report daily (MapReduce 파이프라인)
+    map:     { model: gpt-5.6-luna, temperature: 0.2 }
+    shuffle: { model: gpt-5.6-luna, temperature: 0.1 }
+    reduce:  { temperature: 0.3 }   # model은 defaults.model 상속
+    wrapup:  { temperature: 0.4 }
+  daily_v2:              # jarvis report daily-v2
+    extraction: { model: gpt-5.6-luna, temperature: 0.1 }
+    synthesis:  { model: gpt-5.6-sol,  temperature: 0.1 }
+  analyze: {}            # jarvis analyze → defaults 전부 상속
+  brief:   {}            # jarvis brief → defaults 전부 상속
+```
+
+**상속 규칙**: 각 항목은 `defaults`를 기반으로 명시한 필드만 덮어쓴다.
+`llm:` 섹션 자체가 없어도 위 스키마와 동일한 코드 기본값이 적용되므로 설정 파일 없이도 동작한다.
+
+**`report ticker` 한정**: `--provider` 플래그가 남아 있으며 기존 동작을 유지한다.
 
 ---
 

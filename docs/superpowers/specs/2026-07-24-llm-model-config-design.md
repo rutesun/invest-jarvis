@@ -1,7 +1,7 @@
 # LLM 모델 설정 일원화 설계
 
 - 날짜: 2026-07-24
-- 상태: 설계 확정 대기
+- 상태: 구현 완료 (2026-07-24)
 - 범위: daily_report, stock_report, deep_dive, brief 파이프라인의 LLM 모델 설정
 
 ## 배경
