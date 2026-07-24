@@ -18,14 +18,13 @@ LLM 모델 설정이 3가지 방식으로 흩어져 있다.
 - 지금 어떤 모델이 쓰이는지 한눈에 알 수 없다.
 - 모델 교체마다 코드 수정 또는 env 변수 조합 파악이 필요하다.
 - `StageLLMConfig`(create_llm + build_messages)가 daily_report와 stock_report에 중복 정의돼 있다.
-- `src/llm/analyzer.py:482`가 미정의 함수 `get_llm_instance`를 import하는 죽은 폴백 경로를 갖고 있다.
 
 ## 결정 사항
 
 1. **설정 위치**: 루트 `config.yaml`에 `llm:` 섹션 추가. `src/core/config.py`의 Pydantic `AppConfig`로 로딩.
 2. **단일 소스**: config.yaml만 모델 설정 소스로 사용.
    - `STOCK_REPORT_*` env 변수 체인 전부 삭제.
-   - CLI `--provider` 플래그 삭제 (`analyze`, `brief`, `report daily-v2`).
+   - CLI `--provider` 플래그 삭제 (`analyze`, `brief`, `report daily-v2`, `report ingest-pdf`).
    - API 키·Bedrock 엔드포인트 등 인증 정보는 지금처럼 `.env` 유지.
 3. **키 네이밍**: CLI 명령 기준 — `daily`, `daily_v2`, `analyze`, `brief`.
 4. **모델**: GPT-5.6 패밀리(sol/terra/luna)만 사용. 디폴트는 terra.
@@ -88,8 +87,9 @@ daily_report와 stock_report에 중복된 `StageLLMConfig`(create_llm + build_me
 |---|---|
 | `daily_report/config.py` | `MAP_LLM` 등 4개 상수 삭제 → `AppConfig.llm.resolve("daily", stage)` 참조 |
 | `stock_report/config.py` | `get_semantic_extraction_llm_config`/`get_report_synthesis_llm_config`의 provider 파라미터·env 체인 삭제 → config 참조 |
-| `src/cli/main.py` | `analyze`/`brief`/`report daily-v2`에서 `--provider` 삭제, config로 LLM 생성해 주입 (주입 구조 유지) |
-| `src/llm/analyzer.py` | `get_llm_instance` 죽은 폴백 경로 제거 (LLM 항상 주입) |
+| `src/cli/main.py` | `analyze`/`brief`/`report daily-v2`/`report ingest-pdf`에서 `--provider` 삭제, config로 LLM 생성해 주입 (주입 구조 유지) |
+| stock_report 내부 (`classify.py`/`synthesize.py`/`pipeline.py`/`pdf_classify.py`/`pdf_ingest.py`) | `provider: str` 파라미터 스레딩을 제거하고 진입점에서 `StageLLMConfig`를 한 번 해석해 전달. 로그/태그의 provider는 `llm_config.provider` 사용 |
+| `tuning.py` + `scripts/stock_report_prompt_tuning.py` | env 오버라이드(`with_model_override`) 삭제 → 실험용 모델 오버라이드는 `StageLLMConfig` 명시 주입으로 대체 |
 | `docs/CLI_USAGE.md`, 스킬 문서 | `--provider` 언급 제거 |
 
 ### 4. 데이터 흐름
