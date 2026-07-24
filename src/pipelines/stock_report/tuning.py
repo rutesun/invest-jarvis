@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import csv
 import logging
-import os
 import random
 import time
 from collections import defaultdict
@@ -13,6 +12,7 @@ from pathlib import Path
 
 import yaml
 
+from src.llm.stage_config import StageLLMConfig
 from src.pipelines.stock_report.classify import classify_messages
 from src.pipelines.stock_report.config import get_semantic_extraction_llm_config
 from src.pipelines.stock_report.models import (
@@ -484,7 +484,7 @@ def run_prompt_tuning_round(
     *,
     date: str,
     data_dir: str = "data",
-    provider: str = "openai",
+    llm_config: StageLLMConfig | None = None,
     config_path: str = "config.yaml",
     taxonomy_path: str = "config/stock_report_vocabulary.yaml",
     sample_size: int = 24,
@@ -497,11 +497,11 @@ def run_prompt_tuning_round(
     max_raw_chars: int = 6000,
 ) -> PromptTuningRunResult:
     started_at = time.perf_counter()
-    llm_config = get_semantic_extraction_llm_config(provider)
+    llm_config = llm_config or get_semantic_extraction_llm_config()
     logger.info(
         "prompt tuning started: date=%s provider=%s model=%s sample_size=%d per_channel=%d picks=%d",
         date,
-        provider,
+        llm_config.provider,
         llm_config.model,
         sample_size,
         per_channel,
@@ -536,7 +536,7 @@ def run_prompt_tuning_round(
     classified_rows = classify_messages(
         sampled_rows,
         taxonomy=taxonomy,
-        provider=provider,
+        llm_config=llm_config,
         system_prompt=system_prompt,
     )
     logger.info("prompt tuning classification completed: classified_units=%d", len(classified_rows))
@@ -559,7 +559,7 @@ def run_prompt_tuning_round(
 
     result = PromptTuningRunResult(
         date=date,
-        provider=provider,
+        provider=llm_config.provider,
         model=llm_config.model,
         csv_files=csv_file_count,
         parsed_rows=len(raw_messages),
@@ -593,41 +593,3 @@ def write_prompt_tuning_report(result: PromptTuningRunResult, output_path: str |
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(result.output_markdown, encoding="utf-8")
     return path
-
-
-def with_model_override(provider: str, model: str | None):
-    if not model:
-        return _NoopContext()
-    if provider == "openai":
-        env_key = "STOCK_REPORT_OPENAI_MODEL"
-    elif provider == "anthropic":
-        env_key = "STOCK_REPORT_ANTHROPIC_MODEL"
-    else:
-        raise ValueError(f"지원하지 않는 provider입니다: {provider}")
-    return _EnvOverrideContext(env_key=env_key, value=model)
-
-
-class _NoopContext:
-    def __enter__(self):
-        return None
-
-    def __exit__(self, exc_type, exc, tb):
-        return False
-
-
-class _EnvOverrideContext:
-    def __init__(self, *, env_key: str, value: str):
-        self.env_key = env_key
-        self.value = value
-        self.previous = os.getenv(env_key)
-
-    def __enter__(self):
-        os.environ[self.env_key] = self.value
-        return None
-
-    def __exit__(self, exc_type, exc, tb):
-        if self.previous is None:
-            os.environ.pop(self.env_key, None)
-        else:
-            os.environ[self.env_key] = self.previous
-        return False

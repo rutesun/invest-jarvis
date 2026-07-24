@@ -124,7 +124,7 @@ def _patch_common(monkeypatch, conn: FakeConnection) -> _Recorder:
     monkeypatch.setattr(f"{_MODULE}.load_taxonomy_registry", lambda path: object())
     monkeypatch.setattr(
         f"{_MODULE}.classify_document",
-        lambda parsed, *, title, taxonomy, provider: (None, None),
+        lambda parsed, *, title, taxonomy: (None, None),
     )
 
     return rec
@@ -522,7 +522,7 @@ def test_classify_fills_category_and_theme(tmp_path, monkeypatch) -> None:
     # LLM 분류 결과가 meta를 거쳐 persist_document_chunks까지 전파되는지 검증.
     monkeypatch.setattr(
         f"{_MODULE}.classify_document",
-        lambda parsed, *, title, taxonomy, provider: ("이차전지", "양극재"),
+        lambda parsed, *, title, taxonomy: ("이차전지", "양극재"),
     )
 
     pdf_ingest.run_ingest_pdf("2026-06-02", input_dir=input_dir)

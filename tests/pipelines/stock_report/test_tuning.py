@@ -110,8 +110,7 @@ def test_run_prompt_tuning_round_uses_csv_samples_and_custom_prompt(tmp_path, mo
         encoding="utf-8",
     )
 
-    def _fake_classify(normalized_messages, *, taxonomy, provider, system_prompt=None):
-        assert provider == "openai"
+    def _fake_classify(normalized_messages, *, taxonomy, llm_config=None, system_prompt=None):
         assert system_prompt == "CUSTOM PROMPT"
         return [
             ClassifiedMessage(
@@ -142,7 +141,6 @@ def test_run_prompt_tuning_round_uses_csv_samples_and_custom_prompt(tmp_path, mo
     result = run_prompt_tuning_round(
         date="2026-05-08",
         data_dir=str(tmp_path),
-        provider="openai",
         config_path=str(config_file),
         taxonomy_path="config/stock_report_vocabulary.yaml",
         sample_size=2,
@@ -192,7 +190,7 @@ def test_run_prompt_tuning_round_renders_typed_evidence_and_warning_counts(tmp_p
         encoding="utf-8",
     )
 
-    def _fake_classify(normalized_messages, *, taxonomy, provider, system_prompt=None):
+    def _fake_classify(normalized_messages, *, taxonomy, llm_config=None, system_prompt=None):
         from src.pipelines.stock_report.models import EvidenceItem, QAWarning
 
         row = normalized_messages[0]
@@ -277,7 +275,6 @@ def test_run_prompt_tuning_round_renders_typed_evidence_and_warning_counts(tmp_p
     result = run_prompt_tuning_round(
         date="2026-05-08",
         data_dir=str(tmp_path),
-        provider="openai",
         config_path=str(config_file),
         taxonomy_path="config/stock_report_vocabulary.yaml",
         sample_size=1,
