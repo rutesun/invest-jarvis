@@ -1,3 +1,8 @@
+import pytest
+
+from src.core.config import AppConfig, LLMConfig, get_app_config, load_config
+
+
 def test_load_config_from_yaml(tmp_path):
     config_content = """
 technical:
@@ -10,8 +15,6 @@ cache:
     config_file = tmp_path / "config.yaml"
     config_file.write_text(config_content)
 
-    from src.core.config import load_config
-
     config = load_config(config_file)
 
     assert config.technical.strategies == ["trend", "oscillator"]
@@ -19,16 +22,9 @@ cache:
 
 
 def test_load_config_default():
-    from src.core.config import AppConfig, load_config
-
     config = load_config(None)
     assert isinstance(config, AppConfig)
     assert config.cache.quote_ttl == 60
-
-
-import pytest
-
-from src.core.config import AppConfig, LLMConfig, get_app_config, load_config
 
 
 def test_llm_defaults_when_section_absent():
@@ -71,6 +67,13 @@ def test_llm_stage_entry_inherits_unset_fields_from_defaults():
     assert resolved.provider == "openai"
     assert resolved.model == "gpt-5.6-terra"  # defaults 상속
     assert resolved.temperature == 0.9  # 명시 필드만 오버라이드
+
+
+def test_llm_partial_stage_section_keeps_sibling_code_defaults():
+    llm = LLMConfig.model_validate({"daily": {"reduce": {"temperature": 0.9}}})
+    assert llm.resolve("daily", "map").model == "gpt-5.6-luna"
+    assert llm.resolve("daily", "map").temperature == 0.2
+    assert llm.resolve("daily", "reduce").temperature == 0.9
 
 
 def test_llm_resolve_unknown_pipeline_raises():

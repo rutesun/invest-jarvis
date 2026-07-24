@@ -66,7 +66,12 @@ class LLMConfig(BaseModel):
     brief: LLMEntryConfig = LLMEntryConfig()
 
     @model_validator(mode="after")
-    def _reject_unknown_stage_keys(self) -> "LLMConfig":
+    def _merge_stage_dicts_and_reject_unknown_keys(self) -> "LLMConfig":
+        # Merge provided stage entries over the code defaults so that omitted
+        # sibling stages still carry their stage-specific defaults.
+        self.daily = {**_default_daily(), **self.daily}
+        self.daily_v2 = {**_default_daily_v2(), **self.daily_v2}
+
         for pipeline, stages in _PIPELINE_STAGES.items():
             unknown = set(getattr(self, pipeline)) - set(stages)
             if unknown:
