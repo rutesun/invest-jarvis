@@ -1146,8 +1146,8 @@ async def run_brief(use_llm: bool) -> dict:
 
     llm = None
     if use_llm:
+        llm_config = resolve_stage_llm("brief")
         try:
-            llm_config = resolve_stage_llm("brief")
             llm = llm_config.create_llm()
         except Exception as e:
             console.print(f"[yellow]LLM 초기화 실패 — 규칙 원문으로 진행: {e}[/yellow]")
@@ -1427,7 +1427,9 @@ def report_daily_v2(
     ),
     data_dir: str = typer.Option("data", "--data-dir", "-d", help="데이터 디렉토리"),
     config_path: str = typer.Option(
-        "config.yaml", "--config-path", help="stock report 설정 파일 경로"
+        "config.yaml",
+        "--config-path",
+        help="stock report normalize 설정 파일 경로 (normalize 전용 — llm 섹션은 루트 config.yaml에서만 읽음)",
     ),
     taxonomy_path: str = typer.Option(
         "config/stock_report_vocabulary.yaml",

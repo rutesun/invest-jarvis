@@ -5,6 +5,37 @@ import pytest
 from src.core.config import AppConfig, LLMConfig, get_app_config, load_config
 
 
+# ---------------------------------------------------------------------------
+# Fix 1: extra="forbid" — unknown field 거부
+# ---------------------------------------------------------------------------
+
+
+def test_llm_unknown_field_key_fails_validation():
+    with pytest.raises(ValueError):
+        LLMConfig.model_validate({"defaults": {"modle": "oops"}})
+
+
+def test_llm_unknown_pipeline_key_fails_validation():
+    with pytest.raises(ValueError):
+        LLMConfig.model_validate({"analyz": {}})
+
+
+def test_llm_invalid_provider_fails_validation():
+    with pytest.raises(ValueError):
+        LLMConfig.model_validate({"defaults": {"provider": "gemini"}})
+
+
+# ---------------------------------------------------------------------------
+# Fix 2: empty model string 거부
+# ---------------------------------------------------------------------------
+
+
+def test_llm_empty_model_fails_at_resolve():
+    llm = LLMConfig.model_validate({"defaults": {"model": ""}})
+    with pytest.raises(ValueError):
+        llm.resolve("analyze")
+
+
 def test_load_config_from_yaml(tmp_path):
     config_content = """
 technical:

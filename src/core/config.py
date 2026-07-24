@@ -1,8 +1,9 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 import yaml
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class CacheConfig(BaseModel):
@@ -18,20 +19,24 @@ class TechnicalConfig(BaseModel):
 class LLMEntryConfig(BaseModel):
     """파이프라인/스테이지별 부분 오버라이드 — 명시한 필드만 defaults를 덮는다."""
 
-    provider: str | None = None
-    model: str | None = None
+    model_config = ConfigDict(extra="forbid")
+
+    provider: Literal["openai", "anthropic"] | None = None
+    model: str | None = Field(default=None, min_length=1)
     temperature: float | None = None
 
 
 class LLMDefaultsConfig(BaseModel):
-    provider: str = "openai"
+    model_config = ConfigDict(extra="forbid")
+
+    provider: Literal["openai", "anthropic"] = "openai"
     model: str = "gpt-5.6-terra"
     temperature: float = 0.0
 
 
 class ResolvedLLMEntry(BaseModel):
     provider: str
-    model: str
+    model: str = Field(min_length=1)
     temperature: float
 
 
@@ -59,6 +64,8 @@ def _default_daily_v2() -> dict[str, LLMEntryConfig]:
 
 
 class LLMConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     defaults: LLMDefaultsConfig = LLMDefaultsConfig()
     daily: dict[str, LLMEntryConfig] = Field(default_factory=_default_daily)
     daily_v2: dict[str, LLMEntryConfig] = Field(default_factory=_default_daily_v2)

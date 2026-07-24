@@ -53,6 +53,7 @@ llm:
     provider: openai
     model: gpt-5.6-terra
     temperature: 0.0
+  # 주의: 스테이지 항목을 오버라이드하면 명시하지 않은 필드는 (스테이지 기본값이 아닌) defaults에서 상속된다 — model을 함께 명시할 것.
   daily:                 # jarvis report daily
     map:     { model: gpt-5.6-luna, temperature: 0.2 }
     shuffle: { model: gpt-5.6-luna, temperature: 0.1 }

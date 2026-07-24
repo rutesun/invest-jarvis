@@ -361,14 +361,19 @@ TelegramMessage → MappedIssue → ShuffleResult → ThemeAnalysis/NewsItem →
 **18개 고정 카테고리:**
 반도체, 디스플레이, 이차전지, 소재/화학, 자동차, 조선/중공업, 방산, AI/소프트웨어, 통신, 바이오/제약, 유통/소비재, K-푸드, 에너지, 건설/부동산, 금융/보험, 매크로, 정책/규제, 기타
 
-**설정 (`config.py`):**
+**설정 (`config.yaml` `llm.daily` 섹션):**
 
-| 설정 | 값 | 용도 |
+| 스테이지 | 모델 | temperature | 용도 |
+|----------|------|-------------|------|
+| map | gpt-5.6-luna | 0.2 | Map 스테이지 |
+| shuffle | gpt-5.6-luna | 0.1 | Shuffle 스테이지 |
+| reduce | gpt-5.6-terra (defaults 상속) | 0.3 | Reduce 스테이지 |
+| wrapup | gpt-5.6-terra (defaults 상속) | 0.4 | Wrapup 스테이지 |
+
+모든 스테이지의 provider 기본값은 `openai`. 모델·temperature는 `config.yaml` `llm.daily`에서 오버라이드 가능.
+
+| 상수 | 값 | 용도 |
 |------|---|------|
-| `MAP_LLM` | Anthropic Haiku 4.5, temp 0.2 | Map 스테이지 |
-| `SHUFFLE_LLM` | Anthropic Haiku 4.5, temp 0.1 | Shuffle 스테이지 |
-| `REDUCE_LLM` | Anthropic Haiku 4.5, temp 0.3 | Reduce 스테이지 |
-| `WRAPUP_LLM` | Anthropic Haiku 4.5, temp 0.4 | Wrapup 스테이지 |
 | `MAP_MAX_TOKENS_PER_CHUNK` | 80,000 | Map 청크 크기 |
 | `LLM_TIMEOUT_SECONDS` | 180 | LLM 호출 타임아웃 (Map 100+ 메시지 대응) |
 | `LLM_MAX_RETRIES` | 3 | LLM 재시도 (exponential backoff) |
@@ -382,8 +387,8 @@ TelegramMessage → MappedIssue → ShuffleResult → ThemeAnalysis/NewsItem →
 - 모든 항목 3회 리트라이 (exponential backoff)
 
 **프롬프트 캐싱:**
-- Anthropic provider일 때 system prompt에 `cache_control: ephemeral` 자동 적용
-- OpenAI로 전환 시 자동 비활성화 (`StageLLMConfig.build_messages()`)
+- 스테이지의 provider가 `anthropic`일 때 system prompt에 `cache_control: ephemeral` 자동 적용
+- provider가 `openai`(기본값)이면 자동 비활성화 (`StageLLMConfig.build_messages()`)
 
 **리포트 출력:**
 - Markdown 파일: `reports/YYYY-MM/daily_YYYY-MM-DD.md`
@@ -391,7 +396,7 @@ TelegramMessage → MappedIssue → ShuffleResult → ThemeAnalysis/NewsItem →
 - source_ids로 CSV에서 원본 메시지 로드 → keywords 매칭 시 주변 ~200자 발췌, 매칭 없으면 전체 메시지
 - **포맷**: 개행문자 변환, 출처에 채널명+인용블록, 테마 구분선(`---`)
 
-**의존성:** 텔레그램 CSV, Anthropic Haiku 4.5, yfinance, fear-and-greed
+**의존성:** 텔레그램 CSV, OpenAI (gpt-5.6-luna/gpt-5.6-terra), yfinance, fear-and-greed
 
 ---
 
