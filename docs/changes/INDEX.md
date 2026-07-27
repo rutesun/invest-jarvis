@@ -4,6 +4,7 @@
 
 | Date | Type | Status | 변경 | PR | Record |
 |------|------|--------|------|----|--------|
+| 2026-07-27 | fix | Draft | Daily Report OpenAI strict schema 회귀 수정 — ThemeMapping dict→groups 배열, strict 계약 테스트, 카테고리 alias 6종 | - | [daily-report-strict-schema-fix.md](daily-report-strict-schema-fix.md) |
 | 2026-07-24 | feat | Draft | LLM 모델 설정 일원화 — config.yaml llm 섹션 단일 소스, GPT-5.6 전환(terra/luna/sol), --provider·STOCK_REPORT_* env 삭제, StageLLMConfig 통합 | #52 | [llm-model-config-unification.md](llm-model-config-unification.md) |
 | 2026-07-22 | feat | Merged | Unified Technical Analysis Contract — check/analyze/brief 공통 3년 계약, 다중 티커 check, 설명 전용 종합 해설(ActionableSignal 제거), report ticker 제거 | #51 | [unified-technical-analysis-contract.md](unified-technical-analysis-contract.md) |
 | 2026-07-16 | feat | Draft | Technical Scoring Redesign — raw 합계와 adjusted verdict 분리 | - | [technical-scoring-redesign.md](technical-scoring-redesign.md) |
