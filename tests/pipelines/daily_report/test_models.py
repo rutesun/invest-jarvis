@@ -3,9 +3,14 @@
 import pytest
 
 from src.pipelines.daily_report.models import (
+    KeyInsightsList,
     MacroSnapshot,
     MappedIssue,
+    MappedIssueList,
     NewsItem,
+    Sentiment,
+    ThemeAnalysis,
+    ThemeMapping,
 )
 
 
@@ -94,8 +99,6 @@ def test_news_item_emoji_field():
 def test_theme_analysis_with_investment_theme():
     """ThemeAnalysis should have investment_theme and keywords fields."""
     from pydantic import ValidationError
-
-    from src.pipelines.daily_report.models import ThemeAnalysis
 
     data = {
         "theme": "GPU 공급망",
@@ -196,8 +199,6 @@ def test_validation_error_context():
     """ValidationError should include spec and examples in context."""
     from pydantic import ValidationError
 
-    from src.pipelines.daily_report.models import ThemeAnalysis
-
     # Test investment_theme validation error context
     try:
         ThemeAnalysis(
@@ -264,3 +265,96 @@ def test_validation_error_context():
         # Check examples
         assert isinstance(ctx["examples"], list)
         assert len(ctx["examples"]) == 2
+
+
+def test_mapped_issue_normalizes_common_category_aliases():
+    issue = MappedIssue(
+        category="전기전자",
+        title="AI 서버 부품 수요 확대",
+        summary="AI 서버 부품 수요가 늘고 있다.",
+        themes=["AI 서버 부품"],
+        impact="반도체 밸류체인 수혜",
+        sentiment=Sentiment.BULL,
+        source_ids=["1"],
+    )
+
+    assert issue.category == "반도체"
+
+
+def test_mapped_issue_normalizes_steel_metal_category_alias():
+    issue = MappedIssue(
+        category="철강금속",
+        title="철강 수요 회복",
+        summary="철강 수요 회복과 금속 가격 변화가 나타났다.",
+        themes=["철강 수요 회복"],
+        impact="소재 업종 수혜",
+        sentiment=Sentiment.BULL,
+        source_ids=["1"],
+    )
+
+    assert issue.category == "소재/화학"
+
+
+def test_mapped_issue_normalizes_stock_name_used_as_category():
+    issue = MappedIssue(
+        category="현대백화점",
+        title="백화점 소비 회복",
+        summary="백화점 소비 회복 신호가 나타났다.",
+        themes=["백화점 소비 회복"],
+        impact="유통 업종 수혜",
+        sentiment=Sentiment.BULL,
+        source_ids=["1"],
+    )
+
+    assert issue.category == "유통/소비재"
+
+
+def test_mapped_issue_normalizes_space_and_resource_category_aliases():
+    cases = [
+        ("우주개발", "방산"),
+        ("철강/소재", "소재/화학"),
+        ("광산/에너지", "에너지"),
+    ]
+
+    for raw_category, expected in cases:
+        issue = MappedIssue(
+            category=raw_category,
+            title="카테고리 정규화",
+            summary="LLM category alias를 정규화한다.",
+            themes=["카테고리 정규화"],
+            impact="리포트 생성 안정화",
+            sentiment=Sentiment.NEUTRAL,
+            source_ids=["1"],
+        )
+
+        assert issue.category == expected
+
+
+# invoke_llm_with_retry에 전달되는 구조화 출력 모델 전체
+LLM_OUTPUT_MODELS = [MappedIssueList, ThemeMapping, ThemeAnalysis, KeyInsightsList]
+
+
+def _free_form_object_paths(schema: dict, path: str = "<root>") -> list[str]:
+    """properties 없는 object(자유형 dict) 경로 수집."""
+    found = []
+    if schema.get("type") == "object" and "properties" not in schema:
+        found.append(path)
+    for section in ("properties", "$defs"):
+        for name, sub in schema.get(section, {}).items():
+            found.extend(_free_form_object_paths(sub, f"{path}.{name}"))
+    if isinstance(schema.get("items"), dict):
+        found.extend(_free_form_object_paths(schema["items"], f"{path}[]"))
+    for i, sub in enumerate(schema.get("anyOf", [])):
+        found.extend(_free_form_object_paths(sub, f"{path}|{i}"))
+    return found
+
+
+@pytest.mark.parametrize("model", LLM_OUTPUT_MODELS)
+def test_llm_output_models_are_openai_strict_schema_compatible(model):
+    """OpenAI strict structured output은 자유형 dict 필드를 400으로 거부한다."""
+    offending = _free_form_object_paths(model.model_json_schema())
+
+    assert not offending, (
+        f"{model.__name__}에 OpenAI strict json_schema가 거부하는 "
+        f"자유형 dict 필드가 있습니다: {offending}"
+    )

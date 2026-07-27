@@ -51,9 +51,15 @@ IssueCategory = Literal[
 
 # 카테고리 alias 매핑 (LLM이 자연스럽게 생성하는 변형 → 정규 카테고리)
 CATEGORY_ALIASES: dict[str, IssueCategory] = {
+    "전기전자": "반도체",
+    "철강금속": "소재/화학",
+    "철강/소재": "소재/화학",
+    "광산/에너지": "에너지",
+    "우주개발": "방산",
     "의료/제약": "바이오/제약",
     "제약": "바이오/제약",
     "헬스케어": "바이오/제약",
+    "현대백화점": "유통/소비재",
     "운송": "운송/물류",
     "물류": "운송/물류",
     "항공": "운송/물류",
@@ -233,10 +239,24 @@ class MappedIssueList(BaseModel):
     issues: list[MappedIssue] = Field(description="추출된 이슈 배열")
 
 
-class ThemeMapping(BaseModel):
-    """Shuffle stage의 구조화된 테마 매핑 래퍼."""
+class ThemeGroup(BaseModel):
+    """정규화된 테마 하나와 통합된 원본 테마들."""
 
-    mapping: dict[str, list[str]] = Field(description="정규화명 → 원본 테마명 배열 매핑")
+    normalized: str = Field(description="정규화된 테마명")
+    originals: list[str] = Field(description="이 그룹으로 통합된 원본 테마명 배열")
+
+
+class ThemeMapping(BaseModel):
+    """Shuffle stage의 구조화된 테마 매핑 래퍼.
+
+    OpenAI strict structured output이 자유형 dict를 거부하므로 그룹 배열로 표현한다.
+    """
+
+    groups: list[ThemeGroup] = Field(description="정규화된 테마 그룹 배열")
+
+    def as_dict(self) -> dict[str, list[str]]:
+        """정규화명 → 원본 테마명 배열 dict로 변환."""
+        return {group.normalized: group.originals for group in self.groups}
 
 
 class KeyInsightsList(BaseModel):

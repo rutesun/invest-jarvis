@@ -168,7 +168,7 @@ async def _normalize_themes(
 
     try:
         response = await invoke_llm_with_retry(llm, ThemeMapping, messages, config)
-        return response.mapping
+        return response.as_dict()
     except Exception as e:
         logger.error("[%s] theme normalization failed: %s", category, e, exc_info=True)
         return {theme: [theme] for theme in themes}
