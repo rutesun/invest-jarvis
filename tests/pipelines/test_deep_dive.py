@@ -240,9 +240,10 @@ async def test_deep_dive_pipeline_success(
         assert result["scenarios"]
         assert result["chart_patterns"]
         explanation_input = mock_signal.await_args.args[0]
-        assert explanation_input.level_context["structure_levels"]["support_zones"][0][
-            "lower_bound"
-        ] == 170.0
+        assert (
+            explanation_input.level_context["structure_levels"]["support_zones"][0]["lower_bound"]
+            == 170.0
+        )
 
 
 @pytest.mark.asyncio
@@ -400,7 +401,9 @@ async def test_deep_dive_uses_rule_verdict_recommendation_for_final_explanation(
     )
 
     with (
-        patch("src.llm.analyzer.generate_technical_summary", new_callable=AsyncMock) as mock_tech_summary,
+        patch(
+            "src.llm.analyzer.generate_technical_summary", new_callable=AsyncMock
+        ) as mock_tech_summary,
         patch("src.llm.analyzer.analyze_news", new_callable=AsyncMock) as mock_news_analysis,
         patch(
             "src.llm.analyzer.generate_integrated_explanation", new_callable=AsyncMock
@@ -761,7 +764,9 @@ async def test_deep_dive_passes_verdict_and_score_history_to_technical_summary(
     ]
 
     with (
-        patch("src.llm.analyzer.generate_technical_summary", new_callable=AsyncMock) as mock_tech_summary,
+        patch(
+            "src.llm.analyzer.generate_technical_summary", new_callable=AsyncMock
+        ) as mock_tech_summary,
         patch("src.llm.analyzer.analyze_news", new_callable=AsyncMock) as mock_news_analysis,
         patch(
             "src.llm.analyzer.generate_integrated_explanation", new_callable=AsyncMock

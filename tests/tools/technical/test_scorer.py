@@ -150,7 +150,9 @@ def test_score_history_change_drivers_are_deterministic_for_ties():
 def test_score_history_matches_freshly_calculated_cutoff_score(swing_sensitive_raw_df):
     calculator = IndicatorCalculator()
     scorer = TechnicalScorer()
-    result = scorer.score(calculator.calculate(swing_sensitive_raw_df), ticker="AAPL", history_days=5)
+    result = scorer.score(
+        calculator.calculate(swing_sensitive_raw_df), ticker="AAPL", history_days=5
+    )
 
     cutoff = swing_sensitive_raw_df.index[-3]
     expected = scorer._score_current(
@@ -166,7 +168,9 @@ def test_score_history_matches_freshly_calculated_cutoff_score(swing_sensitive_r
 def test_score_history_does_not_use_future_rows(swing_sensitive_raw_df):
     calculator = IndicatorCalculator()
     scorer = TechnicalScorer()
-    baseline = scorer.score(calculator.calculate(swing_sensitive_raw_df), ticker="AAPL", history_days=5)
+    baseline = scorer.score(
+        calculator.calculate(swing_sensitive_raw_df), ticker="AAPL", history_days=5
+    )
 
     changed = swing_sensitive_raw_df.copy()
     for index in changed.index[-2:]:

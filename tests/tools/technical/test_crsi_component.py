@@ -44,9 +44,7 @@ def test_crsi_no_data():
         (90, 70, "overextension", "bearish", "risk", False),
     ],
 )
-def test_crsi_hook_signal_metadata(
-    previous, current, signal_type, bias, intent, entry_eligible
-):
+def test_crsi_hook_signal_metadata(previous, current, signal_type, bias, intent, entry_eligible):
     df = pd.DataFrame(
         {
             "cRSI": [previous, current],

@@ -88,7 +88,10 @@ def build_market_context(df: pd.DataFrame) -> MarketContext:
         [
             close_above_sma50 is False and volume_ratio is not None and volume_ratio >= 1.3,
             supertrend_sell_transition,
-            close_above_sma20 is False and close_above_sma50 is False and ret_10d is not None and ret_10d < 0,
+            close_above_sma20 is False
+            and close_above_sma50 is False
+            and ret_10d is not None
+            and ret_10d < 0,
         ]
     )
     is_uptrend = close_above_sma50 and sma20_above_sma50 and supertrend_dir != -1
@@ -96,7 +99,9 @@ def build_market_context(df: pd.DataFrame) -> MarketContext:
         sma20 is not None and sma50 is not None and sma20 < sma50 and close < sma50
     )
 
-    support_candidates = [value for value in [sma20, sma50, sma150, sma200] if value and value < close]
+    support_candidates = [
+        value for value in [sma20, sma50, sma150, sma200] if value and value < close
+    ]
     nearest_support = max(support_candidates) if support_candidates else None
 
     return MarketContext(

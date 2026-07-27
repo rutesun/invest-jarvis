@@ -449,30 +449,19 @@ class TechnicalResult(BaseModel):
 
     @model_validator(mode="after")
     def _backfill_score_contract_fields(self) -> Self:
-        component_scores = [
-            component.get("score") for component in self.components.values()
-        ]
+        component_scores = [component.get("score") for component in self.components.values()]
         for component_name, component in self.components.items():
             if "score" in component and type(component["score"]) is not int:
-                raise ValueError(
-                    f"component score for {component_name} must be an integer"
-                )
-        if component_scores and all(
-            type(score) is int
-            for score in component_scores
-        ):
+                raise ValueError(f"component score for {component_name} must be an integer")
+        if component_scores and all(type(score) is int for score in component_scores):
             component_raw_total = sum(component_scores)
             if self.total_score != component_raw_total:
-                raise ValueError(
-                    "total_score must equal the sum of component scores"
-                )
+                raise ValueError("total_score must equal the sum of component scores")
             if (
                 self.component_raw_total is not None
                 and self.component_raw_total != component_raw_total
             ):
-                raise ValueError(
-                    "component_raw_total must equal the sum of component scores"
-                )
+                raise ValueError("component_raw_total must equal the sum of component scores")
             self.component_raw_total = component_raw_total
         elif self.component_raw_total is not None:
             if self.component_raw_total != self.total_score:

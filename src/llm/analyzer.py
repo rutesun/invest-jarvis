@@ -47,7 +47,9 @@ def technical_recommendation_from_verdict(verdict) -> str | None:
     """Map rule-based technical verdict action to the tri-state LLM recommendation label."""
     if verdict is None:
         return None
-    action = verdict.get("action") if isinstance(verdict, dict) else getattr(verdict, "action", None)
+    action = (
+        verdict.get("action") if isinstance(verdict, dict) else getattr(verdict, "action", None)
+    )
     if action is None:
         return None
     return _TECHNICAL_RECOMMENDATION_BY_VERDICT.get(str(action))
