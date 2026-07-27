@@ -660,6 +660,43 @@ def _toggle(title: str, children: list[dict], max_length: int = 1900) -> dict:
     }
 
 
+# 업로드 대상 리포트 파일명: daily_/daily_v2_/screen- 접두사 + 날짜 (AB 테스트 등 변형 제외)
+_REPORT_FILENAME_RE = re.compile(r"^(?:daily(?:_v2)?_|screen-)(\d{4}-\d{2}-\d{2})$")
+
+
+def extract_report_date(stem: str) -> str | None:
+    """리포트 파일명(stem)에서 날짜를 추출한다. 업로드 대상 형식이 아니면 None."""
+    match = _REPORT_FILENAME_RE.match(stem)
+    return match.group(1) if match else None
+
+
+def _archive_existing_report_pages(
+    notion: Client, database_id: str, report_type: str, date: str
+) -> int:
+    """같은 타입·날짜의 기존 페이지를 아카이브한다. 재업로드 시 중복 방지용."""
+    database = notion.databases.retrieve(database_id=database_id)
+    data_sources = database.get("data_sources", [])
+    if not data_sources:
+        logger.warning("Notion database %s has no data sources; skip dedup", database_id)
+        return 0
+
+    results = notion.data_sources.query(
+        data_source_id=data_sources[0]["id"],
+        filter={
+            "and": [
+                {"property": "Type", "select": {"equals": report_type}},
+                {"property": "Date", "date": {"equals": date}},
+            ]
+        },
+    )
+    pages = results["results"]
+    for page in pages:
+        notion.pages.update(page_id=page["id"], archived=True)
+    if pages:
+        logger.info("Archived %d existing %s page(s) for %s", len(pages), report_type, date)
+    return len(pages)
+
+
 def upload_report_from_file(file_path: Path, date: str) -> str:
     """
     Upload report from MD file to Notion.
@@ -703,6 +740,9 @@ def upload_report_from_file(file_path: Path, date: str) -> str:
         "Type": {"select": {"name": report_type}},
         "Date": {"date": {"start": date}},
     }
+
+    # 같은 타입·날짜의 기존 페이지를 아카이브해 재업로드 중복 방지
+    _archive_existing_report_pages(notion, database_id, report_type, date)
 
     # 페이지 생성 (children 없이)
     try:
@@ -781,7 +821,7 @@ def _markdown_to_blocks(content: str) -> list[dict]:
             while (
                 i < len(lines)
                 and lines[i].strip()
-                and not lines[i].startswith("#")
+                and not lines[i].startswith(("# ", "## ", "### "))
                 and not lines[i].startswith("|")
             ):
                 para_lines.append(lines[i].strip())

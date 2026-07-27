@@ -20,6 +20,8 @@ PR #52에서 daily 스테이지 LLM이 Anthropic haiku(tool calling)에서 OpenA
 3. **strict 스키마 계약 테스트 추가**: `invoke_llm_with_retry`에 전달되는 구조화 출력 모델 4종(MappedIssueList/ThemeMapping/ThemeAnalysis/KeyInsightsList) 전체에 대해 "properties 없는 object 금지"를 검증하는 파라미터라이즈 테스트. provider 전환 시 dict 필드 회귀를 테스트 단계에서 잡는다.
 4. **map stage 카테고리 alias 6종 추가**: LLM이 생성하는 비정규 카테고리(전기전자→반도체, 철강금속·철강/소재→소재/화학, 광산/에너지→에너지, 우주개발→방산, 현대백화점→유통/소비재)를 정규 카테고리로 흡수.
 5. **test_models.py 기존 테스트 복원**: 이전 세션에서 alias 테스트를 추가하면서 의도치 않게 삭제된 기존 모델 검증 테스트 약 260줄(MacroSnapshot 검증, MappedIssue themes 제약, ThemeAnalysis 검증 등)을 HEAD에서 복원해 병합.
+6. **Notion 마크다운 변환기 해시태그 무한 루프 수정**: `_markdown_to_blocks`의 문단 수집 중단 조건을 `#` 전체에서 실제 heading marker(`# `, `## `, `### `)로 좁힘. `#특징업종` 같은 해시태그 줄이 소비되지 않아 index가 멈추던 버그. 해시태그 줄 회귀 테스트 포함.
+7. **`jarvis report upload` 버그 3종 수정**: (1) 종료 날짜 미지정 시 help대로 시작 날짜 하루만 대상, (2) 파일명 날짜 추출을 prefix strip에서 정규식(`extract_report_date`)으로 바꿔 `daily_v2_*`는 정상 날짜로, AB 테스트 변형은 제외, (3) 업로드 전 같은 Type·Date의 기존 페이지를 아카이브(`_archive_existing_report_pages`, notion-client 3.0 `data_sources.query`)해 재업로드를 교체 의미로 변경.
 
 ## Before / After
 
@@ -33,6 +35,7 @@ After:  ThemeMapping.groups: list[ThemeGroup] + as_dict()
 ## Impact
 
 - `jarvis report daily` 사용자 체감: 스키마 오류 로그(카테고리당 3회 재시도) 제거, 유사 테마가 다시 통합됨. 2026-07-16~26 리포트 11건을 이 수정으로 생성해 검증 완료.
+- `jarvis report upload <date>`: 시작 날짜 이후 전체가 아니라 해당 날짜만 업로드. 재실행해도 Notion 페이지가 중복 생성되지 않고 교체됨(기존 페이지는 휴지통으로). 07-16~26 리포트 11건 업로드로 검증 완료.
 - 마이그레이션·환경 변수 변경 없음.
 
 ## Constraints
