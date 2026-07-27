@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 load_dotenv()
 from langsmith import traceable
 
-from src.pipelines.daily_report.config import REDUCE_LLM
+from src.pipelines.daily_report.config import get_stage_llm
 from src.pipelines.daily_report.llm_utils import invoke_llm_with_retry
 from src.pipelines.daily_report.models import (
     MacroSnapshot,
@@ -79,7 +79,7 @@ async def _analyze_themes_parallel(
     date: str,
 ) -> list[NewsItem]:
     """카테고리/테마별 병렬 분석 (실패율 체크 포함)."""
-    llm = REDUCE_LLM.create_llm()
+    llm = get_stage_llm("reduce").create_llm()
 
     # 테마명과 함께 태스크 저장
     theme_tasks = []
@@ -180,7 +180,7 @@ async def _analyze_theme(
         },
     }
 
-    messages = REDUCE_LLM.build_messages(system_prompt, user_prompt)
+    messages = get_stage_llm("reduce").build_messages(system_prompt, user_prompt)
 
     try:
         response = await invoke_llm_with_retry(llm, ThemeAnalysis, messages, config)

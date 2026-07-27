@@ -149,9 +149,9 @@ async def _classify_async(
     title: str | None,
     body_excerpt: str,
     taxonomy: TaxonomyRegistry,
-    provider: str,
 ) -> PdfClassificationLLMOutput:
-    llm_config = get_semantic_extraction_llm_config(provider)
+    llm_config = get_semantic_extraction_llm_config()
+    provider = llm_config.provider
     llm = llm_config.create_llm()
     outline = render_taxonomy_outline(taxonomy)
     user_prompt = build_pdf_classify_user_prompt(
@@ -186,7 +186,6 @@ def classify_document(
     *,
     title: str | None,
     taxonomy: TaxonomyRegistry,
-    provider: str,
 ) -> tuple[str | None, str | None]:
     """문서 제목 + 본문 발췌를 taxonomy 기반 LLM으로 분류해 (category_key, main_theme) 반환.
 
@@ -202,7 +201,7 @@ def classify_document(
     category_key: str | None = None
     main_theme: str | None = None
     try:
-        output = asyncio.run(_classify_async(title, body, taxonomy, provider))
+        output = asyncio.run(_classify_async(title, body, taxonomy))
         category_key = _normalize_category(output.category_key, category_map)
         main_theme = _normalize_theme(output.main_theme, theme_map, category_key)
     except Exception as exc:  # noqa: BLE001 - 분류 실패가 배치를 막으면 안 된다

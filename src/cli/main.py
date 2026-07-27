@@ -4,7 +4,6 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Literal
 
 import typer
 from dotenv import load_dotenv
@@ -12,6 +11,7 @@ from rich.console import Console
 from rich.markdown import Markdown
 
 from src.llm.provider import LLMProvider
+from src.llm.stage_config import resolve_stage_llm
 from src.pipelines.brief import BriefPipeline
 from src.pipelines.deep_dive import DeepDivePipeline
 from src.pipelines.quick_check import QuickCheckPipeline
@@ -261,13 +261,15 @@ def check(
         raise typer.Exit(1)
 
 
-async def run_deep_dive(ticker_or_name: str, provider: str) -> dict:
+async def run_deep_dive(ticker_or_name: str) -> dict:
     """Run deep dive analysis pipeline."""
     # Resolve ticker if company name is provided
     ticker = await resolve_ticker(ticker_or_name)
 
-    api_key_env = "OPENAI_API_KEY" if provider == "openai" else "ANTHROPIC_API_KEY"
-    base_url_env = "OPENAI_BASE_URL" if provider == "openai" else "ANTHROPIC_BASE_URL"
+    llm_config = resolve_stage_llm("analyze")
+    is_openai = llm_config.provider == "openai"
+    api_key_env = "OPENAI_API_KEY" if is_openai else "ANTHROPIC_API_KEY"
+    base_url_env = "OPENAI_BASE_URL" if is_openai else "ANTHROPIC_BASE_URL"
     api_key = os.getenv(api_key_env)
     base_url = os.getenv(base_url_env)
     if not api_key:
@@ -318,10 +320,11 @@ async def run_deep_dive(ticker_or_name: str, provider: str) -> dict:
     fundamental_tool = FundamentalTool(kis_provider=kis_provider if is_korean_stock else None)
     news_tool = NewsTool()
     llm = LLMProvider.create(
-        provider=provider,
+        provider=llm_config.provider,
         api_key=api_key,
+        model=llm_config.model,
         base_url=base_url,
-        temperature=0,
+        temperature=llm_config.temperature,
     )
 
     sec_fetcher = SECDisclosureFetcher()
@@ -1040,9 +1043,6 @@ def format_deep_dive_output(result: dict) -> str:
 @app.command()
 def analyze(
     query: str = typer.Argument(..., help="Stock ticker or company name (e.g., AAPL, Apple, 구글)"),
-    provider: Literal["openai", "anthropic"] = typer.Option(
-        "openai", "--provider", "-p", help="LLM provider"
-    ),
 ):
     """Deep dive analysis with LLM (technical + news + disclosure + flow)."""
     console.print(f"[bold]Resolving '{query}'...[/bold]")
@@ -1052,7 +1052,7 @@ def analyze(
         console.print(f"[green]✓ Resolved to: {ticker}[/green]\n")
         console.print(f"[bold]Running deep dive analysis for {ticker}...[/bold]\n")
 
-        result = asyncio.run(run_deep_dive(query, provider))
+        result = asyncio.run(run_deep_dive(query))
         output = format_deep_dive_output(result)
         console.print(Markdown(output))
 
@@ -1081,16 +1081,13 @@ def analyze(
 
 @app.command()
 def brief(
-    provider: Literal["openai", "anthropic"] = typer.Option(
-        "openai", "--provider", "-p", help="LLM provider"
-    ),
     no_llm: bool = typer.Option(False, "--no-llm", help="LLM 문장화 없이 규칙 원문만 출력"),
 ):
     """일일 포트 액션 브리핑 — playbook.yaml 보유+워치 전 종목 평가."""
     console.print("[bold]Daily brief 생성 중...[/bold]")
 
     try:
-        result = asyncio.run(run_brief(provider, use_llm=not no_llm))
+        result = asyncio.run(run_brief(use_llm=not no_llm))
         pipeline = result.pop("_pipeline")
         console.print(Markdown(pipeline.format_output(result)))
         report_path = pipeline.save_report(result)
@@ -1100,7 +1097,7 @@ def brief(
         raise typer.Exit(1) from None
 
 
-async def run_brief(provider: str, use_llm: bool) -> dict:
+async def run_brief(use_llm: bool) -> dict:
     """brief 파이프라인 조립·실행. run_deep_dive와 동일한 도구 조립 패턴."""
     from src.providers.index_provider import IndexProvider
     from src.providers.kis_wrapper import KISProviderWrapper
@@ -1149,8 +1146,9 @@ async def run_brief(provider: str, use_llm: bool) -> dict:
 
     llm = None
     if use_llm:
+        llm_config = resolve_stage_llm("brief")
         try:
-            llm = LLMProvider.create(provider=provider, temperature=0)
+            llm = llm_config.create_llm()
         except Exception as e:
             console.print(f"[yellow]LLM 초기화 실패 — 규칙 원문으로 진행: {e}[/yellow]")
 
@@ -1428,9 +1426,10 @@ def report_daily_v2(
         help="분석할 날짜 (YYYY-MM-DD). 미지정 시 전날.",
     ),
     data_dir: str = typer.Option("data", "--data-dir", "-d", help="데이터 디렉토리"),
-    provider: str = typer.Option("openai", "--provider", "-p", help="LLM provider"),
     config_path: str = typer.Option(
-        "config.yaml", "--config-path", help="stock report 설정 파일 경로"
+        "config.yaml",
+        "--config-path",
+        help="stock report normalize 설정 파일 경로 (normalize 전용 — llm 섹션은 루트 config.yaml에서만 읽음)",
     ),
     taxonomy_path: str = typer.Option(
         "config/stock_report_vocabulary.yaml",
@@ -1463,7 +1462,6 @@ def report_daily_v2(
         result = run_daily_v2(
             date=date,
             data_dir=data_dir,
-            provider=provider,
             config_path=config_path,
             taxonomy_path=taxonomy_path,
             preview_limit=preview_limit,
@@ -1549,9 +1547,6 @@ def report_ingest_pdf(
         False, "--embed-missing", help="패스2만: pending/failed 임베딩 재시도"
     ),
     reembed: bool = typer.Option(False, "--reembed", help="재파스+재청킹+재임베딩(전체 재적재)"),
-    provider: str = typer.Option(
-        "openai", "--provider", help="분류 LLM provider (openai/anthropic)"
-    ),
 ):
     """증권사 PDF를 documents/document_chunks에 적재하고 임베딩한다 (Phase 2)."""
     from datetime import datetime as dt
@@ -1567,7 +1562,6 @@ def report_ingest_pdf(
         summary = run_ingest_pdf(
             date=date,
             input_dir=input_dir,
-            provider=provider,
             use_hybrid=use_hybrid,
             ocr_lang=ocr_lang,
             embed_missing=embed_missing,

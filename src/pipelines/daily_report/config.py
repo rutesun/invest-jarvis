@@ -1,63 +1,14 @@
 """Daily report 파이프라인 설정."""
 
-from dataclasses import dataclass
-
-from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
-
-from src.llm.provider import LLMProvider
+from src.llm.stage_config import StageLLMConfig, resolve_stage_llm
 
 
-@dataclass(frozen=True)
-class StageLLMConfig:
-    """스테이지별 LLM 설정."""
-
-    provider: str
-    model: str
-    temperature: float
-
-    def create_llm(self) -> BaseChatModel:
-        return LLMProvider.create(
-            provider=self.provider,
-            model=self.model,
-            temperature=self.temperature,
-        )
-
-    def build_messages(self, system_prompt: str, user_prompt: str) -> list[BaseMessage]:
-        """LLM 메시지 리스트 생성. Anthropic이면 system prompt 캐싱 적용."""
-        kwargs = {}
-        if self.provider == "anthropic":
-            kwargs["cache_control"] = {"type": "ephemeral"}
-        return [
-            SystemMessage(content=system_prompt, additional_kwargs=kwargs),
-            HumanMessage(content=user_prompt),
-        ]
+def get_stage_llm(stage: str) -> StageLLMConfig:
+    """config.yaml llm.daily 섹션에서 스테이지 설정을 얻는다."""
+    return resolve_stage_llm("daily", stage)
 
 
-# 스테이지별 LLM 설정
-MAP_LLM = StageLLMConfig(
-    provider="anthropic",
-    model="us.anthropic.claude-haiku-4-5-20251001-v1:0",
-    temperature=0.2,  # 실험 결과: 0.2가 최적 (avg_sources 1.57, 안정적)
-)
-
-SHUFFLE_LLM = StageLLMConfig(
-    provider="anthropic",
-    model="us.anthropic.claude-haiku-4-5-20251001-v1:0",
-    temperature=0.1,
-)
-
-REDUCE_LLM = StageLLMConfig(
-    provider="anthropic",
-    model="us.anthropic.claude-haiku-4-5-20251001-v1:0",
-    temperature=0.3,
-)
-
-WRAPUP_LLM = StageLLMConfig(
-    provider="anthropic",
-    model="us.anthropic.claude-haiku-4-5-20251001-v1:0",
-    temperature=0.4,
-)
+__all__ = ["StageLLMConfig", "get_stage_llm"]
 
 # Map stage 청크 설정
 MAP_MAX_TOKENS_PER_CHUNK = 80_000

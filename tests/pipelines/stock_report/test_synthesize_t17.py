@@ -199,7 +199,7 @@ def test_synthesize_category_with_search_fn_uses_tool_calling(monkeypatch) -> No
 
     monkeypatch.setattr(
         "src.pipelines.stock_report.synthesize.get_report_synthesis_llm_config",
-        lambda provider: FakeLLMConfig(),
+        lambda: FakeLLMConfig(),
     )
     monkeypatch.setattr(
         "src.pipelines.stock_report.synthesize.invoke_llm_with_tools",
@@ -262,7 +262,7 @@ def test_synthesize_category_pdf_id_not_in_evidence_chunk_ids(monkeypatch) -> No
 
     monkeypatch.setattr(
         "src.pipelines.stock_report.synthesize.get_report_synthesis_llm_config",
-        lambda p: FakeLLMConfig(),
+        lambda: FakeLLMConfig(),
     )
     monkeypatch.setattr("src.pipelines.stock_report.synthesize.invoke_llm_with_tools", fake_invoke)
 
@@ -423,7 +423,7 @@ def test_synthesize_category_populates_search_log_entries(monkeypatch) -> None:
 
     monkeypatch.setattr(
         "src.pipelines.stock_report.synthesize.get_report_synthesis_llm_config",
-        lambda p: FakeLLMConfig(),
+        lambda: FakeLLMConfig(),
     )
     monkeypatch.setattr("src.pipelines.stock_report.synthesize.invoke_llm_with_tools", fake_invoke)
 

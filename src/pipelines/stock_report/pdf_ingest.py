@@ -88,7 +88,6 @@ def run_ingest_pdf(
     migrations_dir: str = "migrations/stock_report",
     sources_path: str = "config/stock_report_pdf_sources.yaml",
     taxonomy_path: str = "config/stock_report_vocabulary.yaml",
-    provider: str = "openai",
     use_hybrid: bool = False,
     ocr_lang: str | None = None,
     reembed: bool = False,
@@ -134,7 +133,6 @@ def run_ingest_pdf(
                 input_dir=input_dir,
                 sources_path=sources_path,
                 taxonomy_path=taxonomy_path,
-                provider=provider,
                 use_hybrid=use_hybrid,
                 ocr_lang=ocr_lang,
                 reembed=reembed,
@@ -165,7 +163,6 @@ def _run_pass1(
     input_dir: str,
     sources_path: str,
     taxonomy_path: str,
-    provider: str,
     use_hybrid: bool,
     ocr_lang: str | None,
     reembed: bool,
@@ -213,7 +210,7 @@ def _run_pass1(
         # OpenAI 호출이라 upsert 트랜잭션 밖이며, parse 실패/OCR 문서는 본문이 없어 건너뛴다.
         if meta.parse_status == "ok":
             category_key, main_theme = classify_document(
-                parsed, title=meta.title, taxonomy=taxonomy, provider=provider
+                parsed, title=meta.title, taxonomy=taxonomy
             )
             meta.category_key = category_key
             meta.main_theme = main_theme

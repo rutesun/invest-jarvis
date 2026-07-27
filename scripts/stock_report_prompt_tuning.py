@@ -9,7 +9,6 @@ from pathlib import Path
 from src.pipelines.stock_report.tuning import (
     MessageSelector,
     run_prompt_tuning_round,
-    with_model_override,
     write_prompt_tuning_report,
 )
 
@@ -20,8 +19,16 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("date", nargs="?", default=None, help="Target date (YYYY-MM-DD)")
     parser.add_argument("--data-dir", default="data", help="Data directory")
-    parser.add_argument("--provider", default="openai", help="LLM provider")
-    parser.add_argument("--model", default="", help="Model override")
+    parser.add_argument(
+        "--provider",
+        default="",
+        help="실험용 LLM provider override. --model을 함께 지정할 때만 유효하며, 생략 시 config.yaml 기본값을 따른다.",
+    )
+    parser.add_argument(
+        "--model",
+        default="",
+        help="실험용 모델 override (config.yaml 기본값 대신 적용).",
+    )
     parser.add_argument("--config-path", default="config.yaml", help="Config path")
     parser.add_argument(
         "--taxonomy-path",
@@ -100,22 +107,32 @@ def main() -> int:
     output_path = args.output_path or f"reports/{date[:7]}/prompt_tuning_{date}.md"
     picked_messages = _load_picked_messages(args)
 
-    with with_model_override(args.provider, args.model.strip() or None):
-        result = run_prompt_tuning_round(
-            date=date,
-            data_dir=args.data_dir,
-            provider=args.provider,
-            config_path=args.config_path,
-            taxonomy_path=args.taxonomy_path,
-            sample_size=args.sample_size,
-            per_channel=args.per_channel,
-            seed=args.seed,
-            include_grouped_only=args.include_grouped_only,
-            picked_messages=picked_messages,
-            strict_picks=not args.allow_missing_picks,
-            system_prompt_path=args.prompt_path.strip() or None,
-            max_raw_chars=args.max_raw_chars,
+    llm_config = None
+    if args.model.strip():
+        from src.llm.stage_config import StageLLMConfig
+        from src.pipelines.stock_report.config import get_semantic_extraction_llm_config
+
+        base = get_semantic_extraction_llm_config()
+        llm_config = StageLLMConfig(
+            provider=args.provider or base.provider,
+            model=args.model.strip(),
+            temperature=base.temperature,
         )
+    result = run_prompt_tuning_round(
+        date=date,
+        data_dir=args.data_dir,
+        llm_config=llm_config,
+        config_path=args.config_path,
+        taxonomy_path=args.taxonomy_path,
+        sample_size=args.sample_size,
+        per_channel=args.per_channel,
+        seed=args.seed,
+        include_grouped_only=args.include_grouped_only,
+        picked_messages=picked_messages,
+        strict_picks=not args.allow_missing_picks,
+        system_prompt_path=args.prompt_path.strip() or None,
+        max_raw_chars=args.max_raw_chars,
+    )
 
     saved = write_prompt_tuning_report(result, Path(output_path))
     print("Stock Report V2 Prompt Tuning")

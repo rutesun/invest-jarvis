@@ -192,9 +192,8 @@ def test_run_daily_v2_calls_migration_and_ingest(monkeypatch):
         events.append(f"persist:{len(normalized_messages)}")
         assert conn is fake_conn
 
-    def _fake_classify(normalized_messages, taxonomy, provider):
+    def _fake_classify(normalized_messages, taxonomy):
         events.append(f"classify:{len(normalized_messages)}")
-        assert provider == "openai"
         return [
             ClassifiedMessage(
                 telegram_message_id=101,
@@ -234,8 +233,8 @@ def test_run_daily_v2_calls_migration_and_ingest(monkeypatch):
             low_confidence_chunks=[],
         )
 
-    def _fake_synthesize_same_day_bundle(bundle, *, provider, search_fn=None):
-        events.append(f"synthesize_bundle:{provider}")
+    def _fake_synthesize_same_day_bundle(bundle, *, search_fn=None):
+        events.append("synthesize_bundle")
         return SimpleNamespace(
             report_date=date(2026, 5, 8),
             evidence_refs=[object()],
@@ -302,12 +301,10 @@ def test_run_daily_v2_calls_migration_and_ingest(monkeypatch):
     result = run_daily_v2(
         date="2026-05-08",
         data_dir="data",
-        provider="openai",
         dsn=None,
     )
 
     assert result.date == "2026-05-08"
-    assert result.provider == "openai"
     assert result.csv_files == 2
     assert result.parsed_rows == 12
     assert result.upserted_rows == 11
@@ -336,7 +333,7 @@ def test_run_daily_v2_calls_migration_and_ingest(monkeypatch):
         "classify:1",
         "persist_chunks:1",
         "load_bundle:2026-05-08",
-        "synthesize_bundle:openai",
+        "synthesize_bundle",
         "render_report",
         "persist_report:openai",
         "connect.exit",
@@ -363,8 +360,8 @@ def test_stage_local_evidence_synthesis_passes_search_fn(monkeypatch) -> None:
 
     captured: list[dict] = []
 
-    def fake_synthesize_daily(bundle, *, provider, search_fn=None):
-        captured.append({"provider": provider, "search_fn": search_fn})
+    def fake_synthesize_daily(bundle, *, search_fn=None):
+        captured.append({"search_fn": search_fn})
         return SimpleNamespace(report_date=date(2026, 6, 22), evidence_refs=[])
 
     monkeypatch.setattr(
@@ -376,11 +373,10 @@ def test_stage_local_evidence_synthesis_passes_search_fn(monkeypatch) -> None:
         return []
 
     bundle = SimpleNamespace()
-    _stage_local_evidence_synthesis(bundle, provider="openai", search_fn=fake_search_fn)
+    _stage_local_evidence_synthesis(bundle, search_fn=fake_search_fn)
 
     assert len(captured) == 1
     assert captured[0]["search_fn"] is fake_search_fn
-    assert captured[0]["provider"] == "openai"
 
 
 def test_stage_local_evidence_synthesis_passes_none_when_no_search_fn(monkeypatch) -> None:
@@ -389,7 +385,7 @@ def test_stage_local_evidence_synthesis_passes_none_when_no_search_fn(monkeypatc
 
     captured: list[dict] = []
 
-    def fake_synthesize_daily(bundle, *, provider, search_fn=None):
+    def fake_synthesize_daily(bundle, *, search_fn=None):
         captured.append({"search_fn": search_fn})
         return SimpleNamespace(report_date=date(2026, 6, 22), evidence_refs=[])
 
@@ -399,7 +395,7 @@ def test_stage_local_evidence_synthesis_passes_none_when_no_search_fn(monkeypatc
     )
 
     bundle = SimpleNamespace()
-    _stage_local_evidence_synthesis(bundle, provider="openai")
+    _stage_local_evidence_synthesis(bundle)
 
     assert captured[0]["search_fn"] is None
 

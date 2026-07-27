@@ -90,7 +90,7 @@ def test_fallback_overlay_returns_none_when_no_alias_hit() -> None:
 
 
 def test_classify_document_uses_llm_result_normalized(monkeypatch) -> None:
-    async def fake_async(title, body, taxonomy, provider):
+    async def fake_async(title, body, taxonomy):
         return PdfClassificationLLMOutput(category_key="이차전지", main_theme="양극재")
 
     monkeypatch.setattr(pdf_classify, "_classify_async", fake_async)
@@ -99,14 +99,13 @@ def test_classify_document_uses_llm_result_normalized(monkeypatch) -> None:
         _parsed("배터리 양극재 리포트 본문이다."),
         title="배터리",
         taxonomy=_taxonomy(),
-        provider="openai",
     )
     assert category == "이차전지"
     assert theme == "양극재"
 
 
 def test_classify_document_falls_back_on_llm_failure(monkeypatch) -> None:
-    async def boom(title, body, taxonomy, provider):
+    async def boom(title, body, taxonomy):
         raise RuntimeError("llm down")
 
     monkeypatch.setattr(pdf_classify, "_classify_async", boom)
@@ -116,14 +115,13 @@ def test_classify_document_falls_back_on_llm_failure(monkeypatch) -> None:
         _parsed("HBM 메모리 반도체 업황 리포트"),
         title="반도체",
         taxonomy=_taxonomy(),
-        provider="openai",
     )
     assert category == "반도체"
     assert theme == "HBM"
 
 
 def test_classify_document_out_of_taxonomy_value_falls_back(monkeypatch) -> None:
-    async def weird(title, body, taxonomy, provider):
+    async def weird(title, body, taxonomy):
         return PdfClassificationLLMOutput(category_key="존재하지않는카테고리", main_theme=None)
 
     monkeypatch.setattr(pdf_classify, "_classify_async", weird)
@@ -133,7 +131,6 @@ def test_classify_document_out_of_taxonomy_value_falls_back(monkeypatch) -> None
         _parsed("배터리 양극재 cathode 리포트"),
         title="배터리",
         taxonomy=_taxonomy(),
-        provider="openai",
     )
     assert category == "이차전지"
     assert theme == "양극재"
@@ -144,7 +141,6 @@ def test_classify_document_empty_body_returns_none() -> None:
         _parsed("   \n\n  "),
         title="제목",
         taxonomy=_taxonomy(),
-        provider="openai",
     )
     assert category is None
     assert theme is None

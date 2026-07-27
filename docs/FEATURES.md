@@ -63,7 +63,7 @@ LLM 없이 기술적 분석만 수행하는 빠른 진단 기능.
 기술적 분석 + 펀더멘탈 + 뉴스 + 공시 + 수급을 종합해 판단 우선 요약과 투자 해석을 생성.
 
 **입출력:**
-- 입력: 티커, LLM provider (openai/anthropic)
+- 입력: 티커 (분석 모델은 config.yaml `llm.analyze` 섹션에서 설정)
 - 출력: 판단 요약(주도 팩터, 핵심 변수, 액션, 보류 이유), 액션 시나리오, 원시 분석
 
 **분석 레이어:**
@@ -330,10 +330,10 @@ Deep Dive 분석 실행 시 자동으로 기술적 차트를 생성하여 `chart
 | Stage | 역할 | LLM | 입력 → 출력 |
 |-------|------|-----|------------|
 | **Ingest** | 메시지 + 매크로 로드 | X | CSV → IngestResult |
-| **Map** | 이슈 추출, 카테고리 분류 | Haiku 4.5 (temp 0.2) | messages → MappedIssue[] |
-| **Shuffle** | 카테고리 그룹핑 + 테마 정규화 | Haiku 4.5 (temp 0.1) | issues → ShuffleResult |
-| **Reduce** | 테마별 분석 리포트 | Haiku 4.5 (temp 0.3) | theme groups → NewsItem[] |
-| **Wrapup** | 크로스 테마 인사이트 | Haiku 4.5 (temp 0.4) | news items → DailyReport |
+| **Map** | 이슈 추출, 카테고리 분류 | gpt-5.6-luna (temp 0.2) | messages → MappedIssue[] |
+| **Shuffle** | 카테고리 그룹핑 + 테마 정규화 | gpt-5.6-luna (temp 0.1) | issues → ShuffleResult |
+| **Reduce** | 테마별 분석 리포트 | gpt-5.6-terra (temp 0.3) | theme groups → NewsItem[] |
+| **Wrapup** | 크로스 테마 인사이트 | gpt-5.6-terra (temp 0.4) | news items → DailyReport |
 
 **Map Stage 동작:**
 - 유사 메시지를 하나의 이슈로 클러스터링 (같은 기업/산업 트렌드/인과관계/복수 종목)
@@ -361,14 +361,19 @@ TelegramMessage → MappedIssue → ShuffleResult → ThemeAnalysis/NewsItem →
 **18개 고정 카테고리:**
 반도체, 디스플레이, 이차전지, 소재/화학, 자동차, 조선/중공업, 방산, AI/소프트웨어, 통신, 바이오/제약, 유통/소비재, K-푸드, 에너지, 건설/부동산, 금융/보험, 매크로, 정책/규제, 기타
 
-**설정 (`config.py`):**
+**설정 (`config.yaml` `llm.daily` 섹션):**
 
-| 설정 | 값 | 용도 |
+| 스테이지 | 모델 | temperature | 용도 |
+|----------|------|-------------|------|
+| map | gpt-5.6-luna | 0.2 | Map 스테이지 |
+| shuffle | gpt-5.6-luna | 0.1 | Shuffle 스테이지 |
+| reduce | gpt-5.6-terra (defaults 상속) | 0.3 | Reduce 스테이지 |
+| wrapup | gpt-5.6-terra (defaults 상속) | 0.4 | Wrapup 스테이지 |
+
+모든 스테이지의 provider 기본값은 `openai`. 모델·temperature는 `config.yaml` `llm.daily`에서 오버라이드 가능.
+
+| 상수 | 값 | 용도 |
 |------|---|------|
-| `MAP_LLM` | Anthropic Haiku 4.5, temp 0.2 | Map 스테이지 |
-| `SHUFFLE_LLM` | Anthropic Haiku 4.5, temp 0.1 | Shuffle 스테이지 |
-| `REDUCE_LLM` | Anthropic Haiku 4.5, temp 0.3 | Reduce 스테이지 |
-| `WRAPUP_LLM` | Anthropic Haiku 4.5, temp 0.4 | Wrapup 스테이지 |
 | `MAP_MAX_TOKENS_PER_CHUNK` | 80,000 | Map 청크 크기 |
 | `LLM_TIMEOUT_SECONDS` | 180 | LLM 호출 타임아웃 (Map 100+ 메시지 대응) |
 | `LLM_MAX_RETRIES` | 3 | LLM 재시도 (exponential backoff) |
@@ -382,8 +387,8 @@ TelegramMessage → MappedIssue → ShuffleResult → ThemeAnalysis/NewsItem →
 - 모든 항목 3회 리트라이 (exponential backoff)
 
 **프롬프트 캐싱:**
-- Anthropic provider일 때 system prompt에 `cache_control: ephemeral` 자동 적용
-- OpenAI로 전환 시 자동 비활성화 (`StageLLMConfig.build_messages()`)
+- 스테이지의 provider가 `anthropic`일 때 system prompt에 `cache_control: ephemeral` 자동 적용
+- provider가 `openai`(기본값)이면 자동 비활성화 (`StageLLMConfig.build_messages()`)
 
 **리포트 출력:**
 - Markdown 파일: `reports/YYYY-MM/daily_YYYY-MM-DD.md`
@@ -391,7 +396,7 @@ TelegramMessage → MappedIssue → ShuffleResult → ThemeAnalysis/NewsItem →
 - source_ids로 CSV에서 원본 메시지 로드 → keywords 매칭 시 주변 ~200자 발췌, 매칭 없으면 전체 메시지
 - **포맷**: 개행문자 변환, 출처에 채널명+인용블록, 테마 구분선(`---`)
 
-**의존성:** 텔레그램 CSV, Anthropic Haiku 4.5, yfinance, fear-and-greed
+**의존성:** 텔레그램 CSV, OpenAI (gpt-5.6-luna/gpt-5.6-terra), yfinance, fear-and-greed
 
 ---
 
@@ -448,7 +453,7 @@ TelegramMessage → MappedIssue → ShuffleResult → ThemeAnalysis/NewsItem →
 - chat(분류/합성)은 사내 게이트웨이(`OPENAI_BASE_URL`)를 경유하지만, 게이트웨이가 임베딩 provider를 막는 경우가 있어 임베딩은 `OPEN_AI_EMBEDDING_KEY`(또는 `STOCK_REPORT_EMBED_API_KEY`)로 OpenAI 공식 엔드포인트를 직접 사용
 
 **옵션:**
-- `--input-dir`, `--provider`(분류 LLM, 기본 openai), `--use-hybrid`, `--ocr-lang`, `--embed-missing`(pending/failed 청크만 임베딩하는 backfill 경로), `--reembed`(멱등 skip 무시하고 전체 재적재)
+- `--input-dir`, `--use-hybrid`, `--ocr-lang`, `--embed-missing`(pending/failed 청크만 임베딩하는 backfill 경로), `--reembed`(멱등 skip 무시하고 전체 재적재) (분류 LLM은 config.yaml `llm.daily_v2.extraction` 설정을 따름)
 
 **제약:**
 - hybrid(docling) 통합은 `needs_hybrid=True` 문서 재처리 경로로 예정

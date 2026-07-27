@@ -5,6 +5,7 @@ import logging
 import time
 from functools import lru_cache
 
+from src.llm.stage_config import StageLLMConfig
 from src.pipelines.daily_report.llm_utils import invoke_llm_with_retry
 from src.pipelines.stock_report.config import (
     SEMANTIC_EXTRACTION_MAX_CONCURRENCY,
@@ -1137,25 +1138,24 @@ def _normalize_unit(
 
 
 @lru_cache(maxsize=4)
-def _get_llm_runtime(provider: str):
-    llm_config = get_semantic_extraction_llm_config(provider)
+def _get_llm_runtime(llm_config: StageLLMConfig):
     logger.info(
         "Semantic extraction runtime initialized: provider=%s model=%s temperature=%.2f",
-        provider,
+        llm_config.provider,
         llm_config.model,
         llm_config.temperature,
     )
-    return llm_config, llm_config.create_llm()
+    return llm_config.create_llm()
 
 
 async def _extract_message_semantics(
     *,
     row: NormalizedMessage,
     taxonomy: TaxonomyRegistry,
-    provider: str,
+    llm_config: StageLLMConfig,
     system_prompt: str,
 ) -> SemanticExtractionDraft:
-    llm_config, llm = _get_llm_runtime(provider)
+    llm = _get_llm_runtime(llm_config)
     taxonomy_outline = render_taxonomy_outline(taxonomy)
     user_prompt = build_semantic_extraction_user_prompt(
         row,
@@ -1170,13 +1170,13 @@ async def _extract_message_semantics(
         "tags": [
             "stock_report",
             "semantic_extraction",
-            f"provider:{provider}",
+            f"provider:{llm_config.provider}",
             f"channel:{row.channel_key}",
         ],
         "metadata": {
             "stage": "semantic_extraction",
             "telegram_message_id": row.telegram_message_id,
-            "provider": provider,
+            "provider": llm_config.provider,
             "model": llm_config.model,
             "channel_key": row.channel_key,
             "channel_message_id": row.channel_message_id,
@@ -1205,7 +1205,7 @@ async def _classify_single_message(
     *,
     row: NormalizedMessage,
     taxonomy: TaxonomyRegistry,
-    provider: str,
+    llm_config: StageLLMConfig,
     category_map: dict[str, str],
     theme_map: dict[str, tuple[str, str]],
     semaphore: asyncio.Semaphore,
@@ -1225,7 +1225,7 @@ async def _classify_single_message(
             extraction = await _extract_message_semantics(
                 row=row,
                 taxonomy=taxonomy,
-                provider=provider,
+                llm_config=llm_config,
                 system_prompt=system_prompt,
             )
     except Exception as exc:
@@ -1263,7 +1263,7 @@ async def _classify_messages_async(
     normalized_messages: list[NormalizedMessage],
     *,
     taxonomy: TaxonomyRegistry,
-    provider: str,
+    llm_config: StageLLMConfig,
     system_prompt: str,
 ) -> list[ClassifiedMessage]:
     """메시지 배치를 동시 분류하고 메시지별 unit 결과를 평탄화한다.
@@ -1276,7 +1276,7 @@ async def _classify_messages_async(
     category_map, theme_map = build_match_dictionary(taxonomy)
     logger.info(
         "Semantic extraction batch started: provider=%s messages=%d max_concurrency=%d",
-        provider,
+        llm_config.provider,
         len(normalized_messages),
         SEMANTIC_EXTRACTION_MAX_CONCURRENCY,
     )
@@ -1285,7 +1285,7 @@ async def _classify_messages_async(
         _classify_single_message(
             row=row,
             taxonomy=taxonomy,
-            provider=provider,
+            llm_config=llm_config,
             category_map=category_map,
             theme_map=theme_map,
             semaphore=semaphore,
@@ -1297,7 +1297,7 @@ async def _classify_messages_async(
     flattened = [item for batch in results for item in batch]
     logger.info(
         "Semantic extraction batch completed: provider=%s messages=%d units=%d elapsed=%.2fs",
-        provider,
+        llm_config.provider,
         len(normalized_messages),
         len(flattened),
         time.perf_counter() - started_at,
@@ -1309,22 +1309,25 @@ def classify_messages(
     normalized_messages: list[NormalizedMessage],
     *,
     taxonomy: TaxonomyRegistry,
-    provider: str,
     system_prompt: str | None = None,
+    llm_config: StageLLMConfig | None = None,
 ) -> list[ClassifiedMessage]:
     """pipeline/CLI가 사용하는 동기 엔트리포인트다.
 
     목적:
     - 외부 호출부는 단순하게 유지하고, 실제 분류 작업은 async 구현에 위임한다.
+    - llm_config 미지정 시 config.yaml(llm.daily_v2.extraction)을 따른다.
+      실험(tuning)에서는 명시 주입으로 오버라이드한다.
     """
     if not normalized_messages:
         return []
+    resolved_llm_config = llm_config or get_semantic_extraction_llm_config()
     resolved_system_prompt = system_prompt or SEMANTIC_EXTRACTION_SYSTEM_PROMPT
     return asyncio.run(
         _classify_messages_async(
             normalized_messages,
             taxonomy=taxonomy,
-            provider=provider,
+            llm_config=resolved_llm_config,
             system_prompt=resolved_system_prompt,
         )
     )

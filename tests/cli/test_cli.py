@@ -287,12 +287,16 @@ async def test_run_deep_dive_korean_stock_without_kis_credentials_uses_yfinance(
     monkeypatch.delenv("KIS_APP_SECRET", raising=False)
     monkeypatch.delenv("OPENDART_API_KEY", raising=False)
 
+    from src.llm.stage_config import StageLLMConfig
+
     expected = {"ticker": "066970.KQ", "success": True}
     mock_pipeline = AsyncMock()
     mock_pipeline.run = AsyncMock(return_value=expected)
+    fake_llm_config = StageLLMConfig(provider="openai", model="gpt-4o-mini", temperature=0)
 
     with (
         patch("src.cli.main.resolve_ticker", new=AsyncMock(return_value="066970.KQ")),
+        patch("src.cli.main.resolve_stage_llm", return_value=fake_llm_config),
         patch("src.cli.main.YFinanceProvider", return_value=object()) as mock_yfinance_provider,
         patch("src.cli.main.TechnicalScorer", return_value=object()),
         patch("src.cli.main.TechnicalAnalysisTool", return_value=object()),
@@ -308,7 +312,7 @@ async def test_run_deep_dive_korean_stock_without_kis_credentials_uses_yfinance(
             "src.cli.main.DeepDivePipeline", return_value=mock_pipeline
         ) as mock_pipeline_cls,
     ):
-        result = await run_deep_dive("엘앤에프", "openai")
+        result = await run_deep_dive("엘앤에프")
 
     assert result == expected
     mock_yfinance_provider.assert_called_once()

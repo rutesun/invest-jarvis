@@ -298,8 +298,8 @@ def _stage_normalize(raw_messages, *, short_channels: set[str], max_chars: int, 
 
 
 @traceable(name="Stock Report Daily V2 - Classify")
-def _stage_classify(normalized, *, taxonomy, provider: str):
-    return classify_messages(normalized, taxonomy=taxonomy, provider=provider)
+def _stage_classify(normalized, *, taxonomy):
+    return classify_messages(normalized, taxonomy=taxonomy)
 
 
 @traceable(name="Stock Report Daily V2 - Persist Chunks")
@@ -317,8 +317,8 @@ def _stage_load_same_day_bundle(conn, date: str):
 
 
 @traceable(name="Stock Report Daily V2 - Local Evidence Synthesis")
-def _stage_local_evidence_synthesis(bundle, *, provider: str, search_fn=None):
-    return synthesize_daily(bundle, provider=provider, search_fn=search_fn)
+def _stage_local_evidence_synthesis(bundle, *, search_fn=None):
+    return synthesize_daily(bundle, search_fn=search_fn)
 
 
 @traceable(
@@ -367,7 +367,6 @@ def _stage_persist_normalized(conn, normalized) -> None:
 def run_daily_v2(
     date: str,
     data_dir: str = "data",
-    provider: str = "openai",
     dsn: str | None = None,
     migrations_dir: str = "migrations/stock_report",
     config_path: str = "config.yaml",
@@ -383,12 +382,12 @@ def run_daily_v2(
     migrations_path = Path(migrations_dir)
     short_channels, max_chars, group_window = _load_normalize_config(config_path)
     taxonomy = load_taxonomy_registry(taxonomy_path)
-    semantic_llm_config = get_semantic_extraction_llm_config(provider)
-    synthesis_llm_config = get_report_synthesis_llm_config(provider)
+    semantic_llm_config = get_semantic_extraction_llm_config()
+    synthesis_llm_config = get_report_synthesis_llm_config()
     logger.info(
         "daily-v2 started: date=%s provider=%s semantic_model=%s synthesis_model=%s data_dir=%s",
         date,
-        provider,
+        semantic_llm_config.provider,
         semantic_llm_config.model,
         synthesis_llm_config.model,
         data_dir,
@@ -415,7 +414,7 @@ def run_daily_v2(
         logger.info("daily-v2 normalization completed: normalized_rows=%d", len(normalized))
         _stage_persist_normalized(conn, normalized)
         logger.info("daily-v2 normalized messages persisted")
-        classified = _stage_classify(normalized, taxonomy=taxonomy, provider=provider)
+        classified = _stage_classify(normalized, taxonomy=taxonomy)
         logger.info("daily-v2 classification completed: classified_units=%d", len(classified))
         _stage_persist_chunks(
             conn,
@@ -425,9 +424,7 @@ def run_daily_v2(
         logger.info("daily-v2 classified chunks persisted")
         same_day_bundle = _stage_load_same_day_bundle(conn, date)
         search_fn = functools.partial(_search_documents, conn) if has_embed_auth() else None
-        report_artifact = _stage_local_evidence_synthesis(
-            same_day_bundle, provider=provider, search_fn=search_fn
-        )
+        report_artifact = _stage_local_evidence_synthesis(same_day_bundle, search_fn=search_fn)
         output_markdown = _stage_render_markdown(report_artifact)
         google_grounding_markdown: str | None = None
         if google_grounding:
@@ -443,7 +440,7 @@ def run_daily_v2(
         report_run_id = _stage_persist_report(
             conn,
             report_date=report_artifact.report_date,
-            provider=provider,
+            provider=synthesis_llm_config.provider,
             output_markdown=output_markdown,
             evidence_refs=report_artifact.evidence_refs,
         )
@@ -494,7 +491,7 @@ def run_daily_v2(
 
     return DailyV2RunResult(
         date=date,
-        provider=provider,
+        provider=synthesis_llm_config.provider,
         csv_files=ingest_stats.csv_files,
         parsed_rows=ingest_stats.parsed_rows,
         upserted_rows=ingest_stats.upserted_rows,
