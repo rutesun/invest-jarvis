@@ -35,3 +35,9 @@
 - 근원(root cause): (1) end_date 미지정 시 상한 없음, (2) 파일명 prefix strip 방식 날짜 추출이 v2/AB 변형을 처리 못 하고 문자열 비교 필터를 통과, (3) upload_report_from_file에 기존 페이지 확인 없이 항상 create.
 - 수정: end_date 미지정 시 start_date로 고정. `extract_report_date()`가 정규식으로 `daily_/daily_v2_/screen-` + 날짜 형식만 허용(AB 변형 제외). 업로드 전 같은 Type·Date 페이지를 `_archive_existing_report_pages()`로 아카이브해 재업로드를 교체 의미로 변경 (notion-client 3.0 data_sources.query 사용).
 - 재발 방지 / 배운 것: extract_report_date 파라미터라이즈 테스트 + archive 헬퍼 mock 테스트 추가. 실제 재업로드로 07-20 페이지가 1개 유지됨을 확인.
+
+## (2026-07-27 17:20) [Bug] 코드리뷰에서 발견된 Notion 업로드 결함 2건 수정
+- 증상: (1) `_markdown_to_blocks`가 표 형식이 아닌 `|` 시작 줄(다음 줄이 `|`가 아닌 경우)에서 여전히 무한 루프 — 해시태그 수정과 동일한 "소비되지 않는 줄" 버그 클래스. (2) 재업로드 시 기존 페이지를 먼저 아카이브한 뒤 페이지 생성을 시도해, 생성 실패(429 등) 시 기존 리포트가 유실됨.
+- 근원(root cause): (1) 문단 수집 루프가 소비하지 못하는 줄에서 index가 전진하지 않는 구조적 문제 — 특정 접두사만 고치는 것으로는 부족. (2) archive-before-create 순서에 롤백 없음.
+- 수정: (1) 문단 분기에 진행 보장(어떤 분기도 소비 못 한 줄은 단독 문단으로 소비) + `_HEADING_PREFIXES` 상수로 heading 분기와 중단 조건 동기화. (2) 기존 페이지 id를 미리 조회하고 새 페이지 업로드 성공 후에만 아카이브하도록 순서 변경. notion-client 하한도 3.0.0으로 상향(data_sources.query 의존 명시).
+- 재발 방지 / 배운 것: `|` 줄 회귀 테스트 2건, create 실패 시 기존 페이지 보존 테스트 추가. 특수 케이스 수정 시 같은 버그 클래스의 다른 입력을 반드시 찾아볼 것.

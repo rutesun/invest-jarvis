@@ -21,7 +21,8 @@ PR #52에서 daily 스테이지 LLM이 Anthropic haiku(tool calling)에서 OpenA
 4. **map stage 카테고리 alias 6종 추가**: LLM이 생성하는 비정규 카테고리(전기전자→반도체, 철강금속·철강/소재→소재/화학, 광산/에너지→에너지, 우주개발→방산, 현대백화점→유통/소비재)를 정규 카테고리로 흡수.
 5. **test_models.py 기존 테스트 복원**: 이전 세션에서 alias 테스트를 추가하면서 의도치 않게 삭제된 기존 모델 검증 테스트 약 260줄(MacroSnapshot 검증, MappedIssue themes 제약, ThemeAnalysis 검증 등)을 HEAD에서 복원해 병합.
 6. **Notion 마크다운 변환기 해시태그 무한 루프 수정**: `_markdown_to_blocks`의 문단 수집 중단 조건을 `#` 전체에서 실제 heading marker(`# `, `## `, `### `)로 좁힘. `#특징업종` 같은 해시태그 줄이 소비되지 않아 index가 멈추던 버그. 해시태그 줄 회귀 테스트 포함.
-7. **`jarvis report upload` 버그 3종 수정**: (1) 종료 날짜 미지정 시 help대로 시작 날짜 하루만 대상, (2) 파일명 날짜 추출을 prefix strip에서 정규식(`extract_report_date`)으로 바꿔 `daily_v2_*`는 정상 날짜로, AB 테스트 변형은 제외, (3) 업로드 전 같은 Type·Date의 기존 페이지를 아카이브(`_archive_existing_report_pages`, notion-client 3.0 `data_sources.query`)해 재업로드를 교체 의미로 변경.
+7. **`jarvis report upload` 버그 3종 수정**: (1) 종료 날짜 미지정 시 help대로 시작 날짜 하루만 대상, (2) 파일명 날짜 추출을 prefix strip에서 정규식(`extract_report_date`)으로 바꿔 `daily_v2_*`는 정상 날짜로, AB 테스트 변형은 제외, (3) 같은 Type·Date의 기존 페이지를 새 페이지 업로드 성공 후 아카이브(`_find_existing_report_page_ids`, notion-client 3.0 `data_sources.query`)해 재업로드를 교체 의미로 변경 — 생성 실패 시 기존 페이지는 보존된다.
+8. **코드리뷰 후속 수정**: (1) `_markdown_to_blocks` 문단 분기에 진행 보장 추가 — 표 형식이 아닌 `|` 시작 줄에서 남아 있던 무한 루프(해시태그와 동일 버그 클래스) 해소, heading 접두사는 `_HEADING_PREFIXES` 상수로 동기화. (2) `ThemeMapping.as_dict()`가 중복 normalized 그룹을 last-wins로 유실하지 않도록 병합. (3) strict 스키마 walker를 `tests/harness/strict_schema.py`로 공용화 — stock_report의 기존 가드(commit 94f55e4)와 중복 구현 제거, daily_report 계약 테스트가 더 강한 검출(list[Any], oneOf/allOf 등)을 얻음. (4) notion-client 하한을 `>=3.0.0`으로 상향(`data_sources.query` 의존 명시).
 
 ## Before / After
 

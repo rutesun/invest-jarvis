@@ -10,8 +10,10 @@ from src.pipelines.daily_report.models import (
     NewsItem,
     Sentiment,
     ThemeAnalysis,
+    ThemeGroup,
     ThemeMapping,
 )
+from tests.harness.strict_schema import unconstrained_object_paths
 
 
 def test_macro_snapshot_validation():
@@ -334,27 +336,24 @@ def test_mapped_issue_normalizes_space_and_resource_category_aliases():
 LLM_OUTPUT_MODELS = [MappedIssueList, ThemeMapping, ThemeAnalysis, KeyInsightsList]
 
 
-def _free_form_object_paths(schema: dict, path: str = "<root>") -> list[str]:
-    """properties 없는 object(자유형 dict) 경로 수집."""
-    found = []
-    if schema.get("type") == "object" and "properties" not in schema:
-        found.append(path)
-    for section in ("properties", "$defs"):
-        for name, sub in schema.get(section, {}).items():
-            found.extend(_free_form_object_paths(sub, f"{path}.{name}"))
-    if isinstance(schema.get("items"), dict):
-        found.extend(_free_form_object_paths(schema["items"], f"{path}[]"))
-    for i, sub in enumerate(schema.get("anyOf", [])):
-        found.extend(_free_form_object_paths(sub, f"{path}|{i}"))
-    return found
-
-
 @pytest.mark.parametrize("model", LLM_OUTPUT_MODELS)
 def test_llm_output_models_are_openai_strict_schema_compatible(model):
     """OpenAI strict structured output은 자유형 dict 필드를 400으로 거부한다."""
-    offending = _free_form_object_paths(model.model_json_schema())
+    offending = unconstrained_object_paths(model)
 
     assert not offending, (
         f"{model.__name__}에 OpenAI strict json_schema가 거부하는 "
         f"자유형 dict 필드가 있습니다: {offending}"
     )
+
+
+def test_theme_mapping_as_dict_merges_duplicate_normalized_names():
+    """LLM이 같은 정규화명을 중복 반환해도 originals가 유실되지 않고 병합된다."""
+    mapping = ThemeMapping(
+        groups=[
+            ThemeGroup(normalized="HBM 업사이클", originals=["HBM 가격 상승", "AI 메모리 수요"]),
+            ThemeGroup(normalized="HBM 업사이클", originals=["삼성 HBM3E 양산"]),
+        ]
+    ).as_dict()
+
+    assert mapping == {"HBM 업사이클": ["HBM 가격 상승", "AI 메모리 수요", "삼성 HBM3E 양산"]}

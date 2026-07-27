@@ -255,8 +255,11 @@ class ThemeMapping(BaseModel):
     groups: list[ThemeGroup] = Field(description="정규화된 테마 그룹 배열")
 
     def as_dict(self) -> dict[str, list[str]]:
-        """정규화명 → 원본 테마명 배열 dict로 변환."""
-        return {group.normalized: group.originals for group in self.groups}
+        """정규화명 → 원본 테마명 배열 dict로 변환. 중복 정규화명은 병합해 유실을 막는다."""
+        mapping: dict[str, list[str]] = {}
+        for group in self.groups:
+            mapping.setdefault(group.normalized, []).extend(group.originals)
+        return mapping
 
 
 class KeyInsightsList(BaseModel):
