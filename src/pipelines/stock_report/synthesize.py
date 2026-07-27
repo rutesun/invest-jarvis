@@ -214,7 +214,12 @@ async def _run_synthesis_call(
     messages = llm_config.build_messages(system, user)
     config = {
         "run_name": f"StockReport Per-Category Synthesis ({llm_config.provider})",
-        "tags": ["stock_report", "daily_v2", "per_category_synthesis", f"provider:{llm_config.provider}"],
+        "tags": [
+            "stock_report",
+            "daily_v2",
+            "per_category_synthesis",
+            f"provider:{llm_config.provider}",
+        ],
         "metadata": {
             "stage": "per_category_synthesis",
             "provider": llm_config.provider,

@@ -424,9 +424,7 @@ def run_daily_v2(
         logger.info("daily-v2 classified chunks persisted")
         same_day_bundle = _stage_load_same_day_bundle(conn, date)
         search_fn = functools.partial(_search_documents, conn) if has_embed_auth() else None
-        report_artifact = _stage_local_evidence_synthesis(
-            same_day_bundle, search_fn=search_fn
-        )
+        report_artifact = _stage_local_evidence_synthesis(same_day_bundle, search_fn=search_fn)
         output_markdown = _stage_render_markdown(report_artifact)
         google_grounding_markdown: str | None = None
         if google_grounding:
