@@ -11,6 +11,7 @@ import sys
 import urllib.error
 import urllib.request
 
+
 NOTE_API = (
     "https://wp8tovrz8a.execute-api.ap-northeast-2.amazonaws.com/release"
     "/v3/note/{session_id}/{note_id}?provider=&whisper=false"
@@ -20,7 +21,9 @@ NOTE_API = (
 def parse_lilys_url(url: str) -> tuple[str, str]:
     match = re.search(r"lilys\.ai/digest/(\d+)/(\d+)", url)
     if not match:
-        raise ValueError("Lilys digest URL must look like https://lilys.ai/digest/{session_id}/{note_id}")
+        raise ValueError(
+            "Lilys digest URL must look like https://lilys.ai/digest/{session_id}/{note_id}"
+        )
     return match.group(1), match.group(2)
 
 
@@ -40,7 +43,9 @@ def clean_content(content: str) -> str:
     text = re.sub(r"<script[^>]*>.*?</script>", " ", content, flags=re.DOTALL | re.IGNORECASE)
     text = re.sub(r"<style[^>]*>.*?</style>", " ", text, flags=re.DOTALL | re.IGNORECASE)
     text = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
-    text = re.sub(r"</(p|li|ul|ol|h[1-6]|lilys-heading|lilys-section)>", "\n", text, flags=re.IGNORECASE)
+    text = re.sub(
+        r"</(p|li|ul|ol|h[1-6]|lilys-heading|lilys-section)>", "\n", text, flags=re.IGNORECASE
+    )
     text = re.sub(r"<[^>]+>", " ", text)
     text = html.unescape(text)
     text = re.sub(r"[ \t\r\f\v]+", " ", text)
@@ -52,7 +57,9 @@ def clean_content(content: str) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Fetch a public Lilys AI digest note.")
     parser.add_argument("url", help="Lilys digest URL")
-    parser.add_argument("--max-chars", type=int, default=0, help="Truncate cleaned content to N characters")
+    parser.add_argument(
+        "--max-chars", type=int, default=0, help="Truncate cleaned content to N characters"
+    )
     parser.add_argument("--json", action="store_true", help="Print JSON instead of text")
     args = parser.parse_args()
 

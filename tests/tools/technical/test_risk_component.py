@@ -147,9 +147,7 @@ def test_risk_supertrend_down_breakdown_signal_metadata():
 
     result = analyze_risk(df)
 
-    metadata = next(
-        item for item in result.signal_metadata if item.reason == "Supertrend 하락"
-    )
+    metadata = next(item for item in result.signal_metadata if item.reason == "Supertrend 하락")
     assert metadata.source == "risk"
     assert metadata.signal_type == "breakdown"
     assert metadata.bias == "bearish"

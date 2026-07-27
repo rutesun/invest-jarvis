@@ -106,7 +106,9 @@ def test_supertrend_buy_transition_signal_metadata():
 
     result = analyze_supertrend(df)
 
-    metadata = next(item for item in result.signal_metadata if item.reason == "Supertrend 매수 전환")
+    metadata = next(
+        item for item in result.signal_metadata if item.reason == "Supertrend 매수 전환"
+    )
     assert metadata.source == "supertrend"
     assert metadata.signal_type == "breakout"
     assert metadata.bias == "bullish"

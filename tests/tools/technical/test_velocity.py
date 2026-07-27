@@ -41,8 +41,18 @@ def test_velocity_insufficient_data():
 @pytest.mark.parametrize(
     ("sma_20", "signal_type", "bias", "intent"),
     [
-        ([100, 100, 100, 100, 100, 100, 99, 98, 97, 96, 96, 97, 98, 99, 100], "trend", "bullish", "hold"),
-        ([100, 100, 100, 100, 100, 100, 101, 102, 103, 104, 104, 103, 102, 101, 100], "breakdown", "bearish", "risk"),
+        (
+            [100, 100, 100, 100, 100, 100, 99, 98, 97, 96, 96, 97, 98, 99, 100],
+            "trend",
+            "bullish",
+            "hold",
+        ),
+        (
+            [100, 100, 100, 100, 100, 100, 101, 102, 103, 104, 104, 103, 102, 101, 100],
+            "breakdown",
+            "bearish",
+            "risk",
+        ),
     ],
 )
 def test_velocity_turn_signal_metadata(sma_20, signal_type, bias, intent):

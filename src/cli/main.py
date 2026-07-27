@@ -647,17 +647,13 @@ def _format_raw_analysis_sections(result: dict) -> str:
             f"- **50일 이동평균선**: "
             f"{format_long_sma(long_sma_snapshot.sma_50, long_sma_snapshot.sma_50_slope_pct)}\n"
         )
-    output += (
-        f"- **SMA 100**: {format_long_sma(long_sma_snapshot.sma_100, long_sma_snapshot.sma_100_slope_pct)}\n"
-    )
+    output += f"- **SMA 100**: {format_long_sma(long_sma_snapshot.sma_100, long_sma_snapshot.sma_100_slope_pct)}\n"
     if long_sma_snapshot.sma_150 is not None:
         output += (
             f"- **150일 이동평균선**: "
             f"{format_long_sma(long_sma_snapshot.sma_150, long_sma_snapshot.sma_150_slope_pct)}\n"
         )
-    output += (
-        f"- **SMA 200**: {format_long_sma(long_sma_snapshot.sma_200, long_sma_snapshot.sma_200_slope_pct)}\n"
-    )
+    output += f"- **SMA 200**: {format_long_sma(long_sma_snapshot.sma_200, long_sma_snapshot.sma_200_slope_pct)}\n"
 
     output += "\n"
 
@@ -1295,7 +1291,7 @@ def report_upload(
     """Upload existing reports to Notion."""
     from pathlib import Path
 
-    from src.integrations.notion import upload_report_from_file
+    from src.integrations.notion import extract_report_date, upload_report_from_file
 
     # reports/ 디렉토리 스캔
     reports_dir = Path("reports")
@@ -1317,15 +1313,15 @@ def report_upload(
         return
 
     # 날짜 필터링
+    # 종료 날짜 미지정 시 시작 날짜 하루만
+    if start_date and not end_date:
+        end_date = start_date
+
     filtered_files = []
     for file_path in md_files:
-        # 파일명에서 날짜 추출
-        filename = file_path.stem
-        if filename.startswith("daily_"):
-            date_str = filename.replace("daily_", "")
-        elif filename.startswith("screen-"):
-            date_str = filename.replace("screen-", "")
-        else:
+        # 파일명에서 날짜 추출 (형식이 다른 파일은 제외)
+        date_str = extract_report_date(file_path.stem)
+        if date_str is None:
             continue
 
         # 날짜 범위 체크

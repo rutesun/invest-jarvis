@@ -139,7 +139,9 @@ def _has_volume_backed_breakdown(
         context.is_breakdown
         and context.volume_ratio_20d is not None
         and context.volume_ratio_20d >= 1.3
-        and any(signal.signal_type == "breakdown" and signal.severity == "high" for signal in metadata)
+        and any(
+            signal.signal_type == "breakdown" and signal.severity == "high" for signal in metadata
+        )
     )
 
 
@@ -172,9 +174,7 @@ def _choose_action(
         adjusted >= 55
         and new_entry_allowed
         and not context.is_downtrend
-        and (
-            _has_entry_signal(metadata, "pullback") or _is_contextual_pullback_add(context)
-        )
+        and (_has_entry_signal(metadata, "pullback") or _is_contextual_pullback_add(context))
     ):
         return "add", "pullback_add"
     if adjusted >= 40 and context.is_uptrend:

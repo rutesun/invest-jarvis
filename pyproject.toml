@@ -19,7 +19,7 @@ dependencies = [
     "scipy>=1.17.1",
     "ddgs>=9.0.0",
     "telethon>=1.36.0",
-    "notion-client>=2.0.0",
+    "notion-client>=3.0.0",  # data_sources.query 필요 (upload 중복 방지)
     "fear-and-greed>=0.4",
     "mplfinance>=0.12.10b0",
     "psycopg[binary]>=3.2.12",
@@ -74,6 +74,7 @@ ignore = [
 ]
 [tool.ruff.lint.per-file-ignores]
 "src/pipelines/daily_report/stages/*.py" = ["E402"]
+"scripts/*.py" = ["E402"]  # 실험용 스크립트: load_dotenv() 후 import 패턴 허용
 
 [tool.ruff.lint.isort]
 known-first-party = ["src"]

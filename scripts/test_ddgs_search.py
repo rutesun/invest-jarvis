@@ -34,7 +34,7 @@ def format_datetime(date_str: str) -> str:
     try:
         dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
         return dt.strftime("%Y-%m-%d %H:%M")
-    except:
+    except Exception:  # 날짜가 None/비문자열이어도 원본 값 그대로 표시
         return date_str
 
 

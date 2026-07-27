@@ -3,7 +3,13 @@ from src.tools.technical.models import ComponentSignal, MarketContext
 
 
 def _component(score: int, metadata: list[ComponentSignal]) -> dict:
-    return {"score": score, "signals": [], "evidence": [], "metrics": {}, "signal_metadata": metadata}
+    return {
+        "score": score,
+        "signals": [],
+        "evidence": [],
+        "metrics": {},
+        "signal_metadata": metadata,
+    }
 
 
 def test_downtrend_reversal_is_capped_to_watch():

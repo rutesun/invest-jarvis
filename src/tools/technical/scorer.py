@@ -36,7 +36,9 @@ class TechnicalScorer:
         """Calculate technical score from OHLCV data."""
         result = self._score_current(df, ticker=ticker)
         if include_history and history_days > 0:
-            history, warning = self._build_score_history(df, ticker=ticker, history_days=history_days)
+            history, warning = self._build_score_history(
+                df, ticker=ticker, history_days=history_days
+            )
             result.score_history = history
             result.score_history_warning = warning
             if result.technical_verdict is not None:
@@ -165,7 +167,9 @@ class TechnicalScorer:
                         one_line_reason=first_reason,
                         new_entry_allowed=daily.technical_verdict.new_entry_allowed,
                         driver_components=_top_component_drivers(daily.components),
-                        change_drivers=_top_component_changes(previous_components, daily.components),
+                        change_drivers=_top_component_changes(
+                            previous_components, daily.components
+                        ),
                         cautions=daily.technical_verdict.cautions[:2],
                     )
                 )

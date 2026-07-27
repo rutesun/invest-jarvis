@@ -74,9 +74,7 @@ def _brief_verdict(ticker: str) -> PlaybookVerdict:
     return PlaybookVerdict(
         ticker=ticker,
         holding=True,
-        market_regime=MarketRegimeResult(
-            regime="상승", allow_new_buy=True, index_symbol="^GSPC"
-        ),
+        market_regime=MarketRegimeResult(regime="상승", allow_new_buy=True, index_symbol="^GSPC"),
         relative_strength=RelativeStrengthResult(
             mansfield_rs=1.0,
             outperform_6m=1.0,
@@ -168,7 +166,10 @@ async def test_technical_contract_is_identical_across_check_analyze_and_brief(
     brief_disclosure = MagicMock()
     brief_disclosure.execute = AsyncMock(return_value=ToolResult(success=True, data=[]))
     brief_pipeline = BriefPipeline(
-        technical_tools={"KR": _technical_tool(ohlcv_snapshot), "US": _technical_tool(ohlcv_snapshot)},
+        technical_tools={
+            "KR": _technical_tool(ohlcv_snapshot),
+            "US": _technical_tool(ohlcv_snapshot),
+        },
         playbook_engine=brief_playbook,
         macro_tool=macro_tool,
         news_tool=brief_news,

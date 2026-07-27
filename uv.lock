@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.14' and sys_platform == 'win32'",
@@ -1151,7 +1151,7 @@ requires-dist = [
     { name = "langchain-core", specifier = ">=1.2.28" },
     { name = "langchain-openai", specifier = ">=1.1.12" },
     { name = "mplfinance", specifier = ">=0.12.10b0" },
-    { name = "notion-client", specifier = ">=2.0.0" },
+    { name = "notion-client", specifier = ">=3.0.0" },
     { name = "opendataloader-pdf", specifier = ">=2.4.7" },
     { name = "opik", marker = "extra == 'dev'", specifier = ">=1.11.0" },
     { name = "pandas", specifier = ">=2.0.0" },

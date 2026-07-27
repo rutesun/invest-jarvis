@@ -570,4 +570,3 @@ class DeepDivePipeline:
         )
 
         return await generate_fundamental_summary(input_data, self.llm)
-

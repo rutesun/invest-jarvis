@@ -40,6 +40,7 @@ from src.pipelines.stock_report.synthesize import (
     RelatedStockLLM,
     TickerCardLLMOutput,
 )
+from tests.harness.strict_schema import unconstrained_object_paths
 
 
 # The LLM structured-output models guarded here.  A bare ``from`` import above
@@ -62,57 +63,6 @@ NAMED_SYNTHESIS_OUTPUT_MODELS: tuple[type[BaseModel], ...] = (
     OverviewCoreThemeOutput,
     RelatedStockLLM,
 )
-
-_OBJECT_COMBINATORS = ("anyOf", "oneOf", "allOf")
-
-
-def _scan_schema(schema: dict[str, Any], path: str) -> list[str]:
-    """Return locations of object schemas that OpenAI strict mode would reject.
-
-    A node is unsafe when it is an object that neither declares ``properties`` nor
-    pins ``additionalProperties: false`` — i.e. a ``dict[str, Any]``-style open
-    object.  ``$ref`` nodes are skipped because their target ``$defs`` entry is
-    scanned on its own.
-    """
-    bad: list[str] = []
-
-    def walk(node: Any, where: str) -> None:
-        if not isinstance(node, dict):
-            return
-        if node == {}:
-            bad.append(where)  # list[Any] produces items: {} — untyped, rejected server-side
-            return
-        if "$ref" in node:
-            return
-        for combo in _OBJECT_COMBINATORS:
-            for index, sub in enumerate(node.get(combo, []) or []):
-                walk(sub, f"{where}.{combo}[{index}]")
-        if node.get("type") == "object":
-            props = node.get("properties")
-            additional = node.get("additionalProperties", None)
-            if not props and additional is not False:
-                bad.append(where)
-            for name, sub in (props or {}).items():
-                walk(sub, f"{where}.{name}")
-            if isinstance(additional, dict):
-                walk(additional, f"{where}.<additionalProperties>")
-        items = node.get("items")
-        if isinstance(items, dict):
-            walk(items, f"{where}[]")
-        for index, sub in enumerate(node.get("prefixItems", []) or []):
-            walk(sub, f"{where}[{index}]")
-
-    walk(schema, path)
-    return bad
-
-
-def unconstrained_object_paths(model: type[BaseModel]) -> list[str]:
-    """Find every unconstrained-object location in a model's JSON schema, incl. $defs."""
-    schema = model.model_json_schema()
-    bad = _scan_schema(schema, model.__name__)
-    for def_name, def_schema in (schema.get("$defs") or {}).items():
-        bad.extend(_scan_schema(def_schema, f"$defs.{def_name}"))
-    return bad
 
 
 def _discover_output_models() -> set[type[BaseModel]]:

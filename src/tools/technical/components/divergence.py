@@ -72,7 +72,11 @@ def analyze_divergence(df: pd.DataFrame) -> ComponentResult:
             signals.append(macd_div["signal"])
             evidence.append(macd_div["evidence"])
             score += macd_div["score"]
-            metadata.append(_divergence_metadata("bearish" if macd_div["score"] < 0 else "bullish", macd_div["signal"]))
+            metadata.append(
+                _divergence_metadata(
+                    "bearish" if macd_div["score"] < 0 else "bullish", macd_div["signal"]
+                )
+            )
 
     # cRSI divergence (if available)
     if "cRSI" in df.columns:
@@ -81,7 +85,11 @@ def analyze_divergence(df: pd.DataFrame) -> ComponentResult:
             signals.append(crsi_div["signal"])
             evidence.append(crsi_div["evidence"])
             score += crsi_div["score"]
-            metadata.append(_divergence_metadata("bearish" if crsi_div["score"] < 0 else "bullish", crsi_div["signal"]))
+            metadata.append(
+                _divergence_metadata(
+                    "bearish" if crsi_div["score"] < 0 else "bullish", crsi_div["signal"]
+                )
+            )
             # Stronger signal if both RSI and cRSI agree
             if (bearish_div and "bearish" in crsi_div["signal"].lower()) or (
                 bullish_div and "bullish" in crsi_div["signal"].lower()

@@ -660,6 +660,38 @@ def _toggle(title: str, children: list[dict], max_length: int = 1900) -> dict:
     }
 
 
+# 업로드 대상 리포트 파일명: daily_/daily_v2_/screen- 접두사 + 날짜 (AB 테스트 등 변형 제외)
+_REPORT_FILENAME_RE = re.compile(r"^(?:daily(?:_v2)?_|screen-)(\d{4}-\d{2}-\d{2})$")
+
+
+def extract_report_date(stem: str) -> str | None:
+    """리포트 파일명(stem)에서 날짜를 추출한다. 업로드 대상 형식이 아니면 None."""
+    match = _REPORT_FILENAME_RE.match(stem)
+    return match.group(1) if match else None
+
+
+def _find_existing_report_page_ids(
+    notion: Client, database_id: str, report_type: str, date: str
+) -> list[str]:
+    """같은 타입·날짜의 기존 페이지 id를 찾는다. 재업로드 시 중복 방지용."""
+    database = notion.databases.retrieve(database_id=database_id)
+    data_sources = database.get("data_sources", [])
+    if not data_sources:
+        logger.warning("Notion database %s has no data sources; skip dedup", database_id)
+        return []
+
+    results = notion.data_sources.query(
+        data_source_id=data_sources[0]["id"],
+        filter={
+            "and": [
+                {"property": "Type", "select": {"equals": report_type}},
+                {"property": "Date", "date": {"equals": date}},
+            ]
+        },
+    )
+    return [page["id"] for page in results["results"]]
+
+
 def upload_report_from_file(file_path: Path, date: str) -> str:
     """
     Upload report from MD file to Notion.
@@ -704,6 +736,10 @@ def upload_report_from_file(file_path: Path, date: str) -> str:
         "Date": {"date": {"start": date}},
     }
 
+    # 같은 타입·날짜의 기존 페이지를 미리 찾아 두고, 새 페이지 업로드 성공 후에만
+    # 아카이브한다 — 생성 실패 시 기존 페이지가 보존되도록 순서 보장
+    existing_page_ids = _find_existing_report_page_ids(notion, database_id, report_type, date)
+
     # 페이지 생성 (children 없이)
     try:
         response = notion.pages.create(
@@ -717,9 +753,23 @@ def upload_report_from_file(file_path: Path, date: str) -> str:
         if children:
             _append_blocks_in_batches(notion, page_id, children)
 
+        for old_page_id in existing_page_ids:
+            notion.pages.update(page_id=old_page_id, archived=True)
+        if existing_page_ids:
+            logger.info(
+                "Archived %d existing %s page(s) for %s",
+                len(existing_page_ids),
+                report_type,
+                date,
+            )
+
         return page_url
     except Exception as e:
         raise Exception(f"Notion page creation failed: {str(e)}") from e
+
+
+# _markdown_to_blocks의 heading 분기와 문단 수집 중단 조건이 함께 써야 하는 접두사
+_HEADING_PREFIXES = ("# ", "## ", "### ")
 
 
 def _markdown_to_blocks(content: str) -> list[dict]:
@@ -781,13 +831,17 @@ def _markdown_to_blocks(content: str) -> list[dict]:
             while (
                 i < len(lines)
                 and lines[i].strip()
-                and not lines[i].startswith("#")
+                and not lines[i].startswith(_HEADING_PREFIXES)
                 and not lines[i].startswith("|")
             ):
                 para_lines.append(lines[i].strip())
                 i += 1
-            if para_lines:
-                blocks.append(_paragraph(" ".join(para_lines)))
+            if not para_lines:
+                # 어떤 분기도 소비하지 못한 줄(예: 표 형식이 아닌 '|' 시작 줄)은
+                # 단독 문단으로 소비한다 — i가 전진하지 않으면 무한 루프
+                para_lines.append(lines[i].strip())
+                i += 1
+            blocks.append(_paragraph(" ".join(para_lines)))
 
     return blocks
 

@@ -46,9 +46,7 @@ async def test_run_quick_check_never_constructs_macro():
         patch("src.cli.main.QuickCheckPipeline") as pipeline_cls,
         patch("src.cli.main.MacroTool") as macro_cls,
     ):
-        pipeline_cls.return_value.run = AsyncMock(
-            return_value={"success": True, "ticker": "AAPL"}
-        )
+        pipeline_cls.return_value.run = AsyncMock(return_value={"success": True, "ticker": "AAPL"})
         result = await run_quick_check("AAPL")
 
     macro_cls.assert_not_called()
@@ -308,9 +306,7 @@ async def test_run_deep_dive_korean_stock_without_kis_credentials_uses_yfinance(
         patch("src.tools.disclosure.DisclosureTool", return_value=object()),
         patch("src.tools.flow.FlowTool", return_value=object()),
         patch("src.cli.main.MacroTool") as mock_macro_tool,
-        patch(
-            "src.cli.main.DeepDivePipeline", return_value=mock_pipeline
-        ) as mock_pipeline_cls,
+        patch("src.cli.main.DeepDivePipeline", return_value=mock_pipeline) as mock_pipeline_cls,
     ):
         result = await run_deep_dive("엘앤에프")
 

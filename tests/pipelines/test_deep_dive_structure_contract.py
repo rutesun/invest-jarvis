@@ -97,7 +97,6 @@ async def test_deep_dive_pipeline_passes_presented_structure_to_integrated_expla
     assert explanation_input.level_context["structure_summary"] == (
         presented.structure_summary or explanation_input.level_context["structure_summary"]
     )
-    assert (
-        explanation_input.level_context["structure_levels"]
-        == result["structure_levels"].model_dump(mode="json")
-    )
+    assert explanation_input.level_context["structure_levels"] == result[
+        "structure_levels"
+    ].model_dump(mode="json")
