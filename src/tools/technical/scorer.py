@@ -170,6 +170,7 @@ class TechnicalScorer:
                         change_drivers=_top_component_changes(
                             previous_components, daily.components
                         ),
+                        events=_daily_events(previous_components, daily.components),
                         cautions=daily.technical_verdict.cautions[:2],
                     )
                 )
@@ -194,6 +195,23 @@ def _top_component_drivers(components: dict[str, dict], limit: int = 2) -> list[
     scored = [(name, score) for name, score in _component_scores(components).items() if score != 0]
     scored.sort(key=lambda item: abs(item[1]), reverse=True)
     return [f"{name} {score:+d}" for name, score in scored[:limit]]
+
+
+def _daily_events(
+    previous_components: dict[str, dict] | None,
+    current_components: dict[str, dict],
+) -> list[str]:
+    """Signals that newly turned on today (onset vs. the prior day)."""
+    if previous_components is None:
+        return []
+    events: list[str] = []
+    for name, component in current_components.items():
+        previous = previous_components.get(name, {})
+        previous_signals = set(previous.get("signals") or [])
+        for signal in component.get("signals") or []:
+            if signal not in previous_signals:
+                events.append(signal)
+    return events
 
 
 def _top_component_changes(

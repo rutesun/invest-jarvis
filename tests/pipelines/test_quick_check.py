@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from src.core.models import ToolResult
-from src.pipelines.quick_check import QuickCheckPipeline
+from src.pipelines.quick_check import QuickCheckPipeline, _format_compact_history_point
 from src.tools.technical.models import (
     IndicatorSnapshot,
     ScoreHistoryPoint,
@@ -249,3 +249,40 @@ def test_quick_check_format_output_shows_all_minervini_conditions():
 
     assert "above_52w_low_30pct: 충족" in output
     assert "within_52w_high_25pct: 미충족" in output
+
+
+def test_compact_history_shows_events_before_changes():
+    point = {
+        "date": "2026-07-31",
+        "close": 311.23,
+        "component_raw_total": -55,
+        "adjusted_score": -55,
+        "verdict_action": "avoid",
+        "one_line_reason": "조정 점수가 -25점 미만으로 리스크 우위",
+        "new_entry_allowed": False,
+        "events": ["cRSI Hook Up (매수 시그널)"],
+        "change_drivers": ["cRSI 32.7→38.1 상승"],
+    }
+
+    line = _format_compact_history_point(point, None)
+
+    assert "이벤트: cRSI Hook Up (매수 시그널)" in line
+    assert line.index("이벤트:") < line.index("변화:")
+
+
+def test_compact_history_omits_events_segment_when_empty():
+    point = {
+        "date": "2026-08-03",
+        "close": 321.05,
+        "component_raw_total": -75,
+        "adjusted_score": -75,
+        "verdict_action": "avoid",
+        "one_line_reason": "조정 점수가 -25점 미만으로 리스크 우위",
+        "new_entry_allowed": False,
+        "events": [],
+        "change_drivers": ["cRSI 38.1→44.1 상승"],
+    }
+
+    line = _format_compact_history_point(point, None)
+
+    assert "이벤트:" not in line

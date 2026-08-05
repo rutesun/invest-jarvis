@@ -234,6 +234,9 @@ def _format_compact_history_point(
     adjusted = point["adjusted_score"]
     delta = _score_delta(adjusted, previous_point)
     details = []
+    events = point.get("events") or []
+    if events:
+        details.append(f"이벤트: {', '.join(events)}")
     changes = point.get("change_drivers") or []
     if changes:
         details.append(f"변화: {', '.join(changes)}")
@@ -263,6 +266,9 @@ def _format_detailed_history_point(
         ),
         f"  - reason: {point['one_line_reason']}",
     ]
+    events = point.get("events") or []
+    if events:
+        lines.append(f"  - 이벤트: {', '.join(events)}")
     changes = point.get("change_drivers") or []
     if changes:
         lines.append(f"  - 변화: {', '.join(changes)}")

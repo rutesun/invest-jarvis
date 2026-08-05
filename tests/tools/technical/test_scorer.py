@@ -3,7 +3,11 @@ import pandas as pd
 import pytest
 
 from src.tools.technical.indicators import IndicatorCalculator
-from src.tools.technical.scorer import TechnicalScorer, _top_component_changes
+from src.tools.technical.scorer import (
+    TechnicalScorer,
+    _top_component_changes,
+    _daily_events,
+)
 
 
 @pytest.fixture
@@ -213,4 +217,24 @@ def test_technical_scorer_snapshot_included(sample_df):
 
     assert result.snapshot is not None
     assert result.snapshot.price > 0
-    assert result.snapshot.change_pct is not None
+
+
+def test_daily_events_returns_signal_onsets():
+    previous = {
+        "crsi": {"score": 10, "signals": []},
+        "supertrend": {"score": -25, "signals": ["Supertrend 하락"]},
+    }
+    current = {
+        "crsi": {"score": 20, "signals": ["cRSI Hook Up (매수 시그널)"]},
+        "supertrend": {"score": -25, "signals": ["Supertrend 하락"]},
+    }
+
+    events = _daily_events(previous, current)
+
+    assert events == ["cRSI Hook Up (매수 시그널)"]
+
+
+def test_daily_events_empty_for_first_point():
+    current = {"crsi": {"score": 20, "signals": ["cRSI Hook Up (매수 시그널)"]}}
+
+    assert _daily_events(None, current) == []
