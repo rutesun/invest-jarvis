@@ -170,6 +170,7 @@ class TechnicalScorer:
                         change_drivers=_top_component_changes(
                             previous_components, daily.components
                         ),
+                        events=_daily_events(previous_components, daily.components),
                         cautions=daily.technical_verdict.cautions[:2],
                     )
                 )
@@ -196,6 +197,81 @@ def _top_component_drivers(components: dict[str, dict], limit: int = 2) -> list[
     return [f"{name} {score:+d}" for name, score in scored[:limit]]
 
 
+def _daily_events(
+    previous_components: dict[str, dict] | None,
+    current_components: dict[str, dict],
+) -> list[str]:
+    """Signals that newly turned on today (onset vs. the prior day)."""
+    if previous_components is None:
+        return []
+    events: list[str] = []
+    for name, component in current_components.items():
+        previous = previous_components.get(name, {})
+        previous_signals = set(previous.get("signals") or [])
+        for signal in component.get("signals") or []:
+            if signal not in previous_signals:
+                events.append(signal)
+    return events
+
+
+# Components whose score is driven by a continuous indicator value.
+# Narrate the actual indicator move instead of the score delta so that
+# one-time event bonuses (e.g. cRSI Hook) don't create phantom "악화/개선".
+_CONTINUOUS_COMPONENTS: dict[str, dict] = {
+    "crsi": {
+        "metric": "crsi",
+        "label": "cRSI",
+        "threshold": 3.0,
+        "decimals": 1,
+        "signed": False,
+        "suffix": "",
+    },
+    "velocity": {
+        "metric": "norm_slope",
+        "label": "SMA20 기울기",
+        "threshold": 0.02,
+        "decimals": 2,
+        "signed": True,
+        "suffix": "%",
+    },
+}
+
+
+def _continuous_value(name: str, component: dict) -> float | None:
+    spec = _CONTINUOUS_COMPONENTS.get(name)
+    if spec is None:
+        return None
+    metrics = component.get("metrics") or {}
+    value = metrics.get(spec["metric"])
+    return float(value) if value is not None else None
+
+
+def _format_continuous(name: str, prev_val: float, cur_val: float) -> str | None:
+    spec = _CONTINUOUS_COMPONENTS[name]
+    delta = cur_val - prev_val
+    sign_flip = (prev_val < 0 < cur_val) or (prev_val > 0 > cur_val)
+    if abs(delta) < spec["threshold"] and not sign_flip:
+        return None
+    if sign_flip:
+        direction = "상승전환" if cur_val > prev_val else "하락전환"
+    else:
+        direction = "상승" if delta > 0 else "하락"
+    decimals = spec["decimals"]
+    fmt = f"{{:+.{decimals}f}}" if spec["signed"] else f"{{:.{decimals}f}}"
+    suffix = spec["suffix"]
+    prev_text = fmt.format(prev_val) + suffix
+    cur_text = fmt.format(cur_val) + suffix
+    return f"{spec['label']} {prev_text}→{cur_text} {direction}"
+
+
+def _is_pure_rolloff(previous: dict, current: dict) -> bool:
+    previous_signals = set(previous.get("signals") or [])
+    current_signals = set(current.get("signals") or [])
+    disappeared = previous_signals - current_signals
+    appeared = current_signals - previous_signals
+    return bool(disappeared) and not appeared
+
+
 def _top_component_changes(
     previous_components: dict[str, dict] | None,
     current_components: dict[str, dict],
@@ -206,18 +282,37 @@ def _top_component_changes(
     previous_scores = _component_scores(previous_components)
     current_scores = _component_scores(current_components)
     component_names = set(previous_scores) | set(current_scores)
-    changes = [
-        (name, current_scores.get(name, 0) - previous_scores.get(name, 0))
-        for name in component_names
-    ]
-    changes = [(name, delta) for name, delta in changes if delta != 0]
-    changes.sort(key=lambda item: (-abs(item[1]), item[0]))
 
-    selected = changes[:limit]
-    remaining_delta = sum(delta for _, delta in changes[limit:])
+    continuous: list[str] = []
+    discrete_changes: list[tuple[str, int]] = []
+
+    for name in component_names:
+        previous = previous_components.get(name, {})
+        current = current_components.get(name, {})
+
+        if name in _CONTINUOUS_COMPONENTS:
+            prev_val = _continuous_value(name, previous)
+            cur_val = _continuous_value(name, current)
+            if prev_val is not None and cur_val is not None:
+                driver = _format_continuous(name, prev_val, cur_val)
+                if driver is not None:
+                    continuous.append(driver)
+                continue  # metrics present → continuous track owns this component
+
+        delta = current_scores.get(name, 0) - previous_scores.get(name, 0)
+        if delta == 0:
+            continue
+        if _is_pure_rolloff(previous, current):
+            continue
+        discrete_changes.append((name, delta))
+
+    discrete_changes.sort(key=lambda item: (-abs(item[1]), item[0]))
+    selected = discrete_changes[:limit]
+    remaining_delta = sum(delta for _, delta in discrete_changes[limit:])
     formatted = [f"{name} {delta:+d} {_change_label(delta)}" for name, delta in selected]
     if remaining_delta:
         formatted.append(f"기타 {remaining_delta:+d} {_change_label(remaining_delta)}")
+    formatted.extend(continuous)
     return formatted
 
 

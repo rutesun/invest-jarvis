@@ -96,6 +96,7 @@ class ScoreHistoryPoint(BaseModel):
     new_entry_allowed: bool | None = None
     driver_components: list[str] = Field(default_factory=list)
     change_drivers: list[str] = Field(default_factory=list)
+    events: list[str] = Field(default_factory=list)
     cautions: list[str] = Field(default_factory=list)
 
 

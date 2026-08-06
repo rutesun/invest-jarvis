@@ -4,6 +4,7 @@
 
 | Date | Type | Status | 변경 | PR | Record |
 |------|------|--------|------|----|--------|
+| 2026-08-06 | feat | Draft | 지표값 기반 change_drivers + 당일 이벤트 노출 — score history 서술을 점수 델타에서 지표값(cRSI·SMA20 기울기) 변화로 재작성, 일회성 이벤트 롤오프 유령 신호 억제, `이벤트:` 세그먼트 추가 (스코어링 로직 불변) | #54 | [change-drivers-indicator-based.md](change-drivers-indicator-based.md) |
 | 2026-07-27 | fix | Draft | Daily Report OpenAI strict schema 회귀 수정 + Notion 업로드 버그 — ThemeMapping dict→groups 배열, strict 계약 테스트, 카테고리 alias 6종, 해시태그 무한 루프·upload 날짜 필터·중복 방지 | #53 | [daily-report-strict-schema-fix.md](daily-report-strict-schema-fix.md) |
 | 2026-07-24 | feat | Draft | LLM 모델 설정 일원화 — config.yaml llm 섹션 단일 소스, GPT-5.6 전환(terra/luna/sol), --provider·STOCK_REPORT_* env 삭제, StageLLMConfig 통합 | #52 | [llm-model-config-unification.md](llm-model-config-unification.md) |
 | 2026-07-22 | feat | Merged | Unified Technical Analysis Contract — check/analyze/brief 공통 3년 계약, 다중 티커 check, 설명 전용 종합 해설(ActionableSignal 제거), report ticker 제거 | #51 | [unified-technical-analysis-contract.md](unified-technical-analysis-contract.md) |

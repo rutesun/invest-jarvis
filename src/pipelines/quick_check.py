@@ -233,20 +233,22 @@ def _format_compact_history_point(
 ) -> str:
     adjusted = point["adjusted_score"]
     delta = _score_delta(adjusted, previous_point)
-    details = []
-    changes = point.get("change_drivers") or []
-    if changes:
-        details.append(f"변화: {', '.join(changes)}")
+    header = (
+        f"- {point['date']}: close {point['close']:.2f}, "
+        f"raw {point['component_raw_total']}, adjusted {adjusted}{delta}"
+    )
     entry = _entry_transition(point, previous_point)
     if entry:
-        details.append(f"신규진입: {entry}")
+        header += f" | 신규진입: {entry}"
 
-    suffix = f" | {' | '.join(details)}" if details else ""
-    return (
-        f"- {point['date']}: close {point['close']:.2f}, "
-        f"raw {point['component_raw_total']}, adjusted {adjusted}{delta}, "
-        f"{point['verdict_action']} — {point['one_line_reason']}{suffix}"
-    )
+    lines = [header, f"  - {point['verdict_action']} — {point['one_line_reason']}"]
+    events = point.get("events") or []
+    if events:
+        lines.append(f"  - 이벤트: {', '.join(events)}")
+    changes = point.get("change_drivers") or []
+    if changes:
+        lines.append(f"  - 변화: {', '.join(changes)}")
+    return "\n".join(lines)
 
 
 def _format_detailed_history_point(
@@ -263,6 +265,9 @@ def _format_detailed_history_point(
         ),
         f"  - reason: {point['one_line_reason']}",
     ]
+    events = point.get("events") or []
+    if events:
+        lines.append(f"  - 이벤트: {', '.join(events)}")
     changes = point.get("change_drivers") or []
     if changes:
         lines.append(f"  - 변화: {', '.join(changes)}")
