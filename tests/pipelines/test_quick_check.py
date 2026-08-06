@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from src.core.models import ToolResult
-from src.pipelines.quick_check import QuickCheckPipeline, _format_compact_history_point
+from src.pipelines.quick_check import QuickCheckPipeline, _format_compact_history_point, _format_detailed_history_point
 from src.tools.technical.models import (
     IndicatorSnapshot,
     ScoreHistoryPoint,
@@ -286,3 +286,42 @@ def test_compact_history_omits_events_segment_when_empty():
     line = _format_compact_history_point(point, None)
 
     assert "이벤트:" not in line
+
+
+def test_detailed_history_shows_events_before_changes():
+    point = {
+        "date": "2026-07-31",
+        "close": 311.23,
+        "component_raw_total": -55,
+        "adjusted_score": -55,
+        "verdict_action": "avoid",
+        "one_line_reason": "조정 점수가 -25점 미만으로 리스크 우위",
+        "new_entry_allowed": False,
+        "events": ["cRSI Hook Up (매수 시그널)"],
+        "change_drivers": ["cRSI 32.7→38.1 상승"],
+    }
+
+    lines = _format_detailed_history_point(point, None)
+    joined = "\n".join(lines)
+
+    event_line = next(line for line in lines if "이벤트:" in line)
+    assert event_line == "  - 이벤트: cRSI Hook Up (매수 시그널)"
+    assert joined.index("이벤트:") < joined.index("변화:")
+
+
+def test_detailed_history_omits_events_line_when_empty():
+    point = {
+        "date": "2026-08-03",
+        "close": 321.05,
+        "component_raw_total": -75,
+        "adjusted_score": -75,
+        "verdict_action": "avoid",
+        "one_line_reason": "조정 점수가 -25점 미만으로 리스크 우위",
+        "new_entry_allowed": False,
+        "events": [],
+        "change_drivers": ["cRSI 38.1→44.1 상승"],
+    }
+
+    lines = _format_detailed_history_point(point, None)
+
+    assert not any("이벤트:" in line for line in lines)
