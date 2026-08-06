@@ -238,3 +238,65 @@ def test_daily_events_empty_for_first_point():
     current = {"crsi": {"score": 20, "signals": ["cRSI Hook Up (매수 시그널)"]}}
 
     assert _daily_events(None, current) == []
+
+
+def test_change_drivers_narrate_crsi_value_not_score_delta():
+    previous = {
+        "crsi": {
+            "score": 20,
+            "signals": ["cRSI Hook Up (매수 시그널)"],
+            "metrics": {"crsi": 38.1},
+        },
+        "supertrend": {"score": -25, "signals": ["Supertrend 하락"]},
+    }
+    current = {
+        "crsi": {"score": 0, "signals": [], "metrics": {"crsi": 44.1}},
+        "supertrend": {"score": -25, "signals": ["Supertrend 하락"]},
+    }
+
+    changes = _top_component_changes(previous, current)
+
+    assert "cRSI 38.1→44.1 상승" in changes
+    assert not any("crsi" in c and "악화" in c for c in changes)
+
+
+def test_change_drivers_crsi_below_threshold_is_silent():
+    previous = {"crsi": {"score": 0, "signals": [], "metrics": {"crsi": 40.0}}}
+    current = {"crsi": {"score": 0, "signals": [], "metrics": {"crsi": 41.5}}}
+
+    assert _top_component_changes(previous, current) == []
+
+
+def test_change_drivers_velocity_sign_flip():
+    previous = {"velocity": {"score": -10, "signals": [], "metrics": {"norm_slope": -0.10}}}
+    current = {"velocity": {"score": 15, "signals": ["상승 전환점"], "metrics": {"norm_slope": 0.05}}}
+
+    changes = _top_component_changes(previous, current)
+
+    assert "SMA20 기울기 -0.10%→+0.05% 상승전환" in changes
+
+
+def test_change_drivers_suppress_pure_rolloff():
+    previous = {
+        "supertrend": {
+            "score": 35,
+            "signals": ["Supertrend 상승", "Supertrend 매수 전환"],
+        }
+    }
+    current = {"supertrend": {"score": 20, "signals": ["Supertrend 상승"]}}
+
+    assert _top_component_changes(previous, current) == []
+
+
+def test_change_drivers_keep_delta_on_new_signal():
+    previous = {"supertrend": {"score": 20, "signals": ["Supertrend 상승"]}}
+    current = {
+        "supertrend": {
+            "score": 35,
+            "signals": ["Supertrend 상승", "Supertrend 매수 전환"],
+        }
+    }
+
+    changes = _top_component_changes(previous, current)
+
+    assert changes == ["supertrend +15 개선"]
