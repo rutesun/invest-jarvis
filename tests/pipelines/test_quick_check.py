@@ -288,6 +288,47 @@ def test_compact_history_omits_events_segment_when_empty():
     assert "이벤트:" not in line
 
 
+def test_compact_history_renders_multiline_layout():
+    point = {
+        "date": "2026-08-05",
+        "close": 318.43,
+        "component_raw_total": -20,
+        "adjusted_score": -55,
+        "verdict_action": "avoid",
+        "one_line_reason": "거래량이 동반된 이탈로 신규 진입 금지",
+        "new_entry_allowed": False,
+        "events": ["약세/보합", "Egg (추가 하락 경고)", "중고위험"],
+        "change_drivers": ["minervini -45 악화", "volume -30 악화"],
+    }
+
+    lines = _format_compact_history_point(point, None).split("\n")
+
+    assert lines[0] == "- 2026-08-05: close 318.43, raw -20, adjusted -55 | 신규진입: no"
+    assert lines[1] == "  - avoid — 거래량이 동반된 이탈로 신규 진입 금지"
+    assert lines[2] == "  - 이벤트: 약세/보합, Egg (추가 하락 경고), 중고위험"
+    assert lines[3] == "  - 변화: minervini -45 악화, volume -30 악화"
+
+
+def test_compact_history_header_omits_entry_when_unknown():
+    point = {
+        "date": "2026-08-05",
+        "close": 318.43,
+        "component_raw_total": -20,
+        "adjusted_score": -55,
+        "verdict_action": "avoid",
+        "one_line_reason": "리스크 우위",
+        "new_entry_allowed": None,
+        "events": [],
+        "change_drivers": [],
+    }
+
+    lines = _format_compact_history_point(point, None).split("\n")
+
+    assert lines[0] == "- 2026-08-05: close 318.43, raw -20, adjusted -55"
+    assert lines[1] == "  - avoid — 리스크 우위"
+    assert len(lines) == 2
+
+
 def test_detailed_history_shows_events_before_changes():
     point = {
         "date": "2026-07-31",
