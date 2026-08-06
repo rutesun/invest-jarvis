@@ -300,3 +300,56 @@ def test_change_drivers_keep_delta_on_new_signal():
     changes = _top_component_changes(previous, current)
 
     assert changes == ["supertrend +15 개선"]
+
+
+def test_alab_scenario_removes_crsi_phantom_and_shows_events():
+    # 7/31: cRSI Hook Up 발생, cRSI 32.7→38.1
+    d0731_prev = {
+        "crsi": {"score": 10, "signals": [], "metrics": {"crsi": 32.7}},
+        "supertrend": {"score": -25, "signals": ["Supertrend 하락"]},
+        "minervini": {"score": -20, "signals": []},
+    }
+    d0731 = {
+        "crsi": {
+            "score": 20,
+            "signals": ["cRSI Hook Up (매수 시그널)"],
+            "metrics": {"crsi": 38.1},
+        },
+        "supertrend": {"score": -25, "signals": ["Supertrend 하락"]},
+        "minervini": {"score": -20, "signals": []},
+    }
+    # 8/03: Hook Up 롤오프(점수 20→0), cRSI 38.1→44.1 계속 상승
+    d0803 = {
+        "crsi": {"score": 0, "signals": [], "metrics": {"crsi": 44.1}},
+        "supertrend": {"score": -25, "signals": ["Supertrend 하락"]},
+        "minervini": {"score": -20, "signals": []},
+    }
+    # 8/04: Supertrend 매수 전환, minervini 강세 전환
+    d0804 = {
+        "crsi": {"score": 0, "signals": [], "metrics": {"crsi": 52.9}},
+        "supertrend": {
+            "score": 40,
+            "signals": ["Supertrend 상승", "Supertrend 매수 전환"],
+        },
+        "minervini": {"score": 25, "signals": []},
+    }
+
+    # 7/31: 이벤트 Hook Up, 변화 cRSI 상승, crsi 악화 없음
+    ev_0731 = _daily_events(d0731_prev, d0731)
+    ch_0731 = _top_component_changes(d0731_prev, d0731)
+    assert ev_0731 == ["cRSI Hook Up (매수 시그널)"]
+    assert "cRSI 32.7→38.1 상승" in ch_0731
+    assert not any("악화" in c for c in ch_0731)
+
+    # 8/03: 이벤트 없음, 롤오프 억제, 지표 상승만
+    ev_0803 = _daily_events(d0731, d0803)
+    ch_0803 = _top_component_changes(d0731, d0803)
+    assert ev_0803 == []
+    assert ch_0803 == ["cRSI 38.1→44.1 상승"]
+
+    # 8/04: 이벤트 Supertrend 매수 전환, 이산 개선 서술
+    ev_0804 = _daily_events(d0803, d0804)
+    ch_0804 = _top_component_changes(d0803, d0804)
+    assert ev_0804 == ["Supertrend 상승", "Supertrend 매수 전환"]
+    assert "supertrend +65 개선" in ch_0804
+    assert "minervini +45 개선" in ch_0804
