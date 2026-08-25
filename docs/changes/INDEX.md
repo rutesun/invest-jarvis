@@ -4,6 +4,7 @@
 
 | Date | Type | Status | 변경 | PR | Record |
 |------|------|--------|------|----|--------|
+| 2026-08-25 | feat | Draft | 턴어라운드 신호 (발굴·해석 보조) — 4마커 점수화 순수함수 + check/screen(`--turnaround`)/brief 배선. 예측 알파 아님(나이브 기준선 미통과), 후보 표면화+마커+check확인+손절선 제공, 판단은 사용자 | #{PR 번호} | [turnaround-signal.md](turnaround-signal.md) |
 | 2026-08-06 | feat | Draft | 지표값 기반 change_drivers + 당일 이벤트 노출 — score history 서술을 점수 델타에서 지표값(cRSI·SMA20 기울기) 변화로 재작성, 일회성 이벤트 롤오프 유령 신호 억제, `이벤트:` 세그먼트 추가 (스코어링 로직 불변) | #54 | [change-drivers-indicator-based.md](change-drivers-indicator-based.md) |
 | 2026-07-27 | fix | Draft | Daily Report OpenAI strict schema 회귀 수정 + Notion 업로드 버그 — ThemeMapping dict→groups 배열, strict 계약 테스트, 카테고리 alias 6종, 해시태그 무한 루프·upload 날짜 필터·중복 방지 | #53 | [daily-report-strict-schema-fix.md](daily-report-strict-schema-fix.md) |
 | 2026-07-24 | feat | Draft | LLM 모델 설정 일원화 — config.yaml llm 섹션 단일 소스, GPT-5.6 전환(terra/luna/sol), --provider·STOCK_REPORT_* env 삭제, StageLLMConfig 통합 | #52 | [llm-model-config-unification.md](llm-model-config-unification.md) |
