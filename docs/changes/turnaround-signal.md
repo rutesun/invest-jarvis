@@ -63,5 +63,5 @@ After:  jarvis screen  → 위 + "턴어라운드 발굴 후보" 표
 - 설계/검증: `docs/superpowers/specs/2026-08-24-bottom-watch-design.md` (bottom_watch 폐기·검증 기록)
 - 결정 이력: `docs/worklog/bottom-watch-signal.md`, `docs/ROADMAP.md` Task 15
 - ADR: 없음
-- FEATURES.md: {확인 필요 — 턴어라운드 신호 항목 추가 여부는 사용자 확인}
+- FEATURES.md: §11 턴어라운드 신호 추가
 - 후속: change record PR 번호 반영, 마커/임계값 실사용 튜닝
