@@ -1,4 +1,5 @@
 import json
+import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -8,6 +9,9 @@ import yaml
 
 from src.core.interfaces import BaseProvider
 from src.providers.kis_models import KISToken
+
+
+logger = logging.getLogger(__name__)
 
 
 # KIS FID_ORG_ADJ_PRC: "0" = 수정주가(split/dividend adjusted), "1" = 원주가(unadjusted).
@@ -307,10 +311,19 @@ class KISProvider(BaseProvider):
     async def get_investor_ranking(
         self, investor_type: str = "foreign", top_n: int = 30
     ) -> list[dict]:
-        """Get foreign/institution net buy ranking for Korean stocks."""
+        """Get foreign/institution net buy ranking for Korean stocks.
+
+        외국인기관 매매종목가집계(FHPTJ04400000)는 한 응답에 종목별 외국인·기관
+        순매수를 모두 담아 준다. 따라서 원하는 투자자(frgn/orgn)의 순매수 금액으로
+        클라이언트 정렬해 순매수 상위만 반환한다.
+
+        경계 계약: 이 엔드포인트는 FID_COND_SCR_DIV_CODE="16449"와
+        FID_RANK_SORT_CLS_CODE를 요구한다(과거 "16174"/누락은 rt_cd!=0 또는
+        빈 output을 유발). rt_cd != "0"이면 조용히 빈 리스트를 내리지 않고
+        경고 후 반환한다.
+        """
         token = await self._get_access_token()
         url = f"{self.BASE_URL}/uapi/domestic-stock/v1/quotations/foreign-institution-total"
-        fid_code = "1" if investor_type == "foreign" else "2"
         headers = {
             "Authorization": f"{token.token_type} {token.access_token}",
             "appkey": self.app_key,
@@ -320,17 +333,11 @@ class KISProvider(BaseProvider):
         }
         params = {
             "FID_COND_MRKT_DIV_CODE": "V",
-            "FID_COND_SCR_DIV_CODE": "16174",
+            "FID_COND_SCR_DIV_CODE": "16449",
             "FID_INPUT_ISCD": "0000",
             "FID_DIV_CLS_CODE": "0",
-            "FID_BLNG_CLS_CODE": "0",
-            "FID_TRGT_CLS_CODE": "111111111",
-            "FID_TRGT_EXLS_CLS_CODE": "000000",
-            "FID_INPUT_PRICE_1": "",
-            "FID_INPUT_PRICE_2": "",
-            "FID_VOL_CNT": "",
-            "FID_INPUT_DATE_1": "",
-            "FID_ETC_CLS_CODE": fid_code,
+            "FID_RANK_SORT_CLS_CODE": "0",  # 0: 금액순
+            "FID_ETC_CLS_CODE": "0",
         }
 
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -338,17 +345,36 @@ class KISProvider(BaseProvider):
             response.raise_for_status()
             data = response.json()
 
-        results = []
-        for item in data.get("output", [])[:top_n]:
-            results.append(
-                {
-                    "ticker": item.get("mksc_shrn_iscd", ""),
-                    "name": item.get("hts_kor_isnm", ""),
-                    "net_buy_volume": int(item.get("frgn_ntby_qty", 0)),
-                    "net_buy_amount": int(item.get("frgn_ntby_tr_pbmn", 0)),
-                }
+        if str(data.get("rt_cd")) != "0":
+            logger.warning(
+                "get_investor_ranking rt_cd=%s msg=%s (파라미터 계약 위반 가능)",
+                data.get("rt_cd"),
+                data.get("msg1"),
             )
-        return results
+            return []
+
+        qty_key = "frgn_ntby_qty" if investor_type == "foreign" else "orgn_ntby_qty"
+        amount_key = "frgn_ntby_tr_pbmn" if investor_type == "foreign" else "orgn_ntby_tr_pbmn"
+
+        def _to_int(value) -> int:
+            try:
+                return int(str(value).strip() or 0)
+            except (ValueError, AttributeError):
+                return 0
+
+        rows = [
+            {
+                "ticker": item.get("mksc_shrn_iscd", ""),
+                "name": item.get("hts_kor_isnm", ""),
+                "net_buy_volume": _to_int(item.get(qty_key, 0)),
+                "net_buy_amount": _to_int(item.get(amount_key, 0)),
+            }
+            for item in data.get("output", [])
+        ]
+        # 해당 투자자 순매수(>0)만, 금액 큰 순
+        buys = [r for r in rows if r["net_buy_amount"] > 0]
+        buys.sort(key=lambda r: r["net_buy_amount"], reverse=True)
+        return buys[:top_n]
 
     async def get_us_ranking_updown(
         self, exchange: str = "NAS", direction: str = "up", top_n: int = 30
