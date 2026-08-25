@@ -29,6 +29,7 @@ from src.tools.brief.scoring import (
 )
 from src.tools.disclosure import extract_kr_code, is_korean_ticker
 from src.tools.playbook.holdings import HoldingEntry, HoldingsConfig
+from src.tools.technical.turnaround import score_turnaround
 
 
 logger = logging.getLogger(__name__)
@@ -129,6 +130,9 @@ class BriefPipeline:
                 markers.append(surge)
                 bonus += BONUS_SURGE
 
+            turnaround_signal = score_turnaround(technical.raw_dataframe)
+            turnaround = turnaround_signal.summary_line() if turnaround_signal.score > 0 else None
+
             return BriefItem(
                 ticker=ticker,
                 kind=kind,
@@ -152,6 +156,7 @@ class BriefPipeline:
                 score_history=[point.model_dump() for point in technical.score_history],
                 score_history_warning=technical.score_history_warning,
                 remaining_condition=remaining_condition,
+                turnaround=turnaround,
             )
         except Exception as e:
             logger.warning("brief 종목 분석 실패 %s: %s", ticker, e)

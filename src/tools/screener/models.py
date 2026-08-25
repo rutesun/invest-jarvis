@@ -38,3 +38,8 @@ class ScreenerEvidence(BaseModel):
     total_score: float = 0.0  # accumulation + volume_burst + diversity (excludes up_days)
     vol_ratio: float = 0.0
     rank: int = 0
+    # 턴어라운드 신호 (예측 알파 아님 — 발굴·해석 보조)
+    turnaround_score: int = 0
+    turnaround_markers: list[str] = []
+    turnaround_candidate: bool = False
+    turnaround_confirmed: bool = False

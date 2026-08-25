@@ -1165,7 +1165,7 @@ async def run_brief(use_llm: bool) -> dict:
     return result
 
 
-async def run_screen(market: str) -> dict:
+async def run_screen(market: str, turnaround_only: bool = False) -> dict:
     """Run screener pipeline."""
     naver_provider = NaverProvider()
     kis_provider = None
@@ -1193,19 +1193,22 @@ async def run_screen(market: str) -> dict:
         news_tool=news_tool,
     )
 
-    return await pipeline.run(market)
+    return await pipeline.run(market, turnaround_only=turnaround_only)
 
 
 @app.command()
 def screen(
     market: str = typer.Option("all", "--market", "-m", help="kr, us, or all"),
     notion: bool = typer.Option(False, "--notion", help="Upload to Notion"),
+    turnaround: bool = typer.Option(
+        False, "--turnaround", help="턴어라운드 발굴 후보에 집중(리더 표 생략)"
+    ),
 ):
     """Scan market for leading stocks and themes."""
     console.print(f"[bold]Scanning {market} market...[/bold]\n")
 
     try:
-        result = asyncio.run(run_screen(market))
+        result = asyncio.run(run_screen(market, turnaround_only=turnaround))
 
         # Format and display
         pipeline = ScreenerPipeline(

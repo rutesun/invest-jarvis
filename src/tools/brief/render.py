@@ -131,6 +131,9 @@ def _item_section(item: BriefItem) -> list[str]:
             verdict_line = f"{verdict_line} — {' / '.join(detail_parts)}"
         lines.append(verdict_line)
 
+    if item.turnaround:
+        lines.append(f"- **{item.turnaround}**")
+
     # 사이징 (게이트 통과 시)
     plan = item.verdict.position_plan if item.verdict else None
     if plan is not None and plan.error is None:
