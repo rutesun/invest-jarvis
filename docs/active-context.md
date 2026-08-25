@@ -1,20 +1,24 @@
 # Active Context
 
-- **갱신**: 2026-08-25 09:31
-- **Branch**: feature/bottom-watch-signal
-- **진행 단계**: 방향 재구성 완료(턴어라운드 발굴 깔때기) → 검증 관문 대기
+- **갱신**: 2026-08-25 (턴어라운드 구현 완료)
+- **Branch**: feature/bottom-watch-signal (워크트리: .worktrees/bottom-watch-signal)
+- **진행 단계**: 턴어라운드 신호 3표면 배선 완료 → change-record/PR 대기
 
 ## 지금까지
-- check 로직 점검 → 추세 확인형이라 바닥/평균회귀 진입을 구조적으로 못 잡음 확인.
-- bottom_watch(역추세 바닥 플래그) 설계 → 편향 없는 표본 §6 검증 실패(과적합, 시드 2종목 외 거의 0건) → 보류.
-- 사례 6종목(엘앤에프·실리콘투·PGY·HOOD·삼성전기·삼성전자) 분석 → 실제 목표는 "추세 확인 후 이격 벌어지기 전 진입". 이격은 예측 아닌 리스크 지표임을 실측.
-- Ouroboros 인터뷰로 방향 가치 재검토 → **깔때기 구조로 재구성**: 턴어라운드 발굴(#2 우선) → 소량 테스트 → check 확인 시 증량/손절.
+- bottom_watch(역추세 바닥 예측 신호) → 편향 없는 표본 검증 실패(과적합). 보류.
+- 재검토(Ouroboros 인터뷰) + 검증 관문 실행 → 턴어라운드 스코어도 나이브 기준선 미통과(예측 알파 없음). 단, check 확인 분리는 대부분 기계적 상관.
+- 사용자 결정: "판단(기사·시장)은 내가, 신호만 줘" → 턴어라운드를 **발굴·해석 보조 도구**로 구현(예측 아님).
+- 구현 완료:
+  - 코어 `src/tools/technical/turnaround.py` — 4마커 as-of 안전 점수화, TurnaroundSignal.
+  - check(quick_check 한 줄), screen(--turnaround 발굴 모드), brief(BriefItem.turnaround) 배선.
+  - 테스트 14개, 전체 1305 passed. ruff 통과. 커밋 02debca.
 
-## 핵심 결정 (2026-08-25)
-- 우선순위: 기존 `src/tools/screener/`에 '턴어라운드 발굴 모드' 추가.
-- 턴 정의: 4마커(급락후 과매도반등 / 20·50일선 재탈·지지 / 거래량 수반 양봉 / 저점 높이기)를 **점수화·순위**(AND 아님). "소량 테스트"라 recall 중심 → bottom_watch 정밀도 벽 회피.
+## 핵심 결정
+- 예측 알파 아님을 docstring·CLI 문구에 명시. 마커 내역+check확인+손절선 제공, 최종 판단은 사용자.
+- 4마커는 AND 아니라 점수화(recall 중심), threshold 2.
 
 ## 다음 행동
-1. **검증 관문 먼저**: 턴어라운드 스코어 상위 바스켓의 신호 후 수익률 분포가 나이브 기준선(3개월 저점 대비 +10% 반등한 아무 종목)을 넓은 유니버스에서 이기는지 프로토타입 검증. 통과해야 스펙/구현.
-2. 통과 시 brainstorming→스펙(유니버스·마커 가중치·출력 포맷·검증).
-- 참고: bottom_watch 스펙/검증 결과는 `docs/superpowers/specs/2026-08-24-bottom-watch-design.md`, 결정 이력은 `docs/worklog/bottom-watch-signal.md`.
+- change-record 작성(docs/changes/) + INDEX 갱신 → pre-push 통과.
+- PR 생성(gec-create-pr) — main 병합.
+- (선택) 마커 가중치/임계값 실사용 튜닝.
+- 참고: `docs/superpowers/specs/2026-08-24-bottom-watch-design.md`, `docs/worklog/bottom-watch-signal.md`, ROADMAP Task 15.
