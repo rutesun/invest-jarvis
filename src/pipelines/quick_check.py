@@ -2,6 +2,7 @@ from typing import Any
 
 from src.tools.technical.presentation import format_long_sma
 from src.tools.technical.tool import TechnicalAnalysisTool
+from src.tools.technical.turnaround import TurnaroundSignal, score_turnaround
 
 
 class QuickCheckPipeline:
@@ -59,9 +60,12 @@ class QuickCheckPipeline:
 
         verdict = tech.technical_verdict.model_dump() if tech.technical_verdict else None
 
+        turnaround = score_turnaround(tech.raw_dataframe)
+
         return {
             "ticker": ticker,
             "success": True,
+            "turnaround": _turnaround_dict(turnaround),
             "price": snapshot.price,
             "change_pct": snapshot.change_pct,
             "total_score": tech.total_score,
@@ -126,6 +130,10 @@ class QuickCheckPipeline:
                 lines.append(f"- Invalidation: {verdict['invalidation_level']:.2f}")
             if verdict.get("score_trend_summary"):
                 lines.append(f"- Trend: {verdict['score_trend_summary']}")
+
+        turnaround = result.get("turnaround")
+        if turnaround and turnaround.get("score", 0) > 0:
+            lines.extend(["", "### 턴어라운드 신호", f"- {turnaround['summary']}"])
 
         history = result.get("score_history") or []
         if history:
@@ -225,6 +233,19 @@ class QuickCheckPipeline:
                 lines.append(f"- {warning}")
 
         return "\n".join(lines)
+
+
+def _turnaround_dict(signal: TurnaroundSignal) -> dict[str, Any]:
+    """TurnaroundSignal을 파이프라인 출력 dict로 변환 (check/brief 공용)."""
+    return {
+        "score": signal.score,
+        "markers": signal.marker_labels,
+        "is_candidate": signal.is_candidate,
+        "confirmed": signal.confirmed,
+        "stop_level": signal.stop_level,
+        "stop_pct": signal.stop_pct,
+        "summary": signal.summary_line(),
+    }
 
 
 def _format_compact_history_point(

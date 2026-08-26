@@ -21,11 +21,12 @@ class ScreenerPipeline:
         self.evidence_collector = evidence_collector
         self.news_tool = news_tool
 
-    async def run(self, market: str = "all") -> dict[str, Any]:
+    async def run(self, market: str = "all", turnaround_only: bool = False) -> dict[str, Any]:
         """Run screener pipeline.
 
         Args:
             market: Market to screen ("all", "kr", "us")
+            turnaround_only: True면 턴어라운드 후보 발굴에 집중(리더 표 생략)
 
         Returns:
             Dictionary with market results including leaders, themes, and news
@@ -59,6 +60,13 @@ class ScreenerPipeline:
         kr_scored = [item for item in scored if item.stock.market in ("KOSPI", "KOSDAQ")]
         us_scored = [item for item in scored if item.stock.market not in ("KOSPI", "KOSDAQ")]
 
+        # 5b. 턴어라운드 발굴 후보 (마커 수 → 총점 순)
+        turnaround_candidates = sorted(
+            (item for item in scored if item.turnaround_candidate),
+            key=lambda x: (x.turnaround_score, x.total_score),
+            reverse=True,
+        )[:30]
+
         # 6. News for top 10 (KR only)
         top_stocks = kr_scored[:10]
         news = await self._fetch_news_for_top(top_stocks)
@@ -68,6 +76,8 @@ class ScreenerPipeline:
             "timestamp": datetime.now(),
             "kr_leaders": kr_scored[:50],
             "us_leaders": us_scored[:50],
+            "turnaround_candidates": turnaround_candidates,
+            "turnaround_only": turnaround_only,
             "naver_themes": naver_themes,
             "themes": theme_ranking[:10],
             "news": news,
@@ -191,6 +201,27 @@ class ScreenerPipeline:
                     f"| {i} | {t['name']} | {rate:+.1f}% | {t['stock_count']} | {stocks_str} |"
                 )
             lines.append("")
+
+        # 턴어라운드 발굴 후보 (예측 알파 아님 — 기사·시장 판단은 사용자 몫)
+        candidates = result.get("turnaround_candidates", [])
+        if candidates:
+            lines.append("## 턴어라운드 발굴 후보")
+            lines.append("> 예측 신호 아님. 후보 표면화용 — 기사·시장 상황은 직접 판단하세요.")
+            lines.append("| # | 종목 | 시장 | 스코어 | 마커 | check확인 |")
+            lines.append("|---|------|------|--------|------|-----------|")
+            for i, item in enumerate(candidates, 1):
+                s = item.stock
+                markers = " · ".join(item.turnaround_markers)
+                confirmed = "확인" if item.turnaround_confirmed else "미확인"
+                lines.append(
+                    f"| {i} | {s.name} | {s.market} | {item.turnaround_score}/4 | "
+                    f"{markers} | {confirmed} |"
+                )
+            lines.append("")
+
+        # turnaround_only 모드면 리더 표는 생략(발굴에 집중)
+        if result.get("turnaround_only"):
+            return "\n".join(lines)
 
         # Leaders - separate KR and US
         kr_leaders = result.get("kr_leaders", [])
