@@ -4,6 +4,7 @@
 
 | Date | Type | Status | 변경 | PR | Record |
 |------|------|--------|------|----|--------|
+| 2026-08-26 | feat | Draft | volume 완만 증가 가점 티어 — 상승일 1.2x<vol_ratio≤1.5x 구간에 +3점·"거래량 완만 증가" 근거 추가. 돌파일(예: 제닉 1.42x)이 0점으로 묻히던 사각지대 보완, 급증 티어·기존 패턴 로직 불변 | #{PR번호} | [volume-moderate-tier.md](volume-moderate-tier.md) |
 | 2026-08-26 | feat | Draft | brief 종목명 리졸버 — `TickerNameResolver`(yfinance get_quote + 180일 캐시)로 ticker→종목명 조회, brief에 "종목명 (코드)" 표기(실패 시 코드 fallback), quote_type로 오염 이름 필터 | #56 | [brief-name-resolver.md](brief-name-resolver.md) |
 | 2026-08-25 | fix | Draft | 외국인·기관 순매수 순위 복구 — `get_investor_ranking`이 화면코드 16174(오류)+정렬 파라미터 누락으로 항상 0건 조용히 반환하던 버그 수정(16449+FID_RANK_SORT_CLS_CODE, rt_cd 가드, 투자자별 정렬) | #55 | [kis-investor-ranking-fix.md](kis-investor-ranking-fix.md) |
 | 2026-08-25 | feat | Draft | 턴어라운드 신호 (발굴·해석 보조) — 4마커 점수화 순수함수 + check/screen(`--turnaround`)/brief 배선. 예측 알파 아님(나이브 기준선 미통과), 후보 표면화+마커+check확인+손절선 제공, 판단은 사용자 | #55 | [turnaround-signal.md](turnaround-signal.md) |
