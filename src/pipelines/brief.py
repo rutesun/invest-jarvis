@@ -17,6 +17,7 @@ from langchain_core.language_models import BaseChatModel
 
 from src.llm.analyzer import generate_brief_narratives
 from src.tools.brief.models import BriefItem
+from src.tools.brief.name_resolver import TickerNameResolver
 from src.tools.brief.render import render_markdown
 from src.tools.brief.scoring import (
     BONUS_STOP_PROXIMITY,
@@ -47,6 +48,7 @@ class BriefPipeline:
         disclosure_tool,
         flow_tool,
         llm: BaseChatModel | None = None,
+        name_resolver: TickerNameResolver | None = None,
     ):
         self.technical_tools = technical_tools
         self.playbook_engine = playbook_engine
@@ -55,6 +57,7 @@ class BriefPipeline:
         self.disclosure_tool = disclosure_tool
         self.flow_tool = flow_tool
         self.llm = llm
+        self.name_resolver = name_resolver or TickerNameResolver()
 
     async def run(self, config: HoldingsConfig) -> dict[str, Any]:
         date = datetime.now()
@@ -85,8 +88,9 @@ class BriefPipeline:
         self, ticker: str, holding: HoldingEntry | None, note: str | None
     ) -> BriefItem:
         kind = "holding" if holding is not None else "watch"
+        tool = self.technical_tools["KR" if is_korean_ticker(ticker) else "US"]
+        name = await self.name_resolver.resolve(ticker)
         try:
-            tool = self.technical_tools["KR" if is_korean_ticker(ticker) else "US"]
             tech_result = await tool.execute(ticker)
             if not tech_result.success:
                 raise RuntimeError(f"기술분석 실패: {tech_result.error}")
@@ -136,6 +140,7 @@ class BriefPipeline:
             return BriefItem(
                 ticker=ticker,
                 kind=kind,
+                name=name,
                 action=action,
                 bucket=bucket_for(kind, action, has_warn_signals=has_warn),
                 bonus=bonus,
@@ -163,6 +168,7 @@ class BriefPipeline:
             return BriefItem(
                 ticker=ticker,
                 kind=kind,
+                name=name,
                 action="error",
                 bucket=bucket_for(kind, "error"),
                 note=note,
