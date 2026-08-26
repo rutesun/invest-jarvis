@@ -4,7 +4,7 @@
 
 | Date | Type | Status | 변경 | PR | Record |
 |------|------|--------|------|----|--------|
-| 2026-08-26 | feat | Draft | brief 종목명 리졸버 — `TickerNameResolver`(yfinance get_quote + 180일 캐시)로 ticker→종목명 조회, brief에 "종목명 (코드)" 표기(실패 시 코드 fallback), quote_type로 오염 이름 필터 | #{PR 번호} | [brief-name-resolver.md](brief-name-resolver.md) |
+| 2026-08-26 | feat | Draft | brief 종목명 리졸버 — `TickerNameResolver`(yfinance get_quote + 180일 캐시)로 ticker→종목명 조회, brief에 "종목명 (코드)" 표기(실패 시 코드 fallback), quote_type로 오염 이름 필터 | #56 | [brief-name-resolver.md](brief-name-resolver.md) |
 | 2026-08-25 | fix | Draft | 외국인·기관 순매수 순위 복구 — `get_investor_ranking`이 화면코드 16174(오류)+정렬 파라미터 누락으로 항상 0건 조용히 반환하던 버그 수정(16449+FID_RANK_SORT_CLS_CODE, rt_cd 가드, 투자자별 정렬) | #55 | [kis-investor-ranking-fix.md](kis-investor-ranking-fix.md) |
 | 2026-08-25 | feat | Draft | 턴어라운드 신호 (발굴·해석 보조) — 4마커 점수화 순수함수 + check/screen(`--turnaround`)/brief 배선. 예측 알파 아님(나이브 기준선 미통과), 후보 표면화+마커+check확인+손절선 제공, 판단은 사용자 | #55 | [turnaround-signal.md](turnaround-signal.md) |
 | 2026-08-06 | feat | Draft | 지표값 기반 change_drivers + 당일 이벤트 노출 — score history 서술을 점수 델타에서 지표값(cRSI·SMA20 기울기) 변화로 재작성, 일회성 이벤트 롤오프 유령 신호 억제, `이벤트:` 세그먼트 추가 (스코어링 로직 불변) | #54 | [change-drivers-indicator-based.md](change-drivers-indicator-based.md) |
