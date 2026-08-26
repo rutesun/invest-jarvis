@@ -144,6 +144,16 @@ def analyze_volume(df: pd.DataFrame) -> ComponentResult:
         if price_up:
             score += 5
 
+    elif vol_ratio > PatternThresholds.VOLUME_MODERATE_MULTIPLIER:
+        # 완만한 거래량 증가(1.2x~1.5x) — 급증 임계값엔 못 미치지만 상승 확증으로 소폭 가점.
+        # 돌파일 vol_ratio가 1.5x를 살짝 밑돌아 신호가 통째로 사라지던 사각지대 보완.
+        if price_up:
+            signals.append("거래량 완만 증가 (강세 확인)")
+            evidence.append(
+                f"거래량 {volume:,.0f} / 20일평균 {vol_sma_20:,.0f} = {vol_ratio:.1f}x"
+            )
+            score += 3
+
     elif vol_ratio < 0.5:
         signals.append("거래량 감소")
         evidence.append(f"거래량 {volume:,.0f} / 20일평균 {vol_sma_20:,.0f} = {vol_ratio:.1f}x")

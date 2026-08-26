@@ -25,6 +25,7 @@ class PatternThresholds:
     GAP_SIZE_MIN_PCT = 0.04  # 갭업 최소 크기 4%
     GAP_VOLUME_MULTIPLIER = 3.0  # Power Gap Up 거래량 3배
     VOLUME_SURGE_MULTIPLIER = 2.0  # 일반 거래량 급증 2배
+    VOLUME_MODERATE_MULTIPLIER = 1.2  # 완만한 거래량 증가 하한 (1.2x~1.5x 상승 확증)
 
 
 def _validate_dataframe(df: pd.DataFrame, min_len: int, required_cols: list[str]) -> bool:
