@@ -147,6 +147,80 @@ def test_price_up_volume_surge_signal_metadata():
     assert metadata.entry_eligible is False
 
 
+def test_price_up_moderate_volume_scores_small():
+    """상승일 + 완만한 거래량 증가(1.2x~1.5x) → +3점 (기존 0점 사각지대 제거)."""
+    df = pd.DataFrame(
+        {
+            "Open": [100, 101],
+            "High": [101, 111],
+            "Low": [99, 100],
+            "Close": [100, 110],
+            "Volume": [100, 130],  # 1.3x
+            "Vol_SMA_20": [100, 100],
+        }
+    )
+
+    result = analyze_volume(df)
+
+    assert result.metrics.get("vol_ratio") == 1.3
+    assert result.score == 3
+    assert any("완만" in s for s in result.signals)
+
+
+def test_genic_breakout_ratio_no_longer_zero():
+    """제닉 사례(1.42x 상승 돌파일)가 0점이 아니라 +3점을 받는다."""
+    df = pd.DataFrame(
+        {
+            "Open": [100, 101],
+            "High": [101, 111],
+            "Low": [99, 100],
+            "Close": [100, 110],
+            "Volume": [100, 142],  # 1.42x
+            "Vol_SMA_20": [100, 100],
+        }
+    )
+
+    result = analyze_volume(df)
+
+    assert result.score == 3
+
+
+def test_moderate_volume_requires_price_up():
+    """완만한 거래량 증가라도 하락일이면 가점 없음."""
+    df = pd.DataFrame(
+        {
+            "Open": [100, 101],
+            "High": [101, 102],
+            "Low": [99, 89],
+            "Close": [100, 90],  # 하락일
+            "Volume": [100, 130],  # 1.3x
+            "Vol_SMA_20": [100, 100],
+        }
+    )
+
+    result = analyze_volume(df)
+
+    assert result.score == 0
+
+
+def test_moderate_boundary_below_1_2_scores_zero():
+    """1.2x 이하 상승일은 여전히 0점 (완만 구간 미만)."""
+    df = pd.DataFrame(
+        {
+            "Open": [100, 101],
+            "High": [101, 111],
+            "Low": [99, 100],
+            "Close": [100, 110],
+            "Volume": [100, 110],  # 1.1x
+            "Vol_SMA_20": [100, 100],
+        }
+    )
+
+    result = analyze_volume(df)
+
+    assert result.score == 0
+
+
 def test_pocket_pivot_volume_not_exceeded():
     """Pocket Pivot Failed: Down-day volume does NOT exceed max of last 10 down-days."""
     dates = pd.date_range("2024-01-01", periods=60, freq="D")

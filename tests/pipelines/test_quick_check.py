@@ -4,7 +4,11 @@ from unittest.mock import AsyncMock
 import pytest
 
 from src.core.models import ToolResult
-from src.pipelines.quick_check import QuickCheckPipeline, _format_compact_history_point, _format_detailed_history_point
+from src.pipelines.quick_check import (
+    QuickCheckPipeline,
+    _format_compact_history_point,
+    _format_detailed_history_point,
+)
 from src.tools.technical.models import (
     IndicatorSnapshot,
     ScoreHistoryPoint,
