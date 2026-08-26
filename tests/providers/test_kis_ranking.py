@@ -32,8 +32,8 @@ def mock_investor_ranking_response():
             {
                 "hts_kor_isnm": "현대건설",
                 "mksc_shrn_iscd": "000720",
-                "frgn_ntby_qty": "100000",
-                "frgn_ntby_tr_pbmn": "10000000000",
+                "frgn_ntby_qty": "100,000",  # 콤마 포함 문자열도 견뎌야 함
+                "frgn_ntby_tr_pbmn": "10,000,000,000",
                 "orgn_ntby_qty": "800000",
                 "orgn_ntby_tr_pbmn": "50000000000",
             },
@@ -79,6 +79,9 @@ async def test_get_investor_ranking(mock_token_response, mock_investor_ranking_r
         assert [r["ticker"] for r in result] == ["005930", "000720"]
         assert result[0]["name"] == "삼성전자"
         assert result[0]["net_buy_amount"] == 35_000_000_000
+        # 콤마 포함 문자열도 정수로 파싱
+        assert result[1]["net_buy_amount"] == 10_000_000_000
+        assert result[1]["net_buy_volume"] == 100_000
 
 
 def _mock_investor_call(mock_client, token_response, ranking_response):

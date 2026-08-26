@@ -126,7 +126,11 @@ def score_turnaround(
         hook_up = crsi[j - 1] < low_band[j] and crsi[j] > low_band[j]
         if not hook_up or not (crsi[j] < OVERSOLD_CRSI):
             continue
-        peak = np.nanmax(high[max(0, j - DECLINE_LOOKBACK) : j + 1])
+        # 급락 상태 = 당일 종가가 "직전" 60일 고점 대비 -15% 이하.
+        # 당일 고가는 제외한다(반등 양봉의 자기 고가가 peak을 끌어올려 조건이
+        # 느슨해지는 것을 방지).
+        prior_high = high[max(0, j - DECLINE_LOOKBACK) : j]
+        peak = np.nanmax(prior_high) if len(prior_high) else np.nan
         if np.isfinite(peak) and close[j] <= DECLINE_RATIO * peak:
             markers.append("oversold_rebound")
             break

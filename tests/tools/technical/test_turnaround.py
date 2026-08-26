@@ -94,6 +94,17 @@ def test_oversold_rebound_marker():
     assert "oversold_rebound" in signal.markers
 
 
+def test_oversold_rebound_ignores_self_high_spike():
+    """당일 고가 스파이크만으론 '급락' 판정 안 됨 (peak은 직전 60일, 당일 제외)."""
+    high = np.full(40, 101.0)
+    high[-1] = 130.0  # 반등 양봉의 자기 고가 스파이크 — 직전 급락은 없음
+    crsi = np.full(40, 50.0)
+    crsi[-2] = 25.0
+    crsi[-1] = 32.0
+    signal = score_turnaround(build_df(High=high, cRSI=crsi))
+    assert "oversold_rebound" not in signal.markers
+
+
 def test_confirmed_reflects_supertrend():
     up = np.full(40, -1.0)
     up[-1] = 1.0

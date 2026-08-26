@@ -358,8 +358,9 @@ class KISProvider(BaseProvider):
 
         def _to_int(value) -> int:
             try:
-                return int(str(value).strip() or 0)
+                return int(str(value).strip().replace(",", "") or 0)
             except (ValueError, AttributeError):
+                logger.debug("get_investor_ranking 순매수 값 파싱 실패, 0 처리: %r", value)
                 return 0
 
         rows = [
