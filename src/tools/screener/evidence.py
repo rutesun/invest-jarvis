@@ -14,6 +14,7 @@ from src.tools.screener.scoring import (
     score_volume_burst,
 )
 from src.tools.technical.indicators import IndicatorCalculator
+from src.tools.technical.turnaround import TurnaroundSignal, score_turnaround
 
 
 class EvidenceCollector:
@@ -150,6 +151,8 @@ class EvidenceCollector:
         diversity = score_source_diversity(stock.sources)
         momentum = score_momentum(df)
 
+        turnaround = score_turnaround(df) if not df.empty else TurnaroundSignal()
+
         # Flow score from accumulation
         momentum["flow"] = acc_score * 5.0
         momentum["momentum_total"] += momentum["flow"]
@@ -174,6 +177,10 @@ class EvidenceCollector:
             momentum_total=momentum["momentum_total"],
             total_score=total,
             vol_ratio=round(vol_ratio, 2),
+            turnaround_score=turnaround.score,
+            turnaround_markers=turnaround.marker_labels,
+            turnaround_candidate=turnaround.is_candidate,
+            turnaround_confirmed=turnaround.confirmed,
         )
 
     def _detect_market(self, ticker: str) -> str:

@@ -162,3 +162,21 @@ def test_render_falls_back_to_ticker_without_name():
 def test_render_empty_items():
     md = render_markdown(datetime(2026, 7, 14), macro=None, items=[])
     assert "설정된 종목 없음" in md
+
+
+def test_render_shows_turnaround_line():
+    """BriefItem.turnaround가 있으면 상세 섹션에 노출."""
+    items = [
+        BriefItem(
+            ticker="066970",
+            kind="watch",
+            action="eligible",
+            bucket=BUCKET_BUY_ELIGIBLE,
+            price=121600.0,
+            change_pct=2.1,
+            turnaround="턴어라운드 3/4 · [거래량 수반 양봉 · 저점 높이기] · check 확인됨(추세 on) · ★후보",
+        ),
+    ]
+    md = render_markdown(datetime(2026, 8, 25), macro=None, items=items)
+    assert "턴어라운드 3/4" in md
+    assert "저점 높이기" in md

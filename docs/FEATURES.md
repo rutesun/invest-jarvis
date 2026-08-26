@@ -611,6 +611,26 @@ Daily Report 및 Screener 리포트를 Notion Database에 자동 업로드.
 
 ---
 
+## 11. 턴어라운드 신호 (`check` / `screen --turnaround` / `brief` 공용)
+
+하락에서 반등이 시작된 종목을 표면화하는 발굴·해석 보조 도구. **예측 알파가 아니다** — 백테스트상 신호 자체는 나이브 기준선("3개월 저점 대비 +10% 반등")을 못 이긴다. 목적은 후보를 기계적으로 표면화하고 마커 내역·check 확인 상태·손절선을 제공해, 최종 판단(기사·시장 상황)은 사용자가 얹게 하는 것. 설계/검증: `docs/superpowers/specs/2026-08-24-bottom-watch-design.md`.
+
+**코어 (`src/tools/technical/turnaround.py`):** `score_turnaround(df) → TurnaroundSignal`. as-of 안전(lookahead 없음) 4마커를 AND가 아니라 점수화(0~4, threshold 2):
+| 마커 | 조건 |
+|------|------|
+| 급락 후 과매도 반등 | 60일 고점 대비 −15% 중 cRSI 과매도 훅업 |
+| 20/50일선 재탈환 | 종가가 SMA20/50 상향 돌파 |
+| 거래량 수반 양봉 | 거래량 20일평균 1.5배 동반 양봉 (유일한 오실레이터 밖 독립축) |
+| 저점 높이기 | 최근 저점 > 이전 저점 |
+
+`is_candidate`는 점수≥2 AND 약세 맥락(최근 20일 50일선 아래)일 때. `confirmed`는 supertrend가 이미 추세 on. `stop_level`/`stop_pct`는 직전 스윙 저점 기반 손절.
+
+**출력 3표면:** `check`(판정 아래 한 줄), `screen --turnaround`(발굴 후보 표, ETF/유니버스 한계 있음 — ROADMAP Task 15), `brief`(종목 상세 한 줄). 예측 아님을 docstring·CLI 문구에 명시.
+
+**한계:** 광역 "바닥 발굴"은 유니버스 미스매치(급등주·순매수 리더 = 이미 오른 종목)로 변별력 낮음. 진짜 발굴은 전종목 저점 근접 → 매집 시작 탐지가 필요(ROADMAP Task 15 후속).
+
+---
+
 ## 환경 변수
 
 | 변수 | 필수 | 용도 |

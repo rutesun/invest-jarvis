@@ -56,4 +56,5 @@ class BriefItem:
     score_history_warning: str | None = None
     remaining_condition: str | None = None  # 임박 시 미충족 게이트 1개
     narrative: Any | None = None  # TickerNarrative (Task 4) — 순환 import 방지로 Any
+    turnaround: str | None = None  # 턴어라운드 신호 요약 (score>0일 때만)
     error: str | None = None

@@ -248,3 +248,44 @@ async def test_screener_pipeline_save_report(
         assert "주도 테마" in content
     finally:
         os.chdir(original_cwd)
+
+
+@pytest.mark.asyncio
+async def test_screener_turnaround_candidates_and_gating(
+    mock_universe_builder, mock_news_tool
+):
+    """턴어라운드 후보가 발굴 섹션에 표면화되고, turnaround_only면 리더 표를 생략."""
+    collector = AsyncMock()
+    collector.collect_and_score.return_value = [
+        ScreenerEvidence(
+            stock=UniverseStock(
+                ticker="066970", name="엘앤에프", market="KOSDAQ", sources=["theme"]
+            ),
+            total_score=10.0,
+            turnaround_score=3,
+            turnaround_markers=["거래량 수반 양봉", "저점 높이기"],
+            turnaround_candidate=True,
+            turnaround_confirmed=True,
+        ),
+        ScreenerEvidence(
+            stock=UniverseStock(ticker="KO", name="Coca-Cola", market="NYS", sources=["direct"]),
+            total_score=5.0,
+            turnaround_score=1,
+            turnaround_candidate=False,
+        ),
+    ]
+    pipeline = ScreenerPipeline(
+        universe_builder=mock_universe_builder,
+        evidence_collector=collector,
+        news_tool=mock_news_tool,
+    )
+
+    result = await pipeline.run(market="all", turnaround_only=True)
+    candidates = result["turnaround_candidates"]
+    assert [c.stock.name for c in candidates] == ["엘앤에프"]  # 후보만, 비후보 제외
+
+    output = pipeline.format_output(result)
+    assert "턴어라운드 발굴 후보" in output
+    assert "엘앤에프" in output
+    # turnaround_only 이므로 리더 표(주도주 TOP 50)는 생략
+    assert "주도주" not in output
