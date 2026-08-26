@@ -5,8 +5,8 @@ import pytest
 from src.tools.technical.indicators import IndicatorCalculator
 from src.tools.technical.scorer import (
     TechnicalScorer,
-    _top_component_changes,
     _daily_events,
+    _top_component_changes,
 )
 
 
