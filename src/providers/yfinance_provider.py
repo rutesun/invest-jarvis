@@ -28,6 +28,7 @@ class YFinanceProvider(BaseProvider):
             "price": info.get("currentPrice") or info.get("regularMarketPrice"),
             "previous_close": info.get("previousClose"),
             "name": info.get("shortName"),
+            "quote_type": info.get("quoteType"),
             "market_cap": info.get("marketCap"),
             "pe_ratio": info.get("trailingPE"),
             "volume": info.get("volume"),

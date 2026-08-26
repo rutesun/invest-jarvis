@@ -40,6 +40,7 @@ class BriefItem:
     kind: str  # "holding" | "watch"
     action: str  # "liquidate"|"reduce"|"hold"|"eligible"|"imminent"|"rejected"|"error"
     bucket: int
+    name: str | None = None  # 종목명 (provider 조회, 없으면 렌더러가 코드로 fallback)
     bonus: int = 0
     markers: list[str] = field(default_factory=list)  # "스탑 근접", "급변: ..." 등
     note: str | None = None  # watchlist note

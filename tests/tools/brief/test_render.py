@@ -129,6 +129,36 @@ def test_render_error_item():
     assert "timeout" in md
 
 
+def test_render_shows_name_with_ticker():
+    """종목명이 있으면 헤더와 Top-N에 '종목명 (코드)'로 표기."""
+    item = BriefItem(
+        ticker="005930",
+        kind="holding",
+        name="삼성전자",
+        action="reduce",
+        bucket=BUCKET_REDUCE,
+        price=71200.0,
+        change_pct=-1.1,
+    )
+    md = render_markdown(datetime(2026, 7, 14), macro=None, items=[item])
+    assert "삼성전자 (005930)" in md
+    assert "### 삼성전자 (005930) — 비중축소" in md
+
+
+def test_render_falls_back_to_ticker_without_name():
+    item = BriefItem(
+        ticker="005930",
+        kind="holding",
+        action="reduce",
+        bucket=BUCKET_REDUCE,
+        price=71200.0,
+        change_pct=-1.1,
+    )
+    md = render_markdown(datetime(2026, 7, 14), macro=None, items=[item])
+    assert "### 005930 — 비중축소" in md
+    assert "(005930)" not in md
+
+
 def test_render_empty_items():
     md = render_markdown(datetime(2026, 7, 14), macro=None, items=[])
     assert "설정된 종목 없음" in md

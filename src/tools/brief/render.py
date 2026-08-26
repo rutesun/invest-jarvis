@@ -44,6 +44,14 @@ def render_markdown(
     return "\n".join(lines)
 
 
+def _display(item: BriefItem) -> str:
+    """헤더/액션 표시용 라벨 — 종목명이 있으면 '종목명 (코드)', 없으면 코드만."""
+    name = (item.name or "").strip()
+    if name and name != item.ticker:
+        return f"{name} ({item.ticker})"
+    return item.ticker
+
+
 def _macro_section(macro: TickerMacroSnapshot | None) -> list[str]:
     if macro is None:
         return []
@@ -62,7 +70,7 @@ def _top_actions_section(items: list[BriefItem], top_n: int) -> list[str]:
         label = BUCKET_LABELS.get(item.bucket, "?")
         marker = f" ⚠{' ·'.join(item.markers)}" if item.markers else ""
         remaining = f" — 남은 조건: {item.remaining_condition}" if item.remaining_condition else ""
-        lines.append(f"{rank_no}. [{label}] {item.ticker}{marker}{remaining}")
+        lines.append(f"{rank_no}. [{label}] {_display(item)}{marker}{remaining}")
     lines.append("")
     return lines
 
@@ -72,7 +80,7 @@ def _item_section(item: BriefItem) -> list[str]:
     lines: list[str] = []
 
     if item.action == "error":
-        lines.append(f"### {item.ticker} — 데이터 조회 실패")
+        lines.append(f"### {_display(item)} — 데이터 조회 실패")
         lines.append(f"- **오류**: {item.error}")
         lines.append("")
         return lines
@@ -84,7 +92,7 @@ def _item_section(item: BriefItem) -> list[str]:
     gate = item.verdict.gate if item.verdict else None
     if gate is not None and gate.quality_grade:
         title_extra = f" (grade {gate.quality_grade})"
-    lines.append(f"### {item.ticker} — {label}{title_extra}")
+    lines.append(f"### {_display(item)} — {label}{title_extra}")
 
     if item.note:
         lines.append(f"- **메모**: {item.note}")
