@@ -19,7 +19,7 @@ SignalType = Literal[
 SignalBias = Literal["bullish", "bearish", "neutral"]
 SignalIntent = Literal["entry", "hold", "risk", "watch"]
 SignalSeverity = Literal["low", "medium", "high"]
-VerdictAction = Literal["buy", "add", "hold", "watch", "reduce", "avoid"]
+VerdictAction = Literal["buy", "add", "hold", "watch", "accumulate", "reduce", "avoid"]
 VerdictConfidence = Literal["low", "medium", "high"]
 
 

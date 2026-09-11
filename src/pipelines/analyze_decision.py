@@ -276,6 +276,8 @@ def _technical_factor_score_from_verdict(technical_data) -> int | None:
         return 6
     if verdict.action == "hold":
         return 6
+    if verdict.action == "accumulate":
+        return 5
     if verdict.action == "watch":
         return 4
     return None

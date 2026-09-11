@@ -806,3 +806,16 @@ def test_build_analyze_decision_bundle_does_not_fallback_to_raw_score_for_low_ad
     assert technical.total_score == 6
     assert technical.bias == "bullish"
     assert "초기 반등 신호" in technical.evidence
+
+
+def test_accumulate_verdict_factor_score_is_neutral_band():
+    from types import SimpleNamespace
+
+    from src.pipelines.analyze_decision import _technical_factor_score_from_verdict
+
+    technical_data = SimpleNamespace(
+        technical_verdict=SimpleNamespace(action="accumulate"),
+        adjusted_score=-20,
+    )
+    # watch(4)와 hold(6) 사이 — 바닥 구조는 건설적이나 진입 아님.
+    assert _technical_factor_score_from_verdict(technical_data) == 5

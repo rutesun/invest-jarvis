@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 import pandas as pd
 
 from src.tools.technical.aggregator import ScoreAggregator
+from src.tools.technical.bottoming import detect_bottoming_structure
 from src.tools.technical.components.crsi import analyze_crsi
 from src.tools.technical.components.divergence import analyze_divergence
 from src.tools.technical.components.minervini import analyze_minervini
@@ -120,7 +121,8 @@ class TechnicalScorer:
         component_raw_total = sum(comp["score"] for comp in components.values())
         snapshot = self.calculator.create_snapshot(df)
         context = build_market_context(df)
-        aggregation = self.aggregator.aggregate(components, context)
+        bottoming = detect_bottoming_structure(df, components, context)
+        aggregation = self.aggregator.aggregate(components, context, bottoming=bottoming)
 
         return TechnicalResult.from_analysis(
             df,

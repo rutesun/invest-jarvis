@@ -1,11 +1,19 @@
 from dataclasses import dataclass, field
 
+from src.tools.technical.bottoming import BottomingStructure
 from src.tools.technical.models import (
     AggregationTraceEntry,
     ComponentSignal,
     MarketContext,
     TechnicalVerdict,
 )
+
+
+# 바닥 그라데이션 밴드 정책. 가점(bonus)은 결과 점수를 CEILING까지만 끌어올리고,
+# accumulate 라벨은 [FLOOR, CEILING] 구간에서만 붙는다 — avoid(-90)를 accumulate
+# 밴드까지만 완만화하고 추세 확인(신규진입)은 별도 게이트로 유지.
+BOTTOMING_CEILING = -15
+ACCUMULATE_FLOOR = -40
 
 
 @dataclass
@@ -21,6 +29,7 @@ class ScoreAggregator:
         self,
         components: dict[str, dict],
         context: MarketContext,
+        bottoming: BottomingStructure | None = None,
     ) -> ScoreAggregationResult:
         raw_total = sum(int(component.get("score", 0)) for component in components.values())
         adjusted = raw_total
@@ -88,15 +97,34 @@ class ScoreAggregator:
             )
             cautions.append("추세는 유지돼도 단기 과열 구간")
 
+        bottoming_active = False
+        if _bottoming_bonus_applies(bottoming, context, forced_action):
+            before = adjusted
+            lifted = max(before, min(before + bottoming.bonus, BOTTOMING_CEILING))
+            if lifted > before:
+                adjusted = lifted
+                bottoming_active = True
+                new_entry_allowed = False
+                trace.append(
+                    AggregationTraceEntry(
+                        rule="bottoming_gradient_bonus",
+                        before=before,
+                        after=adjusted,
+                        reason="바닥 다지기 구조 가점(상한 有)",
+                    )
+                )
+                cautions.append("바닥 다지기 진행 — 추세 확인 전 소량 관찰 단계")
+
         action, entry_mode = _choose_action(
             adjusted=adjusted,
             context=context,
             metadata=metadata,
             forced_action=forced_action,
             new_entry_allowed=new_entry_allowed,
+            bottoming_active=bottoming_active,
         )
         reasons = _prioritize_action_reasons(action, reasons, cautions, adjusted)
-        if action in {"hold", "watch", "reduce", "avoid"}:
+        if action in {"hold", "watch", "accumulate", "reduce", "avoid"}:
             new_entry_allowed = False
 
         verdict = TechnicalVerdict(
@@ -131,6 +159,25 @@ def _has_bullish_reversal(metadata: list[ComponentSignal]) -> bool:
     return any(signal.signal_type == "reversal" and signal.bias == "bullish" for signal in metadata)
 
 
+def _bottoming_bonus_applies(
+    bottoming: BottomingStructure | None,
+    context: MarketContext,
+    forced_action: str | None,
+) -> bool:
+    """바닥 가점 적용 조건.
+
+    - 구조가 후보 자격을 갖추고(qualifies),
+    - 종가가 추세 확인선(SMA50) 아래이며(위면 강세주 → 대상 아님),
+    - 신선한 거래량 동반 이탈/Supertrend 매도 전환(forced_action)이 없어야 한다.
+    """
+    return bool(
+        bottoming is not None
+        and bottoming.qualifies
+        and forced_action is None
+        and not context.close_above_sma50
+    )
+
+
 def _has_volume_backed_breakdown(
     metadata: list[ComponentSignal],
     context: MarketContext,
@@ -159,9 +206,12 @@ def _choose_action(
     metadata: list[ComponentSignal],
     forced_action: str | None,
     new_entry_allowed: bool,
+    bottoming_active: bool = False,
 ) -> tuple[str, str]:
     if forced_action is not None:
         return forced_action, "risk_override"
+    if bottoming_active and ACCUMULATE_FLOOR <= adjusted <= BOTTOMING_CEILING:
+        return "accumulate", "bottoming_watch"
     if adjusted < -25:
         return "avoid", "risk_override"
     if adjusted < 0:
@@ -228,7 +278,7 @@ def _prioritize_action_reasons(
     cautions: list[str],
     adjusted: int,
 ) -> list[str]:
-    if action not in {"watch", "reduce", "avoid"}:
+    if action not in {"watch", "accumulate", "reduce", "avoid"}:
         return reasons
 
     action_reasons = [_normalize_caution_as_reason(caution) for caution in cautions]
@@ -253,6 +303,8 @@ def _normalize_caution_as_reason(caution: str) -> str:
 
 
 def _negative_action_reason(action: str, adjusted: int) -> str | None:
+    if action == "accumulate":
+        return "바닥 다지기 구조로 완만 회복 중 — 추세 확인 전 소량 관찰 단계"
     if action == "avoid" and adjusted < -25:
         return "조정 점수가 -25점 미만으로 리스크 우위"
     if action == "reduce" and adjusted < 0:
