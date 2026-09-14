@@ -19,6 +19,7 @@ def _decide(**kwargs):
         overextended=False,
         volume_breakdown=False,
         fresh_sell_flip=False,
+        sma20_break_2d=False,
     )
     base.update(kwargs)
     return decide_action_v2(**base)
@@ -36,13 +37,37 @@ def test_weak_regime_strong_setup_without_bottoming_is_watch():
     assert entry is False
 
 
-def test_negative_setup_is_reduce_regardless_of_regime():
+def test_stage2_up_negative_setup_holds_not_reduce():
+    # 확인된 상승(Stage2+ST up)은 하루 노이즈로 음수여도 hold 유지(floor=hold). NVDA 오강등 방지.
     action, entry = _decide(regime="Stage2", st_up=True, setup_score=-10)
-    assert action == "reduce"
+    assert action == "hold"
     assert entry is False
 
 
-def test_severe_negative_setup_is_avoid():
+def test_stage2_up_severe_setup_still_holds():
+    action, _ = _decide(regime="Stage2", st_up=True, setup_score=-35)
+    assert action == "hold"
+
+
+def test_stage2_up_deterioration_demotes_to_watch():
+    # 음수 setup + 종가<SMA20 2거래일 지속 → 조기 경고로 watch(가격 확인형 악화).
+    action, _ = _decide(
+        regime="Stage2", st_up=True, setup_score=-10, sma20_break_2d=True
+    )
+    assert action == "watch"
+
+
+def test_above50_negative_setup_is_reduce():
+    action, _ = _decide(regime="above50", st_up=True, setup_score=-10)
+    assert action == "reduce"
+
+
+def test_weak_negative_setup_is_reduce():
+    action, _ = _decide(regime="weak", setup_score=-10)
+    assert action == "reduce"
+
+
+def test_weak_severe_setup_is_avoid():
     action, _ = _decide(regime="weak", setup_score=-40, bottoming_watch=True)
     assert action == "avoid"
 
@@ -73,9 +98,10 @@ def test_stage2_up_mid_setup_is_hold():
     assert action == "hold"
 
 
-def test_stage2_up_weak_band_is_watch():
+def test_stage2_up_weak_band_is_hold():
+    # Stage2/up floor=hold — 약 밴드(0~19)도 hold(승자 보유). demotion 조건 없을 때.
     action, _ = _decide(regime="Stage2", st_up=True, setup_score=10)
-    assert action == "watch"
+    assert action == "hold"
 
 
 def test_stage2_down_strong_is_watch():

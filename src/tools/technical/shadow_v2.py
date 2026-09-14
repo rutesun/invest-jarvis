@@ -67,9 +67,14 @@ def decide_action_v2(
     overextended: bool,
     volume_breakdown: bool,
     fresh_sell_flip: bool,
+    sma20_break_2d: bool = False,
 ) -> tuple[str, bool]:
-    """regime × st × setup_band → (action, new_entry_allowed). 게이트는 상한만 적용."""
-    # 선행 override (매트릭스보다 우선)
+    """regime × st × setup_band → (action, new_entry_allowed).
+
+    게이트는 [floor, ceiling] 밴드를 정하고 setup은 그 안 위치만 결정한다. risk override만
+    floor를 뚫는다(설계: score-vs-gate-consensus.md Round 3).
+    """
+    # 선행 override (밴드보다 우선, floor 관통)
     if volume_breakdown:
         return "avoid", False
     if fresh_sell_flip:
@@ -77,24 +82,22 @@ def decide_action_v2(
 
     band = _setup_band(setup_score)
 
-    # 음수 밴드는 레짐 무관하게 리스크 우선
-    if band == "심각":
-        return "avoid", False
-    if band == "음":
-        return "reduce", False
-
-    # 비음수: 레짐 게이트가 상한
     if regime == "weak":
+        # [avoid ... accumulate/watch]
+        if band == "심각":
+            return "avoid", False
+        if band == "음":
+            return "reduce", False
         return ("accumulate" if bottoming_watch else "watch"), False
-    if regime == "above50":
-        return "watch", False
 
-    # Stage2
-    if not st_up:
+    if regime == "above50" or (regime == "Stage2" and not st_up):
+        # [reduce ... watch]
+        return ("reduce" if band in ("음", "심각") else "watch"), False
+
+    # Stage2 + ST up: floor = hold (확인된 상승은 노이즈 음수여도 보유)
+    # 가격 확인형 악화: 음수 setup + 종가<SMA20 2거래일 지속 → 조기 경고 watch
+    if setup_score < 0 and sma20_break_2d:
         return "watch", False
-    if band == "약":
-        return "watch", False
-    # Stage2 + up + (중|강)
     if band == "강" and fresh_buy_flip and not overextended:
         return "buy", True  # buy/add 분기는 상위(Playbook)에서 position으로 결정
     return "hold", False
@@ -129,6 +132,14 @@ def _buy_flip_age(df: pd.DataFrame) -> tuple[bool, int | None]:
     return True, count - 1
 
 
+def _close_below_sma20_streak(df: pd.DataFrame, days: int) -> bool:
+    if "Close" not in df.columns or "SMA_20" not in df.columns or len(df) < days:
+        return False
+    close = df["Close"].to_numpy(dtype=float)[-days:]
+    sma20 = df["SMA_20"].to_numpy(dtype=float)[-days:]
+    return bool((close < sma20).all())
+
+
 def _bottoming_watch(regime: str, df: pd.DataFrame, context, fresh_sell_flip: bool) -> bool:
     if regime != "weak":
         return False
@@ -157,6 +168,7 @@ def compute_shadow_v2(df: pd.DataFrame, components: dict[str, dict], context) ->
         and (context.volume_ratio_20d is not None and context.volume_ratio_20d >= 1.3)
     )
     overextended = bool(getattr(context, "is_overextended", False))
+    sma20_break_2d = _close_below_sma20_streak(df, 2)
 
     action_v2, entry_v2 = decide_action_v2(
         regime=regime,
@@ -167,6 +179,7 @@ def compute_shadow_v2(df: pd.DataFrame, components: dict[str, dict], context) ->
         overextended=overextended,
         volume_breakdown=volume_breakdown,
         fresh_sell_flip=fresh_sell_flip,
+        sma20_break_2d=sma20_break_2d,
     )
 
     return ShadowScoreV2(

@@ -60,3 +60,45 @@ SMA200 아래 deep turnaround는 제외.
 - setup_score도 velocity 때문에 여전히 출렁(BE 9/8→9/9 55→25). 게이트 분리는 의미 혼합만 고침 —
   score 변동성은 velocity의 event/state 추가 분리나 hysteresis가 별도로 필요.
 - 전면 재보정 규모가 큼: 신설 레이어 + 매트릭스 + 밴드 재보정 + 골든 재베이스라인.
+
+---
+
+## Round 3 합의 (shadow 실측 반영): floor+ceiling 밴드 + 악화 사다리
+
+shadow 실측이 두 결함을 드러냄: (1) 강세주 NVDA가 Stage2·ST up인데 움직임 setup 음수일 때
+reduce/avoid로 오강등("음수 setup→레짐 무관 강등" 규칙이 과함), (2) setup 변동성(velocity).
+
+**결정: 게이트를 [floor, ceiling] 밴드로.** setup은 밴드 안 위치만 정하고 risk override만 floor를 뚫는다.
+
+| Regime / ST | Floor | Ceiling |
+|---|---|---|
+| weak / any | avoid | bottoming이면 accumulate, 아니면 watch |
+| above50 / any | reduce | watch |
+| Stage2 / down | reduce | watch |
+| Stage2 / up (flip 없음) | hold | hold |
+| Stage2 / up + fresh flip | hold | buy/add |
+
+완성 매트릭스(밴드: 강≥40/중20~39/약0~19/음-25~-1/심각<-25):
+
+| Regime / ST | 강 | 중 | 약 | 음 | 심각 |
+|---|---|---|---|---|---|
+| weak / any | accum./watch | accum./watch | accum./watch | reduce | avoid |
+| above50 / any | watch | watch | watch | reduce | reduce |
+| Stage2 / down | watch | watch | watch | reduce | reduce |
+| Stage2 / up | hold | hold | hold | hold | hold |
+| Stage2 / up + fresh flip | buy/add† | hold | hold | hold | hold |
+
+† 미보유 buy/보유 add, 해당 셀만 new_entry_allowed=True. overextended면 hold/False.
+
+**Stage2 floor=hold 안전장치 (가격 확인형 악화 사다리)** — 단일 bearish divergence로 floor를 뚫지 않음:
+- Stage2/up + setup<0 + 종가<SMA20 2거래일 지속 → watch (조기 경고)
+- 전일 Stage2 → 당일 weak(SMA50 이탈) → reduce (regime 재계산으로 자연 처리)
+- fresh ST 매도 flip → reduce
+- 거래량 동반 breakdown → avoid
+
+**문제 2(setup 변동성)**: 전체 hysteresis는 보류(실신호 지연·flip TTL 충돌). 밴드 clamp가 대부분 흡수
+(BE 35↔25는 같은 '중' band라 action 불변). demotion에만 SMA20 2일 확인. velocity event/state 분리는 후속.
+
+**검증(합의)**: NVDA Stage2/up 9일 모두 hold(오강등 해소), BE 급점프 재발 없음, LULU buy/hold 0.
+**남은 리스크(정직)**: 세 fixture엔 "Stage2 상승 후 본격 붕괴" 사례가 없어 floor 안전성 최종 증명 부족 →
+Stage2 이탈/붕괴 holdout fixture로 회귀 고정 필요.
