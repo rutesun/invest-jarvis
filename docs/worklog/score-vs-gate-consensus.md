@@ -165,3 +165,43 @@ C(EMA/decay)는 보류: B 이후 setup에 감쇠할 event가 없고 timing 지�
 - 후속(선택): 하락주(비 bottoming weak) churn을 줄이려면 weak 레짐에서 상·하향 모두 2일 확인(대칭)하거나
   watch/reduce 경계(0) 부근에 데드밴드. 보유/관찰엔 영향 없어 우선순위 낮음.
 - 여전히 shadow(기존 action 불변). cutover 시 밴드·hysteresis 재보정.
+
+---
+
+## Round 5 합의 (cutover 전 호환성·유의미성·blocker)
+
+### 이중게이트: 문제 없음(다른 레인)
+- brief의 action/bucket authority = **playbook 게이트**(brief.py:120,123,145). technical verdict는
+  **별도 hint**로만 전달·표시(brief.py:156, render.py:137). playbook B와 A′ regime은 같은
+  minervini.is_stage2를 읽지만 **사실 공유일 뿐 authority 중복 아님**.
+- 단, 표시를 계층화해야 함: `진입 자격: 부적격(Playbook B/C/E)` + `기술 상태: 바닥관찰(accumulate)`.
+  "rejected+accumulate"는 모순 아니라 유용한 정보(진입 부적격 + 바닥 관찰).
+- check의 "신규 진입 가능"은 오해 소지 → `기술적 타이밍 후보`로 문구 변경.
+- **analyze는 예외**: action_v2를 factor 점수로 직접 매핑하면 Stage2가 간접 재가중됨.
+  → action 매핑 대신 **setup_band + trigger로 factor 구성**, action_v2는 라벨로만.
+
+### 유의미성: 의미 있으나 미완
+- shipped(velocity/risk): BE 9/2 −80→−35, 9/3 avoid→reduce 착시 해소 = 유의미한 국소 개선.
+  단 legacy aggregator는 여전히 전 컴포넌트 합산 → 9/3→9/4 Supertrend +65 additive 점프는 잔존.
+- shadow A′: BE 전이 13→4, NVDA 13→2(hold 21일)로 핵심 개선. ARM/LULU는 bearish churn 악화.
+  방향은 옳으나 cutover-ready 아님.
+
+### cutover 최대 blocker: 밴드 미보정(buy = dead branch)
+- 4종목 2026 YTD 688일에서 state setup 범위 −25~35, SETUP_STRONG=40 도달 **0일**,
+  Stage2/up/fresh-flip 24 candidate-day에서도 buy **0회**. X=40은 죽은 가지 → **calibration 전 buy cutover 금지**.
+
+### 기타 부족분
+- regression이 apply_hysteresis를 호출 안 함 → 전이 횟수·no-lookahead·history parity 미고정.
+- hysteresis가 raw setup_score를 effective로 덮음 → raw/effective 두 필드 분리 필요.
+- TechnicalResult에 A′ contract(typed shadow) 없음.
+- v2 action에 legacy reasons/adjusted history를 붙이면 설명 모순.
+- analyze가 playbook 실패를 삼킴(deep_dive.py:284) → veto 누락 가능.
+
+### 합의된 최소 cutover 순서
+1. TechnicalResult에 typed shadow(raw/effective setup·regime·trigger·v2 verdict/history) 추가.
+2. regression으로 정확한 전이수·no-lookahead·history parity 고정.
+3. 30~50 US/KR·2~3년, 시간+종목 holdout으로 strong threshold {15,20,25,30} sweep.
+4. buy는 날짜가 아닌 flip 에피소드 단위로 10/20일 초과수익·MFE/MAE 평가.
+5. calibration 후 **brief 표시 + check 먼저 전환**(bucket/playbook은 그대로).
+6. analyze는 action 매핑 대신 setup/trigger factor로.
+7. legacy score/action/trace는 한 릴리스 동안 진단용 유지.
