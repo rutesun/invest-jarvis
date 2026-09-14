@@ -102,3 +102,66 @@ reduce/avoid로 오강등("음수 setup→레짐 무관 강등" 규칙이 과함
 **검증(합의)**: NVDA Stage2/up 9일 모두 hold(오강등 해소), BE 급점프 재발 없음, LULU buy/hold 0.
 **남은 리스크(정직)**: 세 fixture엔 "Stage2 상승 후 본격 붕괴" 사례가 없어 floor 안전성 최종 증명 부족 →
 Stage2 이탈/붕괴 holdout fixture로 회귀 고정 필요.
+
+---
+
+## Round 4 합의 (setup 변동성): A+B(상태/이벤트 분리) + bottoming 무효화 수정 + 비대칭 2-close
+
+**원인(실측)**: setup 노이즈는 (1) velocity의 accel·turning-point 스태킹(±35), (2) 일회성 이벤트
+컴포넌트(divergence·breakout·volume surge·cRSI Hook)를 매끄러운 품질 점수에 더하는 데서 옴.
+velocity-only(A)는 BE만 개선(24.7→~15), NVDA는 무효(노이즈가 event 컴포넌트라).
+
+**BE counterfactual (codex 재계산, 8/12~9/2, action 전이 횟수 / accumulate 일수)**:
+| 처리 | 일일Δ | 전이 | accum일 |
+|---|---:|---:|---:|
+| 현행 | 22.7 | 8 | 7 |
+| A: velocity 상태만 | 12.7 | 8 | 7 |
+| A+B: 이벤트 제거 | 12.0 | 7 | 7 |
+| +bottoming 무효화 수정 | 12.0 | 4 | 13 |
+| +음수 2-close 강등 | 12.0 | **2** | **15** |
+
+A-only는 8/18에서 오히려 악화(현행 5 → A -20): 부분 분리는 event mix가 남아 비일관 → **A+B 필수**.
+C(EMA/decay)는 보류: B 이후 setup에 감쇠할 event가 없고 timing 지연만 추가.
+
+**컴포넌트 상태/이벤트 분류(확정)** — setup_score엔 state만, event는 0점 trigger로 보존:
+| 컴포넌트 | state (setup 유지) | trigger (setup 제외) |
+|---|---|---|
+| velocity | SMA20 기울기 방향 ±10 | 가속·피로·전환점 |
+| cRSI | 밴드 위치 ±10, squeeze +5 | Hook Up/Down ±20 |
+| volume | 없음 | Pocket Pivot·Tennis/Egg·Power Gap·surge |
+| patterns | VCP +10/+20 | breakout·candlestick |
+| divergence | 없음 | 모든 divergence |
+| risk | 지지/저항 confluence ±10/15 | hard breakdown은 override |
+- volume_dry는 bottoming_watch 전용(setup 가산 X — 이중계산 방지).
+
+**weak churn 대응(B만으론 부족)**:
+1. **bottoming_watch 무효화 버그 수정**: 현재 느슨한 is_breakdown(SMA20 아래+10일수익률 음수)까지
+   bottoming을 꺼서 BE에서 16일 중 8일 깜빡임. → hard 조건(volume breakdown·매도flip·SMA200/구조
+   상실)만 무효화로 좁힘 → accumulate 7→13일.
+2. **비대칭 2-close 히스테리시스**: weak/above50에서 **score에 의한 하향 밴드 이동만** 2거래일 확인.
+   상승 복귀·regime/ST 변경·hard override는 즉시 반영 → 전이 4→2, accumulate 13→15.
+   대가: 저거래량 하락 경고 1일 지연 가능(단 매도flip·volume breakdown은 즉시 관통).
+
+**주의**: state만 남기면 강 setup(≥40) 도달이 드물어짐(buy 희소화) → cutover 시 밴드 재보정 대상.
+
+---
+
+## Round 4 구현 결과 (shadow, 2026-09-14): 실측 검증
+
+`shadow_v2.py`에 구현: setup_state_score(상태만)·bottoming 무효화 hard 조건화·확립된 약세 가드·
+비대칭 2일 히스테리시스(apply_hysteresis). ARM은 갓 무너진 첫 다리의 가짜 accumulate가 나와서
+`_established_weakness`(최근 10일 중 8일 SMA50 아래) 가드를 추가해 배제.
+
+실측(fixture, action 전이 횟수 = 낮을수록 안정):
+| 종목 | OLD 전이 | NEW 전이 | NEW 분포/비고 |
+|---|---|---|---|
+| BE(바닥) | 13 | **4** | accumulate 15일 안정(8/12~9/2), 9/3~4 reduce, 9/8~ hold. avoid→hold 급점프 소멸 |
+| NVDA(강세) | 9 | **2** | Stage2 내내 hold, 눌림(above50)만 watch. 오강등 없음 |
+| ARM(붕괴) | 5 | 7 | buy/hold/accumulate **0**(안전). watch/reduce/avoid 간 라벨 churn ↑ |
+| LULU(하락) | 9 | 18 | buy/hold/accumulate **0**(안전). watch↔reduce churn ↑ |
+
+- 핵심(보유·관찰) 사례 BE·NVDA는 크게 안정. 하락주는 방향은 안전(진입/보유/가짜바닥 0)하나 bearish
+  라벨(watch/reduce/avoid) churn이 늘어남 — 비대칭 히스테리시스가 하락주 반등에 watch를 즉시 허용하기 때문.
+- 후속(선택): 하락주(비 bottoming weak) churn을 줄이려면 weak 레짐에서 상·하향 모두 2일 확인(대칭)하거나
+  watch/reduce 경계(0) 부근에 데드밴드. 보유/관찰엔 영향 없어 우선순위 낮음.
+- 여전히 shadow(기존 action 불변). cutover 시 밴드·hysteresis 재보정.

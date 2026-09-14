@@ -57,11 +57,14 @@ def test_lulu_downtrend_no_buy_hold_and_no_false_bottoming():
 
 
 def test_arm_stage2_collapse_derisks_not_trapped_in_hold():
-    # 고점 후 붕괴: floor=hold에 갇히지 않고 watch→reduce→avoid로 de-risk.
+    # 고점 후 붕괴: 정점(Stage2/up)의 hold는 정당하나, 붕괴가 시작(reduce/avoid 등장)된 뒤에는
+    # hold/buy로 복귀하지 않고 de-risk 유지. 갓 무너진 첫 다리엔 가짜 바닥(accumulate) 없음.
     rows = _shadow_window("arm_2025-01-01_2026-09-09.csv", "2026-06-30", "2026-08-05")
     actions = [sv.action_v2 for _, sv in rows]
-    # 붕괴 구간에 hold/buy로 갇히지 않는다.
-    assert "hold" not in actions
+
     assert "buy" not in actions
-    # 리스크 액션(reduce/avoid)이 실제로 발화한다.
-    assert any(a in {"reduce", "avoid"} for a in actions)
+    first_risk = next((i for i, a in enumerate(actions) if a in {"reduce", "avoid"}), None)
+    assert first_risk is not None, "붕괴 구간에 리스크 액션이 없음"
+    assert all(a != "hold" for a in actions[first_risk:]), "위험 발생 후 hold로 복귀"
+    # 확립된 약세 가드로 갓 무너진 첫 다리의 가짜 accumulate가 없어야 한다.
+    assert "accumulate" not in actions

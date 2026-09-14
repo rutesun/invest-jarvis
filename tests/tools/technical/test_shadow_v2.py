@@ -10,17 +10,17 @@ from src.tools.technical.shadow_v2 import decide_action_v2
 
 
 def _decide(**kwargs):
-    base = dict(
-        regime="weak",
-        st_up=False,
-        fresh_buy_flip=False,
-        setup_score=0,
-        bottoming_watch=False,
-        overextended=False,
-        volume_breakdown=False,
-        fresh_sell_flip=False,
-        sma20_break_2d=False,
-    )
+    base = {
+        "regime": "weak",
+        "st_up": False,
+        "fresh_buy_flip": False,
+        "setup_score": 0,
+        "bottoming_watch": False,
+        "overextended": False,
+        "volume_breakdown": False,
+        "fresh_sell_flip": False,
+        "sma20_break_2d": False,
+    }
     base.update(kwargs)
     return decide_action_v2(**base)
 
@@ -129,3 +129,48 @@ def test_overextended_downgrades_buy_to_hold_no_entry():
     )
     assert action == "hold"
     assert entry is False
+
+
+def _raw_row(setup_score, regime="weak", bottoming_watch=True, st_up=False,
+             volume_breakdown=False, fresh_sell_flip=False):
+    """apply_hysteresis 입력용 raw ShadowScoreV2 (action_v2는 재계산되므로 placeholder)."""
+    from src.tools.technical.shadow_v2 import ShadowScoreV2, _setup_band
+    return ShadowScoreV2(
+        setup_score=setup_score, setup_band=_setup_band(setup_score), regime=regime,
+        st_up=st_up, buy_flip_age=None, fresh_buy_flip=False, bottoming_watch=bottoming_watch,
+        action_v2="", new_entry_allowed_v2=False, volume_breakdown=volume_breakdown,
+        fresh_sell_flip=fresh_sell_flip, overextended=False, sma20_break_2d=False,
+    )
+
+
+def test_hysteresis_delays_downgrade_two_days():
+    from src.tools.technical.shadow_v2 import apply_hysteresis
+    # weak+bottoming: 중(25)→음(-10)→음(-10)→중(25). 하향은 2일째에만 강등, 상승은 즉시.
+    rows = [_raw_row(25), _raw_row(-10), _raw_row(-10), _raw_row(25)]
+    out = [r.action_v2 for r in apply_hysteresis(rows)]
+    assert out == ["accumulate", "accumulate", "reduce", "accumulate"]
+
+
+def test_hysteresis_hard_override_immediate():
+    from src.tools.technical.shadow_v2 import apply_hysteresis
+    # 거래량 breakdown은 2일 확인 없이 즉시 avoid.
+    rows = [_raw_row(25), _raw_row(25, volume_breakdown=True)]
+    out = [r.action_v2 for r in apply_hysteresis(rows)]
+    assert out == ["accumulate", "avoid"]
+
+
+def test_established_weakness_true_for_sustained_below_sma50():
+    import pandas as pd
+
+    from src.tools.technical.shadow_v2 import _established_weakness
+    df = pd.DataFrame({"Close": [90.0] * 10, "SMA_50": [100.0] * 10})
+    assert _established_weakness(df) is True
+
+
+def test_established_weakness_false_for_fresh_drop():
+    import pandas as pd
+
+    from src.tools.technical.shadow_v2 import _established_weakness
+    # 최근 10일 중 8일은 위, 2일만 아래 = 갓 떨어진 상태 → 확립 아님.
+    df = pd.DataFrame({"Close": [110.0] * 8 + [90.0] * 2, "SMA_50": [100.0] * 10})
+    assert _established_weakness(df) is False
