@@ -43,7 +43,7 @@ _BAND_ORDER = {"심각": 0, "음": 1, "약": 2, "중": 3, "강": 4}
 class ShadowScoreV2:
     setup_score: int
     setup_band: str
-    regime: str  # weak | above50 | Stage2
+    regime: str  # weak | above50 | trend  (trend = is_uptrend OR Stage2)
     st_up: bool
     buy_flip_age: int | None
     fresh_buy_flip: bool
@@ -55,6 +55,9 @@ class ShadowScoreV2:
     fresh_sell_flip: bool = False
     overextended: bool = False
     sma20_break_2d: bool = False
+    fresh_breakout: bool = False
+    near52: bool = False
+    stage2: bool = False
 
 
 def _setup_band(score: int) -> str:
@@ -80,11 +83,13 @@ def decide_action_v2(
     volume_breakdown: bool,
     fresh_sell_flip: bool,
     sma20_break_2d: bool = False,
+    fresh_breakout: bool = False,
+    near52: bool = False,
 ) -> tuple[str, bool]:
     """regime × st × setup_band → (action, new_entry_allowed).
 
     게이트는 [floor, ceiling] 밴드를 정하고 setup은 그 안 위치만 결정한다. risk override만
-    floor를 뚫는다(설계: score-vs-gate-consensus.md Round 3).
+    floor를 뚫는다(설계: score-vs-gate-consensus.md Round 3·6).
     """
     # 선행 override (밴드보다 우선, floor 관통)
     if volume_breakdown:
@@ -102,15 +107,22 @@ def decide_action_v2(
             return "reduce", False
         return ("accumulate" if bottoming_watch else "watch"), False
 
-    if regime == "above50" or (regime == "Stage2" and not st_up):
+    if regime == "above50" or (regime == "trend" and not st_up):
         # [reduce ... watch]
         return ("reduce" if band in ("음", "심각") else "watch"), False
 
-    # Stage2 + ST up: floor = hold (확인된 상승은 노이즈 음수여도 보유)
+    # trend(is_uptrend|Stage2) + ST up: floor = hold (확인된 상승은 노이즈 음수여도 보유)
     # 가격 확인형 악화: 음수 setup + 종가<SMA20 2거래일 지속 → 조기 경고 watch
     if setup_score < 0 and sma20_break_2d:
         return "watch", False
-    if band == "강" and fresh_buy_flip and not overextended:
+    # buy 트리거: (1) 신선한 supertrend 매수전환 + 강 setup, 또는
+    #            (2) 신선한 종가 신고가 돌파 + 52주고점 근처(진짜 돌파) + 음수 아님.
+    # 돌파일은 과매수로 setup이 낮아 setup>=0만 요구(추세·ST·near52·종가돌파가 품질 담당).
+    buy_ok = not overextended and (
+        (fresh_buy_flip and setup_score >= SETUP_STRONG)
+        or (fresh_breakout and near52 and setup_score >= 0)
+    )
+    if buy_ok:
         return "buy", True  # buy/add 분기는 상위(Playbook)에서 position으로 결정
     return "hold", False
 
@@ -173,13 +185,38 @@ def setup_state_score(df: pd.DataFrame, components: dict[str, dict]) -> int:
 
 
 def _regime(components: dict[str, dict], context) -> str:
-    minervini = components.get("minervini") or {}
-    metrics = minervini.get("metrics") or {}
-    if metrics.get("is_stage2") == 1.0:
-        return "Stage2"
+    """weak / above50 / trend. trend = is_uptrend(종가>SMA50 & SMA20>SMA50 & ST!=down) OR Stage2.
+
+    Stage2 강제는 SMA150/200 지연 동안 초기 recovery 돌파를 놓친다(PANW). is_uptrend로 완화해
+    확립된 상승추세면 hold/buy를 허용하되, 단순 SMA50 재탈환(미확인)은 above50에 둔다."""
+    stage2 = (components.get("minervini") or {}).get("metrics", {}).get("is_stage2") == 1.0
+    if stage2 or getattr(context, "is_uptrend", False):
+        return "trend"
     if getattr(context, "close_above_sma50", False):
         return "above50"
     return "weak"
+
+
+def _near_52w_high(components: dict[str, dict]) -> bool:
+    """종가가 52주 고점 -25% 이내(진짜 돌파와 하락중 20일신고가 반등 구분)."""
+    return (components.get("minervini") or {}).get("metrics", {}).get(
+        "cond_within_52w_high_25pct"
+    ) == 1.0
+
+
+def _fresh_close_breakout(df: pd.DataFrame, lookback: int = 20) -> bool:
+    """종가가 직전 lookback일 고점을 처음 상향 돌파(장중 wick 제외, 당일이 첫 돌파일)."""
+    if "Close" not in df.columns or "High" not in df.columns or len(df) < lookback + 2:
+        return False
+    close = df["Close"].to_numpy(dtype=float)
+    high = df["High"].to_numpy(dtype=float)
+
+    def broke(idx: int) -> bool:
+        prior = high[idx - lookback : idx]
+        return len(prior) > 0 and np.isfinite(np.nanmax(prior)) and close[idx] > np.nanmax(prior)
+
+    n = len(df)
+    return broke(n - 1) and not broke(n - 2)
 
 
 def _buy_flip_age(df: pd.DataFrame) -> tuple[bool, int | None]:
@@ -248,6 +285,7 @@ def compute_shadow_v2(df: pd.DataFrame, components: dict[str, dict], context) ->
     """단일 바 shadow 산출(히스테리시스 미적용, as-of 결정적)."""
     setup = setup_state_score(df, components)
     regime = _regime(components, context)
+    stage2 = (components.get("minervini") or {}).get("metrics", {}).get("is_stage2") == 1.0
     st_up, buy_flip_age = _buy_flip_age(df)
     fresh_buy_flip = st_up and buy_flip_age is not None and buy_flip_age <= FRESH_FLIP_MAX_AGE
     fresh_sell_flip = bool(getattr(context, "supertrend_sell_transition", False))
@@ -255,6 +293,8 @@ def compute_shadow_v2(df: pd.DataFrame, components: dict[str, dict], context) ->
     volume_breakdown = _volume_breakdown(context)
     overextended = bool(getattr(context, "is_overextended", False))
     sma20_break_2d = _close_below_sma20_streak(df, 2)
+    fresh_breakout = _fresh_close_breakout(df)
+    near52 = _near_52w_high(components)
 
     action_v2, entry_v2 = decide_action_v2(
         regime=regime,
@@ -266,6 +306,8 @@ def compute_shadow_v2(df: pd.DataFrame, components: dict[str, dict], context) ->
         volume_breakdown=volume_breakdown,
         fresh_sell_flip=fresh_sell_flip,
         sma20_break_2d=sma20_break_2d,
+        fresh_breakout=fresh_breakout,
+        near52=near52,
     )
 
     return ShadowScoreV2(
@@ -282,6 +324,9 @@ def compute_shadow_v2(df: pd.DataFrame, components: dict[str, dict], context) ->
         fresh_sell_flip=fresh_sell_flip,
         overextended=overextended,
         sma20_break_2d=sma20_break_2d,
+        fresh_breakout=fresh_breakout,
+        near52=near52,
+        stage2=stage2,
     )
 
 
@@ -323,6 +368,8 @@ def apply_hysteresis(rows: list[ShadowScoreV2]) -> list[ShadowScoreV2]:
             volume_breakdown=r.volume_breakdown,
             fresh_sell_flip=r.fresh_sell_flip,
             sma20_break_2d=r.sma20_break_2d,
+            fresh_breakout=r.fresh_breakout,
+            near52=r.near52,
         )
         out.append(
             replace(

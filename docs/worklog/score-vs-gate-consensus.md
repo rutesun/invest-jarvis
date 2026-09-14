@@ -228,3 +228,36 @@ C(EMA/decay)는 보류: B 이후 setup에 감쇠할 event가 없고 timing 지�
 
 **남은 것**: 종목/시간 무작위 홀드아웃·flip 에피소드 MFE/MAE 심화는 후속. 현 재보정은 "buy dead branch
 해소 + 집계 우위" 수준으로 충분. cutover 시 STRONG은 이 값에서 시작해 실사용 관찰로 미세조정.
+
+---
+
+## Round 6 합의 (PANW 초기돌파 미검출 수정 → H′)
+
+사용자 PANW 테스트로 결함 발견: A′가 recovery breakout(167→243)을 내내 watch로 놓침. 원인:
+(1) regime이 Stage2 강제라 SMA150/200 지연 동안 초기돌파 차단, (2) buy가 supertrend flip 전용,
+(3) 돌파일 setup_state가 과매수(cRSI −10)로 0이라 setup≥10 게이트가 돌파 buy를 막음.
+
+**확정안 H′** (39종목 universe + PANW 검증):
+- regime 상위티어 `trend_eligible = is_uptrend OR Stage2` (weak/above50/trend). NVDA는 Stage2 경로 유지.
+- **fresh close-confirmed breakout**: `Close>prior20d高 AND 전일 아님`. 현 _detect_breakout(장중 고가)은
+  5/4 wick(거래량0.66x)를 오분류 → 종가 확인으로 5/4 watch, 5/7 buy(거래량1.53x).
+- buy = trend_eligible & ST up & !overextended & [ (fresh_flip & setup≥10) OR
+  (fresh_breakout & near52 & setup≥0) ]. near52=종가 52주고점 -25% 이내(하락중 20일신고가 반등 배제).
+- setup≥0(돌파 branch): 추세·ST·near52·종가돌파가 구조품질 담당, cRSI과매수로 10 올리면 재미검출.
+- 거래량은 hard gate 아닌 confidence/evidence(추후 1.0/1.3/1.5x episode 성과 비교).
+- 5/8+ 과열→hold(추격 억제), buy는 episode 최초 1회.
+
+**검증**: H forward +3.1%/승률56%(baseline +2.7%/52%), 하락주티커 buy도 near52로 fwd +4.3%(무작위1.5%↑).
+PANW 5/7 buy·5/8 hold. **잔여 리스크(정직)**: baseline 초과폭 +0.4%p로 얇음 → candidate-day가 아닌
+**trigger episode 단위**로 median·MFE/MAE·하위10%·cluster bootstrap 재검증 필요(후속). buy는 hint.
+
+### H′ 구현·검증 결과 (2026-09-15)
+shadow_v2에 구현: regime trend 티어(is_uptrend|Stage2), fresh close-confirmed breakout, near52,
+buy=[flip&setup≥10 | fresh_breakout&near52&setup≥0]. 신규 테스트(matrix breakout-buy 3 + PANW 회귀).
+- **PANW**: 5/7 buy(entry O)·5/8 hold(과열) 회귀 고정. 사용자 사례 해결.
+- 하락주 buy: naive H 165 → **H′ 56건**(near52 + 종가확인 돌파로 dead-cat 대폭 감소). LULU 3·NKE 5 등
+  회복 시도 구간, 하락 구간(LULU 3/13~5/15)엔 buy 0(회귀 통과).
+- BE/NVDA 안전성 유지, 전체 1380 통과.
+- ⚠️ **정직**: H′ buy 집계 forward 20일 +2.6%/승률 49% ≈ baseline(2.7%/52%). 돌파 진입은 단기
+  평균회귀라 20일 우위 얇음. buy는 **hint**(playbook이 authority). 진짜 판정엔 episode-level
+  MFE/MAE·10일·bootstrap 재검증 필요(후속). recall(PANW류 미검출 방지)은 확보.

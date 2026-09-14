@@ -39,20 +39,20 @@ def test_weak_regime_strong_setup_without_bottoming_is_watch():
 
 def test_stage2_up_negative_setup_holds_not_reduce():
     # 확인된 상승(Stage2+ST up)은 하루 노이즈로 음수여도 hold 유지(floor=hold). NVDA 오강등 방지.
-    action, entry = _decide(regime="Stage2", st_up=True, setup_score=-10)
+    action, entry = _decide(regime="trend", st_up=True, setup_score=-10)
     assert action == "hold"
     assert entry is False
 
 
 def test_stage2_up_severe_setup_still_holds():
-    action, _ = _decide(regime="Stage2", st_up=True, setup_score=-35)
+    action, _ = _decide(regime="trend", st_up=True, setup_score=-35)
     assert action == "hold"
 
 
 def test_stage2_up_deterioration_demotes_to_watch():
     # 음수 setup + 종가<SMA20 2거래일 지속 → 조기 경고로 watch(가격 확인형 악화).
     action, _ = _decide(
-        regime="Stage2", st_up=True, setup_score=-10, sma20_break_2d=True
+        regime="trend", st_up=True, setup_score=-10, sma20_break_2d=True
     )
     assert action == "watch"
 
@@ -80,52 +80,52 @@ def test_above50_up_strong_setup_capped_to_watch():
 
 
 def test_stage2_up_strong_no_flip_is_hold():
-    action, entry = _decide(regime="Stage2", st_up=True, setup_score=50)
+    action, entry = _decide(regime="trend", st_up=True, setup_score=50)
     assert action == "hold"
     assert entry is False
 
 
 def test_stage2_up_strong_with_fresh_flip_is_buy():
     action, entry = _decide(
-        regime="Stage2", st_up=True, fresh_buy_flip=True, setup_score=50
+        regime="trend", st_up=True, fresh_buy_flip=True, setup_score=50
     )
     assert action == "buy"
     assert entry is True
 
 
 def test_stage2_up_mid_setup_is_hold():
-    action, _ = _decide(regime="Stage2", st_up=True, setup_score=25)
+    action, _ = _decide(regime="trend", st_up=True, setup_score=25)
     assert action == "hold"
 
 
 def test_stage2_up_weak_band_is_hold():
     # Stage2/up floor=hold — 약 밴드(0~19)도 hold(승자 보유). demotion 조건 없을 때.
-    action, _ = _decide(regime="Stage2", st_up=True, setup_score=10)
+    action, _ = _decide(regime="trend", st_up=True, setup_score=10)
     assert action == "hold"
 
 
 def test_stage2_down_strong_is_watch():
-    action, _ = _decide(regime="Stage2", st_up=False, setup_score=50)
+    action, _ = _decide(regime="trend", st_up=False, setup_score=50)
     assert action == "watch"
 
 
 def test_volume_breakdown_override_forces_avoid():
     action, entry = _decide(
-        regime="Stage2", st_up=True, fresh_buy_flip=True, setup_score=50, volume_breakdown=True
+        regime="trend", st_up=True, fresh_buy_flip=True, setup_score=50, volume_breakdown=True
     )
     assert action == "avoid"
     assert entry is False
 
 
 def test_fresh_sell_flip_override_forces_reduce():
-    action, entry = _decide(regime="Stage2", st_up=True, setup_score=50, fresh_sell_flip=True)
+    action, entry = _decide(regime="trend", st_up=True, setup_score=50, fresh_sell_flip=True)
     assert action == "reduce"
     assert entry is False
 
 
 def test_overextended_downgrades_buy_to_hold_no_entry():
     action, entry = _decide(
-        regime="Stage2", st_up=True, fresh_buy_flip=True, setup_score=50, overextended=True
+        regime="trend", st_up=True, fresh_buy_flip=True, setup_score=50, overextended=True
     )
     assert action == "hold"
     assert entry is False
@@ -174,3 +174,28 @@ def test_established_weakness_false_for_fresh_drop():
     # 최근 10일 중 8일은 위, 2일만 아래 = 갓 떨어진 상태 → 확립 아님.
     df = pd.DataFrame({"Close": [110.0] * 8 + [90.0] * 2, "SMA_50": [100.0] * 10})
     assert _established_weakness(df) is False
+
+
+def test_breakout_near52_triggers_buy_even_with_low_setup():
+    # 신선한 종가 신고가 돌파 + 52주고점 근처면 setup가 낮아(과매수) 도 buy (PANW형 초기돌파).
+    action, entry = _decide(
+        regime="trend", st_up=True, setup_score=0, fresh_breakout=True, near52=True
+    )
+    assert action == "buy"
+    assert entry is True
+
+
+def test_breakout_without_near52_does_not_buy():
+    # 52주고점서 먼 돌파(하락중 20일신고가 반등)는 buy 아님.
+    action, _ = _decide(
+        regime="trend", st_up=True, setup_score=0, fresh_breakout=True, near52=False
+    )
+    assert action == "hold"
+
+
+def test_breakout_buy_blocked_when_overextended():
+    action, _ = _decide(
+        regime="trend", st_up=True, setup_score=0, fresh_breakout=True, near52=True,
+        overextended=True,
+    )
+    assert action == "hold"

@@ -35,7 +35,7 @@ def _shadow_window(name: str, start: str, end: str):
 def test_nvda_stage2_stays_hold_no_false_demotion():
     # 확인된 강세(Stage2+ST up)는 움직임 setup 음수여도 hold 유지 — reduce/avoid 오강등 금지.
     rows = _shadow_window("nvda_2025-01-01_2026-09-09.csv", "2026-08-27", "2026-09-09")
-    stage2_up = [(d, sv) for d, sv in rows if sv.regime == "Stage2" and sv.st_up]
+    stage2_up = [(d, sv) for d, sv in rows if sv.regime == "trend" and sv.st_up]
     assert stage2_up, "Stage2/up 구간 없음"
     assert all(sv.action_v2 == "hold" for _, sv in stage2_up)
 
@@ -68,3 +68,14 @@ def test_arm_stage2_collapse_derisks_not_trapped_in_hold():
     assert all(a != "hold" for a in actions[first_risk:]), "위험 발생 후 hold로 복귀"
     # 확립된 약세 가드로 갓 무너진 첫 다리의 가짜 accumulate가 없어야 한다.
     assert "accumulate" not in actions
+
+
+def test_panw_recovery_breakout_fires_buy():
+    # 초기 recovery 돌파(Stage2 아님, is_uptrend)에서 종가 신고가 돌파+52주고점근처면 buy.
+    # 사용자 사례: PANW 5/7 매수 타이밍. (Stage2 강제였던 구설계는 내내 watch로 놓침)
+    rows = _shadow_window("panw_2024-01-01_2026-05-20.csv", "2026-05-04", "2026-05-15")
+    by_date = dict(rows)
+    assert by_date["2026-05-07"].action_v2 == "buy"
+    assert by_date["2026-05-07"].new_entry_allowed_v2 is True
+    # 5/8 이후 과열 구간은 추격매수 아님(hold).
+    assert by_date["2026-05-08"].action_v2 == "hold"
