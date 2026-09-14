@@ -1,7 +1,7 @@
-# Change Record: 바닥 다지기 그라데이션 (avoid→hold 급점프 완화)
+# Change Record: 바닥 다지기 그라데이션 + 원본 점수 추세 중복 완화
 
 **Status**: Draft
-**Date**: 2026-09-11
+**Date**: 2026-09-14
 **PRs**: -
 **Type**: feat
 
@@ -64,6 +64,36 @@ SMA50 재탈환 ~3주 전에 accumulate 그라데이션(−15~−30)이 나타�
 - **신규진입 게이트 불변**: accumulate는 `new_entry_allowed=False`. 이평/Stage 기준 진입 허용은 그대로.
 - **가짜 바닥 차단**: 거래량 동반 breakdown/Supertrend 매도 전환(forced_action) 앞에서는 가점 생략. 신저점을 계속 깨는 하락주는 higher_low(10/30)·MIN_SIGNALS=3로 구조적 배제.
 - **재탈환 확인 불blunt**: SMA50 재탈환 순간의 확인 점프 자체는 완만화하지 않는다(조기 관찰만 추가).
+
+## 추가: 원본 점수 추세 중복 완화 (codex 리뷰 반영)
+
+바닥 가점은 증상 완화(band-aid)였고, codex 독립 리뷰로 근본 원인이 **원본 점수의 추세 중복
+카운팅**임이 드러났다(리뷰: `docs/worklog/bottoming-gradient-codex-review.md`). 하락 종목이
+"이평 아래"를 minervini(-20)+velocity(-35)+supertrend(-25)+risk(-10)로 4중 벌점받아 -80~-90.
+BE 9/2는 SMA150을 탈환했는데도 -80이었다.
+
+1. **velocity 상태/이벤트 분리 (`components/velocity.py`)**: 종가가 이미 SMA20 위면 SMA20 기울기의
+   하락은 지연(lag) 아티팩트다. '하락 가속/하락 전환점' 벌점을 억제해 반등 초입을 역방향으로
+   때리지 않는다. 종가가 SMA20 아래인 날은 기존대로 벌점 유지.
+2. **risk 추세 중복 벌점 제거 (`components/risk.py`)**: SMA50 아래·Supertrend 하락 재벌점(각 -5)을
+   삭제. minervini·supertrend가 이미 카운팅하는 추세를 risk가 다시 벌점하던 이중 계산 제거
+   (서사용 breakdown 메타데이터는 유지).
+
+효과(BE, 원본 점수):
+
+```
+날짜        종가   before(구)  after(신)   판정 변화
+2026-09-02  217.3   -80         -35        (SMA150 탈환 반영, avoid 유지)
+2026-09-03  235.6   -62         -22        avoid → reduce (재탈환 직전 완화)
+2026-08-24  204.0   -55         -45
+2026-09-01  213.6   -85         -75        (SMA20 아래 약세일: 소폭만)
+```
+
+avoid→hold 급점프가 이제 원본 레벨에서 **avoid/reduce → reduce → watch → hold** 그라데이션이 된다.
+SMA20 아래 약세일은 거의 그대로라 하락 규율은 유지. 전체 1351 테스트 통과, 회귀 0(밴드 재보정 불요).
+
+**미착수 후속**: minervini의 SMA50 아래 -20 binary는 SMA150/200 탈환·정배열을 반영 못 한다.
+그라데이션화는 전 종목·전 밴드 파급(action band 재보정 동반)이라 별도 과제로 분리.
 
 ## 평가·검증
 

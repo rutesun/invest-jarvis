@@ -47,6 +47,14 @@ def analyze_velocity(df: pd.DataFrame) -> ComponentResult:
     norm_prev_slope = (previous_slope / sma_20_latest) * 100
     slope_change = norm_slope - norm_prev_slope
 
+    # 종가가 이미 SMA20 위면 SMA20 기울기의 하락은 지연(lag) 아티팩트다 — 반등 초입에
+    # '하락 가속/전환점'으로 역방향 벌점을 주는 것을 막는다(상태 vs 이벤트 분리).
+    price_above_sma20 = False
+    if "Close" in df.columns:
+        close_latest = df["Close"].dropna()
+        if not close_latest.empty:
+            price_above_sma20 = float(close_latest.iloc[-1]) > sma_20_latest
+
     signals = []
     evidence = []
     score = 0
@@ -73,6 +81,9 @@ def analyze_velocity(df: pd.DataFrame) -> ComponentResult:
             signals.append("추세 감속")
             evidence.append(f"기울기 변화율 {slope_change:.4f}% (감속)")
 
+    elif norm_slope < -SLOPE_THRESHOLD and price_above_sma20:
+        # 기울기는 하락이나 종가가 SMA20 위 — 지연 신호로 보고 벌점 보류.
+        evidence.append(f"SMA_20 하락 기울기이나 종가가 SMA20 위 (지연 신호, {norm_slope:.4f}%)")
     elif norm_slope < -SLOPE_THRESHOLD:
         evidence.append(f"SMA_20 하락 기울기 ({norm_slope:.4f}%)")
         score -= 10
@@ -86,8 +97,8 @@ def analyze_velocity(df: pd.DataFrame) -> ComponentResult:
     else:
         evidence.append(f"SMA_20 횡보 ({norm_slope:.4f}%)")
 
-    # Turning point detection
-    if previous_slope > 0 and current_slope < 0:
+    # Turning point detection (종가가 SMA20 위면 하락 전환점은 지연 아티팩트라 억제)
+    if previous_slope > 0 and current_slope < 0 and not price_above_sma20:
         signals.append("하락 전환점")
         score -= 15
         metadata.append(

@@ -151,19 +151,18 @@ def analyze_risk(df: pd.DataFrame) -> ComponentResult:
             f"최근 저항선: ${nearest_resistance['level']:.2f} ({nearest_resistance['type']}) +{resistance_distance:.1f}%"
         )
 
-    # Risk penalties
+    # Trend context (서사/메타 전용). SMA50 아래·Supertrend 하락은 minervini·supertrend
+    # 컴포넌트가 이미 점수화하므로 여기서는 중복 벌점을 더하지 않는다(추세 이중 카운팅 방지).
     if "SMA_50" in df.columns and not pd.isna(latest.get("SMA_50")):
         sma_50 = float(latest["SMA_50"])
         if close < sma_50:
             evidence.append("가격이 SMA 50 아래 (리스크 증가)")
-            score -= 5
             metadata.append(_breakdown_metadata("가격이 SMA 50 아래"))
 
     if "SuperTrend_Dir" in df.columns and not pd.isna(latest.get("SuperTrend_Dir")):
         supertrend_dir = int(latest["SuperTrend_Dir"])
         if supertrend_dir == -1:
             evidence.append("Supertrend 하락 (리스크 증가)")
-            score -= 5
             metadata.append(_breakdown_metadata("Supertrend 하락"))
 
     # Stop loss calculation (price - 2×ATR)

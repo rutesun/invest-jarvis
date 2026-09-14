@@ -66,3 +66,28 @@ def test_velocity_turn_signal_metadata(sma_20, signal_type, bias, intent):
     assert metadata.intent == intent
     assert metadata.severity == "medium"
     assert metadata.entry_eligible is False
+
+
+# SMA20 기울기가 아직 하락(전환점 down)인 시계열. 가드 검증에 재사용.
+_SMA20_TURN_DOWN = [100] * 6 + [101, 102, 103, 104, 104, 103, 102, 101, 100]
+
+
+def test_velocity_suppresses_down_penalty_when_price_reclaimed_sma20():
+    # 종가가 이미 SMA20(최근값 100) 위(106)면 SMA20 기울기 하락은 지연(lag) 아티팩트.
+    # '하락 가속/전환점' 벌점을 억제해 반등 초입을 역방향으로 때리지 않는다.
+    df = pd.DataFrame({"SMA_20": _SMA20_TURN_DOWN, "Close": [106] * len(_SMA20_TURN_DOWN)})
+
+    result = analyze_velocity(df)
+
+    assert result.score >= -5, f"lag 벌점 억제 실패: score={result.score}"
+    assert not any(m.bias == "bearish" for m in result.signal_metadata)
+
+
+def test_velocity_keeps_down_penalty_when_price_below_sma20():
+    # 종가가 SMA20 아래(95)면 하락 벌점 유지(정상).
+    df = pd.DataFrame({"SMA_20": _SMA20_TURN_DOWN, "Close": [95] * len(_SMA20_TURN_DOWN)})
+
+    result = analyze_velocity(df)
+
+    assert result.score < 0
+    assert any(m.bias == "bearish" for m in result.signal_metadata)
