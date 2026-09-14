@@ -25,9 +25,13 @@ from src.tools.technical.components.patterns import _detect_vcp
 from src.tools.technical.components.velocity import SLOPE_THRESHOLD
 
 
-# setup_score 밴드 (잠정 — 상태만 합산한 분포 기준, holdout 재보정 대상)
-SETUP_STRONG = 40
-SETUP_MID = 20
+# setup_score 밴드. 39종목×2.5년(US+KR) 재보정:
+# 상태만 합산한 setup 분포는 95%가 ≤20, buy 후보(Stage2+up+fresh flip, n=272)도 중앙값 0·최대 30이라
+# 기존 STRONG=40은 buy가 절대 안 나오는 dead branch였다. buy 후보 20일 forward return이 setup≥10(중)
+# 구간에서 우위(+7.3%, 중앙값 +1.7%)이고 음수 구간은 -2.3%라, STRONG=10을 buy 임계로 채택.
+# 음/심각 경계(-25)는 forward상 변별이 약해 유지(리스크 규율용).
+SETUP_STRONG = 10  # 강: buy 임계 (Stage2+up+fresh flip 시)
+SETUP_MID = 5
 SETUP_WEAK = 0
 SETUP_NEGATIVE = -25  # 이 미만은 '심각'
 

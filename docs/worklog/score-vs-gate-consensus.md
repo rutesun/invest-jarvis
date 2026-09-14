@@ -205,3 +205,26 @@ C(EMA/decay)는 보류: B 이후 setup에 감쇠할 event가 없고 timing 지�
 5. calibration 후 **brief 표시 + check 먼저 전환**(bucket/playbook은 그대로).
 6. analyze는 action 매핑 대신 setup/trigger factor로.
 7. legacy score/action/trace는 한 릴리스 동안 진단용 유지.
+
+---
+
+## 밴드 재보정 (2026-09-14, 옵션 A 실행)
+
+39종목(US 30 + KR 8 + BE)×2024-01~2026-09 일봉으로 setup_state 분포·forward return 실측.
+
+**진단**: state setup 분포 95%≤20, 최대 40. buy 후보(Stage2+up+fresh flip, n=272) 중앙값 0·최대 30
+→ 기존 SETUP_STRONG=40은 buy가 절대 안 나오는 dead branch.
+
+**buy 후보 20일 forward return (setup 구간별)**: 음<0 −2.3% / 약0~9 +6.4%(중앙값 −1.3%) /
+**중10~19 +7.3%(중앙값 +1.7%)** / 강≥20 +6.6%(n=8, 희소). → buy 임계 setup≥10에서 forward 우위·음수 배제.
+
+**결정**: SETUP_STRONG 40→**10**, MID 20→5. WEAK=0·NEGATIVE=-25 유지(음/심각은 forward 변별 약함, 리스크용).
+
+**검증(전 유니버스, STRONG=10)**:
+- buy 신호 101회(종목당 연 ~1.0회). forward 20일 평균 **+7.2%**/승률 54% vs 무작위 +2.7%/52% → 집계 우위.
+- BE/NVDA 재보정 후에도 안정(BE 전이 4·accumulate 15일, NVDA Stage2 hold 유지).
+- ⚠️ **홀드아웃 불일치**: 앞18종목 buy +13.3%(62%) vs 뒤21종목 −1.5%(43%). buy의 out-of-sample
+  일관성은 약함 → buy는 **hint로만**(playbook이 진입 authority). 표준 alpha로 과신 금지.
+
+**남은 것**: 종목/시간 무작위 홀드아웃·flip 에피소드 MFE/MAE 심화는 후속. 현 재보정은 "buy dead branch
+해소 + 집계 우위" 수준으로 충분. cutover 시 STRONG은 이 값에서 시작해 실사용 관찰로 미세조정.
