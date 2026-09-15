@@ -100,3 +100,18 @@ SMA20 아래 약세일은 거의 그대로라 하락 규율은 유지. 전체 13
 - 평가세트 실데이터 fixture(`tests/fixtures/technical/scoring/`): BE(바닥) / NVDA(강세, 판정 불변) / LULU(끝까지 하락, avoid 유지).
 - 임계값 스윕으로 수렴(worklog `bottoming-gradient.md` 참조): `(MIN3, higher-low 10/30)`에서 BE accumulate 11일 / LULU 가짜 accumulate 0일 / NVDA 0일. `MIN4`는 바닥주까지 제거(과함), 짧은 5/10 창은 LULU 과검출.
 - 골든 테스트(`tests/pipelines/stock_report/test_golden_set.py`) 및 전체 1348건 통과로 회귀 없음 확인.
+
+## 추가: A′ (점수 vs 게이트 분리) shadow 레이어 + 표시 cutover
+
+codex와 다회 합의 후, 추세 레짐을 게이트로·차트/거래량/모멘텀을 점수로 분리하는 A′를 **병행(shadow)**
+구현하고 check/brief/analyze에 **표시만 전환**했다(진입 authority는 playbook 유지, legacy 판정 불변).
+
+- `tools/technical/shadow_v2.py`(신규): setup_score(상태만) + regime gate(weak/above50/trend=is_uptrend|Stage2)
+  + supertrend 방향/flip + bottoming_watch(상태) → action_v2. [floor,ceiling] 밴드 + 비대칭 히스테리시스.
+  buy = trend & ST up & !overext & fresh 종가돌파 & 52주고점근처 & setup≥0 (flip 단독 buy 제거).
+- 밴드 재보정(39종목×2.5년): SETUP_STRONG 40→10(buy dead branch 해소). buy forward +2.3%/승률49%,
+  승자 +12.4%/패자 −7.4%(비대칭) — 진입 후보 hint(playbook+손절 전제), standalone 알파 아님.
+- scorer가 shadow 1회 계산 → `TechnicalResult.shadow_v2`. check/brief/analyze가 공유 표시.
+- 검증: BE 바닥 그라데이션·NVDA 강세 안정·LULU/ARM 하락 안전·PANW 초기돌파 포착을 실데이터 회귀로 고정.
+
+설계·합의 상세: `docs/worklog/score-vs-gate-consensus.md`. 미착수: analyze factor 수학 전환, near52 sweep.
