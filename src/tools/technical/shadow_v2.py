@@ -115,13 +115,12 @@ def decide_action_v2(
     # 가격 확인형 악화: 음수 setup + 종가<SMA20 2거래일 지속 → 조기 경고 watch
     if setup_score < 0 and sma20_break_2d:
         return "watch", False
-    # buy 트리거: (1) 신선한 supertrend 매수전환 + 강 setup, 또는
-    #            (2) 신선한 종가 신고가 돌파 + 52주고점 근처(진짜 돌파) + 음수 아님.
+    # buy 트리거: 신선한 종가 신고가 돌파 + 52주고점 근처(진짜 돌파) + 음수 아님.
     # 돌파일은 과매수로 setup이 낮아 setup>=0만 요구(추세·ST·near52·종가돌파가 품질 담당).
-    buy_ok = not overextended and (
-        (fresh_buy_flip and setup_score >= SETUP_STRONG)
-        or (fresh_breakout and near52 and setup_score >= 0)
-    )
+    # supertrend 매수전환(fresh_flip)은 단독 buy로 쓰지 않는다 — flip-only buy는 파라볼릭 고점
+    # flip 같은 꼬리 손실이 크고(ARM −29%) 성과가 약함(+0.7%). flip은 timing metadata로만 유지
+    # (설계: score-vs-gate-consensus.md Round 7).
+    buy_ok = not overextended and fresh_breakout and near52 and setup_score >= 0
     if buy_ok:
         return "buy", True  # buy/add 분기는 상위(Playbook)에서 position으로 결정
     return "hold", False

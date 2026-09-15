@@ -261,3 +261,26 @@ buy=[flip&setup≥10 | fresh_breakout&near52&setup≥0]. 신규 테스트(matrix
 - ⚠️ **정직**: H′ buy 집계 forward 20일 +2.6%/승률 49% ≈ baseline(2.7%/52%). 돌파 진입은 단기
   평균회귀라 20일 우위 얇음. buy는 **hint**(playbook이 authority). 진짜 판정엔 episode-level
   MFE/MAE·10일·bootstrap 재검증 필요(후속). recall(PANW류 미검출 방지)은 확보.
+
+---
+
+## Round 7 합의 (buy 타당성·성과) + flip-only buy 제거
+
+사용자: 샘플 buy 시점·성과로 타당성 판단(리스크 일부 수용). episode 단위 + MFE/MAE 재검증.
+
+**buy 에피소드 성과(297→flip제거 261, 39종목+PANW)**:
+- forward 20일 평균 +2.3% / 중앙 −0.1% / 승률 49% (baseline +2.7%/52%) → **standalone 알파 아님**.
+- 승자 +12.4% / 패자 −7.4%, MFE +10.4% / MAE −7.3% (비대칭). 큰 승자: INTC +98·CRWD +64·삼성 +51·
+  BE +45·PANW 5/7 +38. 꼬리: LULU 하락중 돌파 −26·PLTR 고점 −16.
+- codex 반박(수용): MFE는 사후 고점이라 청산수익 아님. 기대값 0.49×12.4−0.51×7.4≈+2.1%로 baseline 미달.
+  비대칭이 baseline 열세를 독립적으로 상쇄하진 않음.
+
+**합의**:
+- buy는 **진입 후보 hint**로 타당(큰 상승 recall). standalone 20일 보유 전략으론 기각. playbook 승인+명시적
+  stop 필수. LULU/PLTR형 꼬리는 그 관리로 흡수.
+- **flip-only buy 제거**(채택): flip buy 약함(+0.7%)·최악 꼬리(ARM 고점 flip −29%) → buy는 종가 돌파로
+  단일화. flip은 timing metadata/confidence로만 유지("ST 방향=상태, flip=trigger" 철학 유지).
+- near52 25%→15%는 보류(과적합; LULU 1건 근거). 10/15/20/25% sweep(n·중앙·MFE/MAE·우측꼬리 recall) 후 재조정.
+
+**구현**: decide_action_v2 buy = trend & ST up & !overext & fresh_close_breakout & near52 & setup≥0.
+flip 제거 후 ARM −29% 꼬리 사라짐, PANW 5/7 유지. 전체 통과.

@@ -85,12 +85,13 @@ def test_stage2_up_strong_no_flip_is_hold():
     assert entry is False
 
 
-def test_stage2_up_strong_with_fresh_flip_is_buy():
+def test_fresh_flip_alone_does_not_buy():
+    # flip 단독 buy 제거(Round 7): 종가 돌파 없이 flip만으로는 buy 아님(hold).
     action, entry = _decide(
         regime="trend", st_up=True, fresh_buy_flip=True, setup_score=50
     )
-    assert action == "buy"
-    assert entry is True
+    assert action == "hold"
+    assert entry is False
 
 
 def test_stage2_up_mid_setup_is_hold():
