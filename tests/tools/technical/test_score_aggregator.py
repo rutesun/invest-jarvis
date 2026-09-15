@@ -31,9 +31,7 @@ def test_bottoming_bonus_lifts_avoid_into_accumulate_band():
     components = {"risk": _component(-65, [])}
     context = MarketContext(close=100, is_downtrend=True, close_above_sma50=False)
 
-    result = ScoreAggregator().aggregate(
-        components, context, bottoming=_qualifying_bottoming()
-    )
+    result = ScoreAggregator().aggregate(components, context, bottoming=_qualifying_bottoming())
 
     assert result.adjusted_score == -25  # -65 + 40(bonus), 상한(-15) 아래
     assert ACCUMULATE_FLOOR <= result.adjusted_score <= BOTTOMING_CEILING
@@ -46,9 +44,7 @@ def test_bottoming_bonus_never_exceeds_ceiling():
     components = {"risk": _component(-30, [])}
     context = MarketContext(close=100, is_downtrend=True, close_above_sma50=False)
 
-    result = ScoreAggregator().aggregate(
-        components, context, bottoming=_qualifying_bottoming()
-    )
+    result = ScoreAggregator().aggregate(components, context, bottoming=_qualifying_bottoming())
 
     # -30 + 40 = 10 이지만 상한 -15로 클램프.
     assert result.adjusted_score == BOTTOMING_CEILING
@@ -60,9 +56,7 @@ def test_deep_negative_stays_avoid_when_bonus_insufficient():
     # → avoid 유지. 상한이 있어 바닥 신호만으로 avoid를 뒤집지 않는다.
     components = {"risk": _component(-80, [])}
     context = MarketContext(close=100, is_downtrend=True, close_above_sma50=False)
-    bottoming = BottomingStructure(
-        higher_low=True, volume_dry=True, bullish_divergence=True
-    )
+    bottoming = BottomingStructure(higher_low=True, volume_dry=True, bullish_divergence=True)
 
     result = ScoreAggregator().aggregate(components, context, bottoming=bottoming)
 
@@ -75,9 +69,7 @@ def test_bottoming_bonus_skipped_above_sma50():
     components = {"risk": _component(-65, [])}
     context = MarketContext(close=100, close_above_sma50=True, is_uptrend=True)
 
-    result = ScoreAggregator().aggregate(
-        components, context, bottoming=_qualifying_bottoming()
-    )
+    result = ScoreAggregator().aggregate(components, context, bottoming=_qualifying_bottoming())
 
     assert result.adjusted_score == -65
     assert not any(t.rule == "bottoming_gradient_bonus" for t in result.aggregation_trace)
@@ -100,13 +92,9 @@ def test_bottoming_bonus_skipped_on_volume_backed_breakdown():
             ],
         )
     }
-    context = MarketContext(
-        close=100, is_breakdown=True, volume_ratio_20d=1.8, is_downtrend=True
-    )
+    context = MarketContext(close=100, is_breakdown=True, volume_ratio_20d=1.8, is_downtrend=True)
 
-    result = ScoreAggregator().aggregate(
-        components, context, bottoming=_qualifying_bottoming()
-    )
+    result = ScoreAggregator().aggregate(components, context, bottoming=_qualifying_bottoming())
 
     assert result.technical_verdict.action == "avoid"
     assert not any(t.rule == "bottoming_gradient_bonus" for t in result.aggregation_trace)

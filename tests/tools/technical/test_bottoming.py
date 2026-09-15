@@ -202,9 +202,7 @@ def test_bonus_capped_at_max_when_all_signals_fire():
 
 
 def test_bonus_sums_weights_below_cap():
-    structure = BottomingStructure(
-        higher_low=True, volume_dry=True, bullish_divergence=True
-    )
+    structure = BottomingStructure(higher_low=True, volume_dry=True, bullish_divergence=True)
 
     expected = min(
         BottomingThresholds.W_HIGHER_LOW
