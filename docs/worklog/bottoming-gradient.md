@@ -83,3 +83,13 @@
 - 재발 방지: velocity는 '상태(기울기)'와 '이벤트(전환점)'를 분리, risk는 추세 벌점 미보유 원칙.
 - 후속(미착수): minervini SMA50 아래 -20 binary → SMA150/200 탈환·정배열 그라데이션은 전 종목·
   전 밴드 파급이라 별도 과제(band 재보정 동반).
+
+## (2026-09-14 15:30) [Decision] cRSI 로직 독립 감사 — 코어 정확, 밴드법만 Low 차이
+- 맥락: 사용자 TradingView "cRSI 20" 차트와 대조해 우리 cRSI 구현 정합성 점검(별도 에이전트 세션).
+- 결과: von Thienen Cyclic Smoothed RSI와 공식 일치(RSI len 10=domcycle/2, torque=2/11, lag,
+  재귀식). 실제 계산이 차트와 소수점 일치(2026-03-27 cRSI 40.75=차트 40.75; 최신 밴드 db 35.87=차트).
+  lookahead 없음(truncated=full diff=0). 버그(High/Med) 없음.
+- 유일 차이(Low): 밴드가 우리 rolling 10/90 quantile vs 원식 step percentile. 값차 0.7~0.9pt,
+  Hook 신호 개수 거의 동일(up14/13 vs up13/13). 완전 정합 원하면 indicators.py:309-310 step-band로.
+- 함의: setup 노이즈로 지목한 cRSI Hook은 버그 아닌 정상 신호 → Round 4 "Hook→trigger"는 설계 선택.
+- 감사 상세: 에이전트 보고(대화 로그). ADR 후보? no.

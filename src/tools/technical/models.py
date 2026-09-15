@@ -433,6 +433,8 @@ class TechnicalResult(BaseModel):
     score_history: list[ScoreHistoryPoint] = Field(default_factory=list)
     score_history_warning: str | None = None
     aggregation_trace: list[AggregationTraceEntry] = Field(default_factory=list)
+    # A′ shadow(점수 vs 게이트 분리) 병행 산출. legacy adjusted_score/verdict와 별개.
+    shadow_v2: dict | None = None
 
     # NEW: Pattern detection requires OHLC data
     raw_dataframe: pd.DataFrame | None = None
