@@ -964,6 +964,7 @@ async def test_deep_dive_builds_all_source_integrated_explanation(
         "components",
         "component_raw_total",
         "adjusted_score",
+        "shadow_v2",
         "technical_verdict",
         "score_history",
         "aggregation_trace",
