@@ -284,3 +284,20 @@ buy=[flip&setup≥10 | fresh_breakout&near52&setup≥0]. 신규 테스트(matrix
 
 **구현**: decide_action_v2 buy = trend & ST up & !overext & fresh_close_breakout & near52 & setup≥0.
 flip 제거 후 ARM −29% 꼬리 사라짐, PANW 5/7 유지. 전체 통과.
+
+---
+
+## Cutover 실행 (표시-우선, 2026-09-15)
+
+합의된 순서대로 **표시 전환**을 완료(진입 authority는 playbook 유지, legacy score/verdict/결정수학 불변):
+1. scorer가 compute_shadow_v2 1회 계산 → TechnicalResult.shadow_v2에 담음(dict). (models.py 필드 추가)
+2. **check**: "기술 상태(A′)" 블록(판정/셋업/레짐/ST/바닥관찰·신고가돌파 태그 + "진입 권한 playbook" 명시).
+3. **brief**: BriefItem.shadow_v2 + render "기술 상태(A′)" 줄. bucket/action은 playbook 그대로.
+4. **analyze**: rule evidence에 shadow 요약, deep_dive technical_context에 shadow 전달(LLM 인지).
+- 전체 1382 통과, 회귀 0. shadow는 병행 표시(hint)라 기존 판정과 공존.
+
+**미착수(후속)**:
+- analyze 결정 factor를 action→점수 매핑 대신 **setup_band + trigger**로 재구성(codex 경고: Stage2 이중가중).
+- check 표시에 히스테리시스(현재는 당일 raw). score_history 위 apply_hysteresis 배선.
+- near52 밴드화 / 홈런 시그니처 홀드아웃 검증(과적합 경계).
+- 최종: 충분한 관찰 후 action_v2를 primary로 승격(현재는 legacy와 병행).
