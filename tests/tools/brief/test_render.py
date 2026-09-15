@@ -180,3 +180,27 @@ def test_render_shows_turnaround_line():
     md = render_markdown(datetime(2026, 8, 25), macro=None, items=items)
     assert "턴어라운드 3/4" in md
     assert "저점 높이기" in md
+
+
+def test_render_markdown_shows_shadow_v2_state():
+    item = BriefItem(
+        ticker="PANW",
+        kind="watch",
+        action="rejected",
+        bucket=BUCKET_HOLD_OK,
+        price=196.5,
+        change_pct=6.7,
+        shadow_v2={
+            "action_v2": "buy",
+            "setup_score": 0,
+            "regime": "trend",
+            "st_up": True,
+            "bottoming_watch": False,
+            "fresh_breakout": True,
+            "near52": True,
+        },
+    )
+    output = render_markdown(datetime(2026, 5, 7), None, [item])
+    assert "기술 상태(A′)" in output
+    assert "buy" in output
+    assert "신고가돌파" in output

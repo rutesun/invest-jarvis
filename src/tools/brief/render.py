@@ -139,6 +139,20 @@ def _item_section(item: BriefItem) -> list[str]:
             verdict_line = f"{verdict_line} — {' / '.join(detail_parts)}"
         lines.append(verdict_line)
 
+    if item.shadow_v2:
+        shadow = item.shadow_v2
+        st = "up" if shadow.get("st_up") else "down"
+        tags = []
+        if shadow.get("bottoming_watch"):
+            tags.append("바닥관찰")
+        if shadow.get("fresh_breakout") and shadow.get("near52"):
+            tags.append("신고가돌파")
+        tag_str = f" [{', '.join(tags)}]" if tags else ""
+        lines.append(
+            f"- **기술 상태(A′)**: {shadow['action_v2']} "
+            f"(셋업 {shadow['setup_score']}/{shadow['regime']}/ST {st}){tag_str}"
+        )
+
     if item.turnaround:
         lines.append(f"- **{item.turnaround}**")
 
