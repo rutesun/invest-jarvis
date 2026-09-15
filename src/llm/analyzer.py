@@ -38,6 +38,7 @@ _TECHNICAL_RECOMMENDATION_BY_VERDICT = {
     "add": "매수",
     "hold": "중립",
     "watch": "중립",
+    "accumulate": "중립",  # 바닥 관찰 단계 — 확인 전이라 진입 아님
     "reduce": "매도",
     "avoid": "매도",
 }

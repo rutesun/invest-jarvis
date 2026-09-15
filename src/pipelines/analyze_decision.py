@@ -276,6 +276,8 @@ def _technical_factor_score_from_verdict(technical_data) -> int | None:
         return 6
     if verdict.action == "hold":
         return 6
+    if verdict.action == "accumulate":
+        return 5
     if verdict.action == "watch":
         return 4
     return None
@@ -303,6 +305,14 @@ def _technical_rule_evidence(technical_data) -> list[str]:
         evidence.append(f"technical_verdict={verdict.action}")
         if verdict.score_trend_summary:
             evidence.append(f"score_trend: {verdict.score_trend_summary}")
+
+    shadow = getattr(technical_data, "shadow_v2", None)
+    if shadow:
+        evidence.append(
+            f"shadow_v2: action={shadow.get('action_v2')} setup={shadow.get('setup_score')}"
+            f"({shadow.get('setup_band')}) regime={shadow.get('regime')}"
+            f" 진입후보={'yes' if shadow.get('new_entry_allowed_v2') else 'no'}"
+        )
 
     history = getattr(technical_data, "score_history", None) or []
     if history:

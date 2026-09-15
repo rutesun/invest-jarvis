@@ -8,6 +8,7 @@ from src.llm.analyzer import (
     generate_fundamental_summary,
     generate_integrated_explanation,
     generate_technical_summary,
+    technical_recommendation_from_verdict,
 )
 from src.llm.models import (
     FundamentalSummaryInput,
@@ -400,3 +401,8 @@ async def test_generate_integrated_explanation_isolates_untrusted_text():
     assert "\\u003c/untrusted_facts\\u003e" in user_message
     assert _MALICIOUS_TEXT not in user_message
     assert _MALICIOUS_TEXT not in system_message
+
+
+def test_accumulate_verdict_maps_to_neutral_recommendation():
+    # accumulate는 바닥 관찰 단계 — 매수 아님, 중립으로 렌더.
+    assert technical_recommendation_from_verdict({"action": "accumulate"}) == "중립"

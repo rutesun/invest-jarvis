@@ -335,6 +335,7 @@ class DeepDivePipeline:
                 "components": technical_data.components,
                 "component_raw_total": technical_data.component_raw_total,
                 "adjusted_score": technical_data.adjusted_score,
+                "shadow_v2": technical_data.shadow_v2,
                 "technical_verdict": (
                     technical_data.technical_verdict.model_dump(mode="json")
                     if technical_data.technical_verdict is not None

@@ -269,7 +269,9 @@ def test_change_drivers_crsi_below_threshold_is_silent():
 
 def test_change_drivers_velocity_sign_flip():
     previous = {"velocity": {"score": -10, "signals": [], "metrics": {"norm_slope": -0.10}}}
-    current = {"velocity": {"score": 15, "signals": ["상승 전환점"], "metrics": {"norm_slope": 0.05}}}
+    current = {
+        "velocity": {"score": 15, "signals": ["상승 전환점"], "metrics": {"norm_slope": 0.05}}
+    }
 
     changes = _top_component_changes(previous, current)
 

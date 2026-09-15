@@ -18,7 +18,7 @@ LLM 없이 기술적 분석만 수행하는 빠른 진단 기능.
 
 - `total_score`와 `component_raw_total`은 8개 컴포넌트 raw 합계를 유지한다.
 - `adjusted_score`는 `MarketContext`와 structured signal metadata를 반영한 조정 점수다. raw OHLCV 별도 score는 만들지 않는다.
-- `technical_verdict`는 `buy/add/hold/watch/reduce/avoid` 중 하나의 technical-only hint와 판단 이유, 주의점, 무효화 가격, 최근 5거래일 점수 추이를 제공한다.
+- `technical_verdict`는 `buy/add/hold/watch/accumulate/reduce/avoid` 중 하나의 technical-only hint와 판단 이유, 주의점, 무효화 가격, 최근 5거래일 점수 추이를 제공한다. `accumulate`는 SMA50 아래에서 바닥 다지기 구조(저점 높이기·강세 다이버전스·거래량 마름·모멘텀 개선 중 3개 이상 동시 충족)가 확인될 때, avoid를 상한(-15) 있는 가점으로 완만화한 조기 관찰 단계다(신규진입 불가).
 - LLM은 확정된 score와 verdict를 재판단하지 않고 한국어로 설명만 한다.
 
 **8개 기술적 컴포넌트:**

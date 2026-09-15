@@ -1,4 +1,9 @@
-from src.tools.technical.aggregator import ScoreAggregator
+from src.tools.technical.aggregator import (
+    ACCUMULATE_FLOOR,
+    BOTTOMING_CEILING,
+    ScoreAggregator,
+)
+from src.tools.technical.bottoming import BottomingStructure
 from src.tools.technical.models import ComponentSignal, MarketContext
 
 
@@ -10,6 +15,100 @@ def _component(score: int, metadata: list[ComponentSignal]) -> dict:
         "metrics": {},
         "signal_metadata": metadata,
     }
+
+
+def _qualifying_bottoming() -> BottomingStructure:
+    return BottomingStructure(
+        higher_low=True,
+        bullish_divergence=True,
+        volume_dry=True,
+        momentum_improving=True,
+    )
+
+
+def test_bottoming_bonus_lifts_avoid_into_accumulate_band():
+    # 깊은 마이너스 raw + 바닥 구조 충족 + 추세 확인선(SMA50) 아래 → accumulate로 완만화.
+    components = {"risk": _component(-65, [])}
+    context = MarketContext(close=100, is_downtrend=True, close_above_sma50=False)
+
+    result = ScoreAggregator().aggregate(components, context, bottoming=_qualifying_bottoming())
+
+    assert result.adjusted_score == -25  # -65 + 40(bonus), 상한(-15) 아래
+    assert ACCUMULATE_FLOOR <= result.adjusted_score <= BOTTOMING_CEILING
+    assert result.technical_verdict.action == "accumulate"
+    assert result.technical_verdict.new_entry_allowed is False
+    assert any(t.rule == "bottoming_gradient_bonus" for t in result.aggregation_trace)
+
+
+def test_bottoming_bonus_never_exceeds_ceiling():
+    components = {"risk": _component(-30, [])}
+    context = MarketContext(close=100, is_downtrend=True, close_above_sma50=False)
+
+    result = ScoreAggregator().aggregate(components, context, bottoming=_qualifying_bottoming())
+
+    # -30 + 40 = 10 이지만 상한 -15로 클램프.
+    assert result.adjusted_score == BOTTOMING_CEILING
+    assert result.technical_verdict.action == "accumulate"
+
+
+def test_deep_negative_stays_avoid_when_bonus_insufficient():
+    # 적격(3신호, bonus 30)이라도 raw가 너무 깊으면 -80 + 30 = -50 < accumulate floor(-40)
+    # → avoid 유지. 상한이 있어 바닥 신호만으로 avoid를 뒤집지 않는다.
+    components = {"risk": _component(-80, [])}
+    context = MarketContext(close=100, is_downtrend=True, close_above_sma50=False)
+    bottoming = BottomingStructure(higher_low=True, volume_dry=True, bullish_divergence=True)
+
+    result = ScoreAggregator().aggregate(components, context, bottoming=bottoming)
+
+    assert result.adjusted_score == -50
+    assert result.technical_verdict.action == "avoid"
+
+
+def test_bottoming_bonus_skipped_above_sma50():
+    # 이평 위(추세 확인) 종목은 바닥 가점 대상 아님 → 점수 불변.
+    components = {"risk": _component(-65, [])}
+    context = MarketContext(close=100, close_above_sma50=True, is_uptrend=True)
+
+    result = ScoreAggregator().aggregate(components, context, bottoming=_qualifying_bottoming())
+
+    assert result.adjusted_score == -65
+    assert not any(t.rule == "bottoming_gradient_bonus" for t in result.aggregation_trace)
+
+
+def test_bottoming_bonus_skipped_on_volume_backed_breakdown():
+    # 신선한 거래량 동반 이탈(forced avoid) 앞에서는 가점 생략 — 가짜 바닥 차단.
+    components = {
+        "risk": _component(
+            -65,
+            [
+                ComponentSignal(
+                    signal_type="breakdown",
+                    bias="bearish",
+                    intent="risk",
+                    severity="high",
+                    source="risk",
+                    reason="SMA50 break",
+                )
+            ],
+        )
+    }
+    context = MarketContext(close=100, is_breakdown=True, volume_ratio_20d=1.8, is_downtrend=True)
+
+    result = ScoreAggregator().aggregate(components, context, bottoming=_qualifying_bottoming())
+
+    assert result.technical_verdict.action == "avoid"
+    assert not any(t.rule == "bottoming_gradient_bonus" for t in result.aggregation_trace)
+
+
+def test_aggregate_without_bottoming_is_unchanged():
+    # 기존 호출부 하위호환: bottoming 미전달 → 종전 동작.
+    components = {"risk": _component(-65, [])}
+    context = MarketContext(close=100, is_downtrend=True, close_above_sma50=False)
+
+    result = ScoreAggregator().aggregate(components, context)
+
+    assert result.adjusted_score == -65
+    assert result.technical_verdict.action == "avoid"
 
 
 def test_downtrend_reversal_is_capped_to_watch():

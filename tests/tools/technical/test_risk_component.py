@@ -154,3 +154,15 @@ def test_risk_supertrend_down_breakdown_signal_metadata():
     assert metadata.intent == "risk"
     assert metadata.severity == "medium"
     assert metadata.entry_eligible is False
+
+
+def test_risk_excludes_trend_penalties_no_double_count():
+    # risk는 지지/저항 confluence·손절 담당. SMA50 아래·Supertrend 하락은 minervini·
+    # supertrend가 이미 카운팅하므로 risk 점수에는 중복 벌점을 더하지 않는다(메타는 유지).
+    df = pd.DataFrame({"Close": [90] * 20, "SMA_50": [100] * 20, "SuperTrend_Dir": [-1] * 20})
+
+    result = analyze_risk(df)
+
+    assert result.score == 0  # 과거: -5(SMA50) + -5(ST) = -10
+    # 서사용 breakdown 메타데이터는 유지.
+    assert any(m.signal_type == "breakdown" for m in result.signal_metadata)

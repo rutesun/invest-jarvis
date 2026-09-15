@@ -52,6 +52,7 @@ class BriefItem:
     price: float | None = None
     change_pct: float | None = None
     technical_verdict: dict[str, Any] | None = None
+    shadow_v2: dict[str, Any] | None = None  # A′ 기술 상태(점수/게이트 분리) 병행 표시
     score_history: list[dict[str, Any]] = field(default_factory=list)
     score_history_warning: str | None = None
     remaining_condition: str | None = None  # 임박 시 미충족 게이트 1개

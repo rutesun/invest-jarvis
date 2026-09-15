@@ -158,6 +158,7 @@ class BriefPipeline:
                     if technical.technical_verdict is not None
                     else None
                 ),
+                shadow_v2=technical.shadow_v2,
                 score_history=[point.model_dump() for point in technical.score_history],
                 score_history_warning=technical.score_history_warning,
                 remaining_condition=remaining_condition,

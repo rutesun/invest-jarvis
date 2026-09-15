@@ -251,9 +251,7 @@ async def test_screener_pipeline_save_report(
 
 
 @pytest.mark.asyncio
-async def test_screener_turnaround_candidates_and_gating(
-    mock_universe_builder, mock_news_tool
-):
+async def test_screener_turnaround_candidates_and_gating(mock_universe_builder, mock_news_tool):
     """턴어라운드 후보가 발굴 섹션에 표면화되고, turnaround_only면 리더 표를 생략."""
     collector = AsyncMock()
     collector.collect_and_score.return_value = [

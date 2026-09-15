@@ -72,6 +72,7 @@ class QuickCheckPipeline:
             "component_raw_total": tech.component_raw_total,
             "adjusted_score": tech.adjusted_score,
             "technical_verdict": verdict,
+            "shadow_v2": tech.shadow_v2,
             "score_history": [point.model_dump() for point in tech.score_history],
             "aggregation_trace": [entry.model_dump() for entry in tech.aggregation_trace],
             "score_history_warning": tech.score_history_warning,
@@ -130,6 +131,31 @@ class QuickCheckPipeline:
                 lines.append(f"- Invalidation: {verdict['invalidation_level']:.2f}")
             if verdict.get("score_trend_summary"):
                 lines.append(f"- Trend: {verdict['score_trend_summary']}")
+
+        shadow = result.get("shadow_v2")
+        if shadow:
+            st = "up" if shadow.get("st_up") else "down"
+            entry = "yes" if shadow.get("new_entry_allowed_v2") else "no"
+            lines.extend(
+                [
+                    "",
+                    "### 기술 상태 (A′ · 실험)",
+                    f"- 판정: {shadow['action_v2']}  (진입 후보: {entry})",
+                    f"- 셋업 {shadow['setup_score']}({shadow['setup_band']}) · 레짐 {shadow['regime']} · 슈퍼트렌드 {st}",
+                ]
+            )
+            tags = []
+            if shadow.get("bottoming_watch"):
+                tags.append("바닥관찰")
+            if shadow.get("fresh_breakout"):
+                tags.append("종가 신고가돌파")
+            if shadow.get("near52"):
+                tags.append("52주고점 근처")
+            if shadow.get("fresh_buy_flip"):
+                tags.append("슈퍼트렌드 신선전환")
+            if tags:
+                lines.append(f"- 트리거/상태: {', '.join(tags)}")
+            lines.append("- ※ 실제 진입 권한은 playbook — 여긴 기술 타이밍 힌트")
 
         turnaround = result.get("turnaround")
         if turnaround and turnaround.get("score", 0) > 0:

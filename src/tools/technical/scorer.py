@@ -1,8 +1,10 @@
+from dataclasses import asdict
 from datetime import UTC, datetime
 
 import pandas as pd
 
 from src.tools.technical.aggregator import ScoreAggregator
+from src.tools.technical.bottoming import detect_bottoming_structure
 from src.tools.technical.components.crsi import analyze_crsi
 from src.tools.technical.components.divergence import analyze_divergence
 from src.tools.technical.components.minervini import analyze_minervini
@@ -14,6 +16,7 @@ from src.tools.technical.components.volume import analyze_volume
 from src.tools.technical.context import build_market_context
 from src.tools.technical.indicators import IndicatorCalculator
 from src.tools.technical.models import ScoreHistoryPoint, TechnicalResult
+from src.tools.technical.shadow_v2 import compute_shadow_v2
 
 
 _OHLCV_COLUMNS = ["Open", "High", "Low", "Close", "Volume"]
@@ -120,7 +123,9 @@ class TechnicalScorer:
         component_raw_total = sum(comp["score"] for comp in components.values())
         snapshot = self.calculator.create_snapshot(df)
         context = build_market_context(df)
-        aggregation = self.aggregator.aggregate(components, context)
+        bottoming = detect_bottoming_structure(df, components, context)
+        aggregation = self.aggregator.aggregate(components, context, bottoming=bottoming)
+        shadow = compute_shadow_v2(df, components, context)
 
         return TechnicalResult.from_analysis(
             df,
@@ -133,6 +138,7 @@ class TechnicalScorer:
             adjusted_score=aggregation.adjusted_score,
             technical_verdict=aggregation.technical_verdict,
             aggregation_trace=aggregation.aggregation_trace,
+            shadow_v2=asdict(shadow),
         )
 
     def _build_score_history(
