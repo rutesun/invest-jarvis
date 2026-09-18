@@ -97,6 +97,10 @@ def _item_section(item: BriefItem) -> list[str]:
     if item.note:
         lines.append(f"- **메모**: {item.note}")
 
+    # 데이터 경고 (스테일 종가 등) — 가격 해석 전에 먼저 표기
+    for warning in item.warnings:
+        lines.append(f"- **⚠ 데이터 경고**: {warning}")
+
     # 판정 근거 — 규칙 원문 (LLM과 무관하게 항상 표기)
     if exit_v is not None:
         sig_text = " / ".join(f"{s.code}({s.severity}): {s.detail}" for s in exit_v.signals)

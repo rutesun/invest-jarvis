@@ -163,6 +163,7 @@ class BriefPipeline:
                 score_history_warning=technical.score_history_warning,
                 remaining_condition=remaining_condition,
                 turnaround=turnaround,
+                warnings=technical.warnings or [],
             )
         except Exception as e:
             logger.warning("brief 종목 분석 실패 %s: %s", ticker, e)
@@ -220,6 +221,7 @@ class BriefPipeline:
             "exit_signals": [f"{s.code}: {s.detail}" for s in exit_v.signals] if exit_v else [],
             "gate_veto": gate.veto_reason if gate else None,
             "remaining_condition": item.remaining_condition,
+            "warnings": item.warnings,
             "flow": (
                 f"외인5일 {item.flow.foreign_direction_5d}, 기관5일 {item.flow.institution_direction_5d}"
                 if item.flow
