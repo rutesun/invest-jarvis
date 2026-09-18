@@ -1010,6 +1010,8 @@ def format_deep_dive_output(result: dict) -> str:
 
     output = f"# Deep Dive Analysis: {ticker}\n\n"
     output += f"## 가격: ${snapshot.price:.2f} ({snapshot.change_pct:+.2f}%)\n\n"
+    for warning in technical.warnings or []:
+        output += f"> ⚠ **데이터 경고**: {warning}\n\n"
     macro_section = _format_macro_section(result.get("macro"))
     if macro_section:
         output += f"{macro_section}\n\n"

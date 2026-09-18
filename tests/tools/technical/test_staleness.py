@@ -91,6 +91,28 @@ def test_all_nan_close_returns_empty_with_all_dropped():
     assert stale.is_stale is True
 
 
+def test_multiindex_columns_are_handled():
+    """yfinance 단일 티커가 MultiIndex 컬럼을 줄 수 있어 방어한다(from_analysis와 동일)."""
+    dates = pd.DatetimeIndex(pd.to_datetime(["2026-09-16", "2026-09-17"]))
+    df = pd.DataFrame(
+        {
+            ("Open", "INTC"): [100.0, np.nan],
+            ("High", "INTC"): [101.0, np.nan],
+            ("Low", "INTC"): [99.0, np.nan],
+            ("Close", "INTC"): [100.5, np.nan],
+            ("Volume", "INTC"): [1_000_000, 1_000_000],
+        },
+        index=dates,
+    )
+    df.columns = pd.MultiIndex.from_tuples(df.columns)
+
+    cleaned, stale = drop_trailing_nan_close(df)
+
+    assert stale.dropped_rows == 1
+    assert stale.last_valid_date == "2026-09-16"
+    assert len(cleaned) == 1
+
+
 def test_stale_close_is_frozen_dataclass():
     stale = StaleClose(dropped_rows=1, dropped_dates=["2026-09-17"], last_valid_date="2026-09-16")
     assert stale.is_stale is True

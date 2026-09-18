@@ -823,3 +823,40 @@ def test_format_deep_dive_output_no_playbook_section_when_verdict_is_none():
 
     output = format_deep_dive_output(result)
     assert "📋 플레이북 평가" not in output
+
+
+def test_format_deep_dive_output_surfaces_stale_close_warning():
+    snapshot = IndicatorSnapshot(price=101.05, change_pct=4.03)
+    technical = TechnicalResult(
+        ticker="INTC",
+        timestamp=datetime.now(),
+        snapshot=snapshot,
+        indicators=snapshot,
+        components={},
+        total_score=0,
+        warnings=[
+            "최신 봉(2026-09-17) 종가가 비어 있어 마지막 유효 종가(2026-09-16, $101.05)로 "
+            "분석했습니다. 실시간 가격은 약 $108.80입니다. 표시 가격·변동률·점수가 실제와 "
+            "다를 수 있습니다."
+        ],
+    )
+    result = {
+        "ticker": "INTC",
+        "technical": technical,
+        "technical_summary": type(
+            "TechSummary",
+            (),
+            {
+                "summary": "",
+                "key_insights": [],
+                "recommendation": "",
+                "confidence": 0.0,
+                "rationale": "",
+            },
+        )(),
+    }
+
+    output = format_deep_dive_output(result)
+    assert "데이터 경고" in output
+    assert "108.80" in output
+    assert "2026-09-17" in output

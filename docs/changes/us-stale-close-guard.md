@@ -43,11 +43,19 @@ yfinance가 아직 마감되지 않은 최신 일봉을 `Close=NaN`(OHLC 전부 
    - 표시 가격을 실시간가로 덮어쓰지 않고 병기한 이유: `snapshot.price`는 price_levels·구조
      zone 등 지표 계산과 일관돼야 하므로 유효 봉 기준을 유지하고, 실시간가는 경고로 노출한다.
 
-3. **경계 계약 + 골든 테스트**: 실제 raw 응답 fixture(`tests/fixtures/technical/stale_close/
+3. **소비 surface 표면화**(`src/pipelines/brief.py`, `src/tools/brief/{models,render}.py`,
+   `src/cli/main.py`): 경고를 `check`뿐 아니라 플랜이 명시한 `brief`·`analyze`에도 노출한다.
+   `BriefItem.warnings`를 추가해 `_analyze_target`이 `technical.warnings`를 싣고, 렌더러가
+   가격 라인 앞에 "⚠ 데이터 경고"로 표기하며 LLM narrative fact에도 포함한다. analyze는
+   `format_deep_dive_output`이 가격 헤더 직후 경고 블록을 렌더한다. (독립 코드 리뷰에서
+   `check`에만 실려 있던 gap을 지적받아 보강.)
+
+4. **경계 계약 + 골든 테스트**: 실제 raw 응답 fixture(`tests/fixtures/technical/stale_close/
    INTC_2y.csv`, `BE_2y.csv`)로 raw→최종 결과 전 구간을 고정한다. (a) 스테일 종가가 조용히
    나가지 않고 경고가 뜨는지, (b) 가드 없이는 `context.close=0.0`으로 붕괴하지만 가드 후에는
-   유효 종가가 되는지를 함께 고정. 순수 함수 단위 테스트(`test_staleness.py`)와 tool 통합
-   테스트(`test_tool.py`)도 추가.
+   유효 종가가 되는지를 함께 고정. 순수 함수 단위 테스트(`test_staleness.py`, MultiIndex 컬럼
+   방어 포함)·tool 통합(`test_tool.py`)·brief 전파(`test_brief.py`)·analyze 렌더
+   (`test_analyze_output.py`)·brief 렌더(`test_render.py`) 테스트 추가.
 
 ## Before / After
 
@@ -71,8 +79,8 @@ After (guard):
 
 ## Impact
 
-- `check`(quick_check)는 스테일 시 기존 "### 주의" 블록에 경고를 렌더한다(경로 이미 존재).
-  brief/analyze 등 `TechnicalResult.warnings`를 소비하는 경로에 동일하게 실린다.
+- 스테일 시 경고가 세 surface 모두에 노출된다: `check`("### 주의"), `brief`("⚠ 데이터 경고"
+  라인), `analyze`(가격 헤더 직후 경고 블록).
 - 정상 경로(마지막 봉 유효)는 정제가 no-op이라 출력·점수 불변. KR(KIS)은 마지막 봉이 유효해
   경고 없이 그대로.
 - 스테일이 아니던 종목의 점수는 불변. 스테일이던 종목은 `context.close=0` 붕괴가 사라져 점수가

@@ -64,6 +64,26 @@ def test_render_marker_shown():
     assert "스탑 근접" in md
 
 
+def test_render_shows_stale_data_warning():
+    item = BriefItem(
+        ticker="INTC",
+        kind="holding",
+        action="hold",
+        bucket=BUCKET_HOLD_OK,
+        price=101.05,
+        change_pct=4.03,
+        warnings=[
+            "최신 봉(2026-09-17) 종가가 비어 있어 마지막 유효 종가(2026-09-16, $101.05)로 "
+            "분석했습니다. 실시간 가격은 약 $108.80입니다. 표시 가격·변동률·점수가 실제와 "
+            "다를 수 있습니다."
+        ],
+    )
+    md = render_markdown(datetime(2026, 9, 18), macro=None, items=[item])
+    assert "데이터 경고" in md
+    assert "108.80" in md
+    assert "2026-09-17" in md
+
+
 def test_render_markdown_shows_technical_verdict_reason():
     item = BriefItem(
         ticker="AAPL",

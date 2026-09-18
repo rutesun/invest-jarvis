@@ -270,3 +270,44 @@ async def test_empty_config_returns_empty_items():
     result = await pipeline.run(config)
     assert result["items"] == []
     engine.evaluate.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_stale_close_warning_propagates_to_brief_item_and_render():
+    """tool이 실은 스테일 경고가 BriefItem.warnings와 렌더 출력까지 전파된다."""
+    from src.tools.brief.render import render_markdown
+
+    stale_msg = (
+        "최신 봉(2026-09-17) 종가가 비어 있어 마지막 유효 종가(2026-09-16, $101.05)로 "
+        "분석했습니다. 실시간 가격은 약 $108.80입니다. 표시 가격·변동률·점수가 실제와 "
+        "다를 수 있습니다."
+    )
+
+    def _tech_with_warning(ticker: str) -> TechnicalResult:
+        tech = _technical(ticker, price=101.05)
+        tech.warnings = [stale_msg]
+        return tech
+
+    tech_us = MagicMock()
+    tech_us.execute = AsyncMock(
+        side_effect=lambda ticker, **kw: ToolResult(success=True, data=_tech_with_warning(ticker))
+    )
+
+    engine = MagicMock()
+
+    async def _eval(*, ticker, holding, **kw):
+        if holding is not None:
+            return _verdict_holding(ticker, action="hold")
+        return _verdict_watch(ticker, {"A": True, "B": False, "C": False, "E": False})
+
+    engine.evaluate = AsyncMock(side_effect=_eval)
+    pipeline = _pipeline(engine, tech_us=tech_us)
+
+    result = await pipeline.run(_config())
+
+    for item in result["items"]:
+        assert item.warnings == [stale_msg]
+
+    md = render_markdown(result["date"], result["macro"], result["items"])
+    assert "데이터 경고" in md
+    assert "108.80" in md
