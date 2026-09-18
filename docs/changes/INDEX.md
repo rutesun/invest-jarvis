@@ -4,6 +4,7 @@
 
 | Date | Type | Status | 변경 | PR | Record |
 |------|------|--------|------|----|--------|
+| 2026-09-18 | fix | Draft | 스테일 종가 방어(trailing NaN-Close 가드) — yfinance가 최신 봉을 Close=NaN으로 반환하면 조용히 이전 스테일 종가로 계산하던 문제 수정. `drop_trailing_nan_close` 순수 함수로 tool에서 한 번 정제(→ `context.close=0.0` 붕괴 동반 해결) + `logger.warning`·`warnings` 표면화 + best-effort get_quote 실시간가 병기. 실측 INTC 101.05 vs 108.80·BE 270.02 vs 280.76, 정상/KR 경로 불변. 실데이터 골든 fixture 포함, 전체 1398 통과 | #{PR번호} | [us-stale-close-guard.md](us-stale-close-guard.md) |
 | 2026-09-15 | feat | Draft | 바닥 다지기 그라데이션 + 원본 점수 추세 중복 완화 + A′(점수/게이트 분리) shadow·표시 cutover — (1) SMA50 아래 바닥 구조 3개 충족 시 상한(-15) 가점 + `accumulate` 액션, (2) codex 리뷰 반영: velocity 상태/이벤트 분리(종가>SMA20이면 하락 lag 벌점 억제)·risk 추세 중복 벌점 제거. BE 9/2 -80→-35, 9/3 avoid→reduce로 avoid→hold 급점프를 그라데이션화. 전체 1351 통과·회귀 0 | - | [bottoming-gradient.md](bottoming-gradient.md) |
 | 2026-08-26 | feat | Draft | volume 완만 증가 가점 티어 — 상승일 1.2x<vol_ratio≤1.5x 구간에 +3점·"거래량 완만 증가" 근거 추가. 돌파일(예: 제닉 1.42x)이 0점으로 묻히던 사각지대 보완, 급증 티어·기존 패턴 로직 불변 | #57 | [volume-moderate-tier.md](volume-moderate-tier.md) |
 | 2026-08-26 | feat | Draft | brief 종목명 리졸버 — `TickerNameResolver`(yfinance get_quote + 180일 캐시)로 ticker→종목명 조회, brief에 "종목명 (코드)" 표기(실패 시 코드 fallback), quote_type로 오염 이름 필터 | #56 | [brief-name-resolver.md](brief-name-resolver.md) |

@@ -1,10 +1,20 @@
 # Active Context
 
-- **갱신**: 2026-09-11 (바닥 그라데이션 구현·튜닝·문서 완료)
-- **Branch**: feature/bottoming-gradient (워크트리: bottoming-gradient)
-- **진행 단계**: 구현·테스트·튜닝·change record 완료 → 커밋 후 PR 승인 대기
+- **갱신**: 2026-09-18 10:55 (스테일 종가 방어 — 리서치·설계 완료, 구현 착수)
+- **Branch**: feature/us-stale-close-guard (워크트리: us-stale-close-guard)
+- **진행 단계**: 리서치·설계 확정 → TDD 구현 착수
 
-## 지금까지
+## 지금까지 (us-stale-close-guard)
+- 문제: yfinance가 최근 일봉을 Close=NaN으로 반환하면(실측 INTC/BE 2026-09-17) 기술 분석이
+  조용히 이전 유효 봉(스테일) 종가로 계산 → 브리프/analyze에 며칠 지난 값 노출.
+  실측: INTC 101.05 vs 실시간 108.80, BE 270.02 vs 280.76.
+- 근원: 마지막 봉 해석 불일치 — `create_snapshot`은 dropna 후 스테일 봉,
+  `build_market_context`는 iloc[-1]로 close=0.0 붕괴.
+- 설계: `drop_trailing_nan_close` 순수 함수로 tool.execute에서 한 번 정제 + stale 경고
+  (logger.warning + TechnicalResult.warnings) + best-effort get_quote 실시간가 병기.
+- 다음 행동: TDD로 순수 함수·tool 통합·골든(픽스처 INTC/BE_2y.csv) 테스트 → 구현.
+
+## 직전 작업 (bottoming-gradient, 박제)
 - 문제: adjusted score가 SMA50 위/아래에 연동돼, 저점을 계단식으로 높여도 avoid(-90) 고정 →
   SMA50 재탈환 순간 hold(+105)로 급점프(BE 2026 7/28~9/8 실증).
 - 구현: 바닥 구조를 as-of 안전하게 계량해 avoid를 accumulate 밴드까지만 상한 있게 완만화.
