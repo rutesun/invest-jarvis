@@ -87,6 +87,7 @@ def simulate_widetrail(d: pd.DataFrame, entry_fn) -> list[dict]:
                 "ret": (exit_price / entry - 1) * 100,
                 "days": exit_idx - entry_idx,
                 "entry_date": d.index[entry_idx].date(),
+                "risk_pct": risk / entry,
             }
         )
         i = exit_idx + 1
