@@ -1,6 +1,6 @@
 # Change Record: 모멘텀 매매 시스템 백테스트 리서치 (preset 비교 → 확정 시스템 v3)
 
-**Status**: Draft
+**Status**: Merged
 **Date**: 2026-09-30
 **PRs**: #60
 **Type**: feat
