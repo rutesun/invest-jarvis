@@ -13,43 +13,86 @@ import os
 import numpy as np
 import pandas as pd
 import yfinance as yf
-
 from preset_v0 import add_indicators, buy_hold_return, per_ticker_return, simulate
+
 
 CACHE_DIR = "tmp/bt_cache"
 
 # 섹터 소속으로 선정 (성과 무관). 부진주 포함.
 UNIVERSE = {
     # 반도체 (대체로 고베타)
-    "NVDA": "Semis", "AMD": "Semis", "AVGO": "Semis", "MU": "Semis",
-    "INTC": "Semis", "QCOM": "Semis", "MRVL": "Semis", "TXN": "Semis",
+    "NVDA": "Semis",
+    "AMD": "Semis",
+    "AVGO": "Semis",
+    "MU": "Semis",
+    "INTC": "Semis",
+    "QCOM": "Semis",
+    "MRVL": "Semis",
+    "TXN": "Semis",
     # 소프트웨어
-    "MSFT": "Software", "CRM": "Software", "ADBE": "Software", "ORCL": "Software",
-    "PANW": "Software", "CRWD": "Software", "SNOW": "Software", "NOW": "Software",
+    "MSFT": "Software",
+    "CRM": "Software",
+    "ADBE": "Software",
+    "ORCL": "Software",
+    "PANW": "Software",
+    "CRWD": "Software",
+    "SNOW": "Software",
+    "NOW": "Software",
     # 인터넷/커뮤니케이션
-    "GOOGL": "Internet", "META": "Internet", "NFLX": "Internet",
-    "DIS": "Internet", "AMZN": "Internet",
+    "GOOGL": "Internet",
+    "META": "Internet",
+    "NFLX": "Internet",
+    "DIS": "Internet",
+    "AMZN": "Internet",
     # 소비 경기민감
-    "TSLA": "ConsDisc", "NKE": "ConsDisc", "SBUX": "ConsDisc",
-    "LULU": "ConsDisc", "MCD": "ConsDisc", "HD": "ConsDisc",
+    "TSLA": "ConsDisc",
+    "NKE": "ConsDisc",
+    "SBUX": "ConsDisc",
+    "LULU": "ConsDisc",
+    "MCD": "ConsDisc",
+    "HD": "ConsDisc",
     # 필수소비 (저베타)
-    "PG": "Staples", "KO": "Staples", "PEP": "Staples",
-    "COST": "Staples", "WMT": "Staples", "CL": "Staples",
+    "PG": "Staples",
+    "KO": "Staples",
+    "PEP": "Staples",
+    "COST": "Staples",
+    "WMT": "Staples",
+    "CL": "Staples",
     # 헬스케어
-    "LLY": "Health", "JNJ": "Health", "PFE": "Health",
-    "ABBV": "Health", "MRK": "Health", "UNH": "Health",
+    "LLY": "Health",
+    "JNJ": "Health",
+    "PFE": "Health",
+    "ABBV": "Health",
+    "MRK": "Health",
+    "UNH": "Health",
     # 금융
-    "JPM": "Financials", "BAC": "Financials", "GS": "Financials",
-    "MS": "Financials", "V": "Financials", "MA": "Financials",
+    "JPM": "Financials",
+    "BAC": "Financials",
+    "GS": "Financials",
+    "MS": "Financials",
+    "V": "Financials",
+    "MA": "Financials",
     # 에너지
-    "XOM": "Energy", "CVX": "Energy", "COP": "Energy", "SLB": "Energy",
+    "XOM": "Energy",
+    "CVX": "Energy",
+    "COP": "Energy",
+    "SLB": "Energy",
     # 산업재
-    "CAT": "Industrials", "BA": "Industrials", "GE": "Industrials", "DE": "Industrials",
+    "CAT": "Industrials",
+    "BA": "Industrials",
+    "GE": "Industrials",
+    "DE": "Industrials",
     # 유틸리티 (저베타)
-    "NEE": "Utilities", "DUK": "Utilities", "SO": "Utilities",
+    "NEE": "Utilities",
+    "DUK": "Utilities",
+    "SO": "Utilities",
     # 핀테크/고성장 (고베타, 변동성 큼)
-    "HOOD": "Fintech", "PYPL": "Fintech", "SHOP": "Fintech",
-    "COIN": "Fintech", "ROKU": "Fintech", "UPST": "Fintech",
+    "HOOD": "Fintech",
+    "PYPL": "Fintech",
+    "SHOP": "Fintech",
+    "COIN": "Fintech",
+    "ROKU": "Fintech",
+    "UPST": "Fintech",
 }
 
 PRESETS = ["MINERVINI", "ONEIL", "WEINSTEIN"]
@@ -65,8 +108,12 @@ def load_universe(symbols: list[str]) -> dict[str, pd.DataFrame]:
     missing = [s for s in symbols if not os.path.exists(_cache(s))]
     if missing:
         raw = yf.download(
-            missing, period="5y", auto_adjust=True,
-            group_by="ticker", threads=True, progress=False,
+            missing,
+            period="5y",
+            auto_adjust=True,
+            group_by="ticker",
+            threads=True,
+            progress=False,
         )
         for s in missing:
             try:
@@ -106,8 +153,10 @@ def agg(trades: list[dict]) -> dict:
     if not trades:
         return {"n": 0, "win": 0.0, "expR": 0.0, "payoff": 0.0}
     R = np.array([t["R"] for t in trades])
-    w, l = R[R > 0], R[R <= 0]
-    payoff = (w.mean() / abs(l.mean())) if len(w) and len(l) and l.mean() != 0 else float("inf")
+    w, lose = R[R > 0], R[R <= 0]
+    payoff = (
+        (w.mean() / abs(lose.mean())) if len(w) and len(lose) and lose.mean() != 0 else float("inf")
+    )
     return {
         "n": len(R),
         "win": round(100 * len(w) / len(R), 0),
@@ -116,7 +165,9 @@ def agg(trades: list[dict]) -> dict:
     }
 
 
-def print_matrix(title: str, groups: dict[str, dict[str, list[dict]]], order: list[str] | None = None) -> None:
+def print_matrix(
+    title: str, groups: dict[str, dict[str, list[dict]]], order: list[str] | None = None
+) -> None:
     print("\n" + "=" * 96)
     print(title + "   (셀 = 기댓값R / 승률% / 매매수)")
     print(f"  {'그룹':16} " + "".join(f"{p:>22}" for p in PRESETS))
@@ -127,7 +178,9 @@ def print_matrix(title: str, groups: dict[str, dict[str, list[dict]]], order: li
         cells = []
         for p in PRESETS:
             s = agg(groups[g][p])
-            cells.append(f"{s['expR']:>6} / {int(s['win']):>3}% / {s['n']:>3}" if s["n"] else f"{'-':>16}")
+            cells.append(
+                f"{s['expR']:>6} / {int(s['win']):>3}% / {s['n']:>3}" if s["n"] else f"{'-':>16}"
+            )
         print(f"  {g:16} " + "".join(f"{c:>22}" for c in cells))
 
 
@@ -177,19 +230,20 @@ def main() -> None:
     print("③ 전체 (편향 완화된 유니버스)")
     for p in PRESETS:
         s = agg(total[p])
-        print(f"  {p:10}  기댓값R {s['expR']:>6}  승률 {int(s['win'])}%  payoff {s['payoff']}  매매수 {s['n']}")
+        print(
+            f"  {p:10}  기댓값R {s['expR']:>6}  승률 {int(s['win'])}%  payoff {s['payoff']}  매매수 {s['n']}"
+        )
 
     # buy&hold 대비 (성격 요약)
     print("\n  [buy&hold 대비 preset이 이긴 종목 수 / 전체]")
     for p in PRESETS:
         wins = sum(
-            1 for s in loaded
-            if per_ticker_return(trades_by[s][p]) > buy_hold_return(data[s])
+            1 for s in loaded if per_ticker_return(trades_by[s][p]) > buy_hold_return(data[s])
         )
         print(f"    {p:10}: {wins}/{len(loaded)}")
 
     # 베타 상·하위 몇 종목 표시(투명성)
-    sb = sorted(loaded, key=lambda s: (betas[s] if not np.isnan(betas[s]) else -9))
+    sb = sorted(loaded, key=lambda s: betas[s] if not np.isnan(betas[s]) else -9)
     print("\n  베타 하위/상위 5:")
     print("    저베타:", ", ".join(f"{s}({betas[s]:.2f})" for s in sb[:5]))
     print("    고베타:", ", ".join(f"{s}({betas[s]:.2f})" for s in sb[-5:]))

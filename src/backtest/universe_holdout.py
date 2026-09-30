@@ -10,11 +10,13 @@ import warnings
 
 import pandas as pd
 
+
 warnings.filterwarnings("ignore")
 
 from preset_v0 import add_indicators, simulate
 from universe_extra import EXTRA
 from universe_matrix import PRESETS, UNIVERSE, agg, beta_bucket, beta_vs_spy, load_universe
+
 
 CUTOFF = pd.Timestamp("2024-09-29")  # 이전 = IS(학습), 이후 = OOS(숨김)
 
@@ -39,12 +41,16 @@ def main() -> None:
         is_tb[s] = {p: simulate(d, p, entry_to=CUTOFF) for p in PRESETS}
         oos_tb[s] = {p: simulate(d, p, entry_from=CUTOFF) for p in PRESETS}
 
-    print(f"홀드아웃 분할: IS = ~{CUTOFF.date()} 이전(학습),  OOS = 이후(숨김)   종목 {len(loaded)}")
+    print(
+        f"홀드아웃 분할: IS = ~{CUTOFF.date()} 이전(학습),  OOS = 이후(숨김)   종목 {len(loaded)}"
+    )
 
     # ① 전체 preset: IS vs OOS
     print("\n" + "=" * 84)
     print("① 전체 preset 기댓값R  (IS = 학습 / OOS = 숨김)")
-    print(f"  {'preset':10}{'IS expR':>10}{'IS win%':>9}{'IS n':>6}   {'OOS expR':>10}{'OOS win%':>10}{'OOS n':>7}")
+    print(
+        f"  {'preset':10}{'IS expR':>10}{'IS win%':>9}{'IS n':>6}   {'OOS expR':>10}{'OOS win%':>10}{'OOS n':>7}"
+    )
     for p in PRESETS:
         a = agg(pooled(is_tb, loaded, p))
         b = agg(pooled(oos_tb, loaded, p))

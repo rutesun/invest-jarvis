@@ -8,11 +8,10 @@ from __future__ import annotations
 
 import warnings
 
-import numpy as np
 
 warnings.filterwarnings("ignore")
 
-from preset_v0 import add_indicators, buy_hold_return, per_ticker_return, simulate
+from preset_v0 import add_indicators, simulate
 from universe_matrix import (
     PRESETS,
     UNIVERSE,
@@ -22,6 +21,7 @@ from universe_matrix import (
     load_universe,
     print_matrix,
 )
+
 
 # 섹터당 기존에 없던 신규 종목 1개 (성격 대표로 선정)
 EXTRA = {
@@ -104,7 +104,8 @@ def main() -> None:
         for p in PRESETS:
             by_beta[bk][p].extend(combined_tb[s][p])
     print_matrix(
-        "(C) 전체 베타 버킷별", by_beta,
+        "(C) 전체 베타 버킷별",
+        by_beta,
         order=["고베타(≥1.3)", "중베타(0.8~1.3)", "저베타(<0.8)"],
     )
 
@@ -113,7 +114,9 @@ def main() -> None:
     for p in PRESETS:
         pooled = [t for s in combined_tb for t in combined_tb[s][p]]
         a = agg(pooled)
-        print(f"  {p:10}  기댓값R {a['expR']:>6}  승률 {int(a['win'])}%  payoff {a['payoff']}  매매수 {a['n']}")
+        print(
+            f"  {p:10}  기댓값R {a['expR']:>6}  승률 {int(a['win'])}%  payoff {a['payoff']}  매매수 {a['n']}"
+        )
     print(f"  종목수: {len(combined_tb)}")
 
 

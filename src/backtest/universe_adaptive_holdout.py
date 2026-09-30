@@ -12,12 +12,14 @@ import warnings
 import numpy as np
 import pandas as pd
 
+
 warnings.filterwarnings("ignore")
 
 from preset_v0 import add_indicators
 from universe_entry_quality import entry_plain, simulate_widetrail
 from universe_extra import EXTRA
 from universe_matrix import UNIVERSE, agg, beta_vs_spy, load_universe
+
 
 CUTOFF = pd.Timestamp("2024-09-29").date()
 AVOID = {"ConsDisc", "Energy"}
@@ -44,9 +46,13 @@ def main() -> None:
         betas[s] = beta_vs_spy(data[s], spy)
         trades_by[s] = simulate_widetrail(d, entry_plain)
 
-    print(f"적응형 규칙 홀드아웃  IS=~{CUTOFF} 이전 / OOS=이후   종목 {len(loaded)}   거래비용 미반영")
+    print(
+        f"적응형 규칙 홀드아웃  IS=~{CUTOFF} 이전 / OOS=이후   종목 {len(loaded)}   거래비용 미반영"
+    )
     print("\n" + "=" * 84)
-    print(f"  {'변형':22}{'IS expR':>9}{'IS n':>6}{'IS승률':>7}   {'OOS expR':>9}{'OOS n':>7}{'OOS승률':>8}")
+    print(
+        f"  {'변형':22}{'IS expR':>9}{'IS n':>6}{'IS승률':>7}   {'OOS expR':>9}{'OOS n':>7}{'OOS승률':>8}"
+    )
     for name, elig in VARIANTS.items():
         keys = [s for s in loaded if elig(betas[s], tickers[s])]
         is_t = [t for s in keys for t in trades_by[s] if t["entry_date"] < CUTOFF]

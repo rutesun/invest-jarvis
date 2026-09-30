@@ -12,14 +12,18 @@ import warnings
 import numpy as np
 import pandas as pd
 
+
 warnings.filterwarnings("ignore")
 
 from preset_v0 import add_indicators, simulate
 from universe_extra import EXTRA
 from universe_matrix import PRESETS, UNIVERSE, agg, beta_bucket, beta_vs_spy, load_universe
 
+
 EDGES = list(pd.date_range("2021-10-01", "2026-10-01", freq="6MS"))
-LABELS = [f"{EDGES[i].strftime('%y/%m')}~{EDGES[i + 1].strftime('%y/%m')}" for i in range(len(EDGES) - 1)]
+LABELS = [
+    f"{EDGES[i].strftime('%y/%m')}~{EDGES[i + 1].strftime('%y/%m')}" for i in range(len(EDGES) - 1)
+]
 
 
 def bucket_of(dt) -> int | None:
@@ -83,9 +87,7 @@ def main() -> None:
         active = [i for i in range(P) if agg(per[i][p])["n"] >= 5]
         pos = [i for i in active if agg(per[i][p])["expR"] > 0]
         avg = np.mean([agg(per[i][p])["expR"] for i in active]) if active else 0
-        print(
-            f"  {p:10}  플러스 {len(pos)}/{len(active)} 기간   기간평균 expR {avg:>5.2f}"
-        )
+        print(f"  {p:10}  플러스 {len(pos)}/{len(active)} 기간   기간평균 expR {avg:>5.2f}")
     # 와인스타인이 세 preset 중 1등이던 기간 수
     wins = 0
     active_all = 0

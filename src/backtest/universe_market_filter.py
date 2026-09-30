@@ -11,14 +11,18 @@ import warnings
 import numpy as np
 import pandas as pd
 
+
 warnings.filterwarnings("ignore")
 
 from preset_v0 import add_indicators, simulate
 from universe_extra import EXTRA
 from universe_matrix import PRESETS, UNIVERSE, agg, load_universe
 
+
 EDGES = list(pd.date_range("2021-10-01", "2026-10-01", freq="6MS"))
-LABELS = [f"{EDGES[i].strftime('%y/%m')}~{EDGES[i + 1].strftime('%y/%m')}" for i in range(len(EDGES) - 1)]
+LABELS = [
+    f"{EDGES[i].strftime('%y/%m')}~{EDGES[i + 1].strftime('%y/%m')}" for i in range(len(EDGES) - 1)
+]
 
 
 def bucket_of(dt) -> int | None:
@@ -50,7 +54,9 @@ def main() -> None:
     ema10_daily = ema10_m.reindex(spy_close.index, method="ffill")  # 직전 완료월 기준(ffill)
     market_up = spy_close > ema10_daily
     up_ratio = market_up.mean()
-    print(f"시장 필터: SPY > 월간 10-EMA일 때만 진입 (미네르비니 원문).  상승국면 비율 {up_ratio:.0%}   종목 {len(loaded)}")
+    print(
+        f"시장 필터: SPY > 월간 10-EMA일 때만 진입 (미네르비니 원문).  상승국면 비율 {up_ratio:.0%}   종목 {len(loaded)}"
+    )
 
     base: dict = {}
     filt: dict = {}
@@ -63,14 +69,14 @@ def main() -> None:
     # ① 전체 종합: 필터 없음 vs 있음
     print("\n" + "=" * 88)
     print("① 전체 종합  (필터 없음 → 있음)")
-    print(f"  {'preset':10}{'base expR':>11}{'base n':>8}   {'filt expR':>11}{'filt n':>8}{'매매감소':>9}")
+    print(
+        f"  {'preset':10}{'base expR':>11}{'base n':>8}   {'filt expR':>11}{'filt n':>8}{'매매감소':>9}"
+    )
     for p in PRESETS:
         a = agg([t for s in loaded for t in base[s][p]])
         b = agg([t for s in loaded for t in filt[s][p]])
         cut = f"-{100 * (1 - b['n'] / a['n']):.0f}%" if a["n"] else "-"
-        print(
-            f"  {p:10}{a['expR']:>11}{a['n']:>8}   {b['expR']:>11}{b['n']:>8}{cut:>9}"
-        )
+        print(f"  {p:10}{a['expR']:>11}{a['n']:>8}   {b['expR']:>11}{b['n']:>8}{cut:>9}")
 
     # ② 기간별 (붕괴 구간 복구 확인)
     for p in PRESETS:

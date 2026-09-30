@@ -14,6 +14,7 @@ import warnings
 import numpy as np
 import pandas as pd
 
+
 warnings.filterwarnings("ignore")
 
 from preset_v0 import add_indicators
@@ -29,7 +30,10 @@ def entry_plain(d: pd.DataFrame, i: int) -> bool:
         return False
     breakout = r["Close"] > r["hi50_prev"] and not (pr["Close"] > pr["hi50_prev"])
     return bool(
-        r["Close"] > r["SMA150"] and r["SMA150_slope"] > 0 and breakout and r["Volume"] > 1.4 * r["volSMA20"]
+        r["Close"] > r["SMA150"]
+        and r["SMA150_slope"] > 0
+        and breakout
+        and r["Volume"] > 1.4 * r["volSMA20"]
     )
 
 
@@ -122,8 +126,12 @@ def main() -> None:
     print("\n" + "=" * 78)
     print("① 전체 (per-trade R)")
     print(f"  {'진입':22}{'expR':>7}{'승률':>6}{'payoff':>8}{'매매수':>7}{'중앙보유일':>9}")
-    print(f"  {'A: 그냥 돌파':22}{sa['expR']:>7}{int(sa['win']):>5}%{sa['payoff']:>8}{sa['n']:>7}{med_days(ta):>9}")
-    print(f"  {'B: 미네르비니 품질':20}{sb['expR']:>7}{int(sb['win']):>5}%{sb['payoff']:>8}{sb['n']:>7}{med_days(tb):>9}")
+    print(
+        f"  {'A: 그냥 돌파':22}{sa['expR']:>7}{int(sa['win']):>5}%{sa['payoff']:>8}{sa['n']:>7}{med_days(ta):>9}"
+    )
+    print(
+        f"  {'B: 미네르비니 품질':20}{sb['expR']:>7}{int(sb['win']):>5}%{sb['payoff']:>8}{sb['n']:>7}{med_days(tb):>9}"
+    )
 
     def matrix(title: str, groups: list[str], keyfn) -> None:
         print("\n" + "=" * 78)
@@ -137,7 +145,11 @@ def main() -> None:
             bc = f"{b['expR']:>6} / {int(b['win']):>3}% / {b['n']:>3}" if b["n"] else f"{'-':>16}"
             print(f"  {g:16}{ac:>22}{bc:>24}")
 
-    matrix("② 베타 버킷별", ["고베타(≥1.3)", "중베타(0.8~1.3)", "저베타(<0.8)"], lambda s: beta_bucket(betas[s]))
+    matrix(
+        "② 베타 버킷별",
+        ["고베타(≥1.3)", "중베타(0.8~1.3)", "저베타(<0.8)"],
+        lambda s: beta_bucket(betas[s]),
+    )
     matrix("③ 섹터별", sorted(set(tickers.values())), lambda s: tickers[s])
 
 

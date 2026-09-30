@@ -12,18 +12,20 @@ import warnings
 import numpy as np
 import pandas as pd
 
+
 warnings.filterwarnings("ignore")
 
 from preset_v0 import add_indicators
 from universe_extra import EXTRA
 from universe_matrix import UNIVERSE, beta_vs_spy, load_universe
-from universe_transition import AVOID, CUTOFF, prepare, row, simulate
+from universe_transition import AVOID, prepare, row, simulate
+
 
 BETA_WINDOW = 252
 CANDIDATES = {
-    "확정 시스템": dict(T=False, D=False),
-    "+ 바닥 경로 D": dict(T=False, D=True),
-    "+ 전환 T + 바닥 D": dict(T=True, D=True),
+    "확정 시스템": {"T": False, "D": False},
+    "+ 바닥 경로 D": {"T": False, "D": True},
+    "+ 전환 T + 바닥 D": {"T": True, "D": True},
 }
 
 
@@ -46,8 +48,10 @@ def main() -> None:
         prepared[s] = prepare(add_indicators(data[s], spy["Close"]))
         tbeta[s] = trailing_beta(data[s]["Close"], spy["Close"])
 
-    head = (f"  {'방식':34}{'횟수':>5}{'승률':>7}{'평균R':>7}{'합계R':>8}{'보유일':>6}"
-            f"{'IS R':>7}{'OOS R':>7}{'비용후R':>8}")
+    head = (
+        f"  {'방식':34}{'횟수':>5}{'승률':>7}{'평균R':>7}{'합계R':>8}{'보유일':>6}"
+        f"{'IS R':>7}{'OOS R':>7}{'비용후R':>8}"
+    )
     print("베타 look-ahead 제거 재비교  (청산=150일선 2일 연속 또는 150일선-1R 아래)")
     for name, cfg in CANDIDATES.items():
         print("\n" + "=" * 96)
@@ -72,9 +76,12 @@ def main() -> None:
 
     # 5년 베타와 과거 1년 베타가 얼마나 다른지
     n_old = sum(1 for s in loaded if full_beta[s] >= 1.3)
-    share = np.mean([np.nanmean(np.nan_to_num(tbeta[s], nan=0) >= 1.3) for s in loaded
-                     if full_beta[s] >= 1.3])
-    print(f"\n  5년 베타 ≥1.3 종목 {n_old}개: 이 종목들이 과거1년 베타 ≥1.3인 날 비율 평균 {share*100:.0f}%")
+    share = np.mean(
+        [np.nanmean(np.nan_to_num(tbeta[s], nan=0) >= 1.3) for s in loaded if full_beta[s] >= 1.3]
+    )
+    print(
+        f"\n  5년 베타 ≥1.3 종목 {n_old}개: 이 종목들이 과거1년 베타 ≥1.3인 날 비율 평균 {share * 100:.0f}%"
+    )
 
 
 if __name__ == "__main__":

@@ -14,12 +14,14 @@ import warnings
 
 import numpy as np
 
+
 warnings.filterwarnings("ignore")
 
 from preset_v0 import add_indicators
 from universe_entry_quality import entry_plain, simulate_widetrail
 from universe_extra import EXTRA
 from universe_matrix import UNIVERSE, agg, beta_vs_spy, load_universe
+
 
 AVOID = {"ConsDisc", "Energy"}
 
@@ -60,9 +62,13 @@ def main() -> None:
         bh_by[s] = bh(data[s])
 
     spy_bh = bh(spy)
-    print(f"적응형 필터 vs buy&hold   종목 {len(loaded)}   SPY B&H {spy_bh:+.0f}%   거래비용 미반영")
+    print(
+        f"적응형 필터 vs buy&hold   종목 {len(loaded)}   SPY B&H {spy_bh:+.0f}%   거래비용 미반영"
+    )
     print("\n" + "=" * 104)
-    print(f"  {'변형':22}{'종목수':>6}{'expR':>7}{'승률':>6}{'매매수':>7}{'전략평균%':>10}{'대상B&H평균%':>13}{'B&H이긴비율':>11}")
+    print(
+        f"  {'변형':22}{'종목수':>6}{'expR':>7}{'승률':>6}{'매매수':>7}{'전략평균%':>10}{'대상B&H평균%':>13}{'B&H이긴비율':>11}"
+    )
 
     for name, elig in VARIANTS.items():
         keys = [s for s in loaded if elig(betas[s], tickers[s])]
@@ -77,7 +83,9 @@ def main() -> None:
             f"{np.mean(strat):>10.0f}{np.mean(bhs):>13.0f}{beat:>10.0f}%"
         )
 
-    print("\n  주: '전략평균%'는 각 트레이드 전액투입·순차 가정(공백/현금 보유 무시) → 완전투자 B&H보다 시장노출이 적어")
+    print(
+        "\n  주: '전략평균%'는 각 트레이드 전액투입·순차 가정(공백/현금 보유 무시) → 완전투자 B&H보다 시장노출이 적어"
+    )
     print("      강세장에선 총수익이 낮게 나옴. 핵심은 변형 간 expR·B&H이긴비율의 개선 여부.")
 
 

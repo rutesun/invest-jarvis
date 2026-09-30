@@ -20,6 +20,7 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 
+
 TICKERS = {
     "BE": "BE",
     "HOOD": "HOOD",
@@ -107,7 +108,9 @@ def entry_signal(d: pd.DataFrame, i: int, preset: str) -> bool:
         return bool(uptrend and _breakout50(d, i) and vol > 1.5 * r["volSMA20"])
     if preset == "WEINSTEIN":
         stage2 = r["Close"] > r["SMA150"] and r["SMA150_slope"] > 0
-        return bool(stage2 and _breakout50(d, i) and vol > 2.0 * r["volSMA20"])  # 거래량 2배(실제 규칙)
+        return bool(
+            stage2 and _breakout50(d, i) and vol > 2.0 * r["volSMA20"]
+        )  # 거래량 2배(실제 규칙)
     raise ValueError(preset)
 
 
@@ -182,7 +185,9 @@ def simulate(
                     else:  # 느리게 도달 → 즉시 익절
                         exit_price, exit_idx, reason = entry * 1.20, j, "target20"
                         break
-                if not leader and age >= 10 and max_gain < 0.05:  # 2주 내 안 오르면 교체(dead money)
+                if (
+                    not leader and age >= 10 and max_gain < 0.05
+                ):  # 2주 내 안 오르면 교체(dead money)
                     exit_price, exit_idx, reason = rj["Close"], j, "dead_money"
                     break
                 ma = rj["SMA50"] if leader else rj["SMA20"]  # 일반=단기(SMA20), 주도주=여유(SMA50)
@@ -275,7 +280,9 @@ def main() -> None:
     print("데이터 구간 / buy&hold 기준")
     for name, d in data.items():
         c = d["Close"].dropna()
-        print(f"  {name:8} {c.index[0].date()} ~ {c.index[-1].date()}  B&H {buy_hold_return(d):+8.1f}%")
+        print(
+            f"  {name:8} {c.index[0].date()} ~ {c.index[-1].date()}  B&H {buy_hold_return(d):+8.1f}%"
+        )
 
     pooled: dict[str, list[dict]] = {p: [] for p in presets}
     per_ticker: dict[str, dict[str, float]] = {}

@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 
+
 warnings.filterwarnings("ignore")
 
 from preset_v0 import add_indicators
@@ -24,13 +25,20 @@ from universe_matrix import UNIVERSE
 from universe_trailing_beta import trailing_beta
 from universe_transition import AVOID, prepare, simulate
 
+
 LONG_CACHE = "tmp/bt_cache_long"
 PERIODS = {
-    "새 기간 2016-09~2021-09": (pd.Timestamp("2016-09-29").date(), pd.Timestamp("2021-09-29").date()),
-    "기존 기간 2021-09~2026-09": (pd.Timestamp("2021-09-29").date(), pd.Timestamp("2026-12-31").date()),
+    "새 기간 2016-09~2021-09": (
+        pd.Timestamp("2016-09-29").date(),
+        pd.Timestamp("2021-09-29").date(),
+    ),
+    "기존 기간 2021-09~2026-09": (
+        pd.Timestamp("2021-09-29").date(),
+        pd.Timestamp("2026-12-31").date(),
+    ),
 }
-BASE = dict(T=False, D=True, X=None, exit150="2d1R")
-CLIMAX = dict(trim="x", arm_ext=0.40, trim_st=False, trim_frac=1.0, trim_ma="sma20")
+BASE = {"T": False, "D": True, "X": None, "exit150": "2d1R"}
+CLIMAX = {"trim": "x", "arm_ext": 0.40, "trim_st": False, "trim_frac": 1.0, "trim_ma": "sma20"}
 rng = np.random.default_rng(0)
 
 
@@ -38,8 +46,14 @@ def load_long(symbols):
     os.makedirs(LONG_CACHE, exist_ok=True)
     missing = [s for s in symbols if not os.path.exists(f"{LONG_CACHE}/{s}.csv")]
     if missing:
-        raw = yf.download(missing, start="2014-01-01", auto_adjust=True, group_by="ticker",
-                          threads=True, progress=False)
+        raw = yf.download(
+            missing,
+            start="2014-01-01",
+            auto_adjust=True,
+            group_by="ticker",
+            threads=True,
+            progress=False,
+        )
         for s in missing:
             try:
                 d = raw[s][["Open", "High", "Low", "Close", "Volume"]].dropna(how="all")
@@ -49,8 +63,11 @@ def load_long(symbols):
                     d.to_csv(f"{LONG_CACHE}/{s}.csv")
             except Exception:
                 pass
-    return {s: pd.read_csv(f"{LONG_CACHE}/{s}.csv", parse_dates=["Date"]).set_index("Date")
-            for s in symbols if os.path.exists(f"{LONG_CACHE}/{s}.csv")}
+    return {
+        s: pd.read_csv(f"{LONG_CACHE}/{s}.csv", parse_dates=["Date"]).set_index("Date")
+        for s in symbols
+        if os.path.exists(f"{LONG_CACHE}/{s}.csv")
+    }
 
 
 def cluster_ci(trades, n_boot=2000):
@@ -70,16 +87,19 @@ def cluster_ci(trades, n_boot=2000):
 def describe(name, tr):
     R = np.array([x["R"] for x in tr])
     if len(R) == 0:
-        print(f"  {name}: 매매 없음"); return
+        print(f"  {name}: 매매 없음")
+        return
     srt = np.sort(R)[::-1]
     by_tk = pd.Series({x["tk"]: 0.0 for x in tr})
     for x in tr:
         by_tk[x["tk"]] += x["R"]
     top_tk = by_tk.sort_values(ascending=False)
     lo, hi = cluster_ci(tr)
-    print(f"  {name:22}{len(R):>5}{100*(R>0).mean():>6.0f}%{R.mean():>7.2f}{np.median(R):>7.2f}"
-          f"  [{lo:>5.2f},{hi:>5.2f}]{srt[5:].mean():>8.2f}{srt[10:].mean():>8.2f}"
-          f"{100*srt[:5].sum()/R.sum():>7.0f}%  {top_tk.index[0]}({100*top_tk.iloc[0]/R.sum():.0f}%)")
+    print(
+        f"  {name:22}{len(R):>5}{100 * (R > 0).mean():>6.0f}%{R.mean():>7.2f}{np.median(R):>7.2f}"
+        f"  [{lo:>5.2f},{hi:>5.2f}]{srt[5:].mean():>8.2f}{srt[10:].mean():>8.2f}"
+        f"{100 * srt[:5].sum() / R.sum():>7.0f}%  {top_tk.index[0]}({100 * top_tk.iloc[0] / R.sum():.0f}%)"
+    )
 
 
 def main():
@@ -87,7 +107,9 @@ def main():
     data = load_long(list(tickers) + ["SPY"])
     spy = data["SPY"]
     loaded = [s for s in tickers if s in data]
-    print(f"장기 데이터 로드 {len(loaded)}/{len(tickers)}종목, SPY {spy.index[0].date()}~{spy.index[-1].date()}")
+    print(
+        f"장기 데이터 로드 {len(loaded)}/{len(tickers)}종목, SPY {spy.index[0].date()}~{spy.index[-1].date()}"
+    )
     first = {s: data[s].index[0].date() for s in loaded}
     late = [s for s in loaded if first[s] > pd.Timestamp("2016-06-01").date()]
     print(f"2016-06 이후 상장(새 기간 일부만 참여): {', '.join(late)}")
@@ -114,8 +136,10 @@ def main():
         all_runs[(u, "기준")] = run(keys, gate)
         all_runs[(u, "과열 규칙")] = run(keys, gate, **CLIMAX)
 
-    head = (f"  {'':22}{'횟수':>5}{'승률':>7}{'평균R':>7}{'중앙R':>7}  {'95% 구간':>13}"
-            f"{'상위5제외':>8}{'상위10제외':>8}{'상위5비중':>7}  최대 종목(비중)")
+    head = (
+        f"  {'':22}{'횟수':>5}{'승률':>7}{'평균R':>7}{'중앙R':>7}  {'95% 구간':>13}"
+        f"{'상위5제외':>8}{'상위10제외':>8}{'상위5비중':>7}  최대 종목(비중)"
+    )
     for pname, (a, b) in PERIODS.items():
         print("\n" + "=" * 110)
         print(f"[{pname}]")
@@ -143,27 +167,39 @@ def main():
     for u in universes:
         base = {(x["tk"], x["entry_date"]): x for x in all_runs[(u, "기준")]}
         for pname, (a, b) in PERIODS.items():
-            pairs = [(base[(x["tk"], x["entry_date"])], x) for x in all_runs[(u, "과열 규칙")]
-                     if (x["tk"], x["entry_date"]) in base and x["n_partial"] > 0 and a <= x["entry_date"] < b]
+            pairs = [
+                (base[(x["tk"], x["entry_date"])], x)
+                for x in all_runs[(u, "과열 규칙")]
+                if (x["tk"], x["entry_date"]) in base
+                and x["n_partial"] > 0
+                and a <= x["entry_date"] < b
+            ]
             if not pairs:
-                print(f"  {u} / {pname}: 작동 없음"); continue
+                print(f"  {u} / {pname}: 작동 없음")
+                continue
             d = np.array([c["R"] - bse["R"] for bse, c in pairs])
-            print(f"  {u} / {pname}: 작동 {len(d)}회, 과열 규칙이 나은 비율 {100*(d>0).mean():.0f}%, "
-                  f"평균 차이 {d.mean():+.2f}R, 합계 차이 {d.sum():+.1f}R, 최대 이득 {d.max():+.1f}R, 최대 손해 {d.min():+.1f}R")
+            print(
+                f"  {u} / {pname}: 작동 {len(d)}회, 과열 규칙이 나은 비율 {100 * (d > 0).mean():.0f}%, "
+                f"평균 차이 {d.mean():+.2f}R, 합계 차이 {d.sum():+.1f}R, 최대 이득 {d.max():+.1f}R, 최대 손해 {d.min():+.1f}R"
+            )
 
     print("\n" + "=" * 110)
     print("[과열 규칙 설정 민감도 — 고베타 관문, 평균 R (새 기간 / 기존 기간)]")
     keys, gate = universes["고베타 관문"]
     base_tr = all_runs[("고베타 관문", "기준")]
+
     def pm(tr, p):
         a, b = PERIODS[p]
         return np.mean([x["R"] for x in tr if a <= x["entry_date"] < b])
+
     pn = list(PERIODS)
     print(f"  {'기준':20}{pm(base_tr, pn[0]):>8.2f}{pm(base_tr, pn[1]):>8.2f}")
     for ext in (0.30, 0.35, 0.40, 0.45, 0.50):
         for ma in ("sma20", "sma50"):
             tr = run(keys, gate, **{**CLIMAX, "arm_ext": ext, "trim_ma": ma})
-            print(f"  {f'이격 {int(ext*100)}% / {ma[3:]}일선':20}{pm(tr, pn[0]):>8.2f}{pm(tr, pn[1]):>8.2f}")
+            print(
+                f"  {f'이격 {int(ext * 100)}% / {ma[3:]}일선':20}{pm(tr, pn[0]):>8.2f}{pm(tr, pn[1]):>8.2f}"
+            )
 
 
 if __name__ == "__main__":

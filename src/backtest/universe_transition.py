@@ -14,6 +14,7 @@ import warnings
 import numpy as np
 import pandas as pd
 
+
 warnings.filterwarnings("ignore")
 
 from preset_v0 import add_indicators
@@ -22,23 +23,24 @@ from universe_extra import EXTRA
 from universe_matrix import UNIVERSE, beta_vs_spy, load_universe
 from universe_v04 import features
 
+
 CUTOFF = pd.Timestamp("2024-09-29").date()
 AVOID = {"ConsDisc", "Energy"}
 TIGHTEN_AT = 0.30
 
 VARIANTS = {
-    "A  baseline (SWING_W150)": dict(T=False, D=False, X=None),
-    "B  + 촘촘 청산 X1(고점-10%)": dict(T=False, D=False, X="pct10"),
-    "C  + 촘촘 청산 X2(20일선)": dict(T=False, D=False, X="sma20"),
-    "D  + 전환 진입 T": dict(T=True, D=False, X=None),
-    "E  + 전환 T + 바닥 D": dict(T=True, D=True, X=None),
-    "H  + 바닥 D만": dict(T=False, D=True, X=None),
-    "A2 baseline + 새 청산": dict(T=False, D=False, X=None, exit150="2d1R"),
-    "D2 + 전환 T + 새 청산": dict(T=True, D=False, X=None, exit150="2d1R"),
-    "H2 + 바닥 D + 새 청산": dict(T=False, D=True, X=None, exit150="2d1R"),
-    "E2 + T + D + 새 청산": dict(T=True, D=True, X=None, exit150="2d1R"),
-    "F  + 전환 T + X1": dict(T=True, D=False, X="pct10"),
-    "G  + 전환 T + X2": dict(T=True, D=False, X="sma20"),
+    "A  baseline (SWING_W150)": {"T": False, "D": False, "X": None},
+    "B  + 촘촘 청산 X1(고점-10%)": {"T": False, "D": False, "X": "pct10"},
+    "C  + 촘촘 청산 X2(20일선)": {"T": False, "D": False, "X": "sma20"},
+    "D  + 전환 진입 T": {"T": True, "D": False, "X": None},
+    "E  + 전환 T + 바닥 D": {"T": True, "D": True, "X": None},
+    "H  + 바닥 D만": {"T": False, "D": True, "X": None},
+    "A2 baseline + 새 청산": {"T": False, "D": False, "X": None, "exit150": "2d1R"},
+    "D2 + 전환 T + 새 청산": {"T": True, "D": False, "X": None, "exit150": "2d1R"},
+    "H2 + 바닥 D + 새 청산": {"T": False, "D": True, "X": None, "exit150": "2d1R"},
+    "E2 + T + D + 새 청산": {"T": True, "D": True, "X": None, "exit150": "2d1R"},
+    "F  + 전환 T + X1": {"T": True, "D": False, "X": "pct10"},
+    "G  + 전환 T + X2": {"T": True, "D": False, "X": "sma20"},
 }
 
 
@@ -52,12 +54,23 @@ def prepare(d: pd.DataFrame) -> dict:
     return f
 
 
-def simulate(f: dict, T: bool, D: bool, X: str | None, exit150: str = "1d",
-             eligible: np.ndarray | None = None, trim: str | None = None,
-             trim_ma: str = "sma50", trim_st: bool = True, exit_ma: str = "sma150",
-             trim_frac: float = 0.25, arm_ext: float | None = None, rebuy: str = "reclaim") -> list[dict]:
+def simulate(
+    f: dict,
+    T: bool,
+    D: bool,
+    X: str | None,
+    exit150: str = "1d",
+    eligible: np.ndarray | None = None,
+    trim: str | None = None,
+    trim_ma: str = "sma50",
+    trim_st: bool = True,
+    exit_ma: str = "sma150",
+    trim_frac: float = 0.25,
+    arm_ext: float | None = None,
+    rebuy: str = "reclaim",
+) -> list[dict]:
     """exit150: '1d' 종가가 150일선 아래면 매도 / '2d1R' 2일 연속 아래 또는 150일선-1R 아래면 매도."""
-    c, o, h, l = f["c"], f["o"], f["h"], f["l"]
+    c, o, h, low = f["c"], f["o"], f["h"], f["l"]
     n = len(c)
     trades: list[dict] = []
     t = 250
@@ -68,7 +81,12 @@ def simulate(f: dict, T: bool, D: bool, X: str | None, exit150: str = "1d",
         kind = None
         if f["swing"][t]:
             kind = "S"
-        elif T and f["transition"][t] and (f["fresh20"][t] or f["reclaim50"][t]) and not f["overext"][t]:
+        elif (
+            T
+            and f["transition"][t]
+            and (f["fresh20"][t] or f["reclaim50"][t])
+            and not f["overext"][t]
+        ):
             kind = "T"
         elif D and f["deep"][t] and (f["fresh20"][t] or f["reclaim50"][t]):
             kind = "D"
@@ -100,7 +118,7 @@ def simulate(f: dict, T: bool, D: bool, X: str | None, exit150: str = "1d",
         xp = xi = None
         why = "end"
         for k in range(ei, n):
-            if l[k] <= stop:
+            if low[k] <= stop:
                 xp, xi, why = stop, k, "stop"
                 break
             maxc = max(maxc, c[k])
@@ -120,7 +138,7 @@ def simulate(f: dict, T: bool, D: bool, X: str | None, exit150: str = "1d",
                     n_partial += 1
                 elif units < 1.0 and trim != "sell_only":
                     if rebuy == "pullback100":
-                        near = l[max(ei, k - 4):k + 1].min() <= f["sma100"][k] * 1.03
+                        near = low[max(ei, k - 4) : k + 1].min() <= f["sma100"][k] * 1.03
                         ok = near and c[k] > f["sma100"][k] and c[k] > h[k - 1]
                     elif trim == "rebuy_st" and arm_ext is None:
                         ok = c[k] > tm[k] and (f["st"][k] == 1 or not trim_st)
@@ -132,17 +150,19 @@ def simulate(f: dict, T: bool, D: bool, X: str | None, exit150: str = "1d",
                         n_partial += 1
             if not graduated and c[k] > f["sma150"][k] and f["slope150"][k] > 0:
                 graduated = True
-            if X and maxc / entry - 1 >= TIGHTEN_AT:
-                if (X == "pct10" and c[k] < maxc * 0.90) or (X == "sma20" and c[k] < f["sma20"][k]):
-                    xp, xi, why = c[k], k, "tighten"
-                    break
+            if (
+                X
+                and maxc / entry - 1 >= TIGHTEN_AT
+                and (
+                    (X == "pct10" and c[k] < maxc * 0.90) or (X == "sma20" and c[k] < f["sma20"][k])
+                )
+            ):
+                xp, xi, why = c[k], k, "tighten"
+                break
             if graduated:
                 em = f[exit_ma]
                 below = c[k] < em[k]
-                if exit150 == "1d":
-                    hit = below
-                else:
-                    hit = (below and prev_below) or c[k] < em[k] - risk
+                hit = below if exit150 == "1d" else below and prev_below or c[k] < em[k] - risk
                 prev_below = below
                 if hit:
                     xp, xi, why = c[k], k, "sma150"
@@ -150,9 +170,21 @@ def simulate(f: dict, T: bool, D: bool, X: str | None, exit150: str = "1d",
         if xp is None:
             xp, xi = c[-1], n - 1
         pnl = realized + sum(u * (xp - p) for u, p in lots)
-        trades.append(dict(kind=kind, entry_date=f["dates"][ei], exit_date=f["dates"][xi], entry=entry,
-                           exit=xp, R=pnl / risk, ret=pnl / entry * 100, days=xi - ei,
-                           why=why, risk_pct=risk / entry, n_partial=n_partial))
+        trades.append(
+            {
+                "kind": kind,
+                "entry_date": f["dates"][ei],
+                "exit_date": f["dates"][xi],
+                "entry": entry,
+                "exit": xp,
+                "R": pnl / risk,
+                "ret": pnl / entry * 100,
+                "days": xi - ei,
+                "why": why,
+                "risk_pct": risk / entry,
+                "n_partial": n_partial,
+            }
+        )
         t = xi + 1
     return trades
 
@@ -164,9 +196,11 @@ def row(name: str, tr: list[dict]) -> str:
     cost = np.array([0.002 / x["risk_pct"] for x in tr])  # 매수·매도 각 0.1%, 1R=명목×risk_pct
     is_r = [x["R"] for x in tr if x["entry_date"] < CUTOFF]
     oos_r = [x["R"] for x in tr if x["entry_date"] >= CUTOFF]
-    return (f"  {name:30}{len(R):>5}{100*(R>0).mean():>6.0f}%{R.mean():>7.2f}{R.sum():>8.1f}"
-            f"{int(np.median([x['days'] for x in tr])):>6}{np.mean(is_r):>7.2f}{np.mean(oos_r):>7.2f}"
-            f"{(R-cost).mean():>8.2f}")
+    return (
+        f"  {name:30}{len(R):>5}{100 * (R > 0).mean():>6.0f}%{R.mean():>7.2f}{R.sum():>8.1f}"
+        f"{int(np.median([x['days'] for x in tr])):>6}{np.mean(is_r):>7.2f}{np.mean(oos_r):>7.2f}"
+        f"{(R - cost).mean():>8.2f}"
+    )
 
 
 def main() -> None:
@@ -176,11 +210,15 @@ def main() -> None:
     loaded = [s for s in tickers if s in data]
     betas = {s: beta_vs_spy(data[s], spy) for s in loaded}
     prepared = {s: prepare(add_indicators(data[s], spy["Close"])) for s in loaded}
-    results = {name: {s: simulate(prepared[s], **cfg) for s in loaded} for name, cfg in VARIANTS.items()}
+    results = {
+        name: {s: simulate(prepared[s], **cfg) for s in loaded} for name, cfg in VARIANTS.items()
+    }
 
     groups = {
         "전체 73종목": loaded,
-        "고베타 대상(β≥1.3, 손실섹터 제외)": [s for s in loaded if betas[s] >= 1.3 and tickers[s] not in AVOID],
+        "고베타 대상(β≥1.3, 손실섹터 제외)": [
+            s for s in loaded if betas[s] >= 1.3 and tickers[s] not in AVOID
+        ],
         "그 외 종목": [s for s in loaded if not (betas[s] >= 1.3 and tickers[s] not in AVOID)],
     }
     head = f"  {'변형':30}{'횟수':>5}{'승률':>7}{'평균R':>7}{'합계R':>8}{'보유일':>6}{'IS R':>7}{'OOS R':>7}{'비용후R':>8}"
@@ -195,7 +233,12 @@ def main() -> None:
     print("\n" + "=" * 96)
     print("[진입 종류별]  전체 73종목")
     print(head)
-    for name in ("D  + 전환 진입 T", "D2 + 전환 T + 새 청산", "H  + 바닥 D만", "H2 + 바닥 D + 새 청산"):
+    for name in (
+        "D  + 전환 진입 T",
+        "D2 + 전환 T + 새 청산",
+        "H  + 바닥 D만",
+        "H2 + 바닥 D + 새 청산",
+    ):
         allt = [x for s in loaded for x in results[name][s]]
         for kind, label in (("S", "기존 돌파 S"), ("T", "전환 T"), ("D", "바닥 D")):
             sub = [x for x in allt if x["kind"] == kind]
