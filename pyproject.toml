@@ -75,6 +75,7 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "src/pipelines/daily_report/stages/*.py" = ["E402"]
 "scripts/*.py" = ["E402"]  # 실험용 스크립트: load_dotenv() 후 import 패턴 허용
+"src/backtest/*.py" = ["E402", "N803", "N806"]  # 백테스트 실험: warnings 설정 후 형제 모듈 import, R/T/D 등 매매 용어 변수명
 
 [tool.ruff.lint.isort]
 known-first-party = ["src"]

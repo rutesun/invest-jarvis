@@ -631,6 +631,12 @@ Daily Report 및 Screener 리포트를 Notion Database에 자동 업로드.
 
 ---
 
+## 12. 모멘텀 백테스트 리서치 (`src/backtest/`, CLI 미노출)
+
+모멘텀 매매 규칙을 과거 데이터로 검증하는 독립 실행 스크립트 묶음. 사용자 CLI 기능이 아니라 리서치 도구다. `uv run python src/backtest/<스크립트>.py`로 실행하며 가격은 yfinance 수정주가를 `tmp/` 아래에 캐시한다. 결과와 현재 확정 시스템(v3)은 `docs/backtest/results-log.md`, 실행법과 한계는 `docs/backtest/README.md` 참고.
+
+---
+
 ## 환경 변수
 
 | 변수 | 필수 | 용도 |
