@@ -58,5 +58,6 @@ class BriefItem:
     remaining_condition: str | None = None  # 임박 시 미충족 게이트 1개
     narrative: Any | None = None  # TickerNarrative (Task 4) — 순환 import 방지로 Any
     turnaround: str | None = None  # 턴어라운드 신호 요약 (score>0일 때만)
+    swing_w150: str | None = None  # SWING_W150 전략 상태 한 줄 (참고, 판정에 쓰지 않음)
     warnings: list[str] = field(default_factory=list)  # 스테일 종가 등 데이터 경고
     error: str | None = None

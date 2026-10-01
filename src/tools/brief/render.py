@@ -160,6 +160,9 @@ def _item_section(item: BriefItem) -> list[str]:
     if item.turnaround:
         lines.append(f"- **{item.turnaround}**")
 
+    if item.swing_w150:
+        lines.append(f"- {item.swing_w150}")
+
     # 사이징 (게이트 통과 시)
     plan = item.verdict.position_plan if item.verdict else None
     if plan is not None and plan.error is None:

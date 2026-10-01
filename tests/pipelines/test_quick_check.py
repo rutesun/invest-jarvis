@@ -1,6 +1,7 @@
 from datetime import datetime
 from unittest.mock import AsyncMock
 
+import pandas as pd
 import pytest
 
 from src.core.models import ToolResult
@@ -370,3 +371,31 @@ def test_detailed_history_omits_events_line_when_empty():
     lines = _format_detailed_history_point(point, None)
 
     assert not any("이벤트:" in line for line in lines)
+
+
+_SWING_FIXTURE = "tests/fixtures/swing_w150/PYPL.csv"
+
+
+@pytest.mark.asyncio
+async def test_quick_check_run_adds_swing_w150_line_from_price_data(mock_technical_tool):
+    from src.strategies.swing_w150.engine import current_state
+
+    df = pd.read_csv(_SWING_FIXTURE, parse_dates=["Date"]).set_index("Date")
+    mock_technical_tool.execute.return_value.data.raw_dataframe = df
+    pipeline = QuickCheckPipeline(technical_tool=mock_technical_tool)
+
+    result = await pipeline.run("PYPL")
+
+    assert result["swing_w150"] == current_state(df).summary_line()
+    output = pipeline.format_output(result)
+    assert "### 스윙 전략 (참고)" in output
+    assert f"- {result['swing_w150']}" in output
+
+
+@pytest.mark.asyncio
+async def test_quick_check_without_price_data_omits_swing_section(mock_technical_tool):
+    pipeline = QuickCheckPipeline(technical_tool=mock_technical_tool)
+    result = await pipeline.run("AAPL")
+
+    assert result["swing_w150"] is None
+    assert "스윙 전략" not in pipeline.format_output(result)

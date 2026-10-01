@@ -1,5 +1,6 @@
 from typing import Any
 
+from src.strategies.swing_w150.engine import summarize as summarize_swing_w150
 from src.tools.technical.presentation import format_long_sma
 from src.tools.technical.tool import TechnicalAnalysisTool
 from src.tools.technical.turnaround import TurnaroundSignal, score_turnaround
@@ -66,6 +67,7 @@ class QuickCheckPipeline:
             "ticker": ticker,
             "success": True,
             "turnaround": _turnaround_dict(turnaround),
+            "swing_w150": summarize_swing_w150(tech.raw_dataframe, ticker),
             "price": snapshot.price,
             "change_pct": snapshot.change_pct,
             "total_score": tech.total_score,
@@ -160,6 +162,10 @@ class QuickCheckPipeline:
         turnaround = result.get("turnaround")
         if turnaround and turnaround.get("score", 0) > 0:
             lines.extend(["", "### 턴어라운드 신호", f"- {turnaround['summary']}"])
+
+        swing_line = result.get("swing_w150")
+        if swing_line:
+            lines.extend(["", "### 스윙 전략 (참고)", f"- {swing_line}"])
 
         history = result.get("score_history") or []
         if history:
