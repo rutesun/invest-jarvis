@@ -1,6 +1,6 @@
 # Handoff — swing-w150-engine
 
-- 갱신: 2026-10-01 15:41 · Branch: feature/swing-w150-engine (워크트리 `.claude/worktrees/swing-w150-engine`, base main `cf8d564`) · Status: 검토대기 (구현·검증·문서 완료, 커밋 전)
+- 갱신: 2026-10-01 16:03 · Branch: feature/swing-w150-engine (워크트리 `.claude/worktrees/swing-w150-engine`, base main `cf8d564`) · Status: 검토대기 (PR #62)
 
 ## 목표
 백테스트로 확정한 스윙 시스템 v3를 제품 코드(전략 레이어)로 옮기고, `jarvis check`·`brief`에 상태를 참고 정보 한 줄로 표시한다. 기존 판정(action·verdict·bucket)은 바꾸지 않는다.
@@ -20,8 +20,7 @@
 - 문서: change record `docs/changes/swing-w150-strategy-engine.md` + INDEX 행, `FEATURES.md` §13, worklog.
 
 ## 미결 · 다음 결정
-- 커밋·push·PR 진행 여부 — 사용자 승인 대기(아직 아무것도 커밋 안 됨).
-- PR 번호가 나오면 `docs/changes/swing-w150-strategy-engine.md`와 `docs/changes/INDEX.md`의 `#{PR번호}`를 채워야 한다.
+- PR #62 review·CI 결과와 merge 여부.
 - 후속 후보(범위 밖, 순서 미정):
   - 한국 종목 백테스트
   - `src/tools/brief/`를 `pipelines/brief/`로 이동(models·scoring·render는 파이프라인 전용, name_resolver는 provider 성격)
@@ -29,7 +28,7 @@
   - screener에서 오늘 신호 종목 찾기
 
 ## 다음 행동
-사용자에게 커밋/PR 승인을 받은 뒤, 워크트리에서 `uv run pytest -q`와 `uv run ruff check src tests`로 재확인한다. 그다음 `feature/swing-w150-engine`에 커밋하고 push, `gec-create-pr` 스킬로 PR을 만든 뒤 PR 번호를 change record와 INDEX에 반영한다.
+PR #62의 review·CI 결과를 확인하고, 피드백이 있으면 이 worktree에서 수정·검증한다.
 
 ## 참조 (읽기 순서)
 1. `docs/active-context.md` — 현재 상태 스냅샷

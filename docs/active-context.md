@@ -1,8 +1,8 @@
 # Active Context
 
-- **갱신**: 2026-10-01 15:41 (핸드오프 브리프 작성 — 커밋/PR 승인 대기)
+- **갱신**: 2026-10-01 16:03 (PR #62 생성 — 검토대기)
 - **Branch**: feature/swing-w150-engine (워크트리: swing-w150-engine)
-- **진행 단계**: 구현·검증·문서 완료 → 커밋·PR(사용자 승인 필요)
+- **진행 단계**: 구현·검증·문서·commit·push 완료 → PR #62 검토대기
 
 ## 지금까지
 - 위임 작업: 백테스트로 확정한 v3(S 50일 신고가 + D 바닥 경로 + 30주선 2일/−1R 청산 + 과열 20일선 규칙)를 엔진화(2단계)하고 check/brief에 참고 표시(3단계). 기존 action은 덮어쓰지 않음.
@@ -23,8 +23,11 @@
 - 테스트: 골든 4종목, 상태·규칙·요약·pivots, check/brief 표시·판정 불변. 전체 1430 passed, ruff clean.
 - 실데이터: NVDA 보유(S), 005930 대기(S) 288,000, HOOD 대기(S).
 - 문서: change record `docs/changes/swing-w150-strategy-engine.md` + INDEX, FEATURES.md §13, CLAUDE.md·AGENTS.md 레이어 표, worklog.
+- 재검증: `uv run pytest -q` 1430 passed, `ruff check` 통과, `ruff format --check` 375 files formatted.
+- 기능 commit: `4f20f57` (`feat(strategy): add SWING_W150 engine`).
+- PR: https://github.com/rutesun/invest-jarvis/pull/62
 
 ## 다음 행동
 - 인계 문서: `docs/handoff/swing-w150-engine.md`.
-- 사용자 승인 후 커밋 → push → PR(gec-create-pr).
+- PR #62 review·CI 확인 후 피드백 반영 또는 merge.
 - 후속 후보: 한국 종목 백테스트, tools/brief → pipelines/brief 이동, tools/technical/strategies 이름 정리, screener 신호 종목 발굴.
