@@ -311,3 +311,43 @@ async def test_stale_close_warning_propagates_to_brief_item_and_render():
     md = render_markdown(result["date"], result["macro"], result["items"])
     assert "데이터 경고" in md
     assert "108.80" in md
+
+
+@pytest.mark.asyncio
+async def test_swing_w150_line_is_reference_only():
+    """가격 데이터가 있으면 SWING_W150 한 줄이 붙고, 판정(action·bucket)은 그대로다."""
+    import pandas as pd
+
+    from src.strategies.swing_w150.engine import current_state
+
+    df = pd.read_csv("tests/fixtures/swing_w150/PYPL.csv", parse_dates=["Date"]).set_index("Date")
+
+    def _run(with_prices: bool):
+        def _tech(ticker: str) -> TechnicalResult:
+            tech = _technical(ticker)
+            tech.raw_dataframe = df if with_prices else None
+            return tech
+
+        tech_us = MagicMock()
+        tech_us.execute = AsyncMock(
+            side_effect=lambda ticker, **kw: ToolResult(success=True, data=_tech(ticker))
+        )
+        engine = MagicMock()
+
+        async def _eval(*, ticker, holding, **kw):
+            if holding is not None:
+                return _verdict_holding(ticker, action="hold")
+            return _verdict_watch(ticker, {"A": True, "B": False, "C": False, "E": False})
+
+        engine.evaluate = AsyncMock(side_effect=_eval)
+        return _pipeline(engine, tech_us=tech_us).run(_config())
+
+    without = await _run(with_prices=False)
+    with_line = await _run(with_prices=True)
+
+    expected = current_state(df).summary_line()
+    assert all(item.swing_w150 == expected for item in with_line["items"])
+    assert all(item.swing_w150 is None for item in without["items"])
+    assert [(i.ticker, i.action, i.bucket) for i in with_line["items"]] == [
+        (i.ticker, i.action, i.bucket) for i in without["items"]
+    ]

@@ -202,6 +202,22 @@ def test_render_shows_turnaround_line():
     assert "저점 높이기" in md
 
 
+def test_render_shows_swing_w150_line():
+    items = [
+        BriefItem(
+            ticker="PYPL",
+            kind="watch",
+            action="rejected",
+            bucket=BUCKET_HOLD_OK,
+            price=66.1,
+            change_pct=0.5,
+            swing_w150="SWING_W150 보유(D) — 2026-07-06 44.34 진입, 손절 39.40, 현재 +2.0R",
+        ),
+    ]
+    md = render_markdown(datetime(2026, 9, 30), macro=None, items=items)
+    assert "- SWING_W150 보유(D) — 2026-07-06 44.34 진입, 손절 39.40, 현재 +2.0R" in md
+
+
 def test_render_markdown_shows_shadow_v2_state():
     item = BriefItem(
         ticker="PANW",

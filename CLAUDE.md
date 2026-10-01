@@ -64,13 +64,14 @@ Apply the following principles on every code change and refactor:
 Layered architecture — data flows one way:
 
 ```text
-Providers → Tools → Pipelines → CLI (src/cli/main.py)
+Providers → Tools → Strategies → Pipelines → CLI (src/cli/main.py)
 ```
 
 | Layer | Location | Role |
 |-------|----------|------|
 | **Providers** | `src/providers/` | Raw data fetching (yfinance, KIS API, Naver, Telegram) |
-| **Tools** | `src/tools/` | Domain logic (technical analysis, macro, news, screener) |
+| **Tools** | `src/tools/` | Domain logic (technical analysis, macro, news, screener). 지표(재료)는 `src/tools/technical` 한 곳에서 계산하고 재사용 |
+| **Strategies** | `src/strategies/` | 재료를 해석하는 매매 전략(진입·손절·청산 규칙 + 상태). `src.tools`만 import, pipelines가 가져다 씀. `tools/technical/strategies/`(하루치 점수 부품)와는 별개 |
 | **Pipelines** | `src/pipelines/` | Orchestration, combines tools into workflows |
 | **LLM** | `src/llm/` | OpenAI/Anthropic adapters, report generation |
 | **CLI** | `src/cli/main.py` | Typer-based entrypoint, rich output |

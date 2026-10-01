@@ -16,6 +16,7 @@ from typing import Any
 from langchain_core.language_models import BaseChatModel
 
 from src.llm.analyzer import generate_brief_narratives
+from src.strategies.swing_w150.engine import summarize as summarize_swing_w150
 from src.tools.brief.models import BriefItem
 from src.tools.brief.name_resolver import TickerNameResolver
 from src.tools.brief.render import render_markdown
@@ -163,6 +164,7 @@ class BriefPipeline:
                 score_history_warning=technical.score_history_warning,
                 remaining_condition=remaining_condition,
                 turnaround=turnaround,
+                swing_w150=summarize_swing_w150(technical.raw_dataframe, ticker),
                 warnings=technical.warnings or [],
             )
         except Exception as e:

@@ -1,42 +1,30 @@
 # Active Context
 
-- **갱신**: 2026-09-18 10:55 (스테일 종가 방어 — 리서치·설계 완료, 구현 착수)
-- **Branch**: feature/us-stale-close-guard (워크트리: us-stale-close-guard)
-- **진행 단계**: 리서치·설계 확정 → TDD 구현 착수
+- **갱신**: 2026-10-01 15:41 (핸드오프 브리프 작성 — 커밋/PR 승인 대기)
+- **Branch**: feature/swing-w150-engine (워크트리: swing-w150-engine)
+- **진행 단계**: 구현·검증·문서 완료 → 커밋·PR(사용자 승인 필요)
 
-## 지금까지 (us-stale-close-guard)
-- 문제: yfinance가 최근 일봉을 Close=NaN으로 반환하면(실측 INTC/BE 2026-09-17) 기술 분석이
-  조용히 이전 유효 봉(스테일) 종가로 계산 → 브리프/analyze에 며칠 지난 값 노출.
-  실측: INTC 101.05 vs 실시간 108.80, BE 270.02 vs 280.76.
-- 근원: 마지막 봉 해석 불일치 — `create_snapshot`은 dropna 후 스테일 봉,
-  `build_market_context`는 iloc[-1]로 close=0.0 붕괴.
-- 설계: `drop_trailing_nan_close` 순수 함수로 tool.execute에서 한 번 정제 + stale 경고
-  (logger.warning + TechnicalResult.warnings) + best-effort get_quote 실시간가 병기.
-- 다음 행동: TDD로 순수 함수·tool 통합·골든(픽스처 INTC/BE_2y.csv) 테스트 → 구현.
-
-## 직전 작업 (bottoming-gradient, 박제)
-- 문제: adjusted score가 SMA50 위/아래에 연동돼, 저점을 계단식으로 높여도 avoid(-90) 고정 →
-  SMA50 재탈환 순간 hold(+105)로 급점프(BE 2026 7/28~9/8 실증).
-- 구현: 바닥 구조를 as-of 안전하게 계량해 avoid를 accumulate 밴드까지만 상한 있게 완만화.
-  - `src/tools/technical/bottoming.py`(신규): higher_low(10/30)·bullish_divergence·volume_dry·
-    momentum_improving 4신호, MIN_SIGNALS=3, 상한 있는 bonus. `BottomingThresholds` 상수.
-  - `aggregator.py`: `bottoming` 인자 + `bottoming_gradient_bonus` 규칙 + `accumulate` 액션.
-    CEILING=-15, ACCUMULATE_FLOOR=-40. SMA50 아래 + forced_action 없을 때만 적용.
-  - downstream: analyzer tri-state accumulate→중립, analyze_decision factor→5(neutral).
-- 튜닝: 평가세트(BE/NVDA/LULU) 스윕 → (MIN3, 10/30) 채택. LULU 가짜 accumulate 8→0.
-- 검증: 신규 테스트(bottoming 15 + regression 4 + aggregator 6 + 매핑 2), 전체 1348 passed, ruff clean.
+## 지금까지
+- 위임 작업: 백테스트로 확정한 v3(S 50일 신고가 + D 바닥 경로 + 30주선 2일/−1R 청산 + 과열 20일선 규칙)를 엔진화(2단계)하고 check/brief에 참고 표시(3단계). 기존 action은 덮어쓰지 않음.
+- 계획서: `docs/superpowers/plans/2026-09-30-swing-w150-engine.md` (strategies 레이어 구조 반영 완료).
+- 확인: jarvis 지표와 백테스트 지표 식 차이(ATR·슈퍼트렌드). 제품 데이터는 3년(워밍업 250봉 뒤 약 2년 replay).
 
 ## 핵심 결정
-- accumulate를 1급 VerdictAction으로 추가(라벨 노출), 단 new_entry_allowed=False·상한 -15로 규율 유지.
-- 상한 가점은 이평 아래에서만 → 강세주(NVDA) 불변, 하락주(LULU) 가짜 바닥 배제.
-- worklog `bottoming-gradient.md`에 설계·튜닝 근거 기록.
+- 재료는 `src/tools/technical` 한 곳에 두고 재사용, 해석(레시피·상태)은 pipelines 쪽.
+- 지표는 jarvis `IndicatorCalculator`로 통일하고 v3 성과를 재검증(옵션 A).
 
-## 완료 (박제)
-- 코드: bottoming.py, aggregator/scorer/models, analyzer/analyze_decision.
-- fixtures: be_bottoming / nvda / lulu (2025-01-01~2026-09-09).
-- 문서: change record `bottoming-gradient.md` + INDEX, FEATURES.md 갱신, worklog.
+## 추가 결정
+- 전략은 별도 레이어 `src/strategies/swing_w150/` (tools만 import). CLAUDE.md·AGENTS.md 표 갱신 완료.
+- 한국·미국 모두 표시, 미검증 표기 없음.
+- 정답지: tests/fixtures/swing_w150/{COIN,AMAT,PYPL,UPST} (jarvis 지표판 기준).
+
+## 완료
+- 코드: src/tools/technical/{indicators.py(7컬럼),pivots.py}, src/strategies/swing_w150/{rules,engine,models}.py, quick_check·brief 표시.
+- 테스트: 골든 4종목, 상태·규칙·요약·pivots, check/brief 표시·판정 불변. 전체 1430 passed, ruff clean.
+- 실데이터: NVDA 보유(S), 005930 대기(S) 288,000, HOOD 대기(S).
+- 문서: change record `docs/changes/swing-w150-strategy-engine.md` + INDEX, FEATURES.md §13, CLAUDE.md·AGENTS.md 레이어 표, worklog.
 
 ## 다음 행동
-- 격리 워크트리 커밋(승인 불필요).
-- push/PR/merge는 사용자 승인 후(gec-create-pr).
-- (선택) 가중치(W_HL/DIV/VD/MO) 추가 튜닝은 밴드 내 lift만 좌우 — 현재 초기값 유지.
+- 인계 문서: `docs/handoff/swing-w150-engine.md`.
+- 사용자 승인 후 커밋 → push → PR(gec-create-pr).
+- 후속 후보: 한국 종목 백테스트, tools/brief → pipelines/brief 이동, tools/technical/strategies 이름 정리, screener 신호 종목 발굴.

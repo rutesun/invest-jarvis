@@ -127,6 +127,16 @@ class IndicatorCalculator:
         df["Vol_SMA_20"] = ta.sma(df["Volume"], length=20)
         df["Vol_SMA_50"] = ta.sma(df["Volume"], length=50)
         df["Vol_SMA_120"] = ta.sma(df["Volume"], length=120)
+        # 오늘 거래량을 오늘이 빠진 평균과 비교해야 하는 규칙(구조 붕괴 판정)용.
+        df["Vol_SMA_20_Prev"] = df["Volume"].rolling(20).mean().shift(1)
+
+        df["SMA_150_Slope_21"] = df["SMA_150"] - df["SMA_150"].shift(21)
+        df["SMA_20_Slope_5"] = df["SMA_20"] - df["SMA_20"].shift(5)
+        # *_Prev는 오늘 봉을 뺀 창이다. 오늘 종가가 이 값을 넘으면 돌파.
+        df["High_50_Prev"] = df["High"].rolling(50).max().shift(1)
+        df["High_20_Prev"] = df["High"].rolling(20).max().shift(1)
+        df["Low_20"] = df["Low"].rolling(20).min()
+        df["Low_20_Prev"] = df["Low"].rolling(20).min().shift(1)
 
         # Swing High/Low using scipy.signal.argrelextrema for accurate peak detection
         # order=5 means comparing with 5 points on each side (11-bar window total)
