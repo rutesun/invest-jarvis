@@ -287,3 +287,17 @@
 - 기각: Notebook 동반 publish(범위 밖), 강제 덮어쓰기(이력 손실 위험). 무관한 dirty/untracked는 staging·정리하지 않는다.
 - 검증 보완: CI 전체 format의 기존 4파일은 기계적으로 정리하고 AST 동일성을 확인했다. 전략·보유·수량 규칙 변경은 없다.
 - ADR 후보? no
+
+## (2026-10-22 14:35) [Friction] PR #63 Linux CI에서 외부 문서 의존성 발견
+
+- 막힌 점: 로컬 전체 2,193개와 Ruff/format은 통과했지만 GitHub CI의 연구 테스트 2개가 개인 Downloads 스펙 문서 경로에서 실패했다. 새 전체 독립 리뷰는 C0/I1/M1이며 불완전 종목 coverage에서도 FINAL 피벗 Observation이 표시되는 별도 Minor도 재현했다.
+- 임시 대응: merge를 보류하고 별도 구현 에이전트에 이식 가능한 테스트 권위 fixture와 Observation completeness guard의 최소 수정·RED/GREEN을 요청했다. 실제 연구 protocol·frozen identity·과거 artifact 및 coverage 없는 독립 연구 입력 동작은 보존한다.
+- 개선 아이디어 (스킬·훅·프롬프트): 외부 연구 입력의 엄격한 존재/hash 검증과 단위 테스트의 개인 파일 의존성을 분리하고, 같은 PR head에서 Linux CI와 독립 재리뷰를 마친 뒤 merge한다. 로컬 main은 원래 이력을 backup ref에 남긴 후 원격 main과 맞춘다.
+
+## (2026-10-22 14:40) [Bug] PR CI 이식성 및 불완전 차트 Observation 경계 수정
+
+- 증상: Linux CI에서 개인 Downloads 파일 부재로 연구 테스트2개가 실패했고, 거래소270세션 중1개가 누락된 차트에 HIGHER_HIGH FINAL Observation2개가 표시됐다.
+- 근원(root cause): synthetic 테스트가 실제 연구 authority 절대경로를 그대로 사용했고, 추가 Observation detector가 coverage를 확인하지 않고 raw 피벗을 계산했다.
+- 수정: 테스트 전용 authority fixture와 누락 입력 거부·snapshot bytes/hash 회귀를 추가하고, 명시된 incomplete/truncation coverage는 Observation을 생성하지 않도록 했다. 실제 research protocol·frozen artifact·엄격한 authority 검증과 coverage=None의 연구/test 동작을 보존했다.
+- 검증: RED 외부 경로2실패·coverage3실패 → targeted GREEN, 관련87통과. root 전체2,197통과/15제외/기존경고2(191.32초), 전체 Ruff·445개 format·diff PASS. 전체 PR reviewer의 좁은 재리뷰 Spec PASS/Quality 승인(C0/I0/M0), 이후 제품 변경 없음.
+- 재발 방지 / 배운 것: 로컬 환경에 존재하는 외부 파일과 이식 가능한 synthetic 검증을 분리하고, Signal 차단과 Observation 차단을 각각 실제 Adapter 경로에서 검증한다. GitHub CI 성공 전 merge하지 않으며 실제 merge·main 결과는 PR #63과 후속 Git 확인을 기준으로 한다.

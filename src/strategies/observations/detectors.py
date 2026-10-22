@@ -38,6 +38,10 @@ def evaluate_observations(
     params: ObservationParameters,
 ) -> list[StrategyObservationEpisode]:
     """One record per confirmed event/episode; unfinished bars do not commit history."""
+    if features.coverage is not None and (
+        not features.coverage.complete or features.coverage.truncation_reason
+    ):
+        return []
     frame = features.frame
     if len(frame) and features.finalities[-1] == BarFinality.PROVISIONAL:
         final_features = replace(

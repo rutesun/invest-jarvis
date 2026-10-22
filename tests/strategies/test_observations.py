@@ -139,6 +139,37 @@ def test_structure_uses_confirmation_bar_and_has_no_source_dependency():
     assert len(preview) == 1 and preview[0].finality.value == "provisional"
 
 
+@pytest.mark.parametrize(
+    "complete,truncation_reason", [(False, None), (True, "instrument_history_incomplete")]
+)
+def test_supplied_incomplete_coverage_cannot_emit_structure_observations(
+    complete, truncation_reason
+):
+    from src.strategies.models import CoverageManifest
+    from src.strategies.observations.detectors import evaluate_observations
+
+    highs = [1, 2, 3, 6, 3, 2, 1, 2, 3, 8, 3, 2, 1]
+    f = features([{"High": high, "Low": 0} for high in highs])
+    days = tuple(f.frame.index.date)
+    coverage = CoverageManifest(
+        requested_start=days[0],
+        actual_start=days[0],
+        actual_end=days[-1],
+        expected_sessions=days,
+        complete=complete,
+        truncation_reason=truncation_reason,
+    )
+    history = evaluate_observations(
+        "TEST",
+        replace(f, coverage=coverage),
+        [],
+        [],
+        source_contexts=[],
+        params=ObservationParameters(),
+    )
+    assert history == []
+
+
 @pytest.mark.parametrize("unfinished_high", [138, 134])
 def test_final_structure_ignores_middle_provisional_pivot_price_and_row(unfinished_high):
     from src.strategies.observations.detectors import evaluate_observations

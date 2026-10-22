@@ -187,6 +187,41 @@ def test_incomplete_rolling_coverage_returns_not_evaluated(golden_case):
     assert verdict.exit.intent is ExitIntent.NOT_EVALUATED
 
 
+def test_missing_exchange_session_cannot_produce_final_structure_observations():
+    from src.providers.exchange_calendar import exchange_sessions_for
+    from src.strategies.models import EntryOpportunityStatus
+
+    days = exchange_sessions_for("XNYS", date(2025, 1, 2), date(2026, 3, 1))[:270]
+    frame = pd.DataFrame(
+        {"Open": 100.0, "High": 101.0, "Low": 99.0, "Close": 100.0, "Volume": 100.0},
+        index=pd.to_datetime(days),
+    )
+    frame.iloc[[252, 258, 264], frame.columns.get_loc("High")] = [106, 108, 110]
+    assert days[260] == date(2026, 1, 16)
+    frame = frame.drop(pd.Timestamp(days[260]))
+    coverage = CoverageManifest(
+        requested_start=days[0],
+        actual_start=days[0],
+        actual_end=days[-1],
+        expected_sessions=days,
+        complete=False,
+        truncation_reason="instrument_history_incomplete",
+    )
+    bundle = chart_bundle_from_dataframes(
+        profile_version="chart-v1",
+        ticker="COIN",
+        as_of=days[-1],
+        instrument=frame,
+        instrument_coverage=coverage,
+        exchange_sessions=days,
+    )
+    result = SwingW150SignalStrategy().evaluate_signals(bundle)
+    assert result.data_status is DataStatus.PARTIAL
+    assert result.signal_history == result.current_signals == []
+    assert result.entry_opportunity.status is EntryOpportunityStatus.NOT_EVALUATED
+    assert result.observation_history == []
+
+
 def test_short_complete_window_cannot_claim_a_three_year_origin(golden_case):
     _, frame, _ = golden_case
     verdict = SwingW150Strategy().evaluate(_bundle(frame.loc["2025-01-01":]))

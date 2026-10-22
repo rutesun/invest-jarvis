@@ -1,8 +1,8 @@
 # Change Record: Scorecard·Strategy·Position 분리
 
 **Status**: In Progress
-**Date**: 2026-10-21
-**PRs**: -
+**Date**: 2026-10-22
+**PRs**: [#63](https://github.com/rutesun/invest-jarvis/pull/63)
 **Type**: feat
 
 > 이 문서는 PR/머지 단위 변경 기록입니다. 현재 기능 상태는 `docs/FEATURES.md`를 기준으로 봅니다.
@@ -58,6 +58,8 @@ After:  Observation과 날짜별 Signal, 오늘 EntryOpportunity, 두 성과 기
 - 실제 계좌 risk와 현재 가격 snapshot이 부족하면 신규 매수 수량은 `UNAVAILABLE`다. Strategy에서 가상 stop/risk를 채우지 않는다.
 
 ## Verification
+
+PR #63 통합 head c71639f의 새 전체 독립 리뷰 C0/I1/M1을 모두 수정했다. 연구 테스트에 별도 authority fixture를 사용해 개인 Downloads 의존성을 제거하고, 명시된 불완전 종목 coverage에서 Observation 생성을 차단했다. 실제 연구 protocol·과거 artifact·strict freeze 검증과 coverage 없는 독립 연구 입력 동작은 보존한다. 수정 후 root 전체 **2,197 passed / 15 deselected / 기존 경고2**(191.32초), 관련87개 회귀·전체 Ruff·445개 format·diff PASS다. 같은 독립 reviewer의 재리뷰는 Spec PASS/Quality 승인(C0/I0/M0)이다. GitHub CI 성공을 확인한 뒤 정확한 head로 merge하며, 실제 통합 결과는 [PR #63](https://github.com/rutesun/invest-jarvis/pull/63)을 기준으로 한다. 원래 branch·Notebook 변경·무관한 사용자 파일은 보존한다.
 
 2026-10-22 통합 준비: 사용자가 PR·독립 리뷰·조건부 merge·main pull을 승인했다. CI 전체 format 검사에서 기존 4파일의 포맷을 정리하고 AST(구문 구조) 동일성을 확인했다. 전체 Ruff 및 445개 Python format 검사는 통과했다. 원래 branch와 무관한 사용자 변경은 보존하고 별도 Notebook 커밋은 통합 PR에서 제외한다. PR head·최종 리뷰·CI·merge 결과는 후속 검증으로 확정한다.
 

@@ -8,6 +8,16 @@ import pandas as pd
 import pytest
 
 
+@pytest.fixture
+def freeze_test_protocol():
+    protocol = json.loads(Path("research/trading_observation_v1/protocol.json").read_text())
+    authority = (
+        Path(__file__).resolve().parents[1] / "fixtures/observation_calibration/freeze-authority.md"
+    )
+    protocol["specifications"] = [str(authority)]
+    return protocol
+
+
 def test_next_open_is_outcome_anchor():
     from src.backtest.observation_calibration import future_outcome
 
@@ -58,10 +68,10 @@ def test_current_volume_is_not_reference():
     assert out.iloc[-1]["Volume_Contraction_Ratio"] == 2.8
 
 
-def test_protocol_freezes_39_candidates_before_labels(tmp_path):
+def test_protocol_freezes_39_candidates_before_labels(tmp_path, freeze_test_protocol):
     from src.backtest.observation_calibration import freeze_protocol
 
-    protocol = json.loads(Path("research/trading_observation_v1/protocol.json").read_text())
+    protocol = freeze_test_protocol
     cache = tmp_path / "cache"
     cache.mkdir()
     pd.DataFrame(
@@ -81,6 +91,24 @@ def test_protocol_freezes_39_candidates_before_labels(tmp_path):
     assert manifest["protocol_sha256"] == digest
     assert len(manifest["inventory"]) == 21
     assert not (tmp_path / "frozen/outcomes.json").exists()
+    (specification,) = protocol["specifications"]
+    authority = Path(specification).read_bytes()
+    assert manifest["specifications"] == {specification: hashlib.sha256(authority).hexdigest()}
+    snapshot = tmp_path / "frozen" / manifest["specification_snapshots"][specification]
+    assert snapshot.read_bytes() == authority
+
+
+def test_freeze_rejects_missing_specification_instead_of_silently_omitting_authority(
+    tmp_path, freeze_test_protocol
+):
+    from src.backtest.observation_calibration import freeze_protocol
+
+    protocol = freeze_test_protocol
+    missing = tmp_path / "missing-authority.md"
+    protocol["specifications"] = [str(missing)]
+    with pytest.raises(FileNotFoundError):
+        freeze_protocol(protocol, cache_dir=tmp_path / "cache", output=tmp_path / "frozen")
+    assert not (tmp_path / "frozen/freeze-manifest.json").exists()
 
 
 def test_comparator_uses_nearest_prior_nonoccurrence_same_fold_regime_and_sma_state():
@@ -166,12 +194,12 @@ def test_no_plateau_has_no_detector_default():
     assert select_detector_default(family, summaries, {"up_volume_ratio": 1.5})["value"] is None
 
 
-def test_frozen_synthetic_run_keeps_39_candidates_and_v1_default(tmp_path):
+def test_frozen_synthetic_run_keeps_39_candidates_and_v1_default(tmp_path, freeze_test_protocol):
     import shutil
 
     from src.backtest.observation_calibration import freeze_protocol, run_calibration
 
-    protocol = json.loads(Path("research/trading_observation_v1/protocol.json").read_text())
+    protocol = freeze_test_protocol
     protocol["universe"] = ["TEST"]
     cache = tmp_path / "cache"
     cache.mkdir()
