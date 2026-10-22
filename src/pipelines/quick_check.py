@@ -1,6 +1,7 @@
 from typing import Any
 
-from src.strategies.swing_w150.engine import summarize as summarize_swing_w150
+from src.pipelines.strategy_analysis import AnalysisStrategyService, evaluate_optional
+from src.pipelines.strategy_render import render_strategy_sections
 from src.tools.technical.presentation import format_long_sma
 from src.tools.technical.tool import TechnicalAnalysisTool
 from src.tools.technical.turnaround import TurnaroundSignal, score_turnaround
@@ -9,8 +10,13 @@ from src.tools.technical.turnaround import TurnaroundSignal, score_turnaround
 class QuickCheckPipeline:
     """Quick check pipeline - technical analysis without LLM."""
 
-    def __init__(self, technical_tool: TechnicalAnalysisTool):
+    def __init__(
+        self,
+        technical_tool: TechnicalAnalysisTool,
+        strategy_service: AnalysisStrategyService | None = None,
+    ):
         self.technical_tool = technical_tool
+        self.strategy_service = strategy_service
 
     async def run(self, ticker: str) -> dict[str, Any]:
         """Run quick check analysis."""
@@ -24,6 +30,9 @@ class QuickCheckPipeline:
             }
 
         tech = result.data
+        strategy_analysis, strategy_warning = await evaluate_optional(
+            self.strategy_service, ticker, tech, pipeline="check"
+        )
 
         # Support both old (indicators) and new (snapshot) formats
         snapshot = tech.indicators or tech.snapshot
@@ -66,8 +75,11 @@ class QuickCheckPipeline:
         return {
             "ticker": ticker,
             "success": True,
+            "scorecard": tech.scorecard,
+            "strategy_run": strategy_analysis.strategy_run if strategy_analysis else None,
+            "strategy_analysis": strategy_analysis,
+            "strategy_warning": strategy_warning,
             "turnaround": _turnaround_dict(turnaround),
-            "swing_w150": summarize_swing_w150(tech.raw_dataframe, ticker),
             "price": snapshot.price,
             "change_pct": snapshot.change_pct,
             "total_score": tech.total_score,
@@ -97,13 +109,25 @@ class QuickCheckPipeline:
             "components": components_list,
         }
 
-    def format_output(self, result: dict[str, Any], detailed_history: bool = False) -> str:
+    def format_output(
+        self,
+        result: dict[str, Any],
+        detailed_history: bool = False,
+        detailed_strategy: bool = False,
+    ) -> str:
         """Format result as readable string."""
         if not result.get("success", False):
             return f"Error: {result.get('error', 'Unknown error')}"
 
         lines = [
             f"## {result['ticker']} Quick Check",
+            "",
+            render_strategy_sections(
+                result.get("scorecard"),
+                result.get("strategy_analysis"),
+                warning=result.get("strategy_warning"),
+                detail=detailed_strategy,
+            ),
             "",
             f"**가격**: ${result['price']:.2f} ({result['change_pct']:+.2f}%)",
             f"**총점**: {result['total_score']}",
@@ -162,10 +186,6 @@ class QuickCheckPipeline:
         turnaround = result.get("turnaround")
         if turnaround and turnaround.get("score", 0) > 0:
             lines.extend(["", "### 턴어라운드 신호", f"- {turnaround['summary']}"])
-
-        swing_line = result.get("swing_w150")
-        if swing_line:
-            lines.extend(["", "### 스윙 전략 (참고)", f"- {swing_line}"])
 
         history = result.get("score_history") or []
         if history:

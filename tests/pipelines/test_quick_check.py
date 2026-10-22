@@ -377,19 +377,16 @@ _SWING_FIXTURE = "tests/fixtures/swing_w150/PYPL.csv"
 
 
 @pytest.mark.asyncio
-async def test_quick_check_run_adds_swing_w150_line_from_price_data(mock_technical_tool):
-    from src.strategies.swing_w150.engine import current_state
-
+async def test_quick_check_omits_legacy_stateful_swing_line(mock_technical_tool):
     df = pd.read_csv(_SWING_FIXTURE, parse_dates=["Date"]).set_index("Date")
     mock_technical_tool.execute.return_value.data.raw_dataframe = df
     pipeline = QuickCheckPipeline(technical_tool=mock_technical_tool)
 
     result = await pipeline.run("PYPL")
 
-    assert result["swing_w150"] == current_state(df).summary_line()
+    assert "swing_w150" not in result
     output = pipeline.format_output(result)
-    assert "### 스윙 전략 (참고)" in output
-    assert f"- {result['swing_w150']}" in output
+    assert "### 스윙 전략 (참고)" not in output
 
 
 @pytest.mark.asyncio
@@ -397,5 +394,5 @@ async def test_quick_check_without_price_data_omits_swing_section(mock_technical
     pipeline = QuickCheckPipeline(technical_tool=mock_technical_tool)
     result = await pipeline.run("AAPL")
 
-    assert result["swing_w150"] is None
+    assert "swing_w150" not in result
     assert "스윙 전략" not in pipeline.format_output(result)

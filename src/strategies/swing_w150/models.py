@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from datetime import date
 from enum import StrEnum
 
+from src.strategies.models import SwingRuntimeState
+
 
 LABEL = "SWING_W150"
 
@@ -20,6 +22,21 @@ class SwingTrade:
     r_multiple: float
     why: str
     n_partial: int
+
+
+@dataclass(frozen=True)
+class SwingReplayEvent:
+    code: str
+    index: int
+    kind: str
+    entry: float | None = None
+    stop: float | None = None
+
+
+@dataclass(frozen=True)
+class SwingReplayTrace:
+    events: tuple[SwingReplayEvent, ...]
+    state: SwingRuntimeState
 
 
 class SwingStatus(StrEnum):

@@ -6,6 +6,7 @@ LLM narrative가 없으면(실패/미사용) 규칙 원문으로 슬롯을 채�
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
 
 from src.tools.brief.models import BUCKET_LABELS, BriefItem
@@ -17,6 +18,7 @@ def render_markdown(
     macro: TickerMacroSnapshot | None,
     items: list[BriefItem],
     top_n: int = 3,
+    strategy_renderer: Callable[[BriefItem], str] | None = None,
 ) -> str:
     lines: list[str] = [f"# Daily Brief — {date.strftime('%Y-%m-%d')}", ""]
 
@@ -34,12 +36,12 @@ def render_markdown(
         lines.append(f"## 보유 ({len(holdings)}종목)")
         lines.append("")
         for item in holdings:
-            lines.extend(_item_section(item))
+            lines.extend(_item_section(item, strategy_renderer))
     if watches:
         lines.append(f"## 워치리스트 ({len(watches)}종목)")
         lines.append("")
         for item in watches:
-            lines.extend(_item_section(item))
+            lines.extend(_item_section(item, strategy_renderer))
 
     return "\n".join(lines)
 
@@ -75,7 +77,9 @@ def _top_actions_section(items: list[BriefItem], top_n: int) -> list[str]:
     return lines
 
 
-def _item_section(item: BriefItem) -> list[str]:
+def _item_section(
+    item: BriefItem, strategy_renderer: Callable[[BriefItem], str] | None = None
+) -> list[str]:
     label = BUCKET_LABELS.get(item.bucket, "?")
     lines: list[str] = []
 
@@ -93,6 +97,8 @@ def _item_section(item: BriefItem) -> list[str]:
     if gate is not None and gate.quality_grade:
         title_extra = f" (grade {gate.quality_grade})"
     lines.append(f"### {_display(item)} — {label}{title_extra}")
+    if strategy_renderer is not None:
+        lines.extend(["", strategy_renderer(item), ""])
 
     if item.note:
         lines.append(f"- **메모**: {item.note}")
@@ -159,9 +165,6 @@ def _item_section(item: BriefItem) -> list[str]:
 
     if item.turnaround:
         lines.append(f"- **{item.turnaround}**")
-
-    if item.swing_w150:
-        lines.append(f"- {item.swing_w150}")
 
     # 사이징 (게이트 통과 시)
     plan = item.verdict.position_plan if item.verdict else None

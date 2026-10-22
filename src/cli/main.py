@@ -16,6 +16,8 @@ from src.pipelines.brief import BriefPipeline
 from src.pipelines.deep_dive import DeepDivePipeline
 from src.pipelines.quick_check import QuickCheckPipeline
 from src.pipelines.screener import ScreenerPipeline
+from src.pipelines.strategy_analysis import AnalysisStrategyService
+from src.pipelines.strategy_render import render_strategy_sections
 from src.providers.kis import KISProvider
 from src.providers.naver import NaverProvider
 from src.providers.ticker_resolver import TickerResolver
@@ -210,7 +212,7 @@ async def run_quick_check(ticker_or_name: str) -> dict:
 
     scorer = TechnicalScorer()
     tool = TechnicalAnalysisTool(provider=provider, scorer=scorer)
-    pipeline = QuickCheckPipeline(technical_tool=tool)
+    pipeline = QuickCheckPipeline(technical_tool=tool, strategy_service=AnalysisStrategyService())
     return await pipeline.run(ticker)
 
 
@@ -241,6 +243,9 @@ def check(
         "--detail-history",
         help="Show multi-line score history context",
     ),
+    detail_strategy: bool = typer.Option(
+        False, "--detail-strategy", help="Show every Scorecard metric and evidence"
+    ),
 ):
     """Quick check - multi-ticker technical analysis without LLM or Macro."""
     results = asyncio.run(run_quick_checks(queries))
@@ -250,7 +255,13 @@ def check(
     for result in results:
         if result.get("success", False):
             console.print(
-                Markdown(formatter.format_output(result, detailed_history=detail_history))
+                Markdown(
+                    formatter.format_output(
+                        result,
+                        detailed_history=detail_history,
+                        detailed_strategy=detail_strategy,
+                    )
+                )
             )
         else:
             failed = True
@@ -387,6 +398,7 @@ async def run_deep_dive(ticker_or_name: str) -> dict:
         flow_tool=flow_tool,
         playbook_engine=playbook_engine,
         macro_tool=MacroTool(),
+        strategy_service=AnalysisStrategyService(),
     )
 
     return await pipeline.run(ticker)
@@ -994,7 +1006,7 @@ def _format_playbook_section(verdict) -> str:
     return out
 
 
-def format_deep_dive_output(result: dict) -> str:
+def format_deep_dive_output(result: dict, detailed_strategy: bool = False) -> str:
     """Format deep dive result as markdown."""
     ticker = result["ticker"]
     technical = result["technical"]
@@ -1009,6 +1021,15 @@ def format_deep_dive_output(result: dict) -> str:
     playbook_verdict = result.get("playbook_verdict")
 
     output = f"# Deep Dive Analysis: {ticker}\n\n"
+    output += (
+        render_strategy_sections(
+            result.get("scorecard"),
+            result.get("strategy_analysis"),
+            warning=result.get("strategy_warning"),
+            detail=detailed_strategy,
+        )
+        + "\n\n"
+    )
     output += f"## 가격: ${snapshot.price:.2f} ({snapshot.change_pct:+.2f}%)\n\n"
     for warning in technical.warnings or []:
         output += f"> ⚠ **데이터 경고**: {warning}\n\n"
@@ -1041,6 +1062,9 @@ def format_deep_dive_output(result: dict) -> str:
 @app.command()
 def analyze(
     query: str = typer.Argument(..., help="Stock ticker or company name (e.g., AAPL, Apple, 구글)"),
+    detail_strategy: bool = typer.Option(
+        False, "--detail-strategy", help="Show every Scorecard metric and evidence"
+    ),
 ):
     """Deep dive analysis with LLM (technical + news + disclosure + flow)."""
     console.print(f"[bold]Resolving '{query}'...[/bold]")
@@ -1051,7 +1075,7 @@ def analyze(
         console.print(f"[bold]Running deep dive analysis for {ticker}...[/bold]\n")
 
         result = asyncio.run(run_deep_dive(query))
-        output = format_deep_dive_output(result)
+        output = format_deep_dive_output(result, detailed_strategy=detail_strategy)
         console.print(Markdown(output))
 
         # Display chart path if available
@@ -1080,6 +1104,9 @@ def analyze(
 @app.command()
 def brief(
     no_llm: bool = typer.Option(False, "--no-llm", help="LLM 문장화 없이 규칙 원문만 출력"),
+    detail_strategy: bool = typer.Option(
+        False, "--detail-strategy", help="Show every Scorecard metric and evidence"
+    ),
 ):
     """일일 포트 액션 브리핑 — playbook.yaml 보유+워치 전 종목 평가."""
     console.print("[bold]Daily brief 생성 중...[/bold]")
@@ -1087,7 +1114,7 @@ def brief(
     try:
         result = asyncio.run(run_brief(use_llm=not no_llm))
         pipeline = result.pop("_pipeline")
-        console.print(Markdown(pipeline.format_output(result)))
+        console.print(Markdown(pipeline.format_output(result, detailed_strategy=detail_strategy)))
         report_path = pipeline.save_report(result)
         console.print(f"\n[green]리포트 저장: {report_path}[/green]")
     except ValueError as e:
@@ -1161,6 +1188,7 @@ async def run_brief(use_llm: bool) -> dict:
         ),
         flow_tool=FlowTool(kis_provider=kis_provider),
         llm=llm,
+        strategy_service=AnalysisStrategyService(),
     )
     result = await pipeline.run(config)
     result["_pipeline"] = pipeline

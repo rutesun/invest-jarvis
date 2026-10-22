@@ -34,7 +34,7 @@ def evaluate_exit(
     snapshot,
     relative_strength,
     accumulation,
-    holding,
+    holding=None,
 ) -> ExitVerdict:
     """보유 종목 매도 판정. 순수 함수 — I/O 없음."""
     signals: list[ExitSignal] = []

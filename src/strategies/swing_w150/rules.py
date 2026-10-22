@@ -73,15 +73,22 @@ def s_trigger(ind: pd.DataFrame) -> np.ndarray:
     return known & (c > sma150) & (slope150 > 0) & breakout & (v > S_VOLUME_MULT * vol20)
 
 
-def structure_breakdown(ind: pd.DataFrame, st: np.ndarray, lhll: np.ndarray) -> np.ndarray:
+def structure_breakdown(
+    ind: pd.DataFrame,
+    st: np.ndarray,
+    lhll: np.ndarray,
+    *,
+    volume_multiple: float = BREAKDOWN_VOLUME_MULT,
+    weak_close_location: float = WEAK_CLOSE_LOCATION,
+) -> np.ndarray:
     """거래량 동반 20봉 저가 이탈, 약한 종가의 50일선 이탈, 200일선 아래 하락 구조."""
     c, h, low, v = (ind[k].values.astype(float) for k in ("Close", "High", "Low", "Volume"))
     sma50, sma200 = ind["SMA_50"].values, ind["SMA_200"].values
     vr20 = v / ind["Vol_SMA_20_Prev"].values
     cl = close_location(h, low, c)
     return (
-        ((c < ind["Low_20_Prev"].values) & (vr20 >= BREAKDOWN_VOLUME_MULT))
-        | ((c < sma50) & (cl <= WEAK_CLOSE_LOCATION) & (vr20 >= BREAKDOWN_VOLUME_MULT) & (st == -1))
+        ((c < ind["Low_20_Prev"].values) & (vr20 >= volume_multiple))
+        | ((c < sma50) & (cl <= weak_close_location) & (vr20 >= volume_multiple) & (st == -1))
         | ((c < sma200) & (c < sma50) & (st == -1) & lhll)
     )
 

@@ -21,6 +21,12 @@ from src.pipelines.analyze_decision import (
     build_analyze_decision_bundle,
     build_default_scenarios,
 )
+from src.pipelines.strategy_analysis import (
+    AnalysisStrategyService,
+    account_from_capital,
+    evaluate_optional,
+)
+from src.position.models import PositionSnapshot
 from src.tools.disclosure import DisclosureItem, DisclosureTool, extract_kr_code, is_korean_ticker
 from src.tools.flow import FlowTool, InvestorFlow
 from src.tools.fundamental import FundamentalSnapshot, FundamentalTool
@@ -155,6 +161,7 @@ class DeepDivePipeline:
         structure_presentation_adapter: Callable | None = None,
         playbook_engine=None,
         macro_tool: MacroTool | None = None,
+        strategy_service: AnalysisStrategyService | None = None,
     ):
         self.technical_tool = technical_tool
         self.news_tool = news_tool
@@ -170,6 +177,7 @@ class DeepDivePipeline:
         )
         self.playbook_engine = playbook_engine
         self.macro_tool = macro_tool
+        self.strategy_service = strategy_service
 
     async def run(self, ticker: str) -> dict:
         """Run deep dive analysis for a ticker.
@@ -196,6 +204,26 @@ class DeepDivePipeline:
             raise RuntimeError(f"Technical analysis failed: {tech_result.error}")
 
         technical_data: TechnicalResult = tech_result.data
+        holdings_config = None
+        position = None
+        account = None
+        if self.strategy_service is not None:
+            try:
+                holdings_config = load_holdings()
+                holding = holdings_config.find(ticker)
+                position = PositionSnapshot(holding.quantity if holding is not None else 0)
+                capital, risk_pct = holdings_config.get_account_for(ticker)
+                account = account_from_capital(capital, risk_pct)
+            except Exception as exc:
+                logger.warning("Position input unavailable for %s: %s", ticker, exc)
+        strategy_analysis, strategy_warning = await evaluate_optional(
+            self.strategy_service,
+            ticker,
+            technical_data,
+            position=position,
+            account=account,
+            pipeline="analyze",
+        )
 
         news_result = await self.news_tool.execute(ticker, limit=10)
         if not news_result.success:
@@ -285,7 +313,7 @@ class DeepDivePipeline:
         playbook_verdict = None
         if self.playbook_engine is not None:
             try:
-                holding = load_holdings().find(ticker)
+                holding = (holdings_config or load_holdings()).find(ticker)
                 playbook_verdict = await self.playbook_engine.evaluate(
                     ticker=ticker,
                     technical_result=technical_data,
@@ -401,6 +429,10 @@ class DeepDivePipeline:
         return {
             "ticker": ticker,
             "technical": technical_data,
+            "scorecard": technical_data.scorecard,
+            "strategy_run": strategy_analysis.strategy_run if strategy_analysis else None,
+            "strategy_analysis": strategy_analysis,
+            "strategy_warning": strategy_warning,
             "technical_summary": technical_summary,
             "decision_summary": decision_bundle.summary,
             "factor_assessments": decision_bundle.factor_assessments,

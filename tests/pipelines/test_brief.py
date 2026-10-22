@@ -314,11 +314,8 @@ async def test_stale_close_warning_propagates_to_brief_item_and_render():
 
 
 @pytest.mark.asyncio
-async def test_swing_w150_line_is_reference_only():
-    """가격 데이터가 있으면 SWING_W150 한 줄이 붙고, 판정(action·bucket)은 그대로다."""
+async def test_legacy_swing_summary_is_absent_and_does_not_change_action():
     import pandas as pd
-
-    from src.strategies.swing_w150.engine import current_state
 
     df = pd.read_csv("tests/fixtures/swing_w150/PYPL.csv", parse_dates=["Date"]).set_index("Date")
 
@@ -345,9 +342,8 @@ async def test_swing_w150_line_is_reference_only():
     without = await _run(with_prices=False)
     with_line = await _run(with_prices=True)
 
-    expected = current_state(df).summary_line()
-    assert all(item.swing_w150 == expected for item in with_line["items"])
-    assert all(item.swing_w150 is None for item in without["items"])
+    assert all(not hasattr(item, "swing_w150") for item in with_line["items"])
+    assert all(not hasattr(item, "swing_w150") for item in without["items"])
     assert [(i.ticker, i.action, i.bucket) for i in with_line["items"]] == [
         (i.ticker, i.action, i.bucket) for i in without["items"]
     ]

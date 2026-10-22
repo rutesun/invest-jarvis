@@ -4,6 +4,8 @@ from typing import Literal, Self
 import pandas as pd
 from pydantic import BaseModel, Field, StrictInt, model_validator
 
+from src.tools.technical.scorecard_models import TechnicalScorecard
+
 
 SignalType = Literal[
     "breakout",
@@ -435,6 +437,7 @@ class TechnicalResult(BaseModel):
     aggregation_trace: list[AggregationTraceEntry] = Field(default_factory=list)
     # A′ shadow(점수 vs 게이트 분리) 병행 산출. legacy adjusted_score/verdict와 별개.
     shadow_v2: dict | None = None
+    scorecard: TechnicalScorecard | None = None
 
     # NEW: Pattern detection requires OHLC data
     raw_dataframe: pd.DataFrame | None = None
