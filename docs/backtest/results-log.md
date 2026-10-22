@@ -364,6 +364,37 @@ v0.4 명세(TREND/TRANSITION/DEEP_RECOVERY 국면, 탐색→본 매수 승격, �
 
 ---
 
+## 실험 24 — 놓친 SWING Trigger의 `% + R + ATR` 복합 추격 제한
+
+SWING_W150 Trigger 806개(S 419/D 387), 현재 상장 미국 73종목, 2016-10-03~2026-06-29. 신호 후 1·2·3·5·10·20거래일째 종가로 진입 가능성을 판단하고 다음 시가에 체결했다. 차단·미체결은 0R로 원 Trigger 분모에 포함했고 다음 시가가 cap을 넘으면 진입을 취소했다.
+
+C안은 percentage, 기존 stop 기준 추가 R, Trigger ATR 이격을 모두 만족하는 AND 조건이다.
+
+| 정책 | percentage | 추가 R | ATR 이격 |
+|---|---:|---:|---:|
+| tight | 3% | 0.25R | 0.5ATR |
+| balanced | 5% | 0.50R | 1.0ATR |
+| loose | 8% | 0.75R | 1.5ATR |
+
+대표 5거래일 지연 결과:
+
+| 구간 | 정책 | 체결률 | Trigger당 평균 R | 체결분 평균 R |
+|---|---|---:|---:|---:|
+| historical holdout | A(강세 +5%, 횡보 0%) | 72.8% | **0.702** | 0.965 |
+| historical holdout | C-balanced | 55.6% | 0.638 | **1.148** |
+| recent design | A | 59.2% | **0.150** | 0.254 |
+| recent design | C-balanced | 47.6% | 0.137 | **0.288** |
+
+- tight은 historical 전 지연 구간에서 유의하게 열세였다.
+- balanced는 historical 3·10·20일에서 유의하게 열세였고 나머지는 차이의 신뢰구간이 0을 포함했다.
+- loose의 recent 소폭 개선은 모두 신뢰구간이 0을 포함했고 historical 5일에서는 유의하게 열세였다.
+- C는 체결된 종목만 보면 좋아 보이지만 좋은 기회도 함께 차단해 원 Trigger 기준 기대값을 개선하지 못했다.
+- 횡보장의 0% pullback 허용도 recent 1·10·20일에서 각각 -0.153R/-0.130R/-0.093R로 불안정했다.
+- **결론: C gate 채택 보류. V1은 강세장 +5%, 횡보장 WATCH, 하락장 BLOCK. R·ATR은 표시만 한다. Next-open gap guard는 유지한다.**
+- 한계: 현재 상장 종목 생존편향, adjusted OHLC, 비용·슬리피지 미반영, grid 관찰 후 결론이라 완전한 untouched OOS는 아님.
+
+---
+
 ## 확정 시스템 v3 (실험 22 반영, 현재 기준)
 
 ```text

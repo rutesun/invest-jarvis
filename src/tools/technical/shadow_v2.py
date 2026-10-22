@@ -215,7 +215,7 @@ def _fresh_close_breakout(df: pd.DataFrame, lookback: int = 20) -> bool:
         return len(prior) > 0 and np.isfinite(np.nanmax(prior)) and close[idx] > np.nanmax(prior)
 
     n = len(df)
-    return broke(n - 1) and not broke(n - 2)
+    return bool(broke(n - 1) and not broke(n - 2))
 
 
 def _buy_flip_age(df: pd.DataFrame) -> tuple[bool, int | None]:

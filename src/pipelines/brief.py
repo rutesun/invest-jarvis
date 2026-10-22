@@ -16,7 +16,13 @@ from typing import Any
 from langchain_core.language_models import BaseChatModel
 
 from src.llm.analyzer import generate_brief_narratives
-from src.strategies.swing_w150.engine import summarize as summarize_swing_w150
+from src.pipelines.strategy_analysis import (
+    AnalysisStrategyService,
+    account_from_capital,
+    evaluate_optional,
+)
+from src.pipelines.strategy_render import render_strategy_sections
+from src.position.models import PositionSnapshot
 from src.tools.brief.models import BriefItem
 from src.tools.brief.name_resolver import TickerNameResolver
 from src.tools.brief.render import render_markdown
@@ -50,6 +56,7 @@ class BriefPipeline:
         flow_tool,
         llm: BaseChatModel | None = None,
         name_resolver: TickerNameResolver | None = None,
+        strategy_service: AnalysisStrategyService | None = None,
     ):
         self.technical_tools = technical_tools
         self.playbook_engine = playbook_engine
@@ -59,6 +66,7 @@ class BriefPipeline:
         self.flow_tool = flow_tool
         self.llm = llm
         self.name_resolver = name_resolver or TickerNameResolver()
+        self.strategy_service = strategy_service
 
     async def run(self, config: HoldingsConfig) -> dict[str, Any]:
         date = datetime.now()
@@ -76,7 +84,7 @@ class BriefPipeline:
 
         items: list[BriefItem] = []
         for ticker, holding, note in targets:  # KIS 동시 호출 금지 → 순차 루프
-            items.append(await self._analyze_target(ticker, holding, note))
+            items.append(await self._analyze_target(ticker, holding, note, config))
 
         ranked = rank(items)
 
@@ -86,7 +94,11 @@ class BriefPipeline:
         return {"date": date, "macro": macro, "items": ranked}
 
     async def _analyze_target(
-        self, ticker: str, holding: HoldingEntry | None, note: str | None
+        self,
+        ticker: str,
+        holding: HoldingEntry | None,
+        note: str | None,
+        config: HoldingsConfig,
     ) -> BriefItem:
         kind = "holding" if holding is not None else "watch"
         tool = self.technical_tools["KR" if is_korean_ticker(ticker) else "US"]
@@ -96,6 +108,15 @@ class BriefPipeline:
             if not tech_result.success:
                 raise RuntimeError(f"기술분석 실패: {tech_result.error}")
             technical = tech_result.data
+            capital, risk_pct = config.get_account_for(ticker)
+            strategy_analysis, strategy_warning = await evaluate_optional(
+                self.strategy_service,
+                ticker,
+                technical,
+                position=PositionSnapshot(holding.quantity if holding is not None else 0),
+                account=account_from_capital(capital, risk_pct),
+                pipeline="brief",
+            )
 
             flow = None
             if is_korean_ticker(ticker) and self.flow_tool is not None:
@@ -142,6 +163,10 @@ class BriefPipeline:
                 ticker=ticker,
                 kind=kind,
                 name=name,
+                scorecard=technical.scorecard,
+                strategy_run=strategy_analysis.strategy_run if strategy_analysis else None,
+                strategy_analysis=strategy_analysis,
+                strategy_warning=strategy_warning,
                 action=action,
                 bucket=bucket_for(kind, action, has_warn_signals=has_warn),
                 bonus=bonus,
@@ -164,7 +189,6 @@ class BriefPipeline:
                 score_history_warning=technical.score_history_warning,
                 remaining_condition=remaining_condition,
                 turnaround=turnaround,
-                swing_w150=summarize_swing_w150(technical.raw_dataframe, ticker),
                 warnings=technical.warnings or [],
             )
         except Exception as e:
@@ -232,8 +256,18 @@ class BriefPipeline:
             "news_titles": [n.title for n in item.news[:3]],
         }
 
-    def format_output(self, result: dict[str, Any]) -> str:
-        return render_markdown(result["date"], result["macro"], result["items"])
+    def format_output(self, result: dict[str, Any], detailed_strategy: bool = False) -> str:
+        return render_markdown(
+            result["date"],
+            result["macro"],
+            result["items"],
+            strategy_renderer=lambda item: render_strategy_sections(
+                item.scorecard,
+                item.strategy_analysis,
+                warning=item.strategy_warning,
+                detail=detailed_strategy,
+            ),
+        )
 
     def save_report(self, result: dict[str, Any]) -> Path:
         """reports/YYYY-MM/brief_YYYY-MM-DD.md 저장 (ScreenerPipeline.save_report 패턴)."""

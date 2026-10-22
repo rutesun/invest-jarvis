@@ -29,6 +29,7 @@ def evaluate_gate(
     flow,
     stage2_met_count: float | None = None,
     stage2_failed_labels: list[str] | None = None,
+    chart_only: bool = False,
 ) -> GateResult:
     """매수 게이트 평가. 순수 함수 — I/O 없음."""
     checklist: list[GateCheck] = []
@@ -123,7 +124,8 @@ def evaluate_gate(
             GateCheck(name="수급", required=False, met=None, reason="수급 데이터 없음")
         )
 
-    checklist.extend(bonus_checks)
+    if not chart_only:
+        checklist.extend(bonus_checks)
 
     # ── veto 판정 ─────────────────────────────────────────────────────────────
     required_checks = [c for c in checklist if c.required]
@@ -139,7 +141,7 @@ def evaluate_gate(
 
     # ── quality_grade ─────────────────────────────────────────────────────────
     quality_grade: str | None = None
-    if passed:
+    if passed and not chart_only:
         bonus_met = sum(1 for c in bonus_checks if c.met is True)
         bonus_total = len(bonus_checks)
         ratio = bonus_met / bonus_total if bonus_total > 0 else 0.0

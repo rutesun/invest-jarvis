@@ -11,7 +11,7 @@ from src.tools.technical.staleness import StaleClose, drop_trailing_nan_close
 logger = logging.getLogger(__name__)
 
 
-CANONICAL_TECHNICAL_PERIOD: Final[str] = "3y"
+CANONICAL_TECHNICAL_PERIOD: Final[str] = "2y"
 
 
 class TechnicalAnalysisTool(BaseTool):

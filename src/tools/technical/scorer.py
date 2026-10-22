@@ -16,6 +16,7 @@ from src.tools.technical.components.volume import analyze_volume
 from src.tools.technical.context import build_market_context
 from src.tools.technical.indicators import IndicatorCalculator
 from src.tools.technical.models import ScoreHistoryPoint, TechnicalResult
+from src.tools.technical.scorecard import build_scorecard
 from src.tools.technical.shadow_v2 import compute_shadow_v2
 
 
@@ -127,7 +128,7 @@ class TechnicalScorer:
         aggregation = self.aggregator.aggregate(components, context, bottoming=bottoming)
         shadow = compute_shadow_v2(df, components, context)
 
-        return TechnicalResult.from_analysis(
+        result = TechnicalResult.from_analysis(
             df,
             ticker=ticker,
             timestamp=datetime.now(UTC),
@@ -140,6 +141,9 @@ class TechnicalScorer:
             aggregation_trace=aggregation.aggregation_trace,
             shadow_v2=asdict(shadow),
         )
+        as_of = df.index[-1].date() if hasattr(df.index[-1], "date") else datetime.now(UTC).date()
+        result.scorecard = build_scorecard(df, result, ticker=ticker or "", as_of=as_of)
+        return result
 
     def _build_score_history(
         self,
