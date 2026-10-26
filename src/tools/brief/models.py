@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from src.tools.disclosure import DisclosureItem
 from src.tools.flow import InvestorFlow
 from src.tools.news import NewsArticle
 from src.tools.playbook.holdings import HoldingEntry
 from src.tools.playbook.models import PlaybookVerdict
+
+
+if TYPE_CHECKING:
+    from src.pipelines.strategy_analysis import AnalysisStrategyResult
+    from src.strategies.runner import StrategyRunBundle
+    from src.tools.technical.scorecard_models import TechnicalScorecard
 
 
 # 버킷 순서 = 절대 우선순위 (낮을수록 상단). 스펙 §5.2
@@ -50,6 +56,10 @@ class BriefItem:
     disclosures: list[DisclosureItem] = field(default_factory=list)
     flow: InvestorFlow | None = None
     price: float | None = None
+    scorecard: TechnicalScorecard | None = None
+    strategy_run: StrategyRunBundle | None = None
+    strategy_analysis: AnalysisStrategyResult | None = None
+    strategy_warning: str | None = None
     change_pct: float | None = None
     technical_verdict: dict[str, Any] | None = None
     shadow_v2: dict[str, Any] | None = None  # A′ 기술 상태(점수/게이트 분리) 병행 표시
@@ -58,6 +68,5 @@ class BriefItem:
     remaining_condition: str | None = None  # 임박 시 미충족 게이트 1개
     narrative: Any | None = None  # TickerNarrative (Task 4) — 순환 import 방지로 Any
     turnaround: str | None = None  # 턴어라운드 신호 요약 (score>0일 때만)
-    swing_w150: str | None = None  # SWING_W150 전략 상태 한 줄 (참고, 판정에 쓰지 않음)
     warnings: list[str] = field(default_factory=list)  # 스테일 종가 등 데이터 경고
     error: str | None = None

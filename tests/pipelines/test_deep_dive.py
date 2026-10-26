@@ -1,8 +1,11 @@
+import json
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import numpy as np
 import pandas as pd
 import pytest
+from langchain_core.runnables import RunnableLambda
 
 from src.core.models import ToolResult
 from src.llm.models import (
@@ -22,6 +25,7 @@ from src.tools.flow import InvestorFlow, InvestorFlowEntry
 from src.tools.fundamental import FundamentalSnapshot
 from src.tools.macro import TickerMacroSnapshot
 from src.tools.news import NewsArticle
+from src.tools.technical.indicators import IndicatorCalculator
 from src.tools.technical.models import (
     AggregationTraceEntry,
     ExecutionLevelView,
@@ -35,6 +39,7 @@ from src.tools.technical.models import (
     TechnicalResult,
     TechnicalVerdict,
 )
+from src.tools.technical.scorer import TechnicalScorer
 
 
 @pytest.fixture
@@ -1053,3 +1058,65 @@ async def test_deep_dive_integrated_explanation_handles_absent_sources(
     assert captured.news_analysis == mock_news_analysis.return_value.model_dump(mode="json")
     assert "actionable_signal" not in result
     assert result["integrated_explanation"] is not None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("previous_close", "last_close", "expected_breakout"),
+    [(175.0, 175.0, False), (175.0, 190.0, True), (190.0, 191.0, False)],
+)
+async def test_deep_dive_serializes_shadow_breakout_from_numpy_prices(
+    mock_technical_tool, mock_news_tool, previous_close, last_close, expected_breakout
+):
+    """NumPy 가격 비교가 scorer를 거쳐 최종 해설의 JSON bool로 전달된다."""
+    df = mock_technical_tool.execute.return_value.data.raw_dataframe.copy()
+    df.loc[df.index[-2:], "Close"] = [previous_close, last_close]
+    df.loc[df.index[-2:], "High"] = [max(180.0, previous_close), max(180.0, last_close)]
+    assert isinstance(df["Close"].iloc[-1] > df["High"].iloc[-21:-1].max(), np.bool_)
+    technical = TechnicalScorer().score(
+        IndicatorCalculator().calculate(df), ticker="AAPL", include_history=False
+    )
+    mock_technical_tool.execute.return_value = ToolResult(success=True, data=technical)
+
+    outputs = {
+        TechnicalSummaryOutput: TechnicalSummaryOutput(
+            summary="기술 요약",
+            key_insights=[],
+            recommendation="중립",
+            confidence=0.5,
+            rationale="기술 지표",
+        ),
+        NewsAnalysisOutput: NewsAnalysisOutput(
+            sentiment="중립",
+            confidence=0.5,
+            key_themes=[],
+            summary="뉴스 요약",
+            impact_assessment="중립",
+        ),
+        IntegratedExplanationOutput: _explanation_output(),
+    }
+    captured = {}
+
+    def structured_output(model):
+        def respond(prompt):
+            if model is IntegratedExplanationOutput:
+                user_message = prompt.to_messages()[1].content
+                facts_json = user_message.split("<untrusted_facts>", 1)[1].split(
+                    "</untrusted_facts>", 1
+                )[0]
+                captured.update(json.loads(facts_json))
+            return outputs[model]
+
+        return RunnableLambda(respond)
+
+    llm = MagicMock()
+    llm.with_structured_output.side_effect = structured_output
+    pipeline = DeepDivePipeline(
+        technical_tool=mock_technical_tool, news_tool=mock_news_tool, llm=llm
+    )
+    with patch("src.pipelines.deep_dive.render_technical_chart", return_value=None):
+        result = await pipeline.run("AAPL")
+
+    assert technical.shadow_v2["fresh_breakout"] is expected_breakout
+    assert captured["technical_context"]["shadow_v2"]["fresh_breakout"] is expected_breakout
+    assert result["integrated_explanation"].decision_explanation == "해설"

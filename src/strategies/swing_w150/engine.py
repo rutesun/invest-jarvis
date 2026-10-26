@@ -12,8 +12,15 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
+from src.strategies.models import SwingRuntimeState
 from src.strategies.swing_w150 import rules
-from src.strategies.swing_w150.models import SwingState, SwingStatus, SwingTrade
+from src.strategies.swing_w150.models import (
+    SwingReplayEvent,
+    SwingReplayTrace,
+    SwingState,
+    SwingStatus,
+    SwingTrade,
+)
 from src.tools.disclosure import is_korean_ticker
 from src.tools.technical.indicators import IndicatorCalculator
 
@@ -38,6 +45,7 @@ class _Run:
     graduated: bool
     armed: bool
     flat: bool
+    prev_below: bool
 
     def to_trade(self, f: rules.SwingFeatures) -> SwingTrade:
         return SwingTrade(
@@ -58,7 +66,14 @@ def _features(df: pd.DataFrame) -> rules.SwingFeatures:
     return rules.build_features(IndicatorCalculator().calculate(df.copy()))
 
 
-def _walk(f: rules.SwingFeatures, kind: str, entry_index: int, entry: float, stop: float) -> _Run:
+def _walk(
+    f: rules.SwingFeatures,
+    kind: str,
+    entry_index: int,
+    entry: float,
+    stop: float,
+    events: list[SwingReplayEvent] | None = None,
+) -> _Run:
     c, low = f.close, f.low
     n = len(c)
     risk = entry - stop
@@ -86,11 +101,14 @@ def _walk(f: rules.SwingFeatures, kind: str, entry_index: int, entry: float, sto
             graduated=graduated,
             armed=armed,
             flat=not held,
+            prev_below=prev_below,
         )
 
     for k in range(entry_index, n):
         # 과열 매도로 비어 있어도 손절선은 살아 있다(기준 동작).
         if low[k] <= stop:
+            if events is not None:
+                events.append(SwingReplayEvent("STOP", k, kind, entry, stop))
             return finish(k, stop, "stop")
         if rules.overheat_armed(f, k):
             armed = True
@@ -99,22 +117,30 @@ def _walk(f: rules.SwingFeatures, kind: str, entry_index: int, entry: float, sto
             held = False
             armed = False
             n_partial += 1
+            if events is not None:
+                events.append(SwingReplayEvent("OVERHEAT_SELL", k, kind, entry, stop))
         elif not held and rules.overheat_rebuy(f, k):
             basis = float(c[k])
             held = True
             n_partial += 1
+            if events is not None:
+                events.append(SwingReplayEvent("OVERHEAT_REBUY", k, kind, entry, stop))
         if not graduated and rules.graduates(f, k):
             graduated = True
+            if events is not None:
+                events.append(SwingReplayEvent("D_GRADUATION", k, kind, entry, stop))
         if graduated:
             below = rules.below_exit_line(f, k)
             hit = rules.exit_150(f, k, below, prev_below, risk)
             prev_below = below
             if hit:
+                if events is not None:
+                    events.append(SwingReplayEvent("SMA150_EXIT", k, kind, entry, stop))
                 return finish(k, float(c[k]), "sma150")
     return finish(n - 1, float(c[-1]), "end")
 
 
-def _replay(f: rules.SwingFeatures) -> list[_Run]:
+def _replay(f: rules.SwingFeatures, events: list[SwingReplayEvent] | None = None) -> list[_Run]:
     n = len(f.close)
     runs: list[_Run] = []
     t = rules.WARMUP_BARS
@@ -131,10 +157,66 @@ def _replay(f: rules.SwingFeatures) -> list[_Run]:
         if not stop < entry:
             t += 1
             continue
-        run = _walk(f, kind, t + 1, entry, stop)
+        if events is not None:
+            signal_close = float(f.close[t])
+            events.append(
+                SwingReplayEvent(
+                    f"{kind}_ENTRY",
+                    t,
+                    kind,
+                    signal_close,
+                    rules.initial_stop(kind, signal_close, f, t),
+                )
+            )
+        run = _walk(f, kind, t + 1, entry, stop, events)
         runs.append(run)
         t = run.exit_index + 1
     return runs
+
+
+def replay_trace(df: pd.DataFrame) -> SwingReplayTrace:
+    """Replay a FLAT seed and retain every evaluated transition in rule order."""
+    f = _features(df)
+    events: list[SwingReplayEvent] = []
+    runs = _replay(f, events)
+    last = len(f.close) - 1
+    active = bool(runs) and runs[-1].why == "end"
+    exited_today = bool(runs) and runs[-1].exit_index == last and not active
+    signal = None if active or exited_today else rules.trigger_kind(f, last)
+    if signal is not None and last >= rules.WARMUP_BARS:
+        close = float(f.close[last])
+        events.append(
+            SwingReplayEvent(
+                f"{signal}_ENTRY",
+                last,
+                signal,
+                close,
+                rules.initial_stop(signal, close, f, last),
+            )
+        )
+    run = runs[-1] if active else None
+    state = SwingRuntimeState(
+        state_type="swing_w150",
+        state_version="SWING_W150_V1",
+        lifecycle="active" if active or signal else "closed",
+        cycle_phase=(
+            "signal"
+            if signal
+            else "awaiting_rebuy"
+            if run and run.flat
+            else "active"
+            if run
+            else "closed"
+        ),
+        kind=signal or (run.kind if run else None),
+        entry=close if signal else (run.entry if run else None),
+        stop=(rules.initial_stop(signal, close, f, last) if signal else run.stop if run else None),
+        risk=(None if signal else run.risk if run else None),
+        graduated=None if signal else run.graduated if run else None,
+        overheat_armed=None if signal else run.armed if run else None,
+        previous_below_exit_line=None if signal else run.prev_below if run else None,
+    )
+    return SwingReplayTrace(tuple(events), state)
 
 
 def replay(df: pd.DataFrame) -> list[SwingTrade]:

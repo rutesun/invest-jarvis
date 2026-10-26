@@ -653,21 +653,66 @@ Daily Report 및 Screener 리포트를 Notion Database에 자동 업로드.
 
 ---
 
-## 13. SWING_W150 전략 상태 (`check` / `brief` 참고 표시)
+## 13. SWING_W150 V2 차트 Signal (`check` / `analyze` / `brief` 공통)
 
-백테스트로 확정한 스윙 시스템 v3를 제품 코드로 옮긴 전략. `src/strategies/swing_w150/`(규칙 `rules.py`, 재생·상태 `engine.py`, 모델 `models.py`)에 있고, 재료는 `src/tools/technical`(`IndicatorCalculator` + 확정 피벗 `pivots.py`)만 쓴다.
+차트에서 지켜보는 과정인 Observation과 특정 거래일에 완성된 Signal을 구분한다. 세 pipeline은 현재 Observation, 최근 20거래일 Observation history와 Signal history, 오늘 EntryOpportunity를 함께 표시한다. Signal·EntryOpportunity의 상태 원인과 전체 판단 Evidence·임계값, 최근 5거래일 Technical Score의 점수·변화·이벤트·주의는 기본 출력에 보여준다. Strategy 결과에는 가상 보유·손절·포지션 risk·보유 수익률/R이 들어가지 않는다. 별도 구조 위험 진단(Risk Flags)은 차트 정보이며 보유 손익·주문 수량과 무관하다.
 
-**상태 4가지** (마지막 봉 종가 기준, 전체 기간 재생으로 계산):
-- 보유: 시스템 가상 포지션. 진입일·진입가·손절·현재 R
-- 신호: 오늘 종가로 진입 조건 충족, 내일 시가 진입. 예상 손절
-- 대기: 경로 전제만 충족(S: 상승 150일선 위 / D: 200일선 아래 바닥). 내일 넘어야 할 기준가. 이미 기준 위라 '첫 돌파'가 불가하면 되돌림 필요로 표시
-- 대상아님: 그 외 또는 데이터 251봉 미만
+- 상승 돌파·깊은 조정 회복·눌림목 반전·과열 조정 후 회복을 진입 후보로 표시한다. 기본 Pullback parameter V1은 SMA50·150·200·Supertrend 지지 접근과 전일 고가 돌파를 추적한다. 이는 `SWING_W150_V2` Signal 엔진 안의 정책 버전이다.
+- 과열은 SMA50 대비 +40%에서 시작하며, SMA20 이탈 시 correction, 이격 +20% 이하에서 자연 해소, 마지막 +40% bar 뒤 20거래일에 만료한다. correction은 실제 보유 50% 축소 후보이고 SMA150 연속 이탈은 전량 청산 후보다.
+- 최신 미완성 bar는 `PROVISIONAL`(장중 후보), 완료 bar는 `FINAL`(확정)로 표시한다. 같은 차트 prefix·finality·전략 버전·parameter fingerprint(설정 전체의 hash)는 같은 결과를 만든다.
+- 최근 entry의 age 0..20은 현재 기회로 평가하고 21부터 만료한다. source 이후 correction·exit은 `INVALIDATED`, 강세장·기준가 대비 +5% 이내는 `ALLOW`, 횡보장·가격 확장은 `EXECUTION_WATCH`(내부 `WATCH` 호환), 하락장은 `BLOCK`이다. 20봉·+5%는 기존 임시 운영값이며 최적값을 뜻하지 않는다. 필요한 차트·benchmark가 없으면 `NOT_EVALUATED`다.
+- 대표 Entry는 최신 발생일을 먼저 선택하고 같은 날에는 과열후회복→눌림목반등→추세돌파→바닥회복 순으로 선택한다. 이 선택을 EntryOpportunity와 PositionPlanner가 공유하며 모든 Signal은 history에 남긴다. 대표가 진입 불가여도 하위·과거 source로 우회하지 않는다. 순위는 대표 선택용이며 수익성 우열을 의미하지 않는다. Planner의 오늘 ALLOW·exact source 일치와 청산·축소 우선은 유지한다.
+- Production v2는 `TREND_BREAKOUT_ENTRY` 다음 봉부터 종가가 `Signal 당시 직전 50거래일 돌파선 − 1.0 × source ATR(14)` 이하이면 진입 허가를 취소한다. 돌파선·ATR은 source 당시 값으로 고정하며 입력 부족은 비평가한다. 최초 FINAL 무효화·만료의 날짜와 이유를 유지하고, PROVISIONAL 가격 이탈은 같은 장중 봉의 회복으로 해소할 수 있다. 최신 source가 종료되었다고 과거 ALLOW로 돌아가지 않으며 새 Signal은 새 window를 만든다. 동일일에는 explicit exit, 가격 이탈, 만료 순으로 우선한다. 이 규칙은 실제 보유의 매도 규칙을 변경하지 않는다.
+- 별도 Shadow가 돌파선·원래 지지선·눌림목 저점의 이탈과 재탈환, 큰 역방향 이동 등 미검증 후보를 추적한다. 기본 출력의 구조 위험도 `NORMAL`·`CAUTION`·`HIGH_RISK`와 Risk Flags는 진입 gate가 아니다. 따라서 `ALLOW + HIGH_RISK`도 가능하다. 원래 지지선·ATR은 source 당시 차트에서 고정하며 미지원 source/anchor 부족은 비평가로 표시한다.
+- 거래일은 미국·한국 거래소 calendar에서 독립적으로 확인한다. 종목 가격의 미설명 누락은 Signal과 실제 보유 매도 후보를 만들지 않는다. 시장 chart만 없으면 종목 Signal은 유지하고 현재 기회만 평가하지 않는다. 기회 기준가는 발생 당일에는 `Signal 종가 추정`, 이후에는 `다음 실제 거래 가능 시가`로 구분한다.
 
-**출력:** `check`의 "스윙 전략 (참고)" 섹션, `brief` 종목 상세 한 줄. 미국·한국 공통(한국은 가격 소수점 없음). 기존 판정(action·verdict·bucket)에는 쓰지 않는다. 계산 실패 시 경고 로그 후 생략.
+Trading Observation v1은 기본 ON이며 `SETUP`과 Positive/Risk Evidence를 구분해 현재 상태·당일 EVENT·최근 history에 표시한다. 확인된 피벗은 실제 피벗일과 확인일을 함께 제공한다. 이 구조 사건과 명시 V2 INITIAL이 쓰는 pivot 관계는 FINAL 부분집합에서 계산하고 원래 날짜를 보존하며, 마지막 미완성 봉은 PROVISIONAL preview로 구분한다. source별 지지·돌파선의 이탈/재탈환은 원래 기준값과 현재 실측을 구분한다. Observation은 점수를 가감하거나 진입·매도·수량을 만들지 않으며, 종료된 EntryOpportunity도 재탈환만으로 부활하지 않는다. 표시 설정과 매매 설정은 별도 fingerprint(설정 식별 hash)를 사용한다.
 
-**검증:** 백테스트 기준 동작(jarvis 지표판)과 4종목 매매 목록이 일치하는 골든 테스트(`tests/strategies/swing_w150/`).
+기본 ON이 모든 detector의 기본값 선정을 뜻하지는 않는다. 구조 이탈/재탈환 buffer 0 ATR, momentum `SMA20_TURN`, 표시 zone 0.5 ATR은 제품 표시 설정이다. 거래량 확장·수축의 세 ratio는 `None`/`UNRESOLVED`라 기본 출력에서 미평가로 남긴다. detector 구현/설정 선정과 predictive utility(예측에 도움이 되는지) 미확정을 구분하며, 미평가를 위험 없음으로 표현하지 않는다.
 
-**한계:** 제품 데이터 3년 중 약 2년만 재생되어 긴 데이터 기준 상태와 다를 수 있음. 한국 종목·거래비용·생존편향 미검증.
+새 support ladder Pullback은 `{SUPERTREND, SMA50, PRIOR_BREAKOUT_LEVEL, SMA150}` 후보의 cycle·지지 test를 추적하는 명시 V2 API 경로다. 지지는 종류의 고정 순서가 아니라 가격순으로 선택하며, SMA150은 마지막 방어선이다. failure/restart의 운영 선정은 `UNRESOLVED`여서 사용자 기본값은 위 V1이다. 로컬 비교의 V2 설정은 사전 고정한 단일 진단 예시이며 운영 기본값·최적값·수익성 검증이 아니다. [검증 범위와 실제 사례](references/2026-10-21-trading-observation-v1-validation.md)에 두 정책과 Observation 독립성을 구분한다.
+
+SignalPerformance는 Signal 종가 대비 평가가와 다음 실제 거래 가능한 시가 대비 평가가를 별도로 계산한다. 장중 평가가는 `PARTIAL`이며, provider 누락을 거래정지로 추정하지 않는다. Strategy와 성과는 요청 시 차트에서 재계산하고 저장하지 않는다.
+
+V1은 기존 연구 Backtest와 4종목 Golden의 호환 기준으로 유지한다. V2 Backtest는 FINAL Signal, 명시적 warm-up·평가 기간, 독립적인 예상 거래일과 확인된 no-trade 날짜, 다음 실제 시가 체결, stop 우선, 50% correction, 별도 lot와 거래비용을 사용한다. 전체 입력 기간의 미설명 가격 누락은 실행을 중단한다. aggregate R은 청산된 수량의 실현손익 합계를 그 수량의 초기 risk 합계로 나눈다.
+
+명시 V2 연구용 Pullback의 이전 돌파선 지지(`PRIOR_BREAKOUT_LEVEL`)도 Backtest가 소비한다. Signal 당시 지지값·ATR과 기존 손실 제한으로 초기 stop을 계산하며, 지지 Evidence가 없거나 값이 유효하지 않으면 실행을 차단한다. 이 호환 보완은 기본 Pullback V1이나 운영 Signal·EntryOpportunity 규칙을 변경하지 않는다.
+
+**한계:** live 입력은 2y이며 최소 250봉이 필요하다. 기간 시작 경계에서 예상 첫 거래일 1개만 빠지고 이후 종료일까지 연속이면 정상 범위로 허용한다. 시작 2개 이상·중간·끝 누락과 확인되지 않은 상장·거래정지 기간은 평가를 제한한다. 원래 요청 범위와 유효 평가 시작은 별도로 보존한다. 현재 provider가 조기 종료 session metadata를 제공하지 않아 bar finality는 정규 종료 시각과 15분 buffer를 사용한다. Backtest는 실제 broker 체결·유동성·생존편향을 검증하지 않는다. 상세 기준은 [책임 분리 설계](superpowers/specs/2026-10-06-strategy-signal-outcome-backtest-boundary-design.md)를 참고한다.
+
+---
+
+## 14. Scorecard·Strategy·Position 분리 (`check` / `analyze` / `brief` 공통)
+
+세 pipeline은 기존 `total_score`, technical action, Playbook과 brief ranking에 공통 Scorecard·Strategy 결과를 함께 보여준다. production SWING은 V2 Signal을 사용한다.
+
+1. 5축 Technical Scorecard: 추세·구조·모멘텀·수급·안전도 각 0~100점
+2. 중요 Observation과 Evidence: cRSI 과열·밴드 이탈, SMA·MACD 방향성 등 현재 상태의 근거
+3. 최근 20거래일 Analysis Trigger와 Strategy Observation·Signal history
+4. `TECHNICAL_LEGACY`, `PLAYBOOK_V1` verdict와 `SWING_W150_V2` Signal bundle
+5. 현재 EntryOpportunity, 두 가격 기준의 SignalPerformance와 선택적 Position Plan
+
+`--detail-strategy`를 사용하면 전체 metric과 재현용 metadata를 추가로 표시한다. 판단에 필요한 Signal·EntryOpportunity Evidence와 5일 점수 상세는 기본 출력에 포함한다. 과열 sequence는 SWING V2 안에서 계산한다.
+
+**재현 계약:**
+
+- Scorecard와 Strategy는 종목 OHLCV, 시장 benchmark OHLCV, 필요시 업종 benchmark OHLCV, 거래소 calendar로 구성된 같은 `ChartBundle`과 versioned rule만 읽는다.
+- 신호·상태·`as_of`는 차트 거래일 기준이다. 실행 시각은 bar finality 판정과 계산 metadata에 사용한다.
+- 같은 canonical ChartBundle과 strategy version·parameter fingerprint이면 pipeline, DB 상태, 실제 보유와 관계없이 같은 결과를 만든다.
+- 미국 benchmark는 `SPY`, KOSPI·6자리 KRX는 `^KS11`, KOSDAQ은 `^KQ11`이다. 완전한 입력에서 entry가 없으면 `NO_RECENT_SIGNAL`, 불완전하면 `NOT_EVALUATED`로 구분한다.
+
+**실제 보유와 주문 수량:**
+
+- Strategy는 실제 보유, 평균단가, 계좌, 체결·매매기록을 읽지 않는다. 미보유 종목에도 Entry/Exit 의견을 모두 표시한다.
+- `PositionPlanner`만 실제 holding/account를 읽어 목표·매수·매도 수량을 계산한다.
+- 오늘 Signal만 주문 후보로 사용한다. exit → correction → 회복 → 눌림목 → 상승 돌파 → 깊은 회복 순으로 선택하며, 신규 매수는 선택 Signal과 source ID가 일치하는 오늘 `ALLOW`에만 허용한다.
+- `PROVISIONAL`과 `FINAL` 모두 현재 snapshot으로 수량을 계산하고 결과에 finality·계산시각·snapshot hash를 포함한다. 기본 화면은 finality를, `--detail-strategy`는 계산시각과 snapshot hash도 표시한다. 매수에는 실제 계좌 risk와 유효한 현재 가격이 필요하며 없으면 수량은 `UNAVAILABLE`이다.
+- correction은 현재 보유량의 50%를 올림해 매도한다. 예를 들어 5주면 3주, 1주면 1주를 매도한다. exit은 전량 매도하고 미보유면 매도 수량은 0이다.
+- 주문 전송과 체결 추적은 포함하지 않는다.
+
+**저장 경계:** Strategy 관련 PostgreSQL history/cache·migration·runtime 연결은 제거했다. Observation·Trigger·Signal·EntryOpportunity·SignalPerformance는 요청 시 계산하고 PositionPlan은 현재 요청에 반환한다. 별도로 pipeline은 현재 대표 source의 Production/Shadow 판단을 분석용 JSONL에 기록한다. 이 기록은 Strategy의 입력·cache·매매장부가 아니며 실패해도 Production 판정은 유지한다. 미래 성과 annotation은 후속 evaluator 책임이다. Stock Report의 PostgreSQL과 공통 DB utility는 별도 기능으로 유지한다.
+
+**호환 기간:** 기존 점수·action·Playbook과 brief ranking은 유지한다. V2 Signal 및 별도 성과와 비교한 뒤 기존 단일 action과 중복 출력 제거 여부를 결정한다.
 
 ---
 

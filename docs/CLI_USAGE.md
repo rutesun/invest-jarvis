@@ -122,6 +122,44 @@ uv run jarvis check AAPL MSFT 005930.KS
 
 ---
 
+### EntryOpportunity와 구조 위험 진단
+
+`check`, `analyze`, `brief`의 공통 기본 출력에 신규 진입 상태, 이유, source Signal·발생일·경과 거래일, Production policy와 별도 구조 위험도를 표시한다. `EXECUTION_WATCH`는 기존 내부 `WATCH`의 사용자 표시다. `ALLOW + CAUTION/HIGH_RISK`는 기존 진입 조건을 통과했으나 연구상 구조 경고가 함께 있다는 뜻이며, 위험도 자체가 진입 차단·매도 지시는 아니다. 장중은 `PROVISIONAL`, 완료된 차트는 `FINAL`로 구분한다.
+
+현재 대표 source의 판단은 기본 `data/research/entry-shadow.jsonl`에 실행할 때마다 추가 기록한다. 경로는 `JARVIS_ENTRY_SHADOW_LOG_PATH` 환경변수로 바꿀 수 있다. Strategy는 이 파일을 읽지 않으며 삭제해도 같은 차트의 계산 결과는 같다. 저장 실패는 별도 경고로 표시하고 기존 진입 판정은 유지한다. 자동 일일 스케줄·과거 날짜 backfill·미래 수익률 계산은 추가하지 않았다.
+
+```bash
+uv run jarvis check ALAB COHR INTC NVDA AMD
+JARVIS_ENTRY_SHADOW_LOG_PATH=data/research/my-entry-shadow.jsonl uv run jarvis check NVDA
+```
+
+JSONL은 갱신형 DB가 아닌 분석용 평가 snapshot이다. 반복 실행·장중/종가·서로 다른 policy/parameter 기록을 삭제하거나 덮지 않는다. 분석 시 source·차트 거래일·policy/parameter·finality를 구분하고 동일 판단의 중복 snapshot은 선택 기준을 명시해 처리한다. 기록에 실제 보유 수량·주문·손절·미래 outcome은 포함하지 않는다. 프로그램에서 `AnalysisStrategyService(shadow_recorder=None)`으로 기록만 끌 수 있으며, `StrategyRunner(shadow_enabled=False)`는 Shadow 계산을 끄고 Production 결과는 유지한다.
+
+Trading Observation v1은 기본 ON이며 공통 출력에서 cycle/support, 현재 SETUP·Positive/Risk EPISODE, 당일 EVENT, 최근 20거래일 Observation·Signal history를 보여준다. WATCH는 지지 관찰이며 신규 매수 허용을 뜻하지 않는다. 기본 출력에서 날짜·가격·판단 Evidence를 확인하고 `--detail-strategy`에서 설정·fingerprint와 재현 정보를 추가로 확인한다. 기본 ON과 detector별 설정 선정은 별개다. 거래량 확장·수축 ratio는 미선정이므로 기본 실행에서 해당 항목은 `UNRESOLVED`/미평가이며, 평가 실패·Observation OFF와도 구분한다.
+
+기본 Pullback은 `SWING_W150_V2_PARAMS_V1`이다. support ladder V2는 failure/restart 미선정으로 기본 CLI에서 활성화되지 않으며, 아래 offline 연구 명령에서 사전 고정된 진단 설정으로만 비교한다. 이 명령은 provider/LLM/실계좌와 연구 JSONL을 사용하지 않는다.
+
+```bash
+# 보존한 baseline의 예상 파일 집합·hash와 현재 V1 결과를 검증
+uv run python scripts/research_trading_observations.py verify-baseline \
+  --output tmp/trading_observation_v1/baseline
+
+# A: 같은 정책의 Observation ON/OFF, B: V1 / 명시 V2 진단 비교
+uv run python scripts/research_trading_observations.py compare \
+  --baseline tmp/trading_observation_v1/baseline \
+  --protocol research/trading_observation_v1/protocol.json \
+  --output tmp/trading_observation_v1/comparison-new
+
+# 과거 로컬 실제 OHLCV에서 후보 탐색 후 제한된 prefix의 adapter/renderer 재현
+uv run python scripts/research_trading_observations.py cases \
+  --protocol research/trading_observation_v1/protocol.json \
+  --output tmp/trading_observation_v1/cases-new
+```
+
+`compare`/`cases`는 보존 증거를 덮지 않도록 새 output 디렉터리를 요구한다. 비교는 전체 기간 replay를 포함해 오래 걸릴 수 있고, 종목 완료 시 진행 상태를 출력한다. 결과의 `RESEARCH_ONLY_NOT_PRODUCTION_DEFAULT`·전체 설정·fingerprint와 원자료/실행코드 hash를 함께 확인한다. [현재 검증 범위와 제한](references/2026-10-21-trading-observation-v1-validation.md)을 참고한다.
+
+---
+
 ### 2. analyze - 심층 분석 (LLM)
 
 **특징:**

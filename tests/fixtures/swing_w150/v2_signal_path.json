@@ -1,0 +1,214 @@
+{
+  "strategy_id": "SWING_W150",
+  "strategy_version": "SWING_W150_V2",
+  "parameter_set_version": "SWING_W150_V2_PARAMS_V1",
+  "parameter_fingerprint": "3dca481189c1263c57ac26544fceb43cb2447e17923f890f3f65a30b0b0342f2",
+  "ticker": "TEST",
+  "as_of": "2024-12-19",
+  "observation_history": [
+    {
+      "observation_id": "c7cc4982d0438770b0091d2e4de8574825b8ec27a252ac21a7cd2804a021a396",
+      "ticker": "TEST",
+      "schema_version": "OBSERVATION_V1",
+      "parameter_fingerprint": "858bee352ee33222b6b8f775e47231ebcd338790f797e44ed9670bf7619ab250",
+      "code": "POST_OVERHEAT_RECOVERY_WATCH",
+      "kind": "SETUP",
+      "scopes": ["ENTRY"],
+      "temporal_type": "EPISODE",
+      "finality": "final",
+      "started_on": "2024-12-18",
+      "status_as_of": "2024-12-19",
+      "ended_on": "2024-12-19",
+      "status": "resolved_to_signal",
+      "direction": "NEUTRAL",
+      "evidence": [
+        {
+          "code": "SMA_20",
+          "message": "sma 20",
+          "observed_value": 99,
+          "reference_value": 102.05,
+          "importance": "high",
+          "source": "SWING_W150_V2"
+        }
+      ],
+      "source_signal_id": null,
+      "anchor_id": null,
+      "anchor_type": null,
+      "anchor_origin_on": null,
+      "anchor_origin_price": null,
+      "pivot_date": null,
+      "confirmed_on": null,
+      "source_terminal": null,
+      "cycle_id": null
+    }
+  ],
+  "signal_history": [
+    {
+      "signal_id": "SWING_W150_V2:TEST:2024-12-17:OVERHEAT:3dca481189c1263c57ac26544fceb43cb2447e17923f890f3f65a30b0b0342f2",
+      "strategy_id": "SWING_W150",
+      "strategy_version": "SWING_W150_V2",
+      "parameter_set_version": "SWING_W150_V2_PARAMS_V1",
+      "parameter_fingerprint": "3dca481189c1263c57ac26544fceb43cb2447e17923f890f3f65a30b0b0342f2",
+      "code": "OVERHEAT",
+      "occurred_on": "2024-12-17",
+      "finality": "final",
+      "direction": "rising",
+      "signal_price": "142.0",
+      "evidence": [
+        {
+          "code": "OVERHEAT",
+          "message": "overheat",
+          "observed_value": 142,
+          "reference_value": 100.84,
+          "importance": "high",
+          "source": "SWING_W150_V2"
+        },
+        {
+          "code": "OVERHEAT_EXTENSION",
+          "message": "overheat extension",
+          "observed_value": 0.40817136057120185,
+          "reference_value": 0.4,
+          "importance": "high",
+          "source": "SWING_W150_V2"
+        }
+      ],
+      "data_status": "complete"
+    },
+    {
+      "signal_id": "SWING_W150_V2:TEST:2024-12-18:OVERHEAT_CORRECTION:3dca481189c1263c57ac26544fceb43cb2447e17923f890f3f65a30b0b0342f2",
+      "strategy_id": "SWING_W150",
+      "strategy_version": "SWING_W150_V2",
+      "parameter_set_version": "SWING_W150_V2_PARAMS_V1",
+      "parameter_fingerprint": "3dca481189c1263c57ac26544fceb43cb2447e17923f890f3f65a30b0b0342f2",
+      "code": "OVERHEAT_CORRECTION",
+      "occurred_on": "2024-12-18",
+      "finality": "final",
+      "direction": "falling",
+      "signal_price": "99.0",
+      "evidence": [
+        {
+          "code": "OVERHEAT_CORRECTION",
+          "message": "overheat correction",
+          "observed_value": 99,
+          "reference_value": 102.05,
+          "importance": "high",
+          "source": "SWING_W150_V2"
+        },
+        {
+          "code": "SMA20_CROSS_DOWN",
+          "message": "sma20 cross down",
+          "observed_value": 99,
+          "reference_value": 102.05,
+          "importance": "high",
+          "source": "SWING_W150_V2"
+        },
+        {
+          "code": "PRIOR_CLOSE_VS_SMA20",
+          "message": "prior close vs sma20",
+          "observed_value": 142,
+          "reference_value": 102.1,
+          "importance": "high",
+          "source": "SWING_W150_V2"
+        }
+      ],
+      "data_status": "complete"
+    },
+    {
+      "signal_id": "SWING_W150_V2:TEST:2024-12-19:POST_OVERHEAT_RECOVERY_ENTRY:3dca481189c1263c57ac26544fceb43cb2447e17923f890f3f65a30b0b0342f2",
+      "strategy_id": "SWING_W150",
+      "strategy_version": "SWING_W150_V2",
+      "parameter_set_version": "SWING_W150_V2_PARAMS_V1",
+      "parameter_fingerprint": "3dca481189c1263c57ac26544fceb43cb2447e17923f890f3f65a30b0b0342f2",
+      "code": "POST_OVERHEAT_RECOVERY_ENTRY",
+      "occurred_on": "2024-12-19",
+      "finality": "final",
+      "direction": "rising",
+      "signal_price": "110.0",
+      "evidence": [
+        {
+          "code": "POST_OVERHEAT_RECOVERY_ENTRY",
+          "message": "post overheat recovery entry",
+          "observed_value": 110,
+          "reference_value": 102.55,
+          "importance": "high",
+          "source": "SWING_W150_V2"
+        },
+        {
+          "code": "SMA20_RECOVERY",
+          "message": "sma20 recovery",
+          "observed_value": 110,
+          "reference_value": 102.55,
+          "importance": "high",
+          "source": "SWING_W150_V2"
+        },
+        {
+          "code": "PRIOR_HIGH_BREAK",
+          "message": "prior high break",
+          "observed_value": 110,
+          "reference_value": 100,
+          "importance": "high",
+          "source": "SWING_W150_V2"
+        },
+        {
+          "code": "CORRECTED_AGE_BARS",
+          "message": "corrected age bars",
+          "observed_value": 1,
+          "reference_value": 20,
+          "importance": "high",
+          "source": "SWING_W150_V2"
+        }
+      ],
+      "data_status": "complete"
+    }
+  ],
+  "current_signals": [
+    {
+      "signal_id": "SWING_W150_V2:TEST:2024-12-19:POST_OVERHEAT_RECOVERY_ENTRY:3dca481189c1263c57ac26544fceb43cb2447e17923f890f3f65a30b0b0342f2",
+      "strategy_id": "SWING_W150",
+      "strategy_version": "SWING_W150_V2",
+      "parameter_set_version": "SWING_W150_V2_PARAMS_V1",
+      "parameter_fingerprint": "3dca481189c1263c57ac26544fceb43cb2447e17923f890f3f65a30b0b0342f2",
+      "code": "POST_OVERHEAT_RECOVERY_ENTRY",
+      "occurred_on": "2024-12-19",
+      "finality": "final",
+      "direction": "rising",
+      "signal_price": "110.0",
+      "evidence": [
+        {
+          "code": "POST_OVERHEAT_RECOVERY_ENTRY",
+          "message": "post overheat recovery entry",
+          "observed_value": 110,
+          "reference_value": 102.55,
+          "importance": "high",
+          "source": "SWING_W150_V2"
+        },
+        {
+          "code": "SMA20_RECOVERY",
+          "message": "sma20 recovery",
+          "observed_value": 110,
+          "reference_value": 102.55,
+          "importance": "high",
+          "source": "SWING_W150_V2"
+        },
+        {
+          "code": "PRIOR_HIGH_BREAK",
+          "message": "prior high break",
+          "observed_value": 110,
+          "reference_value": 100,
+          "importance": "high",
+          "source": "SWING_W150_V2"
+        },
+        {
+          "code": "CORRECTED_AGE_BARS",
+          "message": "corrected age bars",
+          "observed_value": 1,
+          "reference_value": 20,
+          "importance": "high",
+          "source": "SWING_W150_V2"
+        }
+      ],
+      "data_status": "complete"
+    }
+  ],
+  "data_status": "complete"
+}
