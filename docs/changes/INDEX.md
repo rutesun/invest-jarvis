@@ -4,6 +4,7 @@
 
 | Date | Type | Status | 변경 | PR | Record |
 |------|------|--------|------|----|--------|
+| 2026-10-22 | feat | Draft | 투자 notebook 종목별 분류, read-only plan, lossless projection 및 검증 적용 | [#64](https://github.com/rutesun/invest-jarvis/pull/64) | [notebook-notion-sync.md](notebook-notion-sync.md) |
 | 2026-10-22 | feat | In Progress | Scorecard·Strategy·Position 분리 — chart-only·Observation·돌파선 − source 1 ATR 취소·대표 Entry 통일·Backtest 호환. PR 추가 지적2건 수정, 전체2197 PASS·독립 리뷰 C0/I0/M0. GitHub CI 후 merge | [#63](https://github.com/rutesun/invest-jarvis/pull/63) | [scorecard-strategy-position-separation.md](scorecard-strategy-position-separation.md) |
 | 2026-09-30 | feat | Draft | SWING_W150 전략 엔진 + check/brief 참고 표시 — 백테스트 v3를 `src/strategies/swing_w150/`(신규 Strategies 레이어)로 이식. 재료를 jarvis `IndicatorCalculator`로 통일(재검증: 미사용 기간 1.02R 유지) + 확정 피벗 추가. 4종목 골든(매매 목록 1e-9 일치). 상태 4가지(보유/신호/대기/대상아님)를 check·brief에 한 줄 표시, 기존 판정 불변. 전체 1430 통과 | #62 | [swing-w150-strategy-engine.md](swing-w150-strategy-engine.md) |
 | 2026-09-30 | feat | Merged | 모멘텀 매매 시스템 백테스트 리서치 — 대가 preset 비교에서 시작해 실험 23개로 확정 시스템 v3 도출(S 50일 신고가 + D 바닥 경로 + 30주선 2일/−1R 청산 + 과열 20일선 규칙). 미사용 기간 2016~21에서 평균 1.02R 확인, 고베타 관문·v0.4 레시피·부분매도 등 폐기. `src/backtest/` 독립 스크립트와 문서만 추가, 기존 기능 불변 | #60 | [momentum-backtest-research.md](momentum-backtest-research.md) |

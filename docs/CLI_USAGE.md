@@ -32,6 +32,72 @@ jarvis report
 
 ## 명령어 상세
 
+### notebook sync - 투자 notebook 지속 동기화
+
+기본 실행은 Notion API `2025-09-03`으로 지정 Database를 읽는 remote-aware dry-run입니다. `.env`의 `NOTION_TOKEN`을 사용하며 리포트용 `NOTION_DATABASE_ID`와 별개로 `--database-id`를 지정합니다. 기본 대상은 투자 notebook Database입니다.
+
+```bash
+# 로컬 파싱·변환만 확인 (Notion 접근 없음)
+uv run jarvis notebook sync --offline \
+  --notebook-dir /Users/al03229901/Develop/My/invest-jarvis/notebook \
+  --manifest data/notebook-notion/offline.json
+
+# schema, active page, hash, duplicate를 읽기 전용으로 확인
+uv run jarvis notebook sync \
+  --notebook-dir /Users/al03229901/Develop/My/invest-jarvis/notebook \
+  --database-id eee67e454ce4478b9f1749e8e92a1b42 \
+  --manifest data/notebook-notion/review.json
+```
+
+`--manifest`에는 본문 없이 Key·source path·hash·page ID·schema 제안·선택 목록이 저장됩니다. 개인 metadata가 있으므로 `data/`의 gitignore를 유지하고 외부 공유하지 않습니다. 기존 manifest를 덮어쓰지 않으며 원본 안에는 artifact를 저장할 수 없습니다. schema 변경 등 blocker가 있으면 manifest를 남긴 뒤 exit 2로 종료합니다. 쓰기는 0회입니다.
+
+종목별 검토는 기존 `종목` multi-select를 사용합니다. 수동 종목 대응표는 사용하지 않습니다. 기본 dry-run은 Naver 종목 검색 API(`ac.stock.naver.com/ac`)에 종목·태그·매매 제목에서 추출한 종목명만 보내고, 응답의 국가·시장·코드를 기준으로 같은 종목을 연결합니다. 국내는 반환된 이름, 미국은 반환된 ticker를 표시합니다. 본문·문서 제목 전체·출처 URL은 검색 API로 보내지 않습니다. 국내 부분 일치는 basic API로 주식/ETF 종류를 추가 검증합니다.
+
+`--stock-cache PATH` 기본값은 `data/notebook-notion/stock-search-cache.json`입니다. 검색 근거는 version 2·30일 유효기간으로 저장하며 조회 성공분을 증분 저장해 장애 후 재사용합니다. API 장애·응답 형식 변경을 미검색으로 숨기지 않습니다. 검색 후보가 여러 개이거나, 짧은 영문 태그(예: HBM)가 ticker와 충돌하거나, 일반 태그가 ETF에 부분 일치하면 `stock_resolution.issues`에 검토 대상으로 남깁니다. 명시한 종목 미해결·cache 미조회는 blocker입니다. 미검색 일반 태그는 테마로 유지합니다. research 제목·본문의 단순 종목 언급은 검색하지 않습니다.
+
+`--offline`은 외부 접근 없이 저장된 검색 근거만 사용합니다. 유효한 근거가 없으면 미완료 미리보기를 저장하고 exit 2로 종료합니다. `stock_groups`는 legacy·미선택을 포함한 **로컬 예정 분류**이며 현재 Notion 분류가 아닙니다.
+
+```bash
+# 이미 확인한 공개 API 샘플 근거만 사용한 부분 미리보기 (추가 외부 전송 없음)
+uv run jarvis notebook sync --offline \
+  --notebook-dir /Users/al03229901/Develop/My/invest-jarvis/notebook \
+  --stock-cache data/notebook-notion/public-samples-cache-api-v2-2026-10-22.json \
+  --manifest data/notebook-notion/offline-api-new.json
+
+# 저장된 예정 분류의 삼성전자 문서 목록
+uv run python -c 'import json; p=json.load(open("data/notebook-notion/review-api-partial-v2-2026-10-22.json")); print("\n".join(p["stock_groups"].get("삼성전자", [])))'
+```
+
+`review-api-complete.json` 등 과거 자료는 승인 당시542개 검색어/117항목의 이력입니다. 2026-10-22 실제 업데이트 지시 후 최신118항목으로 범위를 갱신했습니다. 최신 적용·검증 자료와 현재 상태는 [인계](handoff/notebook-notion-sync.md)를 확인하세요. 과거 manifest는 적용하지 않습니다.
+
+apply는 검토 manifest의 `stock_resolution` 근거를 재현하고 검색 API를 새로 호출하지 않습니다. 신규 apply는 만료 근거를 차단합니다. `--resume`은 부분 실패 복구를 위해 만료된 frozen evidence도 재현하되 기존 schema/remote/journal 검증은 유지합니다. 검색 근거가 없는 과거 정적 분류 manifest는 거부합니다.
+
+기본 후보는 신규 항목뿐입니다. `--only-key 'research/YYYY-MM-DD#제목'`을 반복해 범위를 좁힐 수 있습니다. `--include-updates`는 hash가 있는 변경 및 `RELINK_CANDIDATE`(새 target ID로 링크 재연결이 필요한 page)도 포함합니다. 참조 page 선택이 빠지면 apply가 차단됩니다. legacy migration과 orphan archive는 지원하지 않으며 별도 설계·승인이 필요합니다.
+
+schema 변경과 실제 page 적용 승인을 받은 **다음** 최신 schema로 새 manifest를 생성합니다. 첫 적용은 1개 항목으로 검증한 후 나머지 backfill을 검토합니다. 같은 대화에서 이미 승인된 범위에는 승인 질문을 반복하지 않습니다.
+
+`schema_proposal`은 필요한 최종 schema를 설명하는 검토 자료이며 그대로 API에 전송할 수 있는 실행 보장은 없습니다. Notion의 select/multi_select options 요청 배열은100개 이하이며, schema 수정에서 생략한 기존 option은 삭제됩니다. 큰 배열을 단순 분할해 PATCH하지 마세요. 이번 실제 반영에서는3속성만 추가한 뒤 승인된 신규 선택값을 임시 준비page의 값으로100개 이하씩 추가하고, 기존 option과page 보존 검증 후 준비page만 archive했습니다. 이 준비 절차는 현재 CLI의 자동 기능이 아닙니다.
+
+선택값은 Notion과 같이 대소문자·앞뒤 공백을 무시하고 비교합니다. 본문 read-back은 같은 링크·서식의 연속 text 병합과 paragraph의 빈 icon 기본값을 허용하되, 내용·링크·서식 변경은 계속 차단합니다. 2026-10-26부터 원문은 로컬 notebook에만 보존하고 Notion에 Raw Markdown 부록을 붙이지 않습니다. 이 표시 변경의 projection/hash version은 `notebook-v2`이며 과거 v1 manifest를 재적용하지 않습니다. `Content Hash`, `Key`, `Source Path`, `출처`는 목록 보기에서 숨기되 속성 자체는 유지합니다.
+
+```bash
+# 아래 명령은 외부 쓰기를 수행하므로 별도 적용 승인 후에만 실행
+uv run jarvis notebook sync \
+  --notebook-dir /Users/al03229901/Develop/My/invest-jarvis/notebook \
+  --apply data/notebook-notion/approved-one.json \
+  --journal data/notebook-notion/approved-one.journal.json
+
+# 부분 실패 복구: 동일한 manifest와 journal을 유지
+uv run jarvis notebook sync \
+  --notebook-dir /Users/al03229901/Develop/My/invest-jarvis/notebook \
+  --apply data/notebook-notion/approved-one.json \
+  --journal data/notebook-notion/approved-one.journal.json --resume
+```
+
+`CREATE_PENDING` 상태에서 staging Key를 재조회해 유일한 page가 확인되면 재사용합니다. 0개 또는 여러 개면 수동 확인이 필요하며 자동 재생성하지 않습니다. append는 remote 본문의 prefix(이미 저장된 앞부분)를 확인한 뒤 남은 부분만 채웁니다. Notion 쓰기에는 자동 retry가 없습니다. 새 계획을 만들기 전에 기존 journal을 먼저 복구하세요. `--offline` 결과는 적용할 수 없습니다.
+
+이번 worktree의 sandbox에서는 uv cache를 `--cache-dir /tmp/notebook-notion-uv-cache`, Matplotlib cache를 `MPLCONFIGDIR=/tmp/notebook-notion-mpl`로 지정해 검증했습니다.
+
 ### 1. check - 빠른 기술적 분석 (다중 티커)
 
 **특징:**

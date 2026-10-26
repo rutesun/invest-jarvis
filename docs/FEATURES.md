@@ -537,6 +537,22 @@ synthesis(map) 단계가 `search_documents`를 LLM tool로 직접 호출해 PDF 
 
 Daily Report 및 Screener 리포트를 Notion Database에 자동 업로드.
 
+### 투자 notebook 지속 동기화
+
+`jarvis notebook sync`는 월별 `trades/thoughts/research`의 H3 항목을 page 하나로 투영한다. 기본 실행은 현재 Notion schema/page를 읽는 dry-run이며, 원본 파일을 수정하지 않는다.
+
+- 기존 `종목` 속성으로 다종목 항목을 묶는다. Naver 종목 검색 결과의 국가·시장·코드로 이름/코드를 연결하고 `stock_groups`에서 예정 분류를 검토한다. 수동 종목 대응표 없이 검색 근거·cache·미확정 후보를 기록한다. 분류 범위와 충돌 처리 규칙은 CLI 안내에 명시한다.
+- 기존 Key를 유지하며 content hash로 신규·변경·무변경을 구분한다. hash 없는 legacy와 원본에서 사라진 page는 일반 적용에서 제외한다.
+- Markdown link, callout, 중첩 list, table, wikilink를 읽기용 본문으로 변환한다. 원본 Markdown은 로컬에 보존하며 Notion에 중복 부록을 붙이지 않는다. 미해결 wikilink는 원문과 warning으로 남긴다.
+- 새 page ID가 필요한 링크는 2-pass로 연결한다. 링크 대상이 새로 생기거나 교체되면 참조 page 재연결도 manifest에 명시한다.
+- 검토 manifest와 journal을 지정한 apply는 새 page를 완성·read-back 검증한 뒤 기존 page를 archive한다. 실패한 실행은 같은 journal로 복구하며 불확실한 create를 자동 재생성하지 않는다.
+- schema drift·중복 Key·stale manifest·동시 실행을 차단한다. schema와 select/multi-select option은 별도 검토가 필요하며 자동 변경하지 않는다.
+- Notion의 선택값 대소문자·공백 정규화와 같은 서식 text의 저장 시 병합을 반영해 검증한다. 실제 내용·링크·서식 변경은 계속 검출한다.
+
+로컬·fake API 검증과 실제 종목 검색 검증을 제공한다. 2026-10-22 사용자 실제 업데이트 지시로 최신118항목을 반영 범위로 갱신하고, schema 확장과 삼성전자 시험page1개의 업로드·read-back·journal 복구를 검증했다. 신규35개를 실제 반영해 전체118개가 됐고 기존83개는 보존했다. 최종hash기준 추가적용대상은0개다. 현재 상태는 [인계](handoff/notebook-notion-sync.md)를 따른다. PDF는 명시된 Drive URL만 보존하며 업로드 기능은 없다. 사용법은 [CLI 안내](CLI_USAGE.md#notebook-sync---투자-notebook-지속-동기화)를 참조한다.
+
+### 리포트 업로드
+
 **명령어:**
 - `jarvis report daily <날짜> --notion`: Daily Report 업로드
 - `jarvis screen --notion`: Screener Report 업로드

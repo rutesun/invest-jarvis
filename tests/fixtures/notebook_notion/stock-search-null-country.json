@@ -1,0 +1,29 @@
+{
+  "query": "파마리서치",
+  "items": [
+    {
+      "code": "214450",
+      "name": "파마리서치",
+      "typeCode": "KOSDAQ",
+      "typeName": "코스닥",
+      "url": "/domestic/stock/214450/total",
+      "reutersCode": "214450",
+      "nationCode": "KOR",
+      "nationName": "대한민국",
+      "category": "stock",
+      "hasDiscussion": true
+    },
+    {
+      "code": "217950",
+      "name": "파마리서치바이오",
+      "typeCode": "KONEX",
+      "typeName": "코넥스",
+      "url": "/domestic/stock/217950/total",
+      "reutersCode": "217950",
+      "nationCode": null,
+      "nationName": null,
+      "category": "stock",
+      "hasDiscussion": true
+    }
+  ]
+}
