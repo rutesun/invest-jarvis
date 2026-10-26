@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from rich.console import Console
 from rich.markdown import Markdown
 
+from src.cli.notebook import notebook_app
 from src.llm.provider import LLMProvider
 from src.llm.stage_config import resolve_stage_llm
 from src.pipelines.brief import BriefPipeline
@@ -131,6 +132,7 @@ def _format_disclosure_title(form_type: str, description: str) -> str:
 logger = logging.getLogger(__name__)
 
 app = typer.Typer(help="Invest Jarvis - Financial Analysis CLI")
+app.add_typer(notebook_app, name="notebook")
 report_app = typer.Typer(help="리포트 생성")
 console = Console()
 

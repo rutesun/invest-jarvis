@@ -168,6 +168,12 @@ CLI → DailyReportPipeline
 
 ## 의존성 관리
 
+### Notebook → Notion
+
+`src/tools/notebook`은 원본 항목의 identity·metadata와 본문 변환을 담당하고 `src/integrations/notebook_notion`은 Notion 조회·계획·적용을 담당한다. CLI는 기본 read-only client로 snapshot을 읽고 manifest를 만든다. apply는 같은 원본·schema·remote 상태를 재검증하고 journal에 단계별 상태를 기록한다. page ID 할당 → 본문 append → 전체 read-back → property 확정 → 기존 page archive 순서다.
+
+hash는 실제 page ID에 종속되지 않는 logical wikilink를 사용한다. target ID 변경의 참조 page들은 별도 RELINK 후보로 함께 검토한다. 일반 sync는 legacy와 orphan을 변경하지 않는다. 원본 Markdown은 로컬 notebook에 보존하며 Notion에는 읽기용 block만 만든다. 2026-10-26 사용자 지시로 중복 raw 부록을 제거했으며 projection/hash version은 notebook-v2다.
+
 **패키지 매니저**: `uv`
 
 **주요 의존성**:
@@ -179,3 +185,6 @@ CLI → DailyReportPipeline
 - `langchain`: LLM 추상화
 - `telethon`: 텔레그램 API
 - `pytest`: 테스트
+
+
+notebook의 종목 분류는 `src/providers/stock_search.py`의 Naver 검색 경계와 `src/tools/notebook/stocks.py`의 근거 기반 분류로 분리한다. parser는 raw metadata만 추출한다. CLI는 private 검색 cache와 검토 manifest의 frozen evidence를 관리하며, apply 시 검색을 새로 호출하지 않는다.

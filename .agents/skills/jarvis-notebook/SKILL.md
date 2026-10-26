@@ -138,3 +138,11 @@ print(text[max(0,idx-200):idx+2000])
 4. 해당 날짜 H2가 있으면 그 아래, 없으면 날짜 H2 추가 후 항목 append
 5. 관련 항목이 다른 파일에 있으면 위키링크로 연결
 6. 파일 변경 후 "어느 파일 어느 섹션에 추가했다"고 한 줄 보고
+
+## Notion 동기화·표시 규칙
+
+- 원본 Markdown은 로컬 `notebook/`에 보존하고, Notion에는 항목 하나당 page 하나로 읽기용 본문을 표시한다.
+- 본문 전체를 복제한 `Raw Markdown` 보관 부록은 생성하지 않는다. 사용자가 작성한 코드 예시, Markdown link, Obsidian callout, wikilink는 본문에 유지한다.
+- 목록 보기에서 `Content Hash`, `Key`, `Source Path`, `출처`는 숨긴다. 동기화에 필요한 schema 속성 자체는 삭제하지 않는다.
+- 목록 열 숨김은 본문에 작성된 출처·링크를 삭제한다는 뜻이 아니다. 기존 page 변경은 사용자가 요청한 동기화 범위에서만 수행하며, 로컬 출처가 사라진 page를 자동 archive하지 않는다.
+- 동기화 명령과 검증 절차는 저장소 루트의 `docs/CLI_USAGE.md`, 현재 적용 상태는 `docs/handoff/notebook-notion-sync.md`를 확인한다.

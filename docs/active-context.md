@@ -1,33 +1,32 @@
-# Active Context
+# Active Context — notebook-notion-sync
 
-- **갱신**: 2026-10-01 16:03 (PR #62 생성 — 검토대기)
-- **Branch**: feature/swing-w150-engine (워크트리: swing-w150-engine)
-- **진행 단계**: 구현·검증·문서·commit·push 완료 → PR #62 검토대기
+- 갱신: 2026-10-26 18:29 · Branch: feature/notebook-notion-sync · Status: Notion 본문·목록 정리 및 notebook 스킬 반영 완료
+
+## 목표
+Notion에는 읽기용 본문을 표시하고 원본 Markdown은 로컬에 보존합니다.
 
 ## 지금까지
-- 위임 작업: 백테스트로 확정한 v3(S 50일 신고가 + D 바닥 경로 + 30주선 2일/−1R 청산 + 과열 20일선 규칙)를 엔진화(2단계)하고 check/brief에 참고 표시(3단계). 기존 action은 덮어쓰지 않음.
-- 계획서: `docs/superpowers/plans/2026-09-30-swing-w150-engine.md` (strategies 레이어 구조 반영 완료).
-- 확인: jarvis 지표와 백테스트 지표 식 차이(ATR·슈퍼트렌드). 제품 데이터는 3년(워밍업 250봉 뒤 약 2년 replay).
+- 10-22: 신규35개 업로드. 기존83개 legacy 보존.
+- 10-26: 전체118개 스캔 후35개 page의 Raw Markdown 보관 block35개 제거.
+- 읽기용 본문·pageID/URL·schema·원본 보존,35개 v2 hash 검증 완료.
+- Default view(table)의 Content Hash/Key/Source Path/출처는 이미 숨김. 속성 유지.
+- 자동 원문 부록을 제거하고 notebook-v2 사용. 작성된 코드 예시 유지.
+- jarvis-notebook 스킬에 원문 부록 미생성·읽기용 본문 보존·목록 열 숨김 및 schema 유지 규칙 반영. 스킬 형식 검증 PASS.
+- 관련148 tests/Ruff PASS. 전체1554 passed/24 failed/15 deselected; 환경실패는 worklog 참조.
 
 ## 핵심 결정
-- 재료는 `src/tools/technical` 한 곳에 두고 재사용, 해석(레시피·상태)은 pipelines 쪽.
-- 지표는 jarvis `IndicatorCalculator`로 통일하고 v3 성과를 재검증(옵션 A).
-
-## 추가 결정
-- 전략은 별도 레이어 `src/strategies/swing_w150/` (tools만 import). CLAUDE.md·AGENTS.md 표 갱신 완료.
-- 한국·미국 모두 표시, 미검증 표기 없음.
-- 정답지: tests/fixtures/swing_w150/{COIN,AMAT,PYPL,UPST} (jarvis 지표판 기준).
-
-## 완료
-- 코드: src/tools/technical/{indicators.py(7컬럼),pivots.py}, src/strategies/swing_w150/{rules,engine,models}.py, quick_check·brief 표시.
-- 테스트: 골든 4종목, 상태·규칙·요약·pivots, check/brief 표시·판정 불변. 전체 1430 passed, ruff clean.
-- 실데이터: NVDA 보유(S), 005930 대기(S) 288,000, HOOD 대기(S).
-- 문서: change record `docs/changes/swing-w150-strategy-engine.md` + INDEX, FEATURES.md §13, CLAUDE.md·AGENTS.md 레이어 표, worklog.
-- 재검증: `uv run pytest -q` 1430 passed, `ruff check` 통과, `ruff format --check` 375 files formatted.
-- 기능 commit: `4f20f57` (`feat(strategy): add SWING_W150 engine`).
-- PR: https://github.com/rutesun/invest-jarvis/pull/62
+- 원문은 로컬에만 보존합니다. 동기화 속성은 목록에서 숨기고 schema에는 유지합니다.
+- 기존83개 legacy의 본문·분류 migration은 미실행입니다.
 
 ## 다음 행동
-- 인계 문서: `docs/handoff/swing-w150-engine.md`.
-- PR #62 review·CI 확인 후 피드백 반영 또는 merge.
-- 후속 후보: 한국 종목 백테스트, tools/brief → pipelines/brief 이동, tools/technical/strategies 이름 정리, screener 신호 종목 발굴.
+1. Notion 본문·목록 표시 확인.
+2. 현재 로컬124개/remote118개. 신규6개는 별도 범위에서 검색근거·schema 보완 후 검토.
+3. 정리한35개는 UNCHANGED입니다. v1 manifest를 재사용하지 않습니다.
+
+## 함정 · 하지 말 것
+원본 수정/source-missing 자동archive/PDF업로드/commit·push·PR 금지 유지. 개인자료 Git 제외·0600.
+
+## 참조
+1. docs/handoff/notebook-notion-sync.md
+2. docs/worklog/notebook-notion-sync.md
+3. data/notebook-notion/verification-remove-raw-2026-10-26.json
