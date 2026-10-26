@@ -1,6 +1,6 @@
 # Active Context — notebook-notion-sync
 
-- 갱신: 2026-10-26 18:47 · Branch: feature/notebook-notion-sync · Status: PR 생성·머지 검증 진행 중
+- 갱신: 2026-10-26 18:47 · Branch: feature/notebook-notion-sync · Status: PR #64 최종 로컬 검증 완료, CI 통과 후 merge
 
 ## 목표
 Notion에는 읽기용 본문을 표시하고 원본 Markdown은 로컬에 보존합니다.
@@ -77,3 +77,7 @@ Notion에는 읽기용 본문을 표시하고 원본 Markdown은 로컬에 보�
 1. `docs/references/2026-10-21-committed-strategy-review.md` — 원 리뷰와 후속 수정 상태
 2. `docs/changes/scorecard-strategy-position-separation.md` — 변경 범위·검증 이력
 3. `docs/worklog/trading-observation-v1.md` — 결정·버그 검증 기록
+
+## PR 검증 결과
+
+[PR #64](https://github.com/rutesun/invest-jarvis/pull/64) 생성 완료. 최신 main 통합 후 전체2,346 passed/1 skipped/4 deselected(97.27초), Ruff·465파일 format·diff PASS, 독립 재리뷰 Critical/Important 0건입니다. 실제 CI와 merge 상태는 PR 링크에서 확인합니다. 이전18/24개실패 기록은 당시 환경의 이력입니다. 개인 원본·운영자료·.serena는 제외했으며 이 PR 작업에서 추가 Notion 쓰기는 없습니다.

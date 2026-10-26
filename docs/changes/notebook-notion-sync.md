@@ -2,7 +2,7 @@
 
 **Status**: In Progress
 **Date**: 2026-10-26
-**PRs**: 사용자 요청으로 PR 생성·머지 검증 진행 중
+**PRs**: [#64](https://github.com/rutesun/invest-jarvis/pull/64)
 **Type**: feat
 
 > 현재 기능 상태는 `docs/FEATURES.md`를 기준으로 봅니다.
@@ -64,3 +64,7 @@ After: 항목별 dry-run·변경감지·검토manifest·read-back·부분실패�
 ## PR 전 검토 보완
 
 notebook 스킬에 원문 부록 미생성·목록 열 숨김 정책을 반영했습니다. 독립 리뷰에서 발견한 단어·URL 내부 밑줄과 제목의 `C#` 문자 손실을 수정했습니다. 재현 회귀6개와 관련 전체154개가 통과했으며 재리뷰의 Critical/Important 지적은 없습니다. 최신 main의 전략 기능을 병합해 보존했습니다.
+
+## 최종 PR 검증
+
+최신 main 통합 후 전체 2,346 passed / 1 skipped / 4 deselected / 기존 경고2개(97.27초), Ruff check·465파일 format·diff PASS입니다. 독립 재리뷰 Critical/Important 0건이며 실제 CI·merge 상태는 PR #64를 기준으로 확인합니다.

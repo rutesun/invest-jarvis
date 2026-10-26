@@ -1,6 +1,6 @@
 # Handoff — notebook-notion-sync
 
-- 갱신: 2026-10-26 18:47 · Branch: feature/notebook-notion-sync · Status: 사용자 요청으로 PR 생성·머지 검증 진행 중
+- 갱신: 2026-10-26 18:47 · Branch: feature/notebook-notion-sync · Status: PR #64 최종 로컬 검증 완료, CI 통과 후 merge
 
 ## 목표
 로컬 투자 노트를 원본으로 유지하며 Notion에는 항목별 읽기용 본문을 제공합니다. 종목은 검색 API 근거로 묶습니다.
@@ -52,3 +52,7 @@ MPLCONFIGDIR=/tmp/notebook-notion-mpl uv run --cache-dir /tmp/notebook-notion-uv
 - 원본 수정/source-missing 자동archive/PDF업로드 금지 유지. PR 생성·머지는 10-26 요청으로 승인됐습니다.
 - 원문 부록을 다시 붙이거나 v1 manifest를 적용하지 않습니다. 동기화 속성은 삭제하지 않습니다.
 - 전체 로컬 stock_groups와 실제 갱신한35개 remote 분류를 구분합니다.
+
+## PR 검증 결과
+
+[PR #64](https://github.com/rutesun/invest-jarvis/pull/64) 생성 완료. 최신 main 통합 후 전체2,346 passed/1 skipped/4 deselected(97.27초), Ruff·465파일 format·diff PASS, 독립 재리뷰 Critical/Important 0건입니다. 실제 CI와 merge 상태는 PR 링크에서 확인합니다. 이전18/24개실패 기록은 당시 환경의 이력입니다. 개인 원본·운영자료·.serena는 제외했으며 이 PR 작업에서 추가 Notion 쓰기는 없습니다.

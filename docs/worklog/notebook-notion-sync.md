@@ -2,7 +2,7 @@
 
 - **Branch**: feature/notebook-notion-sync
 - **Started**: 2026-10-14
-- **Status**: local-complete / remote-review-pending
+- **Status**: PR #64 / final-local-verification-passed
 - **Links**: [계획](../superpowers/plans/2026-10-14-notebook-notion-sync.md)
 
 ## (2026-10-14 14:39) [Decision] 로컬 구현 범위 갱신
@@ -324,3 +324,11 @@
 - ADR 후보? no
 
 private artifact는 `data/notebook-notion/review-2026-10-14.json`, `schema-proposal-2026-10-14.json`, `verification-2026-10-14.json`입니다. 개인 본문·secret 없이 metadata만 저장하며 Git에서 제외됩니다. 원본 21개 파일 읽기 전후 hash 동일, `.serena/project.yml` 초기 SHA-256 동일을 확인했습니다. 실제 Notion mutation, PDF 업로드, commit/push/PR은 0회입니다.
+
+## (2026-10-26 18:53) [Decision] 최종 로컬 검증 및 PR #64 생성
+- 맥락: 전체 코드·문서·스킬을 포함하는 PR을 생성하고 검토한 head를 main에 머지합니다.
+- 후보: 검증 생략 / 로컬 전체·독립 리뷰·GitHub CI 확인
+- 선택: [PR #64](https://github.com/rutesun/invest-jarvis/pull/64) 생성. 최종 전체2,346 passed/1 skipped/4 deselected/기존경고2개(97.27초), Ruff·465파일format·diff PASS, 독립 재리뷰 Critical/Important 0건을 확인했습니다.
+- 기각: 검증 생략(통합 회귀 방지 필요).
+- 근거: /tmp/notebook-notion-pr-final-tests.log. 제품코드 수정 없이 폰트 cache 초기화 후 표준 pytest로 통과했습니다. 최종 remote CI·merge 상태는 PR에서 확인합니다.
+- ADR 후보? no
