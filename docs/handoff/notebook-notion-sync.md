@@ -1,6 +1,6 @@
 # Handoff — notebook-notion-sync
 
-- 갱신: 2026-10-26 18:18 · Branch: feature/notebook-notion-sync · Status: 원문 부록 제거·목록 숨김 확인 완료
+- 갱신: 2026-10-26 18:47 · Branch: feature/notebook-notion-sync · Status: 사용자 요청으로 PR 생성·머지 검증 진행 중
 
 ## 목표
 로컬 투자 노트를 원본으로 유지하며 Notion에는 항목별 읽기용 본문을 제공합니다. 종목은 검색 API 근거로 묶습니다.
@@ -27,6 +27,12 @@
 ## 미결 · 다음 결정
 새6개 업로드와 기존83개 legacy migration은 별도 범위로 검토합니다. schema options 요청100개 제한과 누락삭제 규칙을 지키며 전체 목록을 잘라 PATCH하지 않습니다.
 
+## PR 통합 검증
+- 10-26 사용자가 PR 생성·머지를 명시적으로 요청했습니다. 이전 commit/push/PR 금지 경계는 이 요청으로 갱신됐습니다.
+- 최신 main을 병합하고 기존 전략 기능과 문서 기록을 보존했습니다. notebook 스킬 표시 규칙도 포함했습니다.
+- 독립 리뷰의 문자 손실 지적을 수정했습니다. 단어·URL의 밑줄과 제목 C# 보존 회귀를 추가해 관련154 tests PASS, 재리뷰 Critical/Important 0건입니다.
+- 개인 notebook·운영 artifact·secret·기존 .serena 변경은 PR에 포함하지 않습니다. 이 PR 작업으로 추가 Notion 쓰기는 수행하지 않습니다.
+
 ## 다음 행동
 우선 Notion 표시를 확인합니다. 후속 동기화 요청 시 현재 source/schema를 다시 읽고 신규6개의 검색근거와 schema를 보완한 새 manifest를 만듭니다.
 
@@ -43,6 +49,6 @@ MPLCONFIGDIR=/tmp/notebook-notion-mpl uv run --cache-dir /tmp/notebook-notion-uv
 3. [변경 기록](../changes/notebook-notion-sync.md)
 
 ## 함정 · 하지 말 것
-- 원본 수정/source-missing 자동archive/PDF업로드/commit·push·PR 금지 유지.
+- 원본 수정/source-missing 자동archive/PDF업로드 금지 유지. PR 생성·머지는 10-26 요청으로 승인됐습니다.
 - 원문 부록을 다시 붙이거나 v1 manifest를 적용하지 않습니다. 동기화 속성은 삭제하지 않습니다.
 - 전체 로컬 stock_groups와 실제 갱신한35개 remote 분류를 구분합니다.

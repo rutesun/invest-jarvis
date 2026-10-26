@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from src.tools.notebook.markdown import render_markdown
 
 
@@ -139,6 +141,29 @@ def test_unsupported_syntax_remains_readable_without_raw_appendix():
 
 def test_empty_markdown_has_no_placeholder_block():
     assert render_markdown("") == []
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["stock_code_value", "https://example.com/a_b_c", "stock__code__value"],
+)
+def test_intraword_underscores_preserve_identifiers_and_bare_urls(text):
+    blocks = render_markdown(text)
+    assert content(payload(blocks[0])["rich_text"]) == text
+
+
+@pytest.mark.parametrize("text, expected", [("#### C#", "C#"), ("# C# ##", "C#")])
+def test_heading_preserves_literal_hash_and_removes_only_spaced_closing_marks(text, expected):
+    blocks = render_markdown(text)
+    assert content(payload(blocks[0])["rich_text"]) == expected
+
+
+def test_underscore_emphasis_still_formats_delimited_words():
+    blocks = render_markdown("_기울임_ __강조__")
+    rich = payload(blocks[0])["rich_text"]
+    assert content(rich) == "기울임 강조"
+    assert rich[0]["annotations"]["italic"]
+    assert rich[-1]["annotations"]["bold"]
 
 
 def test_multiple_blank_lines_after_list_do_not_create_empty_children():

@@ -1,8 +1,8 @@
 # Change Record: 투자 notebook 지속 동기화
 
-**Status**: Draft
-**Date**: 2026-10-22
-**PRs**: 없음 (commit/push/PR 미실행)
+**Status**: In Progress
+**Date**: 2026-10-26
+**PRs**: 사용자 요청으로 PR 생성·머지 검증 진행 중
 **Type**: feat
 
 > 현재 기능 상태는 `docs/FEATURES.md`를 기준으로 봅니다.
@@ -60,3 +60,7 @@ After: 항목별 dry-run·변경감지·검토manifest·read-back·부분실패�
 ## 2026-10-26 본문·목록 정리
 
 사용자 지시로35개 page의 자동 Raw Markdown 보관 block35개를 제거했습니다. 읽기용 본문·주소·schema·로컬 원본을 보존했고 notebook-v2 hash로 갱신했습니다. 목록의 Content Hash/Key/Source Path/출처는 기존 숨김 상태를 재확인했습니다. 관련148 tests/Ruff 통과, 전체1554 passed/24 failed/15 deselected이며 환경실패 상세는 worklog에 있습니다. 그동안 추가된 로컬6개 기록은 이번 정리에 포함하지 않았습니다.
+
+## PR 전 검토 보완
+
+notebook 스킬에 원문 부록 미생성·목록 열 숨김 정책을 반영했습니다. 독립 리뷰에서 발견한 단어·URL 내부 밑줄과 제목의 `C#` 문자 손실을 수정했습니다. 재현 회귀6개와 관련 전체154개가 통과했으며 재리뷰의 Critical/Important 지적은 없습니다. 최신 main의 전략 기능을 병합해 보존했습니다.

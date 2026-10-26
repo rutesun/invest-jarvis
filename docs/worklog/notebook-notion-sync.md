@@ -76,9 +76,6 @@
 - 기각: 과거 신규 29개 수치(원본이 변경됨)
 - ADR 후보? no
 
-private artifact는 `data/notebook-notion/review-2026-10-14.json`, `schema-proposal-2026-10-14.json`, `verification-2026-10-14.json`입니다. 개인 본문·secret 없이 metadata만 저장하며 Git에서 제외됩니다. 원본 21개 파일 읽기 전후 hash 동일, `.serena/project.yml` 초기 SHA-256 동일을 확인했습니다. 실제 Notion mutation, PDF 업로드, commit/push/PR은 0회입니다.
-
-
 ## (2026-10-22 10:29) [Decision] 기존 종목 속성으로 문서를 함께 조회
 - 맥락: 사용자가 삼성전자 관련 여러 문서를 같은 종목으로 묶는 로컬 수정과 미리보기 검증을 승인했습니다.
 - 후보: 새 종목 DB/relation / 기존 multi-select의 값 통일 / 본문 언급 자동 추정
@@ -310,3 +307,20 @@ private artifact는 `data/notebook-notion/review-2026-10-14.json`, `schema-propo
 - 기각: 별도 스킬 생성(기존 notebook 작업 흐름에 속하는 정책).
 - 검증: quick_validate.py에서 `Skill is valid!`, git diff --check PASS. 이번 변경은 스킬·상태 문서만 수정했으며 Notion·로컬 원본에 추가 쓰기는 없습니다.
 - ADR 후보? no
+
+## (2026-10-26 18:50) [Bug] PR 독립 리뷰의 본문 문자 손실 수정
+- 증상: 식별자·bare URL의 내부 밑줄과 제목의 C# 끝 문자가 서식으로 해석돼 사라졌습니다.
+- 근원(root cause): 단어 경계를 확인하지 않은 underscore delimiter 처리와 공백 구분 없는 heading closing hash 정규식이 원인이었습니다.
+- 수정: 단어 내부 underscore를 literal로 보존하고 공백 뒤 closing hash만 제거합니다. 수정 전 회귀4개 실패·2개 통과, 수정 후 관련154개 통과를 확인했습니다.
+- 재발 방지 / 배운 것: 실제 읽기용 출력의 문자열과 URL을 직접 검증하는6개회귀를 추가했습니다. 독립 재리뷰 Critical/Important 0건입니다.
+
+## (2026-10-26 18:50) [Decision] 사용자 요청에 따른 PR·머지 진행
+- 맥락: 사용자가 PR 생성·머지를 명시적으로 요청해 기존 금지 경계가 갱신됐습니다.
+- 후보: 오래된 main 기준 PR / 최신 main 병합 후 PR
+- 선택: 최신 main을 병합해 기존 전략 기능을 보존했습니다. 문서 충돌은 양쪽 기록을 보존했고 src/cli/main.py는 notebook 등록2줄만 추가됩니다.
+- 기각: 오래된 기준 유지(최신 기능과 통합 검증 필요).
+- 검증: 전체 Ruff·465파일 format·diff PASS. 비밀문자열 패턴0건, 개인 notebook/data/.env/.serena는 PR에서 제외했습니다. .serena hash는 기존 값과 같습니다.
+- 환경: 최초 통합 전체 테스트는2336 passed/4 failed/1 skipped/4 deselected. 전역 subprocess mock이 최초 Matplotlib 폰트 검색을 가로채는 기존 문제였고, mock 밖에서 폰트 캐시 초기화 후 차트6개가 통과했습니다. 최종 전체 테스트를 재실행합니다.
+- ADR 후보? no
+
+private artifact는 `data/notebook-notion/review-2026-10-14.json`, `schema-proposal-2026-10-14.json`, `verification-2026-10-14.json`입니다. 개인 본문·secret 없이 metadata만 저장하며 Git에서 제외됩니다. 원본 21개 파일 읽기 전후 hash 동일, `.serena/project.yml` 초기 SHA-256 동일을 확인했습니다. 실제 Notion mutation, PDF 업로드, commit/push/PR은 0회입니다.

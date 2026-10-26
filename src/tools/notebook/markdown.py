@@ -10,7 +10,7 @@ from src.tools.notebook.models import split_text
 Resolver = Callable[[str], str | None]
 _FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 _LIST = re.compile(r"^(\s*)([-+*]|\d+[.)])\s+(.*)$")
-_HEADING = re.compile(r"^ {0,3}(#{1,6})\s+(.*?)\s*#*\s*$")
+_HEADING = re.compile(r"^ {0,3}(#{1,6})[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$")
 _DIVIDER = re.compile(r"^ {0,3}(?:\*\s*){3,}$|^ {0,3}(?:-\s*){3,}$|^ {0,3}(?:_\s*){3,}$")
 _CALLOUT = re.compile(r"^\[!(\w+)\][+-]?\s*(.*)$")
 _ICONS = {"note": "📝", "warning": "⚠️", "info": "ℹ️"}
@@ -140,7 +140,21 @@ def _inline(text: str, resolver: Resolver | None, annotations: dict | None = Non
         ):
             if not text.startswith(delimiter, index):
                 continue
+            # Underscores inside identifiers/URLs are literal Markdown text.
+            if (
+                delimiter.startswith("_")
+                and index
+                and (text[index - 1].isalnum() or text[index - 1] == "_")
+            ):
+                continue
             end = text.find(delimiter, index + len(delimiter))
+            if delimiter.startswith("_"):
+                while (
+                    end >= 0
+                    and end + len(delimiter) < len(text)
+                    and (text[end + len(delimiter)].isalnum() or text[end + len(delimiter)] == "_")
+                ):
+                    end = text.find(delimiter, end + len(delimiter))
             if end > index + len(delimiter):
                 flush()
                 styled = {**(annotations or {}), style: True}

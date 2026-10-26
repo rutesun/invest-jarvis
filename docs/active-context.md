@@ -1,6 +1,6 @@
 # Active Context — notebook-notion-sync
 
-- 갱신: 2026-10-26 18:29 · Branch: feature/notebook-notion-sync · Status: Notion 본문·목록 정리 및 notebook 스킬 반영 완료
+- 갱신: 2026-10-26 18:47 · Branch: feature/notebook-notion-sync · Status: PR 생성·머지 검증 진행 중
 
 ## 목표
 Notion에는 읽기용 본문을 표시하고 원본 Markdown은 로컬에 보존합니다.
@@ -12,6 +12,7 @@ Notion에는 읽기용 본문을 표시하고 원본 Markdown은 로컬에 보�
 - Default view(table)의 Content Hash/Key/Source Path/출처는 이미 숨김. 속성 유지.
 - 자동 원문 부록을 제거하고 notebook-v2 사용. 작성된 코드 예시 유지.
 - jarvis-notebook 스킬에 원문 부록 미생성·읽기용 본문 보존·목록 열 숨김 및 schema 유지 규칙 반영. 스킬 형식 검증 PASS.
+- 최신 main 병합 완료. 독립 리뷰에서 발견한 식별자·URL 내부 밑줄과 C# 제목 손실 수정, 관련154 tests PASS·재리뷰 Critical/Important 0건.
 - 관련148 tests/Ruff PASS. 전체1554 passed/24 failed/15 deselected; 환경실패는 worklog 참조.
 
 ## 핵심 결정
