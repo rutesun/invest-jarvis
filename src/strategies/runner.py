@@ -26,6 +26,11 @@ from src.strategies.observations.parameters import ObservationParameters
 from src.strategies.playbook import PlaybookStrategy
 from src.strategies.swing_w150.adapter import SwingW150SignalStrategy
 from src.strategies.swing_w150.parameters import SwingW150Parameters
+from src.tools.technical.chart_analysis.models import (
+    ChartAnalysis,
+    ChartAnalysisResult,
+    FactSelection,
+)
 from src.tools.technical.models import TechnicalResult
 from src.tools.technical.scorecard_models import (
     DataStatus,
@@ -36,6 +41,12 @@ from src.tools.technical.scorecard_models import (
 
 
 class StrategyRunBundle(BaseModel):
+    common_analyses: dict[str, ChartAnalysis] = Field(default_factory=dict, exclude=True)
+    technical_fact_selections: tuple[FactSelection, ...] = Field(default=(), exclude=True)
+    chart_analysis: ChartAnalysisResult | None = Field(default=None, exclude=True)
+    chart_analysis_unavailable: str | None = Field(default=None, exclude=True)
+    quality_history: tuple[ChartAnalysisResult, ...] = Field(default=(), exclude=True)
+    quality_history_unavailable: str | None = Field(default=None, exclude=True)
     ticker: str
     as_of: date
     input_data_hash: str
@@ -96,6 +107,11 @@ class StrategyRunner:
         if scorecard.as_of != bundle.as_of:
             raise ValueError("scorecard as_of must match ChartBundle as_of")
 
+        from src.strategies.swing_w150.common import raw_swing_analysis
+        from src.tools.playbook.common import chart_frame
+        from src.tools.technical.chart_analysis.service import AnalysisRequestContext
+
+        context = AnalysisRequestContext()
         strategies = self._strategies
         verdicts = []
         signal_bundles = []
@@ -103,7 +119,22 @@ class StrategyRunner:
         for strategy in strategies:
             try:
                 if isinstance(strategy, SwingW150SignalStrategy):
-                    signals = strategy.evaluate_signals(bundle)
+                    common = None
+                    if (
+                        len(bundle.instrument.bars) >= strategy.parameters.minimum_history_bars
+                        and bundle.instrument.coverage.complete
+                        and not bundle.instrument.coverage.truncation_reason
+                    ):
+                        common = raw_swing_analysis(
+                            chart_frame(bundle.instrument),
+                            strategy.parameters,
+                            ticker=bundle.ticker,
+                            finalities=[bar.finality for bar in bundle.instrument.bars],
+                            coverage=bundle.instrument.coverage,
+                            context=context,
+                            bundle=bundle,
+                        )
+                    signals = strategy.evaluate_signals(bundle, common_analysis=common)
                     if signals.strategy_id != strategy.strategy_id:
                         raise ValueError("Strategy returned a different identity")
                     signal_bundles.append(signals)
@@ -148,7 +179,17 @@ class StrategyRunner:
             )
             for strategy in strategies
         }
+        analyses = dict(context.analyses)
+        for consumer in (legacy_result, scorecard, *verdicts, *signal_bundles):
+            analyses.update(
+                {
+                    analysis.analysis_id: analysis
+                    for analysis in getattr(consumer, "common_analyses", ())
+                }
+            )
         return StrategyRunBundle(
+            common_analyses=analyses,
+            technical_fact_selections=tuple(getattr(legacy_result, "fact_selections", ()) or ()),
             ticker=bundle.ticker,
             as_of=bundle.as_of,
             input_data_hash=canonical_hash(

@@ -1,12 +1,13 @@
-import numpy as np
 import pandas as pd
-from scipy.signal import argrelextrema
+from scipy.signal import argrelextrema as argrelextrema
 
+from src.tools.technical.context import common_evidence
 from src.tools.technical.models import ComponentResult, ComponentSignal
 
 
-def analyze_divergence(df: pd.DataFrame) -> ComponentResult:
+def analyze_divergence(df: pd.DataFrame, *, common_analysis=None) -> ComponentResult:
     """Analyze price/indicator divergence patterns."""
+    facts = common_evidence(df, common_analysis, "legacy.divergence")
     if df.empty or len(df) < 50:
         return ComponentResult(
             signals=[],
@@ -30,25 +31,10 @@ def analyze_divergence(df: pd.DataFrame) -> ComponentResult:
     metrics = {}
     score = 0
 
-    # Detect price peaks (swing highs/lows)
-    price_values = df["Close"].values
-    price_highs_idx = argrelextrema(price_values, np.greater, order=5)[0]
-    price_lows_idx = argrelextrema(price_values, np.less, order=5)[0]
-
-    # Detect RSI peaks
-    rsi_values = df["RSI"].fillna(50).values
-    rsi_highs_idx = argrelextrema(rsi_values, np.greater, order=5)[0]
-    rsi_lows_idx = argrelextrema(rsi_values, np.less, order=5)[0]
-
-    metrics["price_highs_count"] = len(price_highs_idx)
-    metrics["price_lows_count"] = len(price_lows_idx)
-    metrics["rsi_highs_count"] = len(rsi_highs_idx)
-    metrics["rsi_lows_count"] = len(rsi_lows_idx)
+    metrics.update(facts["metrics"])
 
     # Bearish divergence (가격 고점↑, RSI 고점↓)
-    bearish_div = _detect_bearish_divergence(
-        df, price_highs_idx, rsi_highs_idx, price_values, rsi_values
-    )
+    bearish_div = _divergence_from_fact(facts["rsi_bearish"], "rsi")
     if bearish_div:
         signals.append(bearish_div["signal"])
         evidence.append(bearish_div["evidence"])
@@ -56,9 +42,7 @@ def analyze_divergence(df: pd.DataFrame) -> ComponentResult:
         metadata.append(_divergence_metadata("bearish", bearish_div["signal"]))
 
     # Bullish divergence (가격 저점↓, RSI 저점↑)
-    bullish_div = _detect_bullish_divergence(
-        df, price_lows_idx, rsi_lows_idx, price_values, rsi_values
-    )
+    bullish_div = _divergence_from_fact(facts["rsi_bullish"], "rsi")
     if bullish_div:
         signals.append(bullish_div["signal"])
         evidence.append(bullish_div["evidence"])
@@ -67,7 +51,7 @@ def analyze_divergence(df: pd.DataFrame) -> ComponentResult:
 
     # MACD divergence (if available)
     if "MACD" in df.columns:
-        macd_div = _detect_macd_divergence(df, price_highs_idx, price_lows_idx, price_values)
+        macd_div = _divergence_from_fact(facts["macd"], "macd")
         if macd_div:
             signals.append(macd_div["signal"])
             evidence.append(macd_div["evidence"])
@@ -80,7 +64,7 @@ def analyze_divergence(df: pd.DataFrame) -> ComponentResult:
 
     # cRSI divergence (if available)
     if "cRSI" in df.columns:
-        crsi_div = _detect_crsi_divergence(df, price_highs_idx, price_lows_idx, price_values)
+        crsi_div = _divergence_from_fact(facts["crsi"], "crsi")
         if crsi_div:
             signals.append(crsi_div["signal"])
             evidence.append(crsi_div["evidence"])
@@ -119,191 +103,75 @@ def _divergence_metadata(bias: str, reason: str) -> ComponentSignal:
 
 def _detect_bearish_divergence(df, price_highs_idx, rsi_highs_idx, price_values, rsi_values):
     """Detect bearish divergence: price making higher highs, RSI making lower highs."""
-    if len(price_highs_idx) < 2 or len(rsi_highs_idx) < 2:
-        return None
+    from src.tools.technical.chart_analysis._legacy_levels import _matching_divergence
 
-    # Get last 2 price peaks
-    recent_price_peaks = price_highs_idx[-2:]
-    if recent_price_peaks[-1] < len(price_values) - 10:
-        return None  # Too old
-
-    # Find corresponding RSI peaks (within 5 bars)
-    rsi_peaks = []
-    for price_peak in recent_price_peaks:
-        nearby_rsi = [idx for idx in rsi_highs_idx if abs(idx - price_peak) <= 5]
-        if nearby_rsi:
-            rsi_peaks.append(nearby_rsi[0])
-
-    if len(rsi_peaks) < 2:
-        return None
-
-    # Check divergence
-    price1, price2 = price_values[recent_price_peaks[0]], price_values[recent_price_peaks[1]]
-    rsi1, rsi2 = rsi_values[rsi_peaks[0]], rsi_values[rsi_peaks[1]]
-
-    if price2 > price1 and rsi2 < rsi1:
-        strength = ((price2 - price1) / price1) * 100
-        rsi_diff = rsi1 - rsi2
-        return {
-            "signal": "약세 다이버전스 (Bearish Divergence)",
-            "evidence": f"가격 고점 상승 ({price1:.2f}→{price2:.2f}, +{strength:.1f}%), RSI 고점 하락 ({rsi1:.1f}→{rsi2:.1f}, -{rsi_diff:.1f})",
-            "score": -15,
-        }
-
-    return None
+    return _divergence_from_fact(
+        _matching_divergence(
+            price_values, price_highs_idx, rsi_values, rsi_highs_idx, bearish=True
+        ),
+        "rsi",
+    )
 
 
 def _detect_bullish_divergence(df, price_lows_idx, rsi_lows_idx, price_values, rsi_values):
     """Detect bullish divergence: price making lower lows, RSI making higher lows."""
-    if len(price_lows_idx) < 2 or len(rsi_lows_idx) < 2:
-        return None
+    from src.tools.technical.chart_analysis._legacy_levels import _matching_divergence
 
-    # Get last 2 price troughs
-    recent_price_lows = price_lows_idx[-2:]
-    if recent_price_lows[-1] < len(price_values) - 10:
-        return None  # Too old
-
-    # Find corresponding RSI troughs
-    rsi_lows = []
-    for price_low in recent_price_lows:
-        nearby_rsi = [idx for idx in rsi_lows_idx if abs(idx - price_low) <= 5]
-        if nearby_rsi:
-            rsi_lows.append(nearby_rsi[0])
-
-    if len(rsi_lows) < 2:
-        return None
-
-    # Check divergence
-    price1, price2 = price_values[recent_price_lows[0]], price_values[recent_price_lows[1]]
-    rsi1, rsi2 = rsi_values[rsi_lows[0]], rsi_values[rsi_lows[1]]
-
-    if price2 < price1 and rsi2 > rsi1:
-        strength = ((price1 - price2) / price1) * 100
-        rsi_diff = rsi2 - rsi1
-        return {
-            "signal": "강세 다이버전스 (Bullish Divergence)",
-            "evidence": f"가격 저점 하락 ({price1:.2f}→{price2:.2f}, -{strength:.1f}%), RSI 저점 상승 ({rsi1:.1f}→{rsi2:.1f}, +{rsi_diff:.1f})",
-            "score": 15,
-        }
-
-    return None
+    return _divergence_from_fact(
+        _matching_divergence(price_values, price_lows_idx, rsi_values, rsi_lows_idx, bearish=False),
+        "rsi",
+    )
 
 
 def _detect_macd_divergence(df, price_highs_idx, price_lows_idx, price_values):
     """Detect MACD divergence."""
-    if "MACD" not in df.columns:
-        return None
+    from src.tools.technical.chart_analysis._legacy_levels import indicator_divergences
 
-    macd_values = df["MACD"].fillna(0).values
-    macd_highs_idx = argrelextrema(macd_values, np.greater, order=5)[0]
-    macd_lows_idx = argrelextrema(macd_values, np.less, order=5)[0]
-
-    # Bearish MACD divergence
-    if len(price_highs_idx) >= 2 and len(macd_highs_idx) >= 2:
-        recent_price_peaks = price_highs_idx[-2:]
-        if recent_price_peaks[-1] >= len(price_values) - 10:
-            macd_peaks = []
-            for price_peak in recent_price_peaks:
-                nearby_macd = [idx for idx in macd_highs_idx if abs(idx - price_peak) <= 5]
-                if nearby_macd:
-                    macd_peaks.append(nearby_macd[0])
-
-            if len(macd_peaks) >= 2:
-                price1, price2 = (
-                    price_values[recent_price_peaks[0]],
-                    price_values[recent_price_peaks[1]],
-                )
-                macd1, macd2 = macd_values[macd_peaks[0]], macd_values[macd_peaks[1]]
-
-                if price2 > price1 and macd2 < macd1:
-                    return {
-                        "signal": "MACD 약세 다이버전스",
-                        "evidence": f"가격↑, MACD↓ ({macd1:.2f}→{macd2:.2f})",
-                        "score": -10,
-                    }
-
-    # Bullish MACD divergence
-    if len(price_lows_idx) >= 2 and len(macd_lows_idx) >= 2:
-        recent_price_lows = price_lows_idx[-2:]
-        if recent_price_lows[-1] >= len(price_values) - 10:
-            macd_lows = []
-            for price_low in recent_price_lows:
-                nearby_macd = [idx for idx in macd_lows_idx if abs(idx - price_low) <= 5]
-                if nearby_macd:
-                    macd_lows.append(nearby_macd[0])
-
-            if len(macd_lows) >= 2:
-                price1, price2 = (
-                    price_values[recent_price_lows[0]],
-                    price_values[recent_price_lows[1]],
-                )
-                macd1, macd2 = macd_values[macd_lows[0]], macd_values[macd_lows[1]]
-
-                if price2 < price1 and macd2 > macd1:
-                    return {
-                        "signal": "MACD 강세 다이버전스",
-                        "evidence": f"가격↓, MACD↑ ({macd1:.2f}→{macd2:.2f})",
-                        "score": 10,
-                    }
-
-    return None
+    matches = indicator_divergences(
+        df, price_values, price_highs_idx, price_lows_idx, column="MACD", fallback=0
+    )
+    return _divergence_from_fact(matches["bearish"] or matches["bullish"], "macd")
 
 
 def _detect_crsi_divergence(df, price_highs_idx, price_lows_idx, price_values):
     """Detect cRSI divergence."""
-    if "cRSI" not in df.columns:
+    from src.tools.technical.chart_analysis._legacy_levels import indicator_divergences
+
+    matches = indicator_divergences(
+        df, price_values, price_highs_idx, price_lows_idx, column="cRSI", fallback=50
+    )
+    return _divergence_from_fact(matches["bearish"] or matches["bullish"], "crsi")
+
+
+def _divergence_from_fact(value, indicator):
+    """Consumer-owned wording and magnitudes from a raw matched occurrence."""
+    if value is None:
         return None
-
-    crsi_values = df["cRSI"].fillna(50).values
-    crsi_highs_idx = argrelextrema(crsi_values, np.greater, order=5)[0]
-    crsi_lows_idx = argrelextrema(crsi_values, np.less, order=5)[0]
-
-    # Bearish cRSI divergence
-    if len(price_highs_idx) >= 2 and len(crsi_highs_idx) >= 2:
-        recent_price_peaks = price_highs_idx[-2:]
-        if recent_price_peaks[-1] >= len(price_values) - 10:
-            crsi_peaks = []
-            for price_peak in recent_price_peaks:
-                nearby_crsi = [idx for idx in crsi_highs_idx if abs(idx - price_peak) <= 5]
-                if nearby_crsi:
-                    crsi_peaks.append(nearby_crsi[0])
-
-            if len(crsi_peaks) >= 2:
-                price1, price2 = (
-                    price_values[recent_price_peaks[0]],
-                    price_values[recent_price_peaks[1]],
-                )
-                crsi1, crsi2 = crsi_values[crsi_peaks[0]], crsi_values[crsi_peaks[1]]
-
-                if price2 > price1 and crsi2 < crsi1:
-                    return {
-                        "signal": "cRSI 약세 다이버전스",
-                        "evidence": f"가격↑, cRSI↓ ({crsi1:.1f}→{crsi2:.1f})",
-                        "score": -10,
-                    }
-
-    # Bullish cRSI divergence
-    if len(price_lows_idx) >= 2 and len(crsi_lows_idx) >= 2:
-        recent_price_lows = price_lows_idx[-2:]
-        if recent_price_lows[-1] >= len(price_values) - 10:
-            crsi_lows = []
-            for price_low in recent_price_lows:
-                nearby_crsi = [idx for idx in crsi_lows_idx if abs(idx - price_low) <= 5]
-                if nearby_crsi:
-                    crsi_lows.append(nearby_crsi[0])
-
-            if len(crsi_lows) >= 2:
-                price1, price2 = (
-                    price_values[recent_price_lows[0]],
-                    price_values[recent_price_lows[1]],
-                )
-                crsi1, crsi2 = crsi_values[crsi_lows[0]], crsi_values[crsi_lows[1]]
-
-                if price2 < price1 and crsi2 > crsi1:
-                    return {
-                        "signal": "cRSI 강세 다이버전스",
-                        "evidence": f"가격↓, cRSI↑ ({crsi1:.1f}→{crsi2:.1f})",
-                        "score": 10,
-                    }
-
-    return None
+    bearish = value["bias"] == "bearish"
+    p1, p2, i1, i2, change, difference = (
+        value[key]
+        for key in (
+            "price1",
+            "price2",
+            "indicator1",
+            "indicator2",
+            "price_change_pct",
+            "indicator_difference",
+        )
+    )
+    if indicator == "rsi":
+        return {
+            "signal": "약세 다이버전스 (Bearish Divergence)"
+            if bearish
+            else "강세 다이버전스 (Bullish Divergence)",
+            "evidence": f"가격 고점 상승 ({p1:.2f}→{p2:.2f}, +{change:.1f}%), RSI 고점 하락 ({i1:.1f}→{i2:.1f}, -{difference:.1f})"
+            if bearish
+            else f"가격 저점 하락 ({p1:.2f}→{p2:.2f}, -{change:.1f}%), RSI 저점 상승 ({i1:.1f}→{i2:.1f}, +{difference:.1f})",
+            "score": -15 if bearish else 15,
+        }
+    label, decimals = ("MACD", 2) if indicator == "macd" else ("cRSI", 1)
+    return {
+        "signal": f"{label} {'약세' if bearish else '강세'} 다이버전스",
+        "evidence": f"가격{'↑' if bearish else '↓'}, {label}{'↓' if bearish else '↑'} ({i1:.{decimals}f}→{i2:.{decimals}f})",
+        "score": -10 if bearish else 10,
+    }

@@ -5,6 +5,8 @@ import pandas as pd
 
 from src.tools.technical.aggregator import ScoreAggregator
 from src.tools.technical.bottoming import detect_bottoming_structure
+from src.tools.technical.chart_analysis import AnalysisRequestContext
+from src.tools.technical.chart_analysis.models import FactRef, FactSelection
 from src.tools.technical.components.crsi import analyze_crsi
 from src.tools.technical.components.divergence import analyze_divergence
 from src.tools.technical.components.minervini import analyze_minervini
@@ -13,11 +15,43 @@ from src.tools.technical.components.risk import analyze_risk
 from src.tools.technical.components.supertrend import analyze_supertrend
 from src.tools.technical.components.velocity import analyze_velocity
 from src.tools.technical.components.volume import analyze_volume
-from src.tools.technical.context import build_market_context
+from src.tools.technical.context import (
+    build_market_context,
+    common_analysis_for_frame,
+    matches_common_request,
+    validate_common_requests,
+    validate_common_scope,
+)
+from src.tools.technical.context import compatibility_rule_request as rule_request
 from src.tools.technical.indicators import IndicatorCalculator
 from src.tools.technical.models import ScoreHistoryPoint, TechnicalResult
 from src.tools.technical.scorecard import build_scorecard
-from src.tools.technical.shadow_v2 import compute_shadow_v2
+from src.tools.technical.shadow_v2 import APRIME_RULE_IDS, compute_shadow_v2, shadow_fact_selections
+from src.tools.technical.trigger_registry import TRIGGER_RULES
+
+
+LEGACY_RULE_IDS = (
+    "chart.stage2.minervini",
+    "chart.velocity.legacy",
+    "chart.crsi.legacy",
+    "chart.supertrend.legacy",
+    "chart.vcp.legacy",
+    "chart.legacy.patterns_extra",
+    "chart.legacy.volume_extra",
+    "chart.pocket_pivot.down_candle",
+    "chart.power_gap",
+    "legacy.confluence",
+    "legacy.divergence",
+    "chart.context.breakdown",
+    "chart.legacy.state_windows",
+)
+
+
+def technical_rule_requests():
+    """Exact supplied-frame compatibility facts required by enabled consumers."""
+    return tuple(
+        rule_request(rule) for rule in dict.fromkeys((*LEGACY_RULE_IDS, *APRIME_RULE_IDS))
+    ) + tuple(rule_request(rule.code, {"frame_policy": "SUPPLIED_AS_IS"}) for rule in TRIGGER_RULES)
 
 
 _OHLCV_COLUMNS = ["Open", "High", "Low", "Close", "Volume"]
@@ -36,12 +70,29 @@ class TechnicalScorer:
         ticker: str | None = None,
         include_history: bool = True,
         history_days: int = 5,
+        *,
+        common_analysis=None,
+        request_context=None,
     ) -> TechnicalResult:
         """Calculate technical score from OHLCV data."""
-        result = self._score_current(df, ticker=ticker)
+        if common_analysis is not None:
+            validate_common_scope(df, common_analysis, ticker=ticker)
+            validate_common_requests(common_analysis, technical_rule_requests())
+        context = request_context or AnalysisRequestContext()
+        if common_analysis is None:
+            common_analysis = common_analysis_for_frame(
+                df,
+                ticker=ticker,
+                context=context,
+                rules=technical_rule_requests(),
+            )
+        result = self._score_current(df, ticker=ticker, common_analysis=common_analysis)
         if include_history and history_days > 0:
             history, warning = self._build_score_history(
-                df, ticker=ticker, history_days=history_days
+                df,
+                ticker=ticker,
+                history_days=history_days,
+                request_context=context if common_analysis is not None else None,
             )
             result.score_history = history
             result.score_history_warning = warning
@@ -49,17 +100,19 @@ class TechnicalScorer:
                 result.technical_verdict.score_trend_summary = _summarize_score_history(history)
         return result
 
-    def _score_current(self, df: pd.DataFrame, ticker: str | None = None) -> TechnicalResult:
+    def _score_current(
+        self, df: pd.DataFrame, ticker: str | None = None, *, common_analysis=None
+    ) -> TechnicalResult:
         """Calculate the current score without building score history."""
         # Analyze with each component
-        minervini_result = analyze_minervini(df)
-        velocity_result = analyze_velocity(df)
-        crsi_result = analyze_crsi(df)
-        volume_result = analyze_volume(df)
-        patterns_result = analyze_patterns(df)
-        supertrend_result = analyze_supertrend(df)
-        divergence_result = analyze_divergence(df)
-        risk_result = analyze_risk(df)
+        minervini_result = analyze_minervini(df, common_analysis=common_analysis)
+        velocity_result = analyze_velocity(df, common_analysis=common_analysis)
+        crsi_result = analyze_crsi(df, common_analysis=common_analysis)
+        volume_result = analyze_volume(df, common_analysis=common_analysis)
+        patterns_result = analyze_patterns(df, common_analysis=common_analysis)
+        supertrend_result = analyze_supertrend(df, common_analysis=common_analysis)
+        divergence_result = analyze_divergence(df, common_analysis=common_analysis)
+        risk_result = analyze_risk(df, common_analysis=common_analysis)
 
         # Aggregate component results
         components = {
@@ -123,10 +176,12 @@ class TechnicalScorer:
 
         component_raw_total = sum(comp["score"] for comp in components.values())
         snapshot = self.calculator.create_snapshot(df)
-        context = build_market_context(df)
-        bottoming = detect_bottoming_structure(df, components, context)
+        context = build_market_context(df, common_analysis=common_analysis)
+        bottoming = detect_bottoming_structure(
+            df, components, context, common_analysis=common_analysis
+        )
         aggregation = self.aggregator.aggregate(components, context, bottoming=bottoming)
-        shadow = compute_shadow_v2(df, components, context)
+        shadow = compute_shadow_v2(df, components, context, common_analysis=common_analysis)
 
         result = TechnicalResult.from_analysis(
             df,
@@ -142,7 +197,21 @@ class TechnicalScorer:
             shadow_v2=asdict(shadow),
         )
         as_of = df.index[-1].date() if hasattr(df.index[-1], "date") else datetime.now(UTC).date()
-        result.scorecard = build_scorecard(df, result, ticker=ticker or "", as_of=as_of)
+        result.scorecard = build_scorecard(
+            df, result, ticker=ticker or "", as_of=as_of, common_analysis=common_analysis
+        )
+        if common_analysis is not None:
+            result.chart_analysis_id = common_analysis.analysis_id
+            result.common_analyses = (common_analysis,)
+            result.fact_selections = (
+                tuple(
+                    _legacy_fact_selection(common_analysis, item, df, components)
+                    for item in common_analysis.items
+                    if item.rule_id in LEGACY_RULE_IDS
+                )
+                + shadow_fact_selections(common_analysis, components)
+                + (result.scorecard.fact_selections or ())
+            )
         return result
 
     def _build_score_history(
@@ -150,6 +219,7 @@ class TechnicalScorer:
         df: pd.DataFrame,
         ticker: str | None,
         history_days: int,
+        request_context=None,
     ) -> tuple[list[ScoreHistoryPoint], str | None]:
         raw_ohlcv = df.loc[:, _OHLCV_COLUMNS].copy()
         valid_df = raw_ohlcv.dropna(subset=["Close"])
@@ -161,7 +231,18 @@ class TechnicalScorer:
         for date in recent_dates:
             try:
                 raw_slice = raw_ohlcv.loc[:date].copy()
-                daily = self._score_current(self.calculator.calculate(raw_slice), ticker=ticker)
+                frame = self.calculator.calculate(raw_slice)
+                analysis = (
+                    common_analysis_for_frame(
+                        frame,
+                        ticker=ticker,
+                        context=request_context,
+                        rules=technical_rule_requests(),
+                    )
+                    if request_context is not None
+                    else None
+                )
+                daily = self._score_current(frame, ticker=ticker, common_analysis=analysis)
                 first_reason = (
                     daily.technical_verdict.reasons[0]
                     if daily.technical_verdict and daily.technical_verdict.reasons
@@ -336,3 +417,57 @@ def _component_scores(components: dict[str, dict]) -> dict[str, int]:
 
 def _change_label(delta: int) -> str:
     return "개선" if delta > 0 else "악화"
+
+
+_LEGACY_RULE_COMPONENT = {
+    "chart.stage2.minervini": "minervini",
+    "chart.velocity.legacy": "velocity",
+    "chart.crsi.legacy": "crsi",
+    "chart.supertrend.legacy": "supertrend",
+    "chart.vcp.legacy": "patterns",
+    "chart.legacy.patterns_extra": "patterns",
+    "chart.legacy.volume_extra": "volume",
+    "chart.pocket_pivot.down_candle": "volume",
+    "chart.power_gap": "volume",
+    "legacy.confluence": "risk",
+    "legacy.divergence": "divergence",
+}
+_COMPONENT_MINIMUM_BARS = {
+    "minervini": 200,
+    "velocity": 15,
+    "crsi": 2,
+    "supertrend": 2,
+    "patterns": 3,
+    "volume": 2,
+    "risk": 20,
+    "divergence": 50,
+}
+
+
+def _component_skip_reason(frame, name, component):
+    """Use the existing component's return/guard, never infer consumption from availability."""
+    if name == "volume" and "Vol_SMA_20" not in frame:
+        return "LEGACY_VOLUME_MISSING_VOL_SMA_20"
+    if len(frame) < _COMPONENT_MINIMUM_BARS[name]:
+        return f"LEGACY_{name.upper()}_HISTORY_SHORT"
+    # A valid pattern evaluation can have no metrics and no detected events.
+    if name == "patterns" or component.get("metrics"):
+        return None
+    if name == "volume":
+        return "LEGACY_VOLUME_VALUES_UNAVAILABLE"
+    return f"LEGACY_{name.upper()}_INPUT_UNAVAILABLE"
+
+
+def _legacy_fact_selection(analysis, item, frame, components):
+    component = _LEGACY_RULE_COMPONENT.get(item.rule_id)
+    skipped = _component_skip_reason(frame, component, components[component]) if component else None
+    if not matches_common_request(item, rule_request(item.rule_id)):
+        selected, reason = False, "LEGACY_FACT_VARIANT_NOT_SELECTED"
+    elif skipped:
+        selected, reason = False, skipped
+    elif item.state == "UNAVAILABLE":
+        selected = False
+        reason = "LEGACY_FACT_" + next(iter(item.evidence.get("reasons", ())), "UNAVAILABLE")
+    else:
+        selected, reason = True, "LEGACY_CONSUMED"
+    return FactSelection(FactRef(analysis.analysis_id, item.id), selected, reason)

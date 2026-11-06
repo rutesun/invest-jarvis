@@ -192,6 +192,8 @@ async def test_technical_contract_is_identical_across_check_analyze_and_brief(
     brief_news.execute = AsyncMock(return_value=ToolResult(success=True, data=[]))
     brief_disclosure = MagicMock()
     brief_disclosure.execute = AsyncMock(return_value=ToolResult(success=True, data=[]))
+    brief_name_resolver = MagicMock()
+    brief_name_resolver.resolve = AsyncMock(return_value=None)
     brief_pipeline = BriefPipeline(
         technical_tools={
             "KR": _technical_tool(ohlcv_snapshot),
@@ -203,6 +205,7 @@ async def test_technical_contract_is_identical_across_check_analyze_and_brief(
         disclosure_tool=brief_disclosure,
         flow_tool=None,
         strategy_service=strategy_service,
+        name_resolver=brief_name_resolver,
     )
     brief_result = await brief_pipeline.run(config)
     changed_position_result = await brief_pipeline.run(
@@ -317,7 +320,7 @@ async def test_market_bundle_failure_keeps_all_strategy_slots_and_legacy_result(
     assert result["strategy_run"].verdicts[1].entry.intent.value == "not_evaluated"
     output = pipeline.format_output(result)
     assert "Market chart unavailable" in output
-    assert "SWING_W150: NOT_EVALUATED" in output
+    assert "| SWING_W150 | 미평가 |" in output
     assert "종목 또는 benchmark 차트 불충분" in output
     assert result["strategy_analysis"].exchange_sessions[-1] == result["scorecard"].as_of
 

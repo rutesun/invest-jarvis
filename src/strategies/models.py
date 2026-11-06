@@ -10,6 +10,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, model_validator
 
 from src.storage.canonical import canonical_hash
+from src.tools.technical.chart_analysis.models import ChartAnalysis, FactSelection
 from src.tools.technical.scorecard_models import DataStatus, Direction, Evidence
 
 
@@ -421,9 +422,13 @@ class EntryRiskFlag(BaseModel):
     message: str
     finality: SignalFinality
     evidence: list[Evidence] = Field(min_length=1)
+    occurred_on: date | None = Field(default=None, exclude=True)
+    confirmed_on: date | None = Field(default=None, exclude=True)
 
 
 class EntryShadowResult(BaseModel):
+    common_analyses: tuple[ChartAnalysis, ...] = Field(default=(), exclude=True)
+    fact_selections: tuple[FactSelection, ...] = Field(default=(), exclude=True)
     model_config = ConfigDict(frozen=True)
 
     evaluation_as_of: date
@@ -440,6 +445,10 @@ class EntryShadowResult(BaseModel):
 
 
 class StrategySignalBundle(BaseModel):
+    common_analyses: tuple[ChartAnalysis, ...] = Field(default=(), exclude=True)
+    # In-memory metadata is intentionally absent from the legacy recorder payload.
+    chart_analysis_id: str | None = Field(default=None, exclude=True)
+    fact_selections: tuple[FactSelection, ...] | None = Field(default=None, exclude=True)
     strategy_id: str
     strategy_version: str
     parameter_set_version: str
@@ -528,6 +537,9 @@ class SwingRuntimeState(StrategyState):
 
 
 class StrategyVerdict(BaseModel):
+    common_analyses: tuple[ChartAnalysis, ...] = Field(default=(), exclude=True)
+    chart_analysis_id: str | None = Field(default=None, exclude=True)
+    fact_selections: tuple[FactSelection, ...] | None = Field(default=None, exclude=True)
     verdict_schema_version: str
     strategy_id: str
     strategy_version: str

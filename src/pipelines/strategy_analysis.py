@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -12,6 +12,8 @@ from typing import Any
 
 import pandas as pd
 
+from src.pipelines.chart_analysis import ChartAnalysisService
+from src.pipelines.quality_history import extend_quality_history, quality_history
 from src.position.models import (
     AccountSnapshot,
     DirectiveKind,
@@ -24,7 +26,6 @@ from src.position.models import (
 )
 from src.position.planner import plan_position, plan_position_from_signals
 from src.position.policy import decide_directive
-from src.providers.exchange_calendar import exchange_sessions_for
 from src.providers.yfinance_provider import YFinanceProvider
 from src.storage.entry_shadow import EntryShadowJsonlRecorder
 from src.strategies.chart_bundle import chart_bundle_from_dataframes
@@ -36,6 +37,11 @@ from src.strategies.signal_performance import (
     evaluate_signal_performance,
 )
 from src.tools.disclosure import is_korean_ticker
+from src.tools.technical.chart_analysis.models import (
+    ChartAnalysis,
+    ChartAnalysisResult,
+    FactSelection,
+)
 from src.tools.technical.models import ScoreHistoryPoint, TechnicalResult
 from src.tools.technical.scorecard_models import TechnicalScorecard
 
@@ -55,6 +61,33 @@ class AnalysisStrategyResult:
     signal_performances: tuple[SignalPerformance, ...] = ()
     score_history: tuple[ScoreHistoryPoint, ...] = ()
     score_history_warning: str | None = None
+    position_plans: dict[str, PositionPlan] = field(default_factory=dict)
+
+    @property
+    def quality_history(self) -> tuple[ChartAnalysisResult, ...]:
+        return tuple(getattr(self.strategy_run, "quality_history", ()))
+
+    @property
+    def quality_history_unavailable(self) -> str | None:
+        return getattr(self.strategy_run, "quality_history_unavailable", None)
+
+    @property
+    def common_analyses(self) -> dict[str, ChartAnalysis]:
+        """Request-local facts without adding a serializable dataclass field."""
+        return dict(getattr(self.strategy_run, "common_analyses", {}))
+
+    @property
+    def technical_fact_selections(self) -> tuple[FactSelection, ...]:
+        """Original TechnicalResult decisions, excluded from legacy serialization."""
+        return tuple(getattr(self.strategy_run, "technical_fact_selections", ()))
+
+    @property
+    def chart_analysis(self) -> ChartAnalysisResult | None:
+        return getattr(self.strategy_run, "chart_analysis", None)
+
+    @property
+    def chart_analysis_unavailable(self) -> str | None:
+        return getattr(self.strategy_run, "chart_analysis_unavailable", None)
 
 
 class ChartBundleLoader:
@@ -76,12 +109,9 @@ class ChartBundleLoader:
             raise ValueError("instrument OHLCV is unavailable")
         stock_sessions = tuple(pd.Timestamp(day).date() for day in instrument.index)
         requested_start = as_of - timedelta(days=365 * 2)
-        calendar_name = "XKRX" if is_korean_ticker(ticker) else "XNYS"
-        sessions = exchange_sessions_for(calendar_name, requested_start, as_of)
-        if not sessions:
-            raise ValueError("exchange calendar has no sessions in the requested period")
+        sessions = stock_sessions
         instrument_coverage = _coverage(
-            stock_sessions, sessions, requested_start, "instrument_history_incomplete"
+            stock_sessions, as_of, requested_start, "instrument_history_incomplete"
         )
         market_ticker = _market_ticker(ticker)
         try:
@@ -104,7 +134,7 @@ class ChartBundleLoader:
 
         market_coverage = _coverage(
             tuple(pd.Timestamp(day).date() for day in market.index),
-            sessions,
+            as_of,
             requested_start,
             "market_history_incomplete",
         )
@@ -124,30 +154,18 @@ class ChartBundleLoader:
 
 def _coverage(
     observed: tuple[date, ...],
-    expected: tuple[date, ...],
+    as_of: date,
     requested_start: date,
     reason: str,
 ) -> CoverageManifest:
-    missing = set(expected) - set(observed)
-    effective_start = None
-    # period=2y may omit exactly one leading session at its rolling boundary.
-    # Accept it only when every subsequent exchange session through as_of exists.
-    if (
-        len(expected) > 1
-        and missing == {expected[0]}
-        and observed[0] == expected[1]
-        and observed[-1] == expected[-1]
-    ):
-        effective_start = expected[1]
-        expected = expected[1:]
-        missing = set()
-    complete = not missing and observed[-1] == expected[-1]
+    # Coverage describes returned rows, not proof of exchange-wide completeness.
+    # Strategy-specific minimum history and benchmark alignment remain downstream.
+    complete = observed[-1] == as_of
     return CoverageManifest(
         requested_start=requested_start,
-        effective_start=effective_start,
         actual_start=observed[0],
         actual_end=observed[-1],
-        expected_sessions=expected,
+        expected_sessions=tuple(day for day in observed if day >= requested_start),
         complete=complete,
         truncation_reason=None if complete else reason,
         # The first observed bar is not a verified listing date or suspension.
@@ -176,7 +194,9 @@ class AnalysisStrategyService:
         strategy_runner: StrategyRunner | None = None,
         *,
         shadow_recorder: EntryShadowJsonlRecorder | None | object = _DEFAULT_SHADOW_RECORDER,
+        chart_service: ChartAnalysisService | None = None,
     ):
+        self.chart_service = chart_service or ChartAnalysisService()
         self.chart_loader = chart_loader or ChartBundleLoader()
         self.strategy_runner = strategy_runner or StrategyRunner()
         # Explicit None disables recording; omission enables local research snapshots.
@@ -207,6 +227,46 @@ class AnalysisStrategyService:
     ) -> AnalysisStrategyResult:
         bundle = await self.chart_loader.load(ticker=ticker, technical=technical, as_of=as_of)
         run = self.strategy_runner.run(bundle, legacy_result=technical)
+        # Strict Quality has its own canonical preparation. Existing inputs and
+        # strategy/recorder fields remain untouched, including on input failure.
+        history = ()
+        history_unavailable = None
+        try:
+            raw = await quality_history(ticker, technical, bundle, self.chart_service, as_of)
+            strict = (await self.chart_service.analyze(ticker, sessions=(as_of,), raw=raw))[0]
+            run.chart_analysis = strict
+            run.chart_analysis_unavailable = None
+            # Five displayed sessions plus one prior observation for the first
+            # daily delta. Reuse supplied prices; every date gets its own origin.
+            sessions = tuple(
+                raw.frame.index[raw.frame.index.date <= strict.analysis.manifest.as_of][-6:].date
+            )
+            try:
+                origin = (pd.Timestamp(sessions[0]) - pd.DateOffset(years=2)).date()
+                if self.chart_service.listing_first_session is not None:
+                    origin = max(origin, self.chart_service.listing_first_session)
+                history_raw = await extend_quality_history(
+                    ticker, technical, raw, origin=origin, as_of=as_of
+                )
+                if history_raw is raw:
+                    prior = await self.chart_service.analyze(
+                        ticker, sessions=sessions[:-1], raw=raw
+                    )
+                    history = (*prior, strict)
+                else:
+                    # A successful history-only supplement changes provenance;
+                    # keep all comparison points on that same verified input.
+                    history = await self.chart_service.analyze(
+                        ticker, sessions=sessions, raw=history_raw
+                    )
+                    run.chart_analysis = history[-1]
+            except Exception as exc:
+                history_unavailable = f"{type(exc).__name__}: {exc}"
+        except Exception as exc:
+            run.chart_analysis = None
+            run.chart_analysis_unavailable = f"{type(exc).__name__}: {exc}"
+        run.quality_history = history
+        run.quality_history_unavailable = history_unavailable
         warnings = []
         if bundle.market is None:
             warnings.append("Market chart unavailable; strategy coverage is incomplete")
@@ -217,20 +277,19 @@ class AnalysisStrategyService:
                 warning = f"Shadow 기록 실패: {type(exc).__name__}: {exc}"
                 logger.warning("%s: %s", ticker, warning)
                 warnings.append(warning)
+        position_plans = {}
         if position is not None:
-            signals = next(
-                (
-                    signals
-                    for signals in getattr(run, "signal_bundles", [])
-                    if signals.strategy_id == "SWING_W150"
-                ),
-                None,
-            )
-            position_plan = (
-                plan_position_from_signals(signals, position, account, market_snapshot)
-                if signals is not None
-                else _plan_playbook_position(run, position, account, execution_check, as_of)
-            )
+            for verdict in run.verdicts:
+                position_plans[verdict.strategy_id] = _plan_verdict_position(
+                    verdict, position, account, execution_check, as_of
+                )
+            for signals in getattr(run, "signal_bundles", ()):
+                if signals.strategy_id == "SWING_W150":
+                    position_plans[signals.strategy_id] = plan_position_from_signals(
+                        signals, position, account, market_snapshot
+                    )
+            # Compatibility only: public renderers consume the keyed alternatives.
+            position_plan = position_plans.get("SWING_W150") or position_plans.get("PLAYBOOK_V1")
         return AnalysisStrategyResult(
             scorecard=run.scorecard,
             strategy_run=run,
@@ -243,24 +302,20 @@ class AnalysisStrategyService:
                 if signal.code in ENTRY_SIGNAL_CODES
             ),
             position_plan=position_plan,
+            position_plans=position_plans,
             warning="; ".join(warnings) or None,
             score_history=tuple(getattr(technical, "score_history", ())),
             score_history_warning=getattr(technical, "score_history_warning", None),
         )
 
 
-def _plan_playbook_position(
-    run: StrategyRunBundle,
+def _plan_verdict_position(
+    selected,
     position: PositionSnapshot,
     account: AccountSnapshot | None,
     execution_check: EntryExecutionCheck | None,
     as_of: date,
 ) -> PositionPlan | None:
-    selected = next(
-        (verdict for verdict in run.verdicts if verdict.strategy_id == "PLAYBOOK_V1"), None
-    )
-    if selected is None:
-        return None
     directive = decide_directive(selected.entry.intent, selected.exit.intent)
     plan = plan_position(selected, directive, position, account, execution_check)
     if directive.kind is DirectiveKind.BUILD_ONLY_TO_RISK_TARGET and (

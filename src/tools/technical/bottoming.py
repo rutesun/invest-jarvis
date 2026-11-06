@@ -13,9 +13,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-import numpy as np
 import pandas as pd
 
+from src.tools.technical.context import common_evidence
 from src.tools.technical.models import ComponentSignal
 
 
@@ -87,29 +87,27 @@ class BottomingStructure:
 
 
 def _detect_higher_low(df: pd.DataFrame) -> bool:
-    recent = BottomingThresholds.HIGHER_LOW_RECENT
-    prior = BottomingThresholds.HIGHER_LOW_PRIOR
-    n = len(df)
-    if n < recent + prior or "Low" not in df.columns:
-        return False
-    low = df["Low"].to_numpy(dtype=float)
-    recent_low = np.nanmin(low[n - recent : n])
-    prior_low = np.nanmin(low[n - recent - prior : n - recent])
-    return bool(np.isfinite(recent_low) and np.isfinite(prior_low) and recent_low > prior_low)
+    from src.tools.technical.chart_analysis._legacy_structure import low_window_values
+
+    return higher_low_measurement(
+        *low_window_values(
+            df,
+            recent=BottomingThresholds.HIGHER_LOW_RECENT,
+            prior=BottomingThresholds.HIGHER_LOW_PRIOR,
+        )
+    )
 
 
 def _detect_volume_dry(df: pd.DataFrame) -> bool:
-    recent = BottomingThresholds.VOLUME_DRY_RECENT
-    prior = BottomingThresholds.VOLUME_DRY_PRIOR
-    n = len(df)
-    if n < recent + prior or "Volume" not in df.columns:
-        return False
-    volume = df["Volume"].to_numpy(dtype=float)
-    recent_avg = np.nanmean(volume[n - recent : n])
-    prior_avg = np.nanmean(volume[n - recent - prior : n - recent])
-    if not np.isfinite(recent_avg) or not np.isfinite(prior_avg) or prior_avg <= 0:
-        return False
-    return bool(recent_avg < BottomingThresholds.VOLUME_DRY_RATIO * prior_avg)
+    from src.tools.technical.chart_analysis._legacy_structure import volume_window_values
+
+    return volume_dry_measurement(
+        *volume_window_values(
+            df,
+            recent=BottomingThresholds.VOLUME_DRY_RECENT,
+            prior=BottomingThresholds.VOLUME_DRY_PRIOR,
+        )
+    )
 
 
 def _detect_bullish_divergence(components: dict[str, dict]) -> bool:
@@ -137,14 +135,42 @@ def detect_bottoming_structure(
     df: pd.DataFrame | None,
     components: dict[str, dict],
     context=None,
+    *,
+    common_analysis=None,
 ) -> BottomingStructure:
     """계산 완료된 지표 DataFrame + 컴포넌트 결과에서 바닥 구조를 산출."""
     if df is None or df.empty:
         return BottomingStructure()
 
+    measurements = (
+        bottoming_measurements(common_evidence(df, common_analysis, "chart.legacy.state_windows"))
+        if common_analysis is not None
+        else (_detect_higher_low(df), _detect_volume_dry(df))
+    )
     return BottomingStructure(
-        higher_low=_detect_higher_low(df),
-        volume_dry=_detect_volume_dry(df),
+        higher_low=measurements[0],
+        volume_dry=measurements[1],
         bullish_divergence=_detect_bullish_divergence(components),
         momentum_improving=_detect_momentum_improving(components),
+    )
+
+
+def bottoming_measurements(values):
+    """Apply existing bottoming thresholds to shared raw window measurements."""
+    return (
+        higher_low_measurement(values["recent_low"], values["prior_low"]),
+        volume_dry_measurement(values["recent_volume_mean"], values["prior_volume_mean"]),
+    )
+
+
+def higher_low_measurement(recent_low, prior_low):
+    return recent_low is not None and prior_low is not None and recent_low > prior_low
+
+
+def volume_dry_measurement(recent_volume, prior_volume):
+    return (
+        recent_volume is not None
+        and prior_volume is not None
+        and prior_volume > 0
+        and recent_volume < BottomingThresholds.VOLUME_DRY_RATIO * prior_volume
     )

@@ -9,8 +9,7 @@ import pandas as pd
 
 from src.strategies.models import BarFinality, CoverageManifest
 from src.strategies.swing_w150.parameters import SwingW150Parameters
-from src.tools.technical.indicators import IndicatorCalculator
-from src.tools.technical.pivots import confirmed_pivots
+from src.tools.technical.chart_analysis.models import ChartAnalysis
 from src.tools.technical.scorecard_models import DataStatus
 
 
@@ -18,31 +17,11 @@ _OHLCV = ("Open", "High", "Low", "Close", "Volume")
 
 
 def observation_feature_columns(frame: pd.DataFrame) -> pd.DataFrame:
-    """Causal Observation inputs; all reference windows exclude overlapping bars."""
-    frame = frame.copy()
-    frame["History_Bars"] = range(1, len(frame) + 1)
-    frame["Previous_Close"] = frame["Close"].shift(1)
-    frame["Volume_Ratio_Prev20"] = frame["Volume"] / frame["Volume"].rolling(20).mean().shift(
-        1
-    ).replace(0, float("nan"))
-    frame["Volume_Contraction_Ratio"] = frame["Volume"].rolling(5).mean() / frame["Volume"].rolling(
-        20
-    ).mean().shift(5).replace(0, float("nan"))
-    prior_high = frame["High"].rolling(20).max().shift(1)
-    trend = (frame["Close"] > frame["SMA_150"]) & (frame["SMA_150_Slope_21"] >= 0)
-    frame["Contraction_Context"] = trend & (frame["Close"] <= prior_high)
-    frame["Prior_Trend_Context"] = trend.shift(1).rolling(20).max().fillna(0).astype(bool)
-    frame["Prior_Below_SMA20"] = (
-        (frame["Close"] < frame["SMA_20"]).shift(1).rolling(10).max().fillna(0).astype(bool)
+    from src.tools.technical.chart_analysis._legacy_structure import (
+        observation_feature_columns as common_columns,
     )
-    frame["Previous_SMA20_Slope"] = frame["SMA_20_Slope_5"].shift(1)
-    frame["Return_5"] = frame["Close"] / frame["Close"].shift(5) - 1
-    frame["High_Break_5"] = frame["Close"] > frame["High"].rolling(5).max().shift(1)
-    breakout = frame["High"].rolling(50).max().shift(1)
-    frame["Price_Breakout_Event"] = (frame["Close"] > breakout) & (
-        frame["Close"].shift(1) <= breakout.shift(1)
-    )
-    return frame
+
+    return common_columns(frame)
 
 
 @dataclass(frozen=True)
@@ -51,6 +30,7 @@ class SwingFeatureFrame:
     data_status: DataStatus
     finalities: tuple[BarFinality, ...]
     coverage: CoverageManifest | None = None
+    common_analyses: tuple[ChartAnalysis, ...] = ()
 
 
 def build_swing_features(
@@ -59,6 +39,7 @@ def build_swing_features(
     *,
     finalities: Sequence[BarFinality] | None = None,
     coverage: CoverageManifest | None = None,
+    common_analysis: ChartAnalysis | None = None,
 ) -> SwingFeatureFrame:
     """Calculate the signal inputs from the observed price bars."""
     resolved_finalities = (
@@ -73,6 +54,19 @@ def build_swing_features(
     if missing:
         raise ValueError(f"Missing OHLCV columns: {sorted(missing)}")
     frame = frame.loc[:, _OHLCV].copy()
+    if common_analysis is not None:
+        from src.strategies.swing_w150.common import frame_scope, raw_rules, validate_analysis
+        from src.tools.technical.chart_analysis.features import LEGACY_VERSION
+
+        scope = frame_scope(
+            common_analysis.manifest.ticker,
+            frame,
+            finalities=resolved_finalities,
+            coverage=coverage,
+            feature_version=LEGACY_VERSION,
+            source_manifest=common_analysis.manifest,
+        )
+        validate_analysis(common_analysis, scope, raw_rules(params))
     if len(frame) < params.minimum_history_bars:
         return SwingFeatureFrame(
             frame=frame,
@@ -89,26 +83,30 @@ def build_swing_features(
             coverage=coverage,
         )
 
-    frame = IndicatorCalculator().calculate(frame)
-    lookback = params.direction_lookback_bars
-    for period in (50, 150, 200):
-        column = f"SMA_{period}"
-        frame[f"{column}_Slope_{lookback}"] = frame[column] - frame[column].shift(lookback)
-    frame["Trend_Breakout_High_Prev"] = (
-        frame["High"].rolling(params.trend_breakout_lookback).max().shift(1)
+    from src.strategies.swing_w150.common import (
+        frame_scope,
+        raw_rules,
+        raw_swing_analysis,
+        row_frame,
+        validate_analysis,
     )
-    frame["Deep_Recovery_High_Prev"] = (
-        frame["High"].rolling(params.deep_recovery_breakout_lookback).max().shift(1)
-    )
-    higher_low, lower_low_lower_high = confirmed_pivots(
-        frame["High"].to_numpy(dtype=float), frame["Low"].to_numpy(dtype=float)
-    )
-    frame["Higher_Low"] = higher_low
-    frame["Lower_Low_Lower_High"] = lower_low_lower_high
-    frame = observation_feature_columns(frame)
-    return SwingFeatureFrame(
-        frame=frame,
-        data_status=DataStatus.COMPLETE,
+    from src.tools.technical.chart_analysis.features import LEGACY_VERSION
+
+    if common_analysis is None:
+        common_analysis = raw_swing_analysis(
+            frame, params, finalities=resolved_finalities, coverage=coverage
+        )
+    scope = frame_scope(
+        common_analysis.manifest.ticker,
+        frame,
         finalities=resolved_finalities,
         coverage=coverage,
+        feature_version=LEGACY_VERSION,
+        source_manifest=common_analysis.manifest,
+    )
+    validate_analysis(common_analysis, scope, raw_rules(params))
+    material = row_frame(common_analysis, raw_rules(params)[0])
+    material.index = frame.index.copy()
+    return SwingFeatureFrame(
+        material, DataStatus.COMPLETE, resolved_finalities, coverage, (common_analysis,)
     )

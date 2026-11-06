@@ -21,6 +21,7 @@ from src.pipelines.analyze_decision import (
     build_analyze_decision_bundle,
     build_default_scenarios,
 )
+from src.pipelines.chart_analysis_render import chart_analysis_context
 from src.pipelines.strategy_analysis import (
     AnalysisStrategyService,
     account_from_capital,
@@ -360,6 +361,11 @@ class DeepDivePipeline:
             fixed_timing=final_summary.timing,
             fixed_action_sentence=final_summary.action_sentence,
             technical_context={
+                **(
+                    {"common_chart": chart_analysis_context(strategy_analysis)}
+                    if getattr(strategy_analysis, "chart_analysis", None) is not None
+                    else {}
+                ),
                 "components": technical_data.components,
                 "component_raw_total": technical_data.component_raw_total,
                 "adjusted_score": technical_data.adjusted_score,

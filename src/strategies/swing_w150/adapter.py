@@ -36,6 +36,7 @@ from src.strategies.swing_w150.features import build_swing_features
 from src.strategies.swing_w150.parameters import SwingW150Parameters, validate_pullback_policy
 from src.strategies.swing_w150.rules import WARMUP_BARS
 from src.strategies.swing_w150.signals import detect_swing
+from src.tools.technical.chart_analysis.models import ChartAnalysis
 from src.tools.technical.scorecard_models import DataStatus, Direction, Evidence, Importance
 
 
@@ -79,14 +80,64 @@ class SwingW150SignalStrategy:
         self.observations_enabled = observations_enabled
         self.observation_parameters = observation_parameters or PRODUCT_OBSERVATION_PARAMETERS
 
-    def evaluate_signals(self, bundle: ChartBundle) -> StrategySignalBundle:
+    def evaluate_signals(
+        self, bundle: ChartBundle, *, common_analysis: ChartAnalysis | None = None
+    ) -> StrategySignalBundle:
+        from src.strategies.swing_w150.common import (
+            feature_scope,
+            frame_scope,
+            raw_rules,
+            raw_swing_analysis,
+            swing_analysis,
+            validate_analysis,
+        )
+        from src.tools.technical.chart_analysis import AnalysisRequestContext
+        from src.tools.technical.chart_analysis.features import LEGACY_VERSION
+
+        common_context = AnalysisRequestContext()
+        if (
+            common_analysis is None
+            and len(bundle.instrument.bars) >= self.parameters.minimum_history_bars
+            and bundle.instrument.coverage.complete
+            and not bundle.instrument.coverage.truncation_reason
+        ):
+            common_analysis = raw_swing_analysis(
+                _frame(bundle),
+                self.parameters,
+                ticker=bundle.ticker,
+                finalities=[bar.finality for bar in bundle.instrument.bars],
+                coverage=bundle.instrument.coverage,
+                context=common_context,
+                bundle=bundle,
+            )
+        if common_analysis is not None:
+            validate_analysis(
+                common_analysis,
+                frame_scope(
+                    bundle.ticker,
+                    _frame(bundle),
+                    finalities=[bar.finality for bar in bundle.instrument.bars],
+                    coverage=bundle.instrument.coverage,
+                    feature_version=LEGACY_VERSION,
+                    bundle=bundle,
+                ),
+                raw_rules(self.parameters),
+            )
         features = build_swing_features(
             _frame(bundle),
             self.parameters,
             finalities=[bar.finality for bar in bundle.instrument.bars],
             coverage=bundle.instrument.coverage,
+            common_analysis=common_analysis,
         )
-        detection = detect_swing(bundle.ticker, features, self.parameters)
+        signal_analysis = (
+            swing_analysis(bundle.ticker, features, self.parameters, context=common_context)
+            if common_context is not None and features.data_status is DataStatus.COMPLETE
+            else None
+        )
+        detection = detect_swing(
+            bundle.ticker, features, self.parameters, common_analysis=signal_analysis
+        )
         opportunity = evaluate_signal_entry_opportunity(
             detection.signal_history, bundle, self.parameters, features=features
         )
@@ -100,11 +151,7 @@ class SwingW150SignalStrategy:
             except Exception as exc:
                 diagnostic_errors.append(f"entry_anchors: {type(exc).__name__}: {exc}")
         shadow = None
-        if self.shadow_enabled:
-            try:
-                shadow = evaluate_entry_shadow(opportunity, bundle, params=self.shadow_parameters)
-            except Exception as exc:
-                diagnostic_errors.append(f"entry_shadow: {type(exc).__name__}: {exc}")
+        anchor_union = ()
         observations = detection.observation_history
         if self.observations_enabled:
             try:
@@ -156,6 +203,22 @@ class SwingW150SignalStrategy:
                             ),
                         )
                     )
+                observation_analysis = None
+                if common_context is not None:
+                    from src.strategies.observations.common import (
+                        observation_anchors,
+                        observation_rules,
+                    )
+                    from src.strategies.shadow_common import shadow_anchors
+
+                    anchor_union = observation_anchors(features, contexts)
+                    if opportunity.anchors is not None:
+                        anchor_union += shadow_anchors(opportunity.anchors, self.shadow_parameters)
+                    observation_analysis = common_context.get(
+                        feature_scope(bundle.ticker, features),
+                        observation_rules(self.observation_parameters),
+                        anchor_union,
+                    )
                 observations = evaluate_observations(
                     bundle.ticker,
                     features,
@@ -163,10 +226,38 @@ class SwingW150SignalStrategy:
                     observations,
                     source_contexts=contexts,
                     params=self.observation_parameters,
+                    common_analysis=observation_analysis,
                 )
             except Exception as exc:
                 diagnostic_errors.append(f"observations: {type(exc).__name__}: {exc}")
+        if self.shadow_enabled:
+            try:
+                shadow = evaluate_entry_shadow(
+                    opportunity,
+                    bundle,
+                    params=self.shadow_parameters,
+                    common_context=common_context,
+                    common_anchors=anchor_union,
+                )
+            except Exception as exc:
+                diagnostic_errors.append(f"entry_shadow: {type(exc).__name__}: {exc}")
+        analyses = {
+            analysis.analysis_id: analysis
+            for analysis in (common_analysis, signal_analysis)
+            if analysis is not None
+        }
+        if common_context is not None:
+            analyses.update(common_context.analyses)
+        if shadow is not None:
+            analyses.update({analysis.analysis_id: analysis for analysis in shadow.common_analyses})
         return StrategySignalBundle(
+            chart_analysis_id=signal_analysis.analysis_id if signal_analysis is not None else None,
+            common_analyses=tuple(analyses.values()),
+            fact_selections=(
+                *detection.fact_selections,
+                *getattr(observations, "fact_selections", ()),
+                *(shadow.fact_selections if shadow is not None else ()),
+            ),
             strategy_id=detection.strategy_id,
             strategy_version=detection.strategy_version,
             parameter_set_version=detection.parameter_set_version,
@@ -226,7 +317,22 @@ class SwingW150Strategy:
                 DataStatus.INSUFFICIENT_DATA,
             )
 
-        trace = replay_trace(_frame(prefix))
+        from src.strategies.swing_w150.common import raw_swing_analysis
+        from src.tools.technical.chart_analysis import AnalysisRequestContext
+
+        common_context = AnalysisRequestContext()
+        common_analysis = raw_swing_analysis(
+            _frame(prefix),
+            SwingW150Parameters(),
+            ticker=bundle.ticker,
+            finalities=[bar.finality for bar in prefix.instrument.bars],
+            coverage=prefix.instrument.coverage,
+            context=common_context,
+            bundle=prefix,
+        )
+        trace = replay_trace(
+            _frame(prefix), common_analysis=common_analysis, common_context=common_context
+        )
         dated_events = []
         recent_sessions = set(prefix.exchange_sessions[-21:])
         for item in trace.events:
@@ -289,11 +395,48 @@ class SwingW150Strategy:
         else:
             entry, exit_ = EntryIntent.WATCH, ExitIntent.HOLD
         return self._verdict(
-            bundle, entry, exit_, DataStatus.COMPLETE, dated_events, state, opportunity
+            bundle,
+            entry,
+            exit_,
+            DataStatus.COMPLETE,
+            dated_events,
+            state,
+            opportunity,
+            common_context=common_context,
         )
 
-    def _verdict(self, bundle, entry, exit_, status, events=None, state=None, opportunity=None):
+    def _verdict(
+        self,
+        bundle,
+        entry,
+        exit_,
+        status,
+        events=None,
+        state=None,
+        opportunity=None,
+        *,
+        common_context=None,
+    ):
+        from src.strategies.swing_w150.common import selections
+
+        analyses = tuple(common_context.analyses.values()) if common_context is not None else ()
         return StrategyVerdict(
+            common_analyses=analyses,
+            chart_analysis_id=analyses[-1].analysis_id if analyses else None,
+            fact_selections=tuple(
+                selection
+                for analysis in analyses
+                for selection in selections(
+                    analysis,
+                    tuple(
+                        rule
+                        for rule in analysis.requested_rules
+                        if rule.rule_id
+                        not in ("chart.pivot.span3", "chart.structure_breakdown.swing")
+                    ),
+                    reason="SWING_REPLAY_FACT_CONSUMED",
+                )
+            ),
             verdict_schema_version="1",
             strategy_id=self.strategy_id,
             strategy_version=self.strategy_version,

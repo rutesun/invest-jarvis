@@ -50,27 +50,36 @@ class SwingFeatures:
 
 
 def _prev(a: np.ndarray) -> np.ndarray:
-    return np.r_[np.nan, a[:-1]]
+    from src.tools.technical.chart_analysis import _legacy_structure
+
+    return _legacy_structure._prev(a)
 
 
 def close_location(high: np.ndarray, low: np.ndarray, close: np.ndarray) -> np.ndarray:
     """봉 안에서 종가 위치(0=저가, 1=고가). 고저가 같으면 0.5."""
-    rng = high - low
-    return np.where(rng > 0, (close - low) / np.where(rng > 0, rng, 1), 0.5)
+    from src.tools.technical.chart_analysis import _legacy_structure
+
+    return _legacy_structure.close_location_values(high, low, close)
 
 
 def s_trigger(ind: pd.DataFrame) -> np.ndarray:
-    c = ind["Close"].values.astype(float)
-    v = ind["Volume"].values.astype(float)
+    from src.tools.technical.chart_analysis import _legacy_structure
+
+    close = ind["Close"].values.astype(float)
+    volume = ind["Volume"].values.astype(float)
     sma150 = ind["SMA_150"].values
     slope150 = ind["SMA_150_Slope_21"].values
-    hi50p = ind["High_50_Prev"].values
-    vol20 = ind["Vol_SMA_20"].values
-    # 전날 기준선이 없으면 '처음 돌파'를 판정할 수 없으므로 신호로 보지 않는다.
-    known = ~np.isnan(sma150) & ~np.isnan(slope150) & ~np.isnan(vol20) & ~np.isnan(hi50p)
-    known &= ~np.isnan(_prev(hi50p))
-    breakout = (c > hi50p) & ~(_prev(c) > _prev(hi50p))
-    return known & (c > sma150) & (slope150 > 0) & breakout & (v > S_VOLUME_MULT * vol20)
+    prior_high = ind["High_50_Prev"].values
+    volume_average = ind["Vol_SMA_20"].values
+    return _legacy_structure.swing_s01_array_values(
+        close,
+        prior_high,
+        sma150,
+        slope150,
+        volume,
+        volume_average,
+        volume_multiple=S_VOLUME_MULT,
+    )["trigger"]
 
 
 def structure_breakdown(
@@ -82,48 +91,73 @@ def structure_breakdown(
     weak_close_location: float = WEAK_CLOSE_LOCATION,
 ) -> np.ndarray:
     """거래량 동반 20봉 저가 이탈, 약한 종가의 50일선 이탈, 200일선 아래 하락 구조."""
-    c, h, low, v = (ind[k].values.astype(float) for k in ("Close", "High", "Low", "Volume"))
-    sma50, sma200 = ind["SMA_50"].values, ind["SMA_200"].values
-    vr20 = v / ind["Vol_SMA_20_Prev"].values
-    cl = close_location(h, low, c)
-    return (
-        ((c < ind["Low_20_Prev"].values) & (vr20 >= volume_multiple))
-        | ((c < sma50) & (cl <= weak_close_location) & (vr20 >= volume_multiple) & (st == -1))
-        | ((c < sma200) & (c < sma50) & (st == -1) & lhll)
-    )
+    from src.tools.technical.chart_analysis import _legacy_structure
+
+    return _legacy_structure.swing_structure_values(
+        ind,
+        st,
+        lhll,
+        volume_multiple=volume_multiple,
+        weak_close_location=weak_close_location,
+    )["structure_breakdown"]
 
 
 def deep_recovery(
     ind: pd.DataFrame, st: np.ndarray, hb: np.ndarray, higher_low: np.ndarray
 ) -> np.ndarray:
-    c = ind["Close"].values.astype(float)
-    return (
-        ~hb
-        & (c < ind["SMA_200"].values)
-        & (c > ind["SMA_20"].values)
-        & (c > ind["SMA_50"].values)
-        & (ind["SMA_20_Slope_5"].values > 0)
-        & higher_low
-        & (st == 1)
-    )
+    from src.tools.technical.chart_analysis import _legacy_structure
+
+    return _legacy_structure.swing_deep_recovery_values(ind, st, hb, higher_low)
 
 
 def d_trigger(ind: pd.DataFrame, deep: np.ndarray) -> np.ndarray:
-    c = ind["Close"].values.astype(float)
-    hi20p, sma50 = ind["High_20_Prev"].values, ind["SMA_50"].values
-    fresh20 = (c > hi20p) & ~(_prev(c) > _prev(hi20p))
-    reclaim50 = (_prev(c) <= _prev(sma50)) & (c > sma50)
-    return deep & (fresh20 | reclaim50)
+    from src.tools.technical.chart_analysis import _legacy_structure
+
+    return _legacy_structure.swing_d_trigger_array_values(
+        ind["Close"].values.astype(float),
+        ind["High_20_Prev"].values,
+        ind["SMA_50"].values,
+        deep,
+    )["d_trigger"]
 
 
-def build_features(ind: pd.DataFrame) -> SwingFeatures:
+def build_features(ind: pd.DataFrame, *, common_analysis=None) -> SwingFeatures:
     """ind: IndicatorCalculator.calculate 결과."""
     h, low = ind["High"].values.astype(float), ind["Low"].values.astype(float)
     # pandas_ta 슈퍼트렌드는 워밍업 구간이 NaN이다. 기준 백테스트는 이를 상승(1)으로 둔다.
     st = np.nan_to_num(ind["SuperTrend_Dir"].values.astype(float), nan=1.0)
-    higher_low, lhll = confirmed_pivots(h, low)
-    hb = structure_breakdown(ind, st, lhll)
-    deep = deep_recovery(ind, st, hb, higher_low)
+    values = None
+    if common_analysis is not None:
+        from src.strategies.swing_w150.common import (
+            requested_items,
+            swing_rules,
+            validate_frame_analysis,
+        )
+        from src.strategies.swing_w150.parameters import SwingW150Parameters
+
+        validate_frame_analysis(
+            common_analysis, ind, swing_rules(SwingW150Parameters(), replay=True)
+        )
+        common_items = requested_items(
+            common_analysis, swing_rules(SwingW150Parameters(), replay=True)
+        )
+        values = dict(
+            next(
+                item.evidence
+                for item in common_items
+                if item.rule_id == "chart.deep_recovery.swing"
+            )
+        )
+        values["s_trigger"] = next(
+            item.evidence["trigger"]
+            for item in common_items
+            if item.rule_id == "chart.close_breakout.strict"
+        )
+        deep = np.asarray(values["deep_recovery"], dtype=bool)
+    else:
+        higher_low, lhll = confirmed_pivots(h, low)
+        hb = structure_breakdown(ind, st, lhll)
+        deep = deep_recovery(ind, st, hb, higher_low)
     return SwingFeatures(
         dates=[x.date() for x in ind.index],
         open=ind["Open"].values.astype(float),
@@ -136,8 +170,12 @@ def build_features(ind: pd.DataFrame) -> SwingFeatures:
         slope150=ind["SMA_150_Slope_21"].values,
         atr=ind["ATR"].values,
         low20=ind["Low_20"].values,
-        s_trigger=s_trigger(ind),
-        d_trigger=d_trigger(ind, deep),
+        s_trigger=np.asarray(values["s_trigger"], dtype=bool)
+        if values is not None
+        else s_trigger(ind),
+        d_trigger=np.asarray(values["d_trigger"], dtype=bool)
+        if values is not None
+        else d_trigger(ind, deep),
         deep=deep,
     )
 

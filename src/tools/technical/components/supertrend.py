@@ -1,10 +1,12 @@
 import pandas as pd
 
+from src.tools.technical.context import common_evidence
 from src.tools.technical.models import ComponentResult, ComponentSignal
 
 
-def analyze_supertrend(df: pd.DataFrame) -> ComponentResult:
+def analyze_supertrend(df: pd.DataFrame, *, common_analysis=None) -> ComponentResult:
     """Analyze Supertrend signals."""
+    facts = common_evidence(df, common_analysis, "chart.supertrend.legacy")
     if df.empty or len(df) < 2:
         return ComponentResult(
             signals=[],
@@ -46,6 +48,11 @@ def analyze_supertrend(df: pd.DataFrame) -> ComponentResult:
     supertrend_dir = int(supertrend_dir)
     prev_supertrend_dir = (
         int(prev_supertrend_dir) if not pd.isna(prev_supertrend_dir) else supertrend_dir
+    )
+
+    supertrend_dir, prev_supertrend_dir, supertrend_value, close = (
+        facts[key]
+        for key in ("supertrend_direction", "previous_direction", "supertrend_value", "close")
     )
 
     signals = []

@@ -25,7 +25,7 @@ from src.strategies.swing_w150.parameters import (
 from src.strategies.swing_w150.signals import (
     STRATEGY_ID,
     STRATEGY_VERSION,
-    iter_swing_detection,
+    _iter_swing_detection,
 )
 
 
@@ -358,7 +358,7 @@ def simulate_swing_v2(
     if signal_history is None:
         history = tuple(
             signal
-            for snapshot in iter_swing_detection(ticker, features, params)
+            for snapshot in _iter_swing_detection(ticker, features, params, metadata_mode="none")
             for signal in snapshot.current_signals
         )
     else:

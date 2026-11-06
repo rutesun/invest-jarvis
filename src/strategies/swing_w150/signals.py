@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from decimal import Decimal
 from enum import StrEnum
 
 import numpy as np
 import pandas as pd
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from src.strategies.models import (
     BarFinality,
@@ -33,14 +33,13 @@ from src.strategies.swing_w150.parameters import (
     SwingW150Parameters,
     validate_pullback_policy,
 )
-from src.strategies.swing_w150.rules import deep_recovery, structure_breakdown
 from src.strategies.swing_w150.support_ladder import (
     advance_support_tests,
     anchor_value,
     select_support,
 )
 from src.strategies.swing_w150.up_cycle import advance_up_cycle
-from src.tools.technical.pivots import confirmed_pivot_events
+from src.tools.technical.chart_analysis.models import ChartAnalysis, FactSelection
 from src.tools.technical.scorecard_models import DataStatus, Direction, Evidence, Importance
 
 
@@ -60,6 +59,8 @@ _PRIORITY = {
 
 
 class SwingSignalDetection(BaseModel):
+    common_analyses: tuple[ChartAnalysis, ...] = Field(default=(), exclude=True)
+    fact_selections: tuple[FactSelection, ...] = Field(default=(), exclude=True)
     strategy_id: str
     strategy_version: str
     parameter_set_version: str
@@ -252,73 +253,6 @@ def _deep_evidence(row: pd.Series, previous: pd.Series) -> list[Evidence]:
     return evidence
 
 
-def _trend_breakout(row: pd.Series, previous: pd.Series, params: SwingW150Parameters) -> bool:
-    close = _number(row, "Close")
-    high = _number(row, "Trend_Breakout_High_Prev")
-    previous_close = _number(previous, "Close")
-    previous_high = _number(previous, "Trend_Breakout_High_Prev")
-    sma150 = _number(row, "SMA_150")
-    slope = _number(row, f"SMA_150_Slope_{params.direction_lookback_bars}")
-    volume = _number(row, "Volume")
-    average_volume = _number(row, "Vol_SMA_20")
-    return bool(
-        all(
-            value is not None
-            for value in (
-                close,
-                high,
-                previous_close,
-                previous_high,
-                sma150,
-                slope,
-                volume,
-                average_volume,
-            )
-        )
-        and close > sma150
-        and slope > 0
-        and close > high
-        and previous_close <= previous_high
-        and volume > params.trend_breakout_volume_multiple * average_volume
-    )
-
-
-def _deep_recovery(
-    row: pd.Series, previous: pd.Series, params: SwingW150Parameters, deep: bool
-) -> bool:
-    close = _number(row, "Close")
-    sma20 = _number(row, "SMA_20")
-    sma50 = _number(row, "SMA_50")
-    sma200 = _number(row, "SMA_200")
-    high20 = _number(row, "Deep_Recovery_High_Prev")
-    previous_high20 = _number(previous, "Deep_Recovery_High_Prev")
-    previous_close = _number(previous, "Close")
-    previous_sma50 = _number(previous, "SMA_50")
-    slope20 = _number(row, "SMA_20_Slope_5")
-    if (
-        any(
-            value is None
-            for value in (
-                close,
-                sma20,
-                sma50,
-                sma200,
-                high20,
-                previous_high20,
-                previous_close,
-                previous_sma50,
-                slope20,
-            )
-        )
-        or not deep
-    ):
-        return False
-    trigger = (close > high20 and previous_close <= previous_high20) or (
-        previous_close <= previous_sma50 and close > sma50
-    )
-    return bool(close < sma200 and close > sma20 and close > sma50 and slope20 > 0 and trigger)
-
-
 _LADDER_COLUMNS = {"SUPERTREND": "SuperTrend_Up", "SMA50": "SMA_50", "SMA150": "SMA_150"}
 
 
@@ -475,14 +409,72 @@ def _ladder_watch(
 
 
 def iter_swing_detection(
-    ticker: str, features: SwingFeatureFrame, params: SwingW150Parameters
+    ticker: str,
+    features: SwingFeatureFrame,
+    params: SwingW150Parameters,
+    *,
+    common_analysis: ChartAnalysis | None = None,
 ) -> Iterator[SwingSignalDetection]:
-    """Yield each as-of snapshot while visiting each feature row exactly once."""
+    """Yield snapshots with public facts bound to each observed input prefix."""
+    yield from _iter_swing_detection(
+        ticker, features, params, common_analysis=common_analysis, metadata_mode="all"
+    )
+
+
+def _iter_swing_detection(
+    ticker: str,
+    features: SwingFeatureFrame,
+    params: SwingW150Parameters,
+    *,
+    common_analysis: ChartAnalysis | None = None,
+    metadata_mode: str,
+) -> Iterator[SwingSignalDetection]:
+    """Shared numerical replay; internal callers may omit unused public facts."""
     SWING_W150_PARAMETER_REGISTRY.validate(params)
     ladder_enabled = validate_pullback_policy(params)
     frame = features.frame
     if len(features.finalities) != len(frame):
         raise ValueError("feature finalities length must match bars")
+    if common_analysis is None and features.data_status is DataStatus.COMPLETE:
+        from src.strategies.swing_w150.common import swing_analysis
+
+        common_analysis = swing_analysis(ticker, features, params)
+    common_values = None
+    common_items = ()
+    common_selections = ()
+    if common_analysis is not None:
+        from src.strategies.swing_w150.common import (
+            feature_scope,
+            requested_items,
+            selections,
+            swing_analysis,
+            swing_rules,
+            validate_analysis,
+        )
+
+        validate_analysis(common_analysis, feature_scope(ticker, features), swing_rules(params))
+        common_items = requested_items(common_analysis, swing_rules(params))
+        common_values = dict(
+            next(
+                item.evidence
+                for item in common_items
+                if item.rule_id == "chart.deep_recovery.swing"
+            )
+        )
+        common_values["trend_breakout"] = next(
+            item.evidence["trigger"]
+            for item in common_items
+            if item.rule_id == "chart.close_breakout.strict"
+        )
+        common_selections = selections(
+            common_analysis,
+            tuple(
+                rule
+                for rule in swing_rules(params)
+                if rule.rule_id != "chart.structure_breakdown.swing"
+                and (ladder_enabled or rule.rule_id != "chart.pivot.span3")
+            ),
+        )
     fingerprint = params.parameter_fingerprint
     observation_params = ObservationParameters()
     up_cycle = UpCycleState(finality=BarFinality.FINAL) if ladder_enabled else None
@@ -490,28 +482,21 @@ def iter_swing_detection(
     ladder_watch = None
     completed_highs: list[float | None] = []
     pivot_events = (
-        confirmed_pivot_events(
-            frame["High"].to_numpy(dtype=float),
-            frame["Low"].to_numpy(dtype=float),
-            final_mask=[finality == BarFinality.FINAL for finality in features.finalities],
+        tuple(
+            __import__("types").SimpleNamespace(**dict(item.evidence))
+            for item in common_items
+            if item.rule_id == "chart.pivot.span3"
         )
-        if ladder_enabled and features.data_status is DataStatus.COMPLETE
+        if common_analysis is not None
+        and ladder_enabled
+        and features.data_status is DataStatus.COMPLETE
         else ()
     )
-    if features.data_status is DataStatus.COMPLETE:
-        st = np.nan_to_num(frame["SuperTrend_Dir"].to_numpy(dtype=float), nan=1.0)
-        higher_low = frame["Higher_Low"].to_numpy(dtype=bool)
-        lower_low_lower_high = frame["Lower_Low_Lower_High"].to_numpy(dtype=bool)
-        breakdown = structure_breakdown(
-            frame,
-            st,
-            lower_low_lower_high,
-            volume_multiple=params.structure_breakdown_volume_multiple,
-            weak_close_location=params.structure_weak_close_location,
-        )
-        deep_rows = deep_recovery(frame, st, breakdown, higher_low)
-    else:
-        deep_rows = np.zeros(len(frame), dtype=bool)
+    deep_rows = (
+        common_values["deep_recovery"]
+        if common_values is not None
+        else np.zeros(len(frame), dtype=bool)
+    )
     observations: list[StrategyObservationEpisode] = []
     signals: list[StrategySignal] = []
     overheat_phase = _OverheatPhase.NORMAL
@@ -639,13 +624,15 @@ def iter_swing_detection(
                 else:
                     below_sma150_count = 0
 
-            if previous is not None and _trend_breakout(row, previous, params):
+            if previous is not None and common_values["trend_breakout"][bar]:
                 emit(
                     "TREND_BREAKOUT_ENTRY",
                     _number(row, "Trend_Breakout_High_Prev"),
                     _trend_evidence(row, params),
                 )
-            if previous is not None and _deep_recovery(row, previous, params, bool(deep_rows[bar])):
+            if previous is not None and (
+                bool(deep_rows[bar]) and common_values["deep_recovery_trigger"][bar]
+            ):
                 emit(
                     "DEEP_RECOVERY_ENTRY",
                     _number(row, "Deep_Recovery_High_Prev"),
@@ -966,7 +953,33 @@ def iter_swing_detection(
             corrected_episode.status_as_of = day
         today.sort(key=lambda signal: _PRIORITY[signal.code])
         signals.extend(today)
+        snapshot_analysis = None
+        snapshot_selections = ()
+        if common_analysis is not None and (
+            metadata_mode == "all" or (metadata_mode == "latest" and bar == len(frame) - 1)
+        ):
+            if bar == len(frame) - 1:
+                snapshot_analysis = common_analysis
+                snapshot_selections = common_selections
+            else:
+                prefix = replace(
+                    features,
+                    frame=frame.iloc[: bar + 1],
+                    finalities=features.finalities[: bar + 1],
+                )
+                snapshot_analysis = swing_analysis(ticker, prefix, params)
+                snapshot_selections = selections(
+                    snapshot_analysis,
+                    tuple(
+                        rule
+                        for rule in swing_rules(params)
+                        if rule.rule_id != "chart.structure_breakdown.swing"
+                        and (ladder_enabled or rule.rule_id != "chart.pivot.span3")
+                    ),
+                )
         yield SwingSignalDetection(
+            common_analyses=(snapshot_analysis,) if snapshot_analysis is not None else (),
+            fact_selections=snapshot_selections,
             strategy_id=STRATEGY_ID,
             strategy_version=STRATEGY_VERSION,
             parameter_set_version=params.parameter_set_version,
@@ -1011,11 +1024,17 @@ def iter_swing_detection(
 
 
 def detect_swing(
-    ticker: str, features: SwingFeatureFrame, params: SwingW150Parameters
+    ticker: str,
+    features: SwingFeatureFrame,
+    params: SwingW150Parameters,
+    *,
+    common_analysis: ChartAnalysis | None = None,
 ) -> SwingSignalDetection:
     """Return the latest replay snapshot; no storage, clock, or position input is used."""
     result: SwingSignalDetection | None = None
-    for snapshot in iter_swing_detection(ticker, features, params):
+    for snapshot in _iter_swing_detection(
+        ticker, features, params, common_analysis=common_analysis, metadata_mode="latest"
+    ):
         result = snapshot
     if result is None:
         raise ValueError("SwingFeatureFrame must contain at least one bar")

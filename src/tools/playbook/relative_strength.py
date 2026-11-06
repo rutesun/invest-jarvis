@@ -1,5 +1,6 @@
 import pandas as pd
 
+from src.tools.playbook.common import playbook_evidence
 from src.tools.playbook.models import RelativeStrengthResult
 
 
@@ -9,44 +10,35 @@ _PERF_DAYS = 126  # 6개월
 
 
 def compute_relative_strength(
-    stock_df: pd.DataFrame, index_df: pd.DataFrame, index_symbol: str
+    stock_df: pd.DataFrame, index_df: pd.DataFrame, index_symbol: str, *, common_analysis=None
 ) -> RelativeStrengthResult:
     """맨스필드 RS. stock_df/index_df는 'Close' 컬럼 + 날짜 인덱스.
 
     순수 함수 — 네트워크 호출 없음. RS ≠ RSI.
     """
-    s = stock_df["Close"].dropna()
-    i = index_df["Close"].dropna()
-    common = s.index.intersection(i.index)
-    rp = (s.loc[common] / i.loc[common]).dropna()
+    from src.tools.technical.chart_analysis._legacy_playbook import relative_strength_values
 
-    if len(rp) < 2:
-        return RelativeStrengthResult(
-            mansfield_rs=0.0,
-            outperform_6m=0.0,
-            rp_slope_4w=0.0,
-            index_symbol=index_symbol,
+    values = (
+        playbook_evidence(
+            stock_df, common_analysis, "chart.rs", market=index_df, index_symbol=index_symbol
         )
-
-    sma_window = min(_RP_SMA, len(rp))
-    rp_sma = rp.rolling(window=sma_window, min_periods=max(20, sma_window // 4)).mean()
-    last_rp = float(rp.iloc[-1])
-    last_sma = float(rp_sma.iloc[-1])
-    mansfield = ((last_rp / last_sma) - 1.0) * 100.0 if last_sma else 0.0
-
-    slope_n = min(_SLOPE_DAYS, len(rp) - 1)
-    rp_slope = float(rp.iloc[-1] - rp.iloc[-1 - slope_n])
-
-    def _perf(series: pd.Series) -> float:
-        n = min(_PERF_DAYS, len(series) - 1)
-        past = float(series.iloc[-1 - n])
-        return ((float(series.iloc[-1]) - past) / past) * 100.0 if past else 0.0
-
-    outperform = _perf(s.loc[common]) - _perf(i.loc[common])
-
+        if common_analysis is not None
+        else relative_strength_values(stock_df, index_df)
+    )
+    if values.get("reasons") == ("INPUT_MISSING",):
+        raise KeyError("Close")
+    if "valid_common_count" in values:
+        count = values["valid_common_count"]
+        if 2 <= count < 20:
+            raise ValueError(f"min_periods 20 must be <= window {count}")
+        if count < 2:
+            return RelativeStrengthResult(
+                mansfield_rs=0.0,
+                outperform_6m=0.0,
+                rp_slope_4w=0.0,
+                index_symbol=index_symbol,
+            )
     return RelativeStrengthResult(
-        mansfield_rs=round(mansfield, 2),
-        outperform_6m=round(outperform, 2),
-        rp_slope_4w=round(rp_slope, 6),
         index_symbol=index_symbol,
+        **{key: values[key] for key in ("mansfield_rs", "outperform_6m", "rp_slope_4w")},
     )

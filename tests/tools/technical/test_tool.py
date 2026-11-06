@@ -138,3 +138,20 @@ async def test_trailing_nan_close_warns_even_when_quote_unavailable(scorer):
     assert result.success is True
     assert result.data.warnings  # get_quote 실패해도 경고는 남는다
     assert result.data.snapshot.price > 0
+
+
+@pytest.mark.asyncio
+async def test_quality_metadata_preserves_untrimmed_raw_without_extra_tool_fetch(scorer):
+    """Quality transport must retain missing bars without entering old payloads."""
+    provider = _provider_with_trailing_nan_close(live_price=None)
+    before = provider.get_price_history.return_value.copy(deep=True)
+    result = await TechnicalAnalysisTool(provider=provider, scorer=scorer).execute("INTC")
+    assert result.success
+    pd.testing.assert_frame_equal(result.data.quality_raw_dataframe, before)
+    assert pd.isna(result.data.quality_raw_dataframe.iloc[-1]["Close"])
+    assert result.data.raw_dataframe.index[-1] == before.index[-2]
+    provider.get_price_history.assert_awaited_once_with("INTC", "2y")
+    payload = result.data.model_dump()
+    assert "quality_raw_dataframe" not in payload
+    assert "quality_history_provider" not in payload
+    pd.testing.assert_frame_equal(provider.get_price_history.return_value, before)

@@ -147,6 +147,8 @@ def _pipeline(engine, tech_us=None, llm=None) -> BriefPipeline:
     disclosure_tool.execute = AsyncMock(return_value=ToolResult(success=True, data=[]))
     flow_tool = MagicMock()
     flow_tool.execute = AsyncMock(return_value=ToolResult(success=False, data=None, error="no kis"))
+    name_resolver = MagicMock()
+    name_resolver.resolve = AsyncMock(return_value=None)
     return BriefPipeline(
         technical_tools={"KR": tech_us, "US": tech_us},
         playbook_engine=engine,
@@ -155,6 +157,7 @@ def _pipeline(engine, tech_us=None, llm=None) -> BriefPipeline:
         disclosure_tool=disclosure_tool,
         flow_tool=flow_tool,
         llm=llm,
+        name_resolver=name_resolver,
     )
 
 

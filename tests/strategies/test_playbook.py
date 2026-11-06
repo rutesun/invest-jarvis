@@ -63,7 +63,9 @@ def _bundle(
 
 
 def test_playbook_strategy_has_no_position_inputs():
-    assert tuple(inspect.signature(PlaybookStrategy.evaluate).parameters) == ("self", "bundle")
+    signature = inspect.signature(PlaybookStrategy.evaluate)
+    assert tuple(signature.parameters) == ("self", "bundle", "common_analysis")
+    assert signature.parameters["common_analysis"].kind is inspect.Parameter.KEYWORD_ONLY
 
 
 def test_playbook_evaluates_entry_and_exit_on_same_chart():

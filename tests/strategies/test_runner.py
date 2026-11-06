@@ -162,7 +162,7 @@ def test_legacy_opinion_cannot_change_chart_strategy_verdict():
 def test_runner_keeps_error_slot_when_a_strategy_fails(monkeypatch):
     from src.strategies.swing_w150.adapter import SwingW150SignalStrategy
 
-    def fail(_self, _bundle):
+    def fail(_self, _bundle, *, common_analysis=None):
         raise RuntimeError("sample failure")
 
     monkeypatch.setattr(SwingW150SignalStrategy, "evaluate_signals", fail)

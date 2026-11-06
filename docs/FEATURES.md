@@ -6,6 +6,27 @@
 
 ---
 
+## 공통 차트 분석과 실험적 Quality
+
+차트의 Event(조건 발생)·Observation(상태 관측)·Risk(위험 조건)를 공통 계산하고, 기존 전략은 필요한 사실을 선택해 기존 매매 규칙으로 해석합니다. `check`·`analyze`·`brief`는 같은 공통 사실·Quality를 한 번 표시하며 상세 화면에 전략 선택 근거를 보존합니다. 같은 사실의 참조가 여러 계산 범위에 있어도 근거가 같으면 표시 행만 합치고 원래 FactRef와 채택·거절 이유를 남깁니다. 기본 화면은 현재 상태·Quality 4축·주요 가격대·최근 5거래일 변화·전략별 대응과 독립 수량을 연결해 보여줍니다. 5일 표의 기존 Technical Score와 새 Quality는 구분하며, 과거 Quality를 현재 값으로 대체하지 않습니다. 돌파·지지·회복 가격은 현재 유효한 실측으로 표시하고 종료된 진입의 옛 기준은 과거 구조 참고로 분리합니다. 과거·해소·무효화된 전체 이력과 공통 FactRef는 `--detail-strategy`로 확인합니다. 현재 판정에 필요한 source 근거와 미평가 경고는 기본 화면에도 남습니다.
+
+Quality는 추세·구조·모멘텀·거래량 참여의 4축 상태 지수입니다. 기존 Technical Score와 매매판정은 유지하며, LLM은 계산된 값을 설명합니다. 기존 조회 raw를 canonical 2년 입력으로 별도 준비하며, 원점이 부족하면 기존 공급자의 3y 입력을 Quality에만 최대 한 번 보충합니다. 겹치는 유효 OHLCV가 다르면 Quality는 unavailable입니다. API가 반환한 일봉의 날짜와 값을 기준으로 검사하며 외부 거래일 달력과 비교해 없는 날짜를 생성하거나 결측으로 추정하지 않습니다. 반환된 봉의 명시적 결측·값 오류·중복 충돌·미확정 여부는 계속 검사하고, 계산 최소 220봉과 공개 최소 FINAL 252봉을 구분합니다. API가 행 전체를 누락하면 응답만으로 휴장과 공급자 누락을 구분하지 않습니다. 실제 입력 부족·결측·미확정 봉으로 Quality가 null이어도 기존 전략 평가는 계속 표시합니다.
+
+기본 화면의 이름은 `차트 상태 점수(Quality)`이며 네 축의 의미·실측 근거·전 거래일 차이를 함께 표시합니다. 최근 5거래일 표에는 날짜별 신규 Quality와 전일차를 기존 Technical Score 옆에 표시하고, 핵심 변화에는 확정 기간의 총점·4축 변화를 연결합니다. 현재 값을 과거 날짜에 복제하지 않고 각 날짜 원점에서 재계산합니다. 장중 미완성·입력 부족은 미산출 사유와 최근 확정값을 구분하며, 실험적 점수를 매매 등급으로 바꾸지 않습니다. 진입 구조 위험에는 연속 발생 구간의 시작일·첫 확정일·현재 평가일과 가격 기준을 표시합니다. 위험 자체가 매도 명령은 아닙니다.
+
+별도의 `score` CLI 없이 기존 세 분석 명령에서 제공합니다. 날짜·기간 재계산 서비스는 내부에서 유지하며 live 범위 API는 `STUB_ONLY`로 닫혀 있습니다. `check`·`analyze`·`brief`의 기존 조회 경로에서 받은 입력은 이 gate를 우회하는 live 범위 계약 증거가 아닙니다. 재계산 결과를 재사용하는 DB·영속 cache·backfill은 추가하지 않습니다. `check --html` 보고서는 사용자가 요청한 출력 파일입니다.
+
+| 상태 구분 | 현재 상태 |
+|---|---|
+| 구현 | 공통 분석·전략별 독립 수량·현재 유효 상태와 날짜별 Quality 재계산 지원 |
+| live raw 범위 계약 | captured raw 검증 전, `STUB_ONLY` 유지 |
+| 점수 품질 | 가중치·정규화·임계값은 검증 전 초기 수치안. 분포·축 상관·민감도 연구 미실행 |
+| 예측력 | 사전 고정 holdout·forward 성과 연구 미실행. 매매 채택 근거 없음 |
+
+사용법은 [CLI 가이드](CLI_USAGE.md), 책임과 데이터 흐름은 [아키텍처](ARCHITECTURE.md#공통-차트-사실과-quality의-책임)를 참조합니다.
+
+---
+
 ## 1. Quick Check (`jarvis check`)
 
 LLM 없이 기술적 분석만 수행하는 빠른 진단 기능.
@@ -14,10 +35,22 @@ LLM 없이 기술적 분석만 수행하는 빠른 진단 기능.
 - 입력: 티커 또는 종목명 (TickerResolver로 자동 변환)
 - 출력: 8개 컴포넌트 점수, context 조정 점수, technical verdict, 최근 점수 추이, 시그널, 경고, 20+ 원시 지표, 퍼포먼스 (1M/3M/6M/1Y)
 
+`check`는 현재 유효 상태와 최근 20개 응답 거래일의 관찰 흐름을 연결합니다. 현재 상태의 근원 사건은 기간 밖이어도 포함하고, 같은 회복의 종료·확인 중복은 합칩니다. 과거 청산 조건이 계속 유효한 상태와 오늘의 신규 매매 지시는 구별하며 기존 전략별 독립 수량을 유지합니다. Quality·Technical Score 추이는 기존 5일 범위입니다.
+
+`--html [PATH]`를 지정하면 텍스트와 함께 기술 차트를 내장한 HTML 보고서를 저장합니다. 경로를 생략하면 실행 디렉터리의 `tmp/reports/`에 고유한 파일명으로 저장하고 절대경로와 `file://` 링크를 출력합니다. 같은 실행 결과를 사용하며 여러 종목·일부 실패를 한 파일에 담습니다. 밝은 본문에 현재 상태·전략별 대응/수량·관찰 흐름을 배치하고, Quality와 상세 근거를 이어 제공합니다. 차트·CSS가 내장되어 외부 CDN 없이 열 수 있습니다. 기본 텍스트 조회에는 차트를 만들지 않으며 새 뉴스·LLM 호출은 추가하지 않습니다. 명시한 기존 파일 교체에는 `--force`가 필요합니다. 사용자가 요청한 보고서 저장은 분석 결과 cache와 별개입니다.
+
+차트 바로 위에는 추세·가격 위치·가격 구조·과열/과매도·거래량 브리핑을 제공합니다. 20·50·150·200일선의 방향과 주가 이격률, 최근 교차·cRSI 변화 최대 두 개를 함께 읽을 수 있습니다. 구조화된 브리핑 수치는 상승/위쪽 초록, 하락/아래쪽 붉은색으로 표시하며 과매도는 별도 상태색을 사용합니다. 기간·기준값은 중립이고, 색과 함께 부호·방향 문구를 제공합니다. 현재 배열과 교차 발생일, 확정과 장중 잠정, 미산출을 구분하며 새 매매 판정을 만들지 않습니다.
+
+HTML의 `현재 상태`는 상단 한 곳에서 핵심 세 항목을 먼저 보여줍니다. 기준일은 제목 옆에 표시하고, 시작·회복·재이탈·조건 충족 날짜는 각 상태의 경과를 펼쳐 확인합니다. 추가 유효 상태와 지난 관찰 전체는 접어 두며, 현재 유효성을 확인할 수 없는 과거 사건을 현재 상태로 올리지 않습니다. 오래전에 시작했어도 현재 평가가 유효한 관찰은 유지하고, 청산 상태 확인 불가·잠정·미평가는 기본 화면에 남깁니다.
+
+차트 아래에서는 전략별 판단과 독립 수량을 카드에 모읍니다. Quality는 최근 5거래일 선 그래프와 현재 4축 가로 막대로 표시합니다. 상대적으로 낮은 축을 한 줄로 설명하며 동률·미평가를 구분합니다. 확정 총점과 장중 축의 기준일을 각각 표시하고, 결측을 채우거나 서로 다른 계산 기준의 점수를 연결하지 않습니다. 보조 위험의 수준과 잠정·미평가는 기본 화면에 남기고 날짜별 세부 근거는 펼쳐 읽을 수 있습니다.
+
+HTML의 구조화 가격·이동평균은 KRW/USD를 구분합니다. 상세 technical 진단 원문에는 국내 금액에도 기존 `$` 기호가 남을 수 있으며, 원문 보존에 따른 표시 제한입니다.
+
 **기술 점수 계약:**
 
 - `total_score`와 `component_raw_total`은 8개 컴포넌트 raw 합계를 유지한다.
-- `adjusted_score`는 `MarketContext`와 structured signal metadata를 반영한 조정 점수다. raw OHLCV 별도 score는 만들지 않는다.
+- `adjusted_score`는 `MarketContext`와 structured signal metadata를 반영한 조정 점수다. 기존 Technical Score 계약은 유지한다. 실험적 Quality는 아래 점수와 별도 표시한다.
 - `technical_verdict`는 `buy/add/hold/watch/accumulate/reduce/avoid` 중 하나의 technical-only hint와 판단 이유, 주의점, 무효화 가격, 최근 5거래일 점수 추이를 제공한다. `accumulate`는 SMA50 아래에서 바닥 다지기 구조(저점 높이기·강세 다이버전스·거래량 마름·모멘텀 개선 중 3개 이상 동시 충족)가 확인될 때, avoid를 상한(-15) 있는 가점으로 완만화한 조기 관찰 단계다(신규진입 불가).
 - LLM은 확정된 score와 verdict를 재판단하지 않고 한국어로 설명만 한다.
 
@@ -664,7 +697,7 @@ Daily Report 및 Screener 리포트를 Notion Database에 자동 업로드.
 - 대표 Entry는 최신 발생일을 먼저 선택하고 같은 날에는 과열후회복→눌림목반등→추세돌파→바닥회복 순으로 선택한다. 이 선택을 EntryOpportunity와 PositionPlanner가 공유하며 모든 Signal은 history에 남긴다. 대표가 진입 불가여도 하위·과거 source로 우회하지 않는다. 순위는 대표 선택용이며 수익성 우열을 의미하지 않는다. Planner의 오늘 ALLOW·exact source 일치와 청산·축소 우선은 유지한다.
 - Production v2는 `TREND_BREAKOUT_ENTRY` 다음 봉부터 종가가 `Signal 당시 직전 50거래일 돌파선 − 1.0 × source ATR(14)` 이하이면 진입 허가를 취소한다. 돌파선·ATR은 source 당시 값으로 고정하며 입력 부족은 비평가한다. 최초 FINAL 무효화·만료의 날짜와 이유를 유지하고, PROVISIONAL 가격 이탈은 같은 장중 봉의 회복으로 해소할 수 있다. 최신 source가 종료되었다고 과거 ALLOW로 돌아가지 않으며 새 Signal은 새 window를 만든다. 동일일에는 explicit exit, 가격 이탈, 만료 순으로 우선한다. 이 규칙은 실제 보유의 매도 규칙을 변경하지 않는다.
 - 별도 Shadow가 돌파선·원래 지지선·눌림목 저점의 이탈과 재탈환, 큰 역방향 이동 등 미검증 후보를 추적한다. 기본 출력의 구조 위험도 `NORMAL`·`CAUTION`·`HIGH_RISK`와 Risk Flags는 진입 gate가 아니다. 따라서 `ALLOW + HIGH_RISK`도 가능하다. 원래 지지선·ATR은 source 당시 차트에서 고정하며 미지원 source/anchor 부족은 비평가로 표시한다.
-- 거래일은 미국·한국 거래소 calendar에서 독립적으로 확인한다. 종목 가격의 미설명 누락은 Signal과 실제 보유 매도 후보를 만들지 않는다. 시장 chart만 없으면 종목 Signal은 유지하고 현재 기회만 평가하지 않는다. 기회 기준가는 발생 당일에는 `Signal 종가 추정`, 이후에는 `다음 실제 거래 가능 시가`로 구분한다.
+- CLI의 거래 세션은 API가 반환한 종목 일봉 날짜를 사용하며 시장 chart도 자체 응답으로 검사한다. 외부 달력과 비교해 없는 날짜를 누락으로 추정하지 않으며 연속 봉 조건과 다음 시가도 반환된 봉 순서를 기준으로 한다. 전략별 최소 이력·종목/시장 날짜 정합성 검사는 유지한다. 시장 chart만 없으면 종목 Signal은 유지하고 현재 기회만 평가하지 않는다. 기회 기준가는 발생 당일에는 `Signal 종가 추정`, 이후에는 `다음 응답 일봉 시가`로 구분한다.
 
 Trading Observation v1은 기본 ON이며 `SETUP`과 Positive/Risk Evidence를 구분해 현재 상태·당일 EVENT·최근 history에 표시한다. 확인된 피벗은 실제 피벗일과 확인일을 함께 제공한다. 이 구조 사건과 명시 V2 INITIAL이 쓰는 pivot 관계는 FINAL 부분집합에서 계산하고 원래 날짜를 보존하며, 마지막 미완성 봉은 PROVISIONAL preview로 구분한다. source별 지지·돌파선의 이탈/재탈환은 원래 기준값과 현재 실측을 구분한다. Observation은 점수를 가감하거나 진입·매도·수량을 만들지 않으며, 종료된 EntryOpportunity도 재탈환만으로 부활하지 않는다. 표시 설정과 매매 설정은 별도 fingerprint(설정 식별 hash)를 사용한다.
 
@@ -690,13 +723,13 @@ V1은 기존 연구 Backtest와 4종목 Golden의 호환 기준으로 유지한�
 2. 중요 Observation과 Evidence: cRSI 과열·밴드 이탈, SMA·MACD 방향성 등 현재 상태의 근거
 3. 최근 20거래일 Analysis Trigger와 Strategy Observation·Signal history
 4. `TECHNICAL_LEGACY`, `PLAYBOOK_V1` verdict와 `SWING_W150_V2` Signal bundle
-5. 현재 EntryOpportunity, 두 가격 기준의 SignalPerformance와 선택적 Position Plan
+5. 현재 EntryOpportunity, 두 가격 기준의 SignalPerformance와 전략별 독립 Position Plans
 
 `--detail-strategy`를 사용하면 전체 metric과 재현용 metadata를 추가로 표시한다. 판단에 필요한 Signal·EntryOpportunity Evidence와 5일 점수 상세는 기본 출력에 포함한다. 과열 sequence는 SWING V2 안에서 계산한다.
 
 **재현 계약:**
 
-- Scorecard와 Strategy는 종목 OHLCV, 시장 benchmark OHLCV, 필요시 업종 benchmark OHLCV, 거래소 calendar로 구성된 같은 `ChartBundle`과 versioned rule만 읽는다.
+- Scorecard와 Strategy는 종목 OHLCV, 시장 benchmark OHLCV, 필요시 업종 benchmark OHLCV, API 응답 기반 세션으로 구성된 같은 `ChartBundle`과 versioned rule만 읽는다.
 - 신호·상태·`as_of`는 차트 거래일 기준이다. 실행 시각은 bar finality 판정과 계산 metadata에 사용한다.
 - 같은 canonical ChartBundle과 strategy version·parameter fingerprint이면 pipeline, DB 상태, 실제 보유와 관계없이 같은 결과를 만든다.
 - 미국 benchmark는 `SPY`, KOSPI·6자리 KRX는 `^KS11`, KOSDAQ은 `^KQ11`이다. 완전한 입력에서 entry가 없으면 `NO_RECENT_SIGNAL`, 불완전하면 `NOT_EVALUATED`로 구분한다.
@@ -704,7 +737,7 @@ V1은 기존 연구 Backtest와 4종목 Golden의 호환 기준으로 유지한�
 **실제 보유와 주문 수량:**
 
 - Strategy는 실제 보유, 평균단가, 계좌, 체결·매매기록을 읽지 않는다. 미보유 종목에도 Entry/Exit 의견을 모두 표시한다.
-- `PositionPlanner`만 실제 holding/account를 읽어 목표·매수·매도 수량을 계산한다.
+- `PositionPlanner`만 실제 holding/account를 읽어 `TECHNICAL_LEGACY`, `PLAYBOOK_V1`, `SWING_W150`별 목표·매수·매도 수량을 계산한다. 같은 보유 입력에 대한 독립 대안이므로 합산하지 않는다. 보유 설정 오류는 수량 미정으로 표시한다.
 - 오늘 Signal만 주문 후보로 사용한다. exit → correction → 회복 → 눌림목 → 상승 돌파 → 깊은 회복 순으로 선택하며, 신규 매수는 선택 Signal과 source ID가 일치하는 오늘 `ALLOW`에만 허용한다.
 - `PROVISIONAL`과 `FINAL` 모두 현재 snapshot으로 수량을 계산하고 결과에 finality·계산시각·snapshot hash를 포함한다. 기본 화면은 finality를, `--detail-strategy`는 계산시각과 snapshot hash도 표시한다. 매수에는 실제 계좌 risk와 유효한 현재 가격이 필요하며 없으면 수량은 `UNAVAILABLE`이다.
 - correction은 현재 보유량의 50%를 올림해 매도한다. 예를 들어 5주면 3주, 1주면 1주를 매도한다. exit은 전량 매도하고 미보유면 매도 수량은 0이다.

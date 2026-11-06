@@ -1,11 +1,12 @@
 import pandas as pd
 
-from src.tools.technical.components.patterns import PatternThresholds
+from src.tools.technical.context import common_evidence, pattern_threshold_snapshot
 from src.tools.technical.models import ComponentResult, ComponentSignal
 
 
-def analyze_volume(df: pd.DataFrame) -> ComponentResult:
+def analyze_volume(df: pd.DataFrame, *, common_analysis=None) -> ComponentResult:
     """Analyze volume patterns (Pocket Pivot, Tennis Ball/Egg, Power Gap Up, Volume Surge)."""
+    facts = common_evidence(df, common_analysis, "chart.legacy.volume_extra")
     if "Vol_SMA_20" not in df.columns or len(df) < 2:
         return ComponentResult(
             signals=[],
@@ -35,6 +36,8 @@ def analyze_volume(df: pd.DataFrame) -> ComponentResult:
     vol_sma_20 = float(vol_sma_20)
     vol_ratio = volume / vol_sma_20
 
+    volume, vol_sma_20, vol_ratio = (facts[key] for key in ("volume", "vol_sma_20", "vol_ratio"))
+
     signals = []
     evidence = []
     score = 0
@@ -50,8 +53,14 @@ def analyze_volume(df: pd.DataFrame) -> ComponentResult:
         not pd.isna(close) and not pd.isna(open_price) and float(close) < float(open_price)
     )
 
+    price_up, price_down, is_down_day = (
+        facts[key] for key in ("price_up", "price_down", "down_candle")
+    )
+
     # Pattern 1: Pocket Pivot (기관 매집 신호)
-    pocket_pivot_result = _detect_pocket_pivot(df, latest)
+    pocket_pivot_result = _pocket_from_facts(
+        common_evidence(df, common_analysis, "chart.pocket_pivot.down_candle")
+    )
     if pocket_pivot_result["detected"]:
         signals.extend(pocket_pivot_result["signals"])
         evidence.extend(pocket_pivot_result["evidence"])
@@ -70,7 +79,7 @@ def analyze_volume(df: pd.DataFrame) -> ComponentResult:
         )
 
     # Pattern 2: Tennis Ball / Egg (평균회귀 신호)
-    tennis_egg_result = _detect_tennis_ball_egg(df, latest, is_down_day)
+    tennis_egg_result = _tennis_from_facts(facts)
     if tennis_egg_result["detected"]:
         signals.extend(tennis_egg_result["signals"])
         evidence.extend(tennis_egg_result["evidence"])
@@ -88,7 +97,7 @@ def analyze_volume(df: pd.DataFrame) -> ComponentResult:
         )
 
     # Pattern 3: Power Gap Up (갭업 + 거래량 폭발)
-    power_gap_result = _detect_power_gap_up(df)
+    power_gap_result = _gap_from_facts(common_evidence(df, common_analysis, "chart.power_gap"))
     if power_gap_result["detected"]:
         signals.extend(power_gap_result["signals"])
         evidence.extend(power_gap_result["evidence"])
@@ -107,7 +116,7 @@ def analyze_volume(df: pd.DataFrame) -> ComponentResult:
         )
 
     # Pattern 4: General Volume Surge (기존 로직 유지)
-    if vol_ratio > PatternThresholds.VOLUME_SURGE_MULTIPLIER:
+    if facts["surge"]:
         signals.append("거래량 급증")
         evidence.append(f"거래량 {volume:,.0f} / 20일평균 {vol_sma_20:,.0f} = {vol_ratio:.1f}x")
         if price_up:
@@ -139,12 +148,12 @@ def analyze_volume(df: pd.DataFrame) -> ComponentResult:
         else:
             score += 5
 
-    elif vol_ratio > 1.5:
+    elif facts["increase"]:
         evidence.append(f"거래량 증가 ({vol_ratio:.1f}x)")
         if price_up:
             score += 5
 
-    elif vol_ratio > PatternThresholds.VOLUME_MODERATE_MULTIPLIER:
+    elif facts["moderate"]:
         # 완만한 거래량 증가(1.2x~1.5x) — 급증 임계값엔 못 미치지만 상승 확증으로 소폭 가점.
         # 돌파일 vol_ratio가 1.5x를 살짝 밑돌아 신호가 통째로 사라지던 사각지대 보완.
         if price_up:
@@ -175,61 +184,15 @@ def _detect_pocket_pivot(df: pd.DataFrame, latest: pd.Series) -> dict:
 
     Returns 25 points.
     """
-    required_cols = ["Open", "Close", "Volume", "SMA_50"]
-    if (
-        not all(col in df.columns for col in required_cols)
-        or len(df) < PatternThresholds.PP_LOOKBACK_DAYS + 1
-    ):
-        return {"detected": False, "signals": [], "evidence": [], "metrics": {}, "score": 0}
+    from src.tools.technical.chart_analysis._legacy_components import pocket_pivot_values
 
-    close = latest.get("Close")
-    open_price = latest.get("Open")
-    volume = latest.get("Volume")
-    sma_50 = latest.get("SMA_50")
-
-    if any(pd.isna(x) for x in [close, open_price, volume, sma_50]) or sma_50 == 0:
-        return {"detected": False, "signals": [], "evidence": [], "metrics": {}, "score": 0}
-
-    close, open_price, volume, sma_50 = (
-        float(close),
-        float(open_price),
-        float(volume),
-        float(sma_50),
+    return _pocket_from_facts(
+        pocket_pivot_values(
+            df,
+            latest=latest,
+            thresholds=pattern_threshold_snapshot("chart.pocket_pivot.down_candle"),
+        )
     )
-
-    # Condition 1: Down day
-    if close >= open_price:
-        return {"detected": False, "signals": [], "evidence": [], "metrics": {}, "score": 0}
-
-    # Condition 3: Near 50MA (±2%)
-    distance_pct = abs(close - sma_50) / sma_50
-    if distance_pct > PatternThresholds.PP_SMA_DISTANCE_PCT:
-        return {"detected": False, "signals": [], "evidence": [], "metrics": {}, "score": 0}
-
-    # Condition 2: Volume exceeds max of last 10 down-days
-    lookback = df.iloc[-(PatternThresholds.PP_LOOKBACK_DAYS + 1) : -1].copy()
-    down_days = lookback[lookback["Close"] < lookback["Open"]]
-
-    # Need at least 3 down-days for meaningful comparison
-    if len(down_days) < 3:
-        return {"detected": False, "signals": [], "evidence": [], "metrics": {}, "score": 0}
-
-    max_down_volume = float(down_days["Volume"].max())
-
-    if volume <= max_down_volume:
-        return {"detected": False, "signals": [], "evidence": [], "metrics": {}, "score": 0}
-
-    # Pocket Pivot detected
-    return {
-        "detected": True,
-        "signals": ["Pocket Pivot (기관 매집)"],
-        "evidence": [
-            f"다운데이 거래량 {volume:,.0f} > 10일 최대 {max_down_volume:,.0f}",
-            f"50일선 근처 ({distance_pct * 100:.1f}% 이내)",
-        ],
-        "metrics": {"pocket_pivot_volume": volume, "max_down_volume_10d": max_down_volume},
-        "score": 25,
-    }
 
 
 def _detect_tennis_ball_egg(df: pd.DataFrame, latest: pd.Series, is_down_day: bool) -> dict:
@@ -243,62 +206,16 @@ def _detect_tennis_ball_egg(df: pd.DataFrame, latest: pd.Series, is_down_day: bo
 
     Returns negative score for Egg (-15).
     """
-    required_cols = ["Close", "Open", "Volume"]
-    if (
-        not all(col in df.columns for col in required_cols)
-        or len(df) < PatternThresholds.MEAN_REVERSION_LOOKBACK + 1
-    ):
-        return {"detected": False, "signals": [], "evidence": [], "metrics": {}, "score": 0}
+    from src.tools.technical.chart_analysis._legacy_components import tennis_ball_values
 
-    # Only check on down days
-    if not is_down_day:
-        return {"detected": False, "signals": [], "evidence": [], "metrics": {}, "score": 0}
-
-    volume = latest.get("Volume")
-    if pd.isna(volume):
-        return {"detected": False, "signals": [], "evidence": [], "metrics": {}, "score": 0}
-
-    volume = float(volume)
-
-    # Check last N down-days average volume
-    lookback = df.iloc[-(PatternThresholds.MEAN_REVERSION_LOOKBACK + 1) : -1].copy()
-    down_days = lookback[lookback["Close"] < lookback["Open"]]
-
-    if len(down_days) < 2:
-        return {"detected": False, "signals": [], "evidence": [], "metrics": {}, "score": 0}
-
-    avg_down_volume = float(down_days["Volume"].mean())
-
-    if avg_down_volume == 0:
-        return {"detected": False, "signals": [], "evidence": [], "metrics": {}, "score": 0}
-
-    volume_ratio = volume / avg_down_volume
-
-    # Tennis Ball: volume < 50% avg
-    if volume_ratio < PatternThresholds.TENNIS_BALL_THRESHOLD:
-        return {
-            "detected": True,
-            "signals": ["Tennis Ball (반등 신호)"],
-            "evidence": [
-                f"하락 거래량 {volume:,.0f} < 평균 {avg_down_volume:,.0f} ({volume_ratio * 100:.0f}%)"
-            ],
-            "metrics": {"down_volume_ratio": round(volume_ratio, 2)},
-            "score": 15,
-        }
-
-    # Egg: volume > 150% avg
-    if volume_ratio > PatternThresholds.EGG_THRESHOLD:
-        return {
-            "detected": True,
-            "signals": ["Egg (추가 하락 경고)"],
-            "evidence": [
-                f"하락 거래량 {volume:,.0f} > 평균 {avg_down_volume:,.0f} ({volume_ratio * 100:.0f}%)"
-            ],
-            "metrics": {"down_volume_ratio": round(volume_ratio, 2)},
-            "score": -15,  # First negative score!
-        }
-
-    return {"detected": False, "signals": [], "evidence": [], "metrics": {}, "score": 0}
+    return _tennis_from_facts(
+        tennis_ball_values(
+            df,
+            latest=latest,
+            is_down_day=is_down_day,
+            thresholds=pattern_threshold_snapshot("chart.legacy.volume_extra"),
+        )
+    )
 
 
 def _detect_power_gap_up(df: pd.DataFrame) -> dict:
@@ -310,52 +227,64 @@ def _detect_power_gap_up(df: pd.DataFrame) -> dict:
 
     Returns 20 points.
     """
-    required_cols = ["Open", "High", "Volume", "Vol_SMA_20"]
-    if not all(col in df.columns for col in required_cols) or len(df) < 2:
-        return {"detected": False, "signals": [], "evidence": [], "metrics": {}, "score": 0}
+    from src.tools.technical.chart_analysis._legacy_components import power_gap_values
 
-    latest = df.iloc[-1]
-    prev = df.iloc[-2]
-
-    open_price = latest.get("Open")
-    prev_high = prev.get("High")
-    volume = latest.get("Volume")
-    vol_sma_20 = latest.get("Vol_SMA_20")
-
-    if (
-        any(pd.isna(x) for x in [open_price, prev_high, volume, vol_sma_20])
-        or prev_high == 0
-        or vol_sma_20 == 0
-    ):
-        return {"detected": False, "signals": [], "evidence": [], "metrics": {}, "score": 0}
-
-    open_price, prev_high, volume, vol_sma_20 = (
-        float(open_price),
-        float(prev_high),
-        float(volume),
-        float(vol_sma_20),
+    return _gap_from_facts(
+        power_gap_values(df, thresholds=pattern_threshold_snapshot("chart.power_gap"))
     )
 
-    # Condition 1: Gap size ≥4%
-    gap_size_pct = (open_price - prev_high) / prev_high
 
-    if gap_size_pct < PatternThresholds.GAP_SIZE_MIN_PCT:
-        return {"detected": False, "signals": [], "evidence": [], "metrics": {}, "score": 0}
+def _empty_pattern():
+    return {"detected": False, "signals": [], "evidence": [], "metrics": {}, "score": 0}
 
-    # Condition 2: Volume ≥3x avg
-    vol_ratio = volume / vol_sma_20
 
-    if vol_ratio < PatternThresholds.GAP_VOLUME_MULTIPLIER:
-        return {"detected": False, "signals": [], "evidence": [], "metrics": {}, "score": 0}
+def _pocket_from_facts(values):
+    if not values.get("detected"):
+        return _empty_pattern()
+    volume, maximum, distance = (
+        values[key] for key in ("volume", "max_down_volume_10d", "distance_pct")
+    )
+    return {
+        "detected": True,
+        "signals": ["Pocket Pivot (기관 매집)"],
+        "evidence": [
+            f"다운데이 거래량 {volume:,.0f} > 10일 최대 {maximum:,.0f}",
+            f"50일선 근처 ({distance * 100:.1f}% 이내)",
+        ],
+        "metrics": dict(values["metrics"]),
+        "score": 25,
+    }
 
-    # Power Gap Up detected
+
+def _tennis_from_facts(values):
+    if not (values.get("tennis_ball") or values.get("egg")):
+        return _empty_pattern()
+    tennis = values["tennis_ball"]
+    volume, average, ratio = (
+        values[key] for key in ("volume", "avg_down_volume_5d", "down_volume_ratio")
+    )
+    return {
+        "detected": True,
+        "signals": ["Tennis Ball (반등 신호)" if tennis else "Egg (추가 하락 경고)"],
+        "evidence": [
+            f"하락 거래량 {volume:,.0f} {'<' if tennis else '>'} 평균 {average:,.0f} ({ratio * 100:.0f}%)"
+        ],
+        "metrics": {"down_volume_ratio": round(ratio, 2)},
+        "score": 15 if tennis else -15,
+    }
+
+
+def _gap_from_facts(values):
+    if not values.get("detected"):
+        return _empty_pattern()
+    gap, volume, ratio = (values[key] for key in ("gap_size_pct", "volume", "gap_vol_ratio"))
     return {
         "detected": True,
         "signals": ["Power Gap Up (강세 갭업)"],
         "evidence": [
-            f"갭 크기 {gap_size_pct * 100:.1f}% (4% 이상)",
-            f"거래량 {volume:,.0f} = {vol_ratio:.1f}x (3배 이상)",
+            f"갭 크기 {gap * 100:.1f}% (4% 이상)",
+            f"거래량 {volume:,.0f} = {ratio:.1f}x (3배 이상)",
         ],
-        "metrics": {"gap_size_pct": round(gap_size_pct, 3), "gap_vol_ratio": round(vol_ratio, 2)},
+        "metrics": dict(values["metrics"]),
         "score": 20,
     }
