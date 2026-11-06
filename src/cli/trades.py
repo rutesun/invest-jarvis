@@ -6,7 +6,7 @@ from typing import Annotated
 
 import typer
 
-from src.pipelines.broker_account import select_account
+from src.pipelines.broker_account import fetch_account_balances, select_account
 from src.providers.nhplug import NHClient, NHError
 from src.tools.trades import JournalError, SourceLink, TradeJournal, render_case, render_cases
 
@@ -14,6 +14,7 @@ from src.tools.trades import JournalError, SourceLink, TradeJournal, render_case
 trades_app = typer.Typer(help="NH 거래 수집과 투자 건별 로컬 매매일지")
 DEFAULT_DB = Path("data/broker/trades.sqlite3")
 Database = Annotated[Path, typer.Option("--db", help="로컬 SQLite 장부 경로")]
+Balance = Annotated[bool, typer.Option("--balance/--no-balance", help="현재 NH 잔고 조회; --no-balance는 로컬 장부만 표시")]
 
 
 def _date(value: str | None) -> date | None:
@@ -39,7 +40,7 @@ def _fail(error: Exception):
     if isinstance(error, JournalError):
         message = str(error)
     elif isinstance(error, NHError):
-        message = "NH 거래 조회에 실패했습니다. 인증 설정 또는 연결 상태를 확인하세요."
+        message = "NH 계좌 조회에 실패했습니다. 인증 설정 또는 연결 상태를 확인하세요."
     elif isinstance(error, ValueError):
         message = "계좌를 확인하세요: jarvis broker accounts 후 개인 실계좌 --account를 지정하세요."
     else:
@@ -75,6 +76,7 @@ def sync(
 @trades_app.command("list")
 def list_cases(
     db: Database = DEFAULT_DB,
+    balance: Balance = True,
     detail: Annotated[bool, typer.Option("--detail", help="거래 ID·원문 필드·확인사항 전체 표시")] = False,
     ticker: Annotated[str | None, typer.Option("--ticker")] = None,
     start: Annotated[str | None, typer.Option("--from", help="YYYY-MM-DD")] = None,
@@ -102,17 +104,20 @@ def list_cases(
             reviewed=reviewed,
             tags=tuple(tag) if tag is not None else None,
         )
-        rendered = render_cases(cases, detailed=detail)
+        snapshots = fetch_account_balances(case.account_id for case in cases) if balance else ()
+        rendered = render_cases(cases, detailed=detail, snapshots=snapshots)
     except Exception as error:
         _fail(error)
     typer.echo(rendered)
 
 
 @trades_app.command("show")
-def show(case_id: str, db: Database = DEFAULT_DB):
+def show(case_id: str, db: Database = DEFAULT_DB, balance: Balance = True):
     """투자 건의 거래 사실과 사용자 기록을 표시한다."""
     try:
-        rendered = render_case(TradeJournal(path=db).show(case_id))
+        case = TradeJournal(path=db).show(case_id)
+        snapshots = fetch_account_balances([case.account_id]) if balance else ()
+        rendered = render_cases([case], detailed=True, snapshots=snapshots)
     except Exception as error:
         _fail(error)
     typer.echo(rendered)
@@ -191,6 +196,7 @@ def split(
 @trades_app.command("export")
 def export(
     db: Database = DEFAULT_DB,
+    balance: Balance = True,
     detail: Annotated[bool, typer.Option("--detail", help="요약 대신 거래 전체 내보내기")] = False,
     case_id: Annotated[str | None, typer.Option("--case", help="투자 건 ID")] = None,
     month: Annotated[str | None, typer.Option("--month", help="YYYY-MM")] = None,
@@ -198,7 +204,12 @@ def export(
 ):
     """Markdown으로 출력하거나 로컬 파일로 내보낸다."""
     try:
-        rendered = TradeJournal(path=db).export(case_id=case_id, month=month, output=output, detailed=detail)
+        journal = TradeJournal(path=db)
+        cases = journal.cases_for_export(case_id=case_id, month=month)
+        snapshots = fetch_account_balances(case.account_id for case in cases) if balance else ()
+        rendered = journal.export(
+            case_id=case_id, month=month, output=output, detailed=detail, snapshots=snapshots,
+        )
     except Exception as error:
         _fail(error)
     typer.echo(f"내보내기 완료: {output}" if output is not None else rendered)

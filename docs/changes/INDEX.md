@@ -4,7 +4,7 @@
 
 | Date | Type | Status | 변경 | PR | Record |
 |------|------|--------|------|----|--------|
-| 2026-11-06 | feat | In Progress | NH 실제 잔고 브리핑·제목 계층 수정과 3개월 거래 장부·요약/상세 출력 | - | [nh-account-journal.md](nh-account-journal.md) |
+| 2026-11-06 | feat | In Progress | NH 실제 잔고 브리핑과 현재 보유를 연결한 3개월 거래 장부·요약/상세 출력 | - | [nh-account-journal.md](nh-account-journal.md) |
 | 2026-11-06 | feat | Merged | check 텍스트·HTML 자동 저장과 파일 링크, 차트 브리핑·전략 카드·Quality 그래프·현재 상태 | [#65](https://github.com/rutesun/invest-jarvis/pull/65) | [check-text-html-output.md](check-text-html-output.md) |
 | 2026-11-06 | feat | Merged | 공통 차트·Quality·전략별 독립 수량 및 현재 상태·가격대·5일 출력 통합 | [#65](https://github.com/rutesun/invest-jarvis/pull/65) | [common-chart-analysis-and-quality.md](common-chart-analysis-and-quality.md) |
 | 2026-10-22 | feat | Draft | 투자 notebook 종목별 분류, read-only plan, lossless projection 및 검증 적용 | [#64](https://github.com/rutesun/invest-jarvis/pull/64) | [notebook-notion-sync.md](notebook-notion-sync.md) |

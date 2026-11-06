@@ -4,7 +4,9 @@ from collections import defaultdict
 from collections.abc import Iterable
 from decimal import Decimal
 
-from .journal import TradeCase
+from src.providers.nhplug import NHBalanceSnapshot
+
+from .journal import JournalError, TradeCase
 
 
 def _cell(value) -> str:
@@ -163,20 +165,61 @@ def _summary(cases: list[TradeCase], level: int) -> list[str]:
     return lines
 
 
-def render_cases(cases: Iterable[TradeCase], *, detailed: bool = False) -> str:
+def _current_holdings(snapshot: NHBalanceSnapshot, level: int) -> list[str]:
+    lines = [
+        f"{'#' * level} NH 현재 보유",
+        "",
+        f"계좌: {snapshot.account_id} · 조회 완료: {snapshot.as_of.isoformat(timespec='seconds')}",
+        "계좌 전체 보유이며 기간 필터와 무관합니다. 과거 투자 건에 배분하지 않습니다.",
+        "",
+        "| 종목 | 이름 | 시장/통화 | 구분 | 대출일 | NH 보유 수량 |",
+        "| --- | --- | --- | --- | --- | ---: |",
+    ]
+    for row in snapshot.holdings:
+        cells = (row.ticker, row.name, f"{row.market}/{row.currency}", row.credit_type,
+                 row.loan_date or "-", _number(row.quantity))
+        lines.append("| " + " | ".join(_cell(cell) for cell in cells) + " |")
+    if not snapshot.holdings:
+        lines.append("보유 내역 없음 (국내·미국 조회 완료).")
+    lines.extend(["", "수량은 NH 제공 기준입니다. 미국은 체결 기준 잔고이며, 거래 장부는 결제 반영이 늦을 수 있습니다.", ""])
+    return lines
+
+
+def render_cases(
+    cases: Iterable[TradeCase], *, detailed: bool = False,
+    snapshots: Iterable[NHBalanceSnapshot] = (),
+) -> str:
     selected = list(cases)
     if not selected:
-        return "# NH 매매일지\n\n조건에 맞는 투자 건이 없습니다.\n"
-    if detailed:
-        return "# NH 매매일지\n\n" + "\n".join(render_case(case) for case in selected)
+        return "# NH 매매일지\n\nNH 현재 잔고: 미조회\n\n조건에 맞는 투자 건이 없습니다.\n"
     accounts = sorted({case.account_id for case in selected})
+    observed = {}
+    for snapshot in snapshots:
+        if snapshot.account_id in observed or any(row.account_id != snapshot.account_id for row in snapshot.holdings):
+            raise JournalError("현재 잔고의 계좌가 중복되거나 일치하지 않습니다.")
+        observed[snapshot.account_id] = snapshot
+    if observed and set(observed) != set(accounts):
+        raise JournalError("선택한 장부 계좌와 현재 잔고의 계좌가 일치하지 않습니다.")
     lines = ["# NH 매매일지", ""]
+    if not observed:
+        lines.extend(["NH 현재 잔고: 미조회", ""])
+    if detailed:
+        for account in accounts:
+            if account in observed:
+                lines.extend(_current_holdings(observed[account], 2))
+        lines.extend(render_case(case) for case in selected)
+        return "\n".join(lines)
     if len(accounts) == 1:
         lines.extend([f"계좌: {accounts[0]}", ""])
     for account in accounts:
         multiple = len(accounts) > 1
         if multiple:
             lines.extend([f"## 계좌 {account}", ""])
-        lines.extend(_summary([case for case in selected if case.account_id == account], 3 if multiple else 2))
+        level = 3 if multiple else 2
+        if account in observed:
+            lines.extend(_current_holdings(observed[account], level))
+            lines.extend([f"{'#' * level} 거래 이력", ""])
+            level += 1
+        lines.extend(_summary([case for case in selected if case.account_id == account], level))
         lines.append("")
     return "\n".join(lines)

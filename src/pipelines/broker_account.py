@@ -1,10 +1,11 @@
 """증권사 보유 사실을 기존 분석 입력에 연결하는 경계."""
 
+from collections.abc import Iterable
 from dataclasses import replace
 from decimal import Decimal
 
 from src.position.models import PositionSnapshot
-from src.providers.nhplug import NHAccount, NHBalanceSnapshot
+from src.providers.nhplug import NHAccount, NHBalanceSnapshot, NHClient
 from src.tools.brief.broker import supports_stock_analysis
 from src.tools.playbook.holdings import HoldingEntry, HoldingsConfig, WatchEntry
 
@@ -24,6 +25,17 @@ def select_account(accounts: list[NHAccount], selector: str | None = None) -> NH
     if len(personal) != 1:
         raise ValueError("연결 계좌를 선택하세요: jarvis broker accounts 후 --account 지정")
     return personal[0]
+
+
+def fetch_account_balances(account_ids: Iterable[str]) -> tuple[NHBalanceSnapshot, ...]:
+    """선택한 장부 계좌의 국내·미국 잔고를 모두 조회한다. 일부 실패 시 반환하지 않는다."""
+    selectors = sorted(set(account_ids))
+    if not selectors:
+        return ()
+    with NHClient.from_env() as client:
+        accounts = client.accounts()
+        selected = [select_account(accounts, selector) for selector in selectors]
+        return tuple(client.balances(account) for account in selected)
 
 
 def merge_broker_holdings(local: HoldingsConfig, observed: NHBalanceSnapshot) -> HoldingsConfig:

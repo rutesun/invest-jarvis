@@ -920,6 +920,7 @@ uv run jarvis brief --broker nh --account nh-계좌식별자 --no-llm
 uv run jarvis trades sync --account nh-계좌식별자 --from 2026-08-06 --to 2026-11-06
 uv run jarvis trades list
 uv run jarvis trades list --detail
+uv run jarvis trades list --no-balance
 uv run jarvis trades list --ticker AAPL --market US --not-reviewed
 uv run jarvis trades list --from 2026-11-01 --to 2026-11-30 --tag 돌파
 uv run jarvis trades show nh-case-투자건식별자
@@ -928,6 +929,8 @@ uv run jarvis trades show nh-case-투자건식별자
 기간은 양 끝 날짜를 포함한다. 국내는 주문일 기준 누적 체결만 수집하고, 미국은 조회 장부일 기준 일별 거래내역에서 실제 매매를 수집하므로 최근 체결의 반영 지연이 있을 수 있다. 미국 실거래일은 제공된 경우 별도로 표시한다. 전체 수집이 성공한 뒤 한 번에 장부에 반영하며, 재수집은 같은 거래를 중복 추가하지 않는다.
 
 위 수집 예시는 3개월 범위다. `list`와 `export`는 기본적으로 월별 매수·매도 금액, 투자 건 요약, 작성한 메모만 표시한다. 금액은 계좌·시장·통화별로 구분하며 실현손익을 계산하지 않는다. 기간 필터는 투자 건을 선택하므로 요약에는 선택한 투자 건의 전체 거래 이력이 포함된다. 계좌 전체의 월별 합계로 해석하지 않는다. 거래 ID·수수료 원문·개별 확인사항은 `--detail`로 확인한다. `show`는 단일 투자 건의 상세를 표시한다.
+
+`list/show/export`는 기본적으로 선택한 장부 계좌의 NH 현재 잔고도 조회한다. 현재 보유 표는 계좌 전체이며 조회 시각·시장·통화·신용/대출 구분·소수점 수량을 보존한다. 기간 필터나 과거 투자 건에 현재 수량을 배정하지 않으며 장부의 불완전 여부도 유지한다. 조회 실패 시 중단하고 내보내기 파일을 만들지 않는다. `--no-balance`는 네트워크 없이 로컬 장부만 표시하며 현재 잔고를 `미조회`로 표시한다.
 
 투자 건은 계좌·시장·통화·종목·신용/대출 구분별 장부를 기준으로 묶는다. 날짜 단위 자료로 같은 날 체결 순서를 단정하지 않으며, 이력 시작 전 보유를 알 수 없는 매도는 불완전으로 표시한다. 미국 거래의 시작 잔고가 양수이거나 거래 전·후 잔고와 수집한 매매가 맞지 않아도 불완전으로 표시하고 잔여 수량을 확정하지 않는다. 표시된 source 잔고는 해당 거래 당시 값이다. 장부상 수량/청산은 실계좌 전체 이력을 증명하지 않는다.
 
@@ -948,6 +951,7 @@ uv run jarvis trades split nh-trade-거래식별자 --title '별도 전략' --st
 ```bash
 uv run jarvis trades export --month 2026-11 --output reports/trades-2026-11.md
 uv run jarvis trades export --detail --output reports/trades-detail.md
+uv run jarvis trades export --no-balance --output reports/trades-local.md
 uv run jarvis trades export --case nh-case-투자건식별자
 uv run jarvis trades list --db data/broker/another-journal.sqlite3
 ```

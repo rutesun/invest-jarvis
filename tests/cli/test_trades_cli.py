@@ -62,7 +62,7 @@ def test_sync_list_show_note_and_resync_preserve_user_records(nh_cli, tmp_path):
     )
     assert result.exit_code == 0, result.output
     assert case_id in result.output and "0.004552" in result.output
-    assert "005940" not in result.output
+    assert "NH 현재 보유" in result.output
     assert "결제" in result.output
     result = runner.invoke(
         app,
@@ -117,6 +117,63 @@ def test_list_and_export_default_to_summary_with_explicit_details(nh_cli, tmp_pa
     detail = runner.invoke(app, ["trades", "export", "--detail", "--db", str(db)])
     assert detail.exit_code == 0
     assert "nh-trade-" in detail.output and "거래 사실" in detail.output
+
+
+@pytest.mark.parametrize("command", ["list", "show", "export"])
+def test_current_balances_are_live_account_facts_separate_from_incomplete_history(nh_cli, tmp_path, command):
+    db = tmp_path / "journal.sqlite3"
+    assert _sync(nh_cli, db).exit_code == 0
+    journal = TradeJournal(db)
+    case = journal.cases(ticker="GOOGL")[0]
+    assert case.incomplete and case.quantity is None
+    args = ["trades", command, "--db", str(db)]
+    if command == "show":
+        args.append(case.case_id)
+    result = runner.invoke(app, args)
+    assert result.exit_code == 0, result.output
+    assert "NH 현재 보유" in result.output and "조회 완료:" in result.output
+    assert "계좌 전체" in result.output and "투자 건에 배분하지 않습니다" in result.output
+    assert "| GOOGL | 알파벳 Class A | US/USD | 현금 | - | 200 |" in result.output
+    assert "이력 불완전" in result.output and journal.show(case.case_id).quantity is None
+    assert nh_cli.clients[-1]._http.is_closed
+
+
+@pytest.mark.parametrize("command", ["list", "show", "export"])
+def test_no_balance_reads_only_local_journal_and_marks_balance_unqueried(nh_cli, tmp_path, command):
+    db = tmp_path / "journal.sqlite3"
+    assert _sync(nh_cli, db).exit_code == 0
+    count = len(nh_cli.clients)
+    args = ["trades", command, "--no-balance", "--db", str(db)]
+    if command == "show":
+        args.append(TradeJournal(db).cases()[0].case_id)
+    result = runner.invoke(app, args)
+    assert result.exit_code == 0, result.output
+    assert "NH 현재 잔고: 미조회" in result.output
+    assert len(nh_cli.clients) == count
+
+
+def test_balance_failure_does_not_write_export_or_claim_no_holdings(nh_cli, tmp_path):
+    db = tmp_path / "journal.sqlite3"
+    assert _sync(nh_cli, db).exit_code == 0
+    before = db.read_bytes()
+    nh_cli.fail = "us_balance"
+    output = tmp_path / "failed.md"
+    result = runner.invoke(app, ["trades", "export", "--db", str(db), "--output", str(output)])
+    assert result.exit_code == 1
+    assert not output.exists() and before == db.read_bytes()
+    assert "ACCOUNT NUMBER" not in result.output and "secret-token" not in result.output
+    assert "보유 내역 없음" not in result.output
+
+
+def test_empty_case_selection_does_not_query_balances(nh_cli, tmp_path):
+    db = tmp_path / "journal.sqlite3"
+    assert _sync(nh_cli, db).exit_code == 0
+    count = len(nh_cli.clients)
+    result = runner.invoke(app, ["trades", "export", "--month", "2020-01", "--db", str(db)])
+    assert result.exit_code == 0, result.output
+    assert "조건에 맞는 투자 건이 없습니다" in result.output
+    assert "NH 현재 잔고: 미조회" in result.output
+    assert len(nh_cli.clients) == count
 
 
 def test_split_and_markdown_export_stay_local(nh_cli, tmp_path):

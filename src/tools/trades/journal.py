@@ -12,7 +12,7 @@ from decimal import Decimal
 from hashlib import sha256
 from pathlib import Path
 
-from src.providers.nhplug import NHTrade
+from src.providers.nhplug import NHBalanceSnapshot, NHTrade
 
 
 class JournalError(ValueError):
@@ -608,12 +608,10 @@ class TradeJournal:
             self._warn(connection, case_id, warning)
             return self._case(connection, case_id)
 
-    def export(
+    def cases_for_export(
         self, *, case_id: str | None = None, month: str | None = None,
-        output: Path | None = None, detailed: bool = False,
-    ) -> str:
-        from .render import render_cases
-
+    ) -> list[TradeCase]:
+        """내보내기 기간은 해당 월에 거래가 있는 투자 건을 선택한다."""
         selected = [self.show(case_id)] if case_id else self.cases()
         if month is not None:
             try:
@@ -628,7 +626,17 @@ class TradeJournal:
                     for trade in case.trades
                 )
             ]
-        markdown = render_cases(selected, detailed=detailed)
+        return selected
+
+    def export(
+        self, *, case_id: str | None = None, month: str | None = None,
+        output: Path | None = None, detailed: bool = False,
+        snapshots: Iterable[NHBalanceSnapshot] = (),
+    ) -> str:
+        from .render import render_cases
+
+        selected = self.cases_for_export(case_id=case_id, month=month)
+        markdown = render_cases(selected, detailed=detailed, snapshots=snapshots)
         if output is not None:
             path = Path(output)
             _private_parent(path)
