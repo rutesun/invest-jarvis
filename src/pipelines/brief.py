@@ -16,12 +16,13 @@ from typing import Any
 from langchain_core.language_models import BaseChatModel
 
 from src.llm.analyzer import generate_brief_narratives
+from src.pipelines.analysis_overview import render_analysis_overview
+from src.pipelines.chart_analysis_render import chart_analysis_context
 from src.pipelines.strategy_analysis import (
     AnalysisStrategyService,
     account_from_capital,
     evaluate_optional,
 )
-from src.pipelines.strategy_render import render_strategy_sections
 from src.position.models import PositionSnapshot
 from src.tools.brief.models import BriefItem
 from src.tools.brief.name_resolver import TickerNameResolver
@@ -240,6 +241,7 @@ class BriefPipeline:
             "price": item.price,
             "change_pct": item.change_pct,
             "technical_verdict": item.technical_verdict,
+            "common_chart": chart_analysis_context(item.strategy_analysis),
             "score_history": item.score_history,
             "score_history_warning": item.score_history_warning,
             "markers": item.markers,
@@ -261,7 +263,7 @@ class BriefPipeline:
             result["date"],
             result["macro"],
             result["items"],
-            strategy_renderer=lambda item: render_strategy_sections(
+            strategy_renderer=lambda item: render_analysis_overview(
                 item.scorecard,
                 item.strategy_analysis,
                 warning=item.strategy_warning,

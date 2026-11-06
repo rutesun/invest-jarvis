@@ -191,22 +191,23 @@ def test_default_renderer_shows_risk_without_today_entry_on_all_three_surfaces()
     flag = analysis.strategy_run.signal_bundles[0].entry_shadow.risk_flags[0]
     assert analysis.strategy_run.signal_bundles[0].current_signals == []
     for rendered in _all_surfaces(analysis):
-        section = rendered.split("### 오늘 EntryOpportunity", 1)[1]
-        assert "EXECUTION_WATCH" in section
-        assert "source=TREND_BREAKOUT_ENTRY" in section
-        assert "발생일=2026-09-01" in section
+        section = rendered.split("### 전략별 대응", 1)[1]
+        assert "대기" in section
+        assert "돌파 진입 조건 충족" in section
+        assert "발생일 2026-09-01" in section
         assert "1거래일 전" in section
-        assert "Production policy=production" in section
-        assert "Risk: CAUTION [PROVISIONAL]" in section
-        assert "Shadow policy=WATCH_RECLAIM_SHADOW_V1" in section
+        assert "보조 위험: 주의 (잠정)" in section
+        assert "Production policy=" not in section
+        assert "Shadow policy=" not in section
         assert flag.message in section
-        assert "관측값=99" in section
-        assert "기준값=100" in section
-        assert "진단은 Production·Position Plan을 변경하지 않습니다" in section
+        assert "평가가격 99.00 / 기준 100.00 (-1.00%)" in section
+        assert (
+            "보조 위험은 신규 매도 명령이 아니며 전략 판단·수량 계획을 변경하지 않습니다" in section
+        )
         assert "B1" not in section
         assert "B4" not in section
         assert "발생 원인: entry" in rendered
-        assert rendered.count("점수 근거 보존") == 5
+        assert "점수 근거 보존" not in rendered  # 선택한 5거래일보다 오래된 이력
 
 
 @pytest.mark.parametrize("mode", ["unsupported", "disabled", "failed"])

@@ -1,6 +1,8 @@
 import json
 import logging
-from datetime import datetime, timedelta
+from collections.abc import Awaitable, Callable
+from datetime import date, datetime, timedelta
+from importlib.metadata import version
 from pathlib import Path
 
 import httpx
@@ -8,7 +10,14 @@ import pandas as pd
 import yaml
 
 from src.core.interfaces import BaseProvider
+from src.providers.exchange_calendar import exchange_sessions_for
 from src.providers.kis_models import KISToken
+from src.providers.price_history_range import (
+    InputHistoryError,
+    RangeHistoryUnavailableError,
+    RawHistory,
+    unknown_history,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -26,9 +35,19 @@ class KISProvider(BaseProvider):
 
     BASE_URL = "https://openapi.koreainvestment.com:9443"
 
-    def __init__(self, app_key: str, app_secret: str):
+    live_range_enabled = False
+    range_evidence_status = "STUB_ONLY"
+
+    def __init__(
+        self,
+        app_key: str,
+        app_secret: str,
+        *,
+        range_page_fetcher: Callable[[dict], Awaitable[dict]] | None = None,
+    ):
         self.app_key = app_key
         self.app_secret = app_secret
+        self._range_page_fetcher = range_page_fetcher
         self._token: KISToken | None = None
         self._token_expires: datetime | None = None
 
@@ -252,6 +271,81 @@ class KISProvider(BaseProvider):
             df.index = df.index.tz_localize("Asia/Seoul")
 
         return df
+
+    async def get_price_history_range(self, ticker: str, *, start: date, end: date) -> RawHistory:
+        """Page an inclusive range with the existing ADJUSTED policy.
+
+        Only an explicit offline page transport is accepted until real raw range
+        evidence has been captured. A truncated response is never a full prefix.
+        """
+        if self._range_page_fetcher is None:
+            raise RangeHistoryUnavailableError("captured KIS raw range evidence is unavailable")
+        if start > end:
+            raise InputHistoryError("range start must not follow end")
+        padded = exchange_sessions_for("XKRX", start - timedelta(days=7), end + timedelta(days=7))
+        expected = tuple(day for day in padded if start <= day <= end)
+        target_start = expected[0] if expected else start
+        cursor = end
+        records = []
+        reached_start = not expected
+        while expected and cursor >= start:
+            params = {
+                "FID_COND_MRKT_DIV_CODE": "J",
+                "FID_INPUT_ISCD": ticker,
+                "FID_INPUT_DATE_1": start.strftime("%Y%m%d"),
+                "FID_INPUT_DATE_2": cursor.strftime("%Y%m%d"),
+                "FID_PERIOD_DIV_CODE": "D",
+                "FID_ORG_ADJ_PRC": ADJUSTED,
+            }
+            data = await self._range_page_fetcher(params)
+            items = data.get("output2")
+            if not isinstance(items, list):
+                raise InputHistoryError("KIS range output2 must be a daily-record list")
+            if not items:
+                break
+            page_days = []
+            for item in items:
+                try:
+                    day = datetime.strptime(item["stck_bsop_date"], "%Y%m%d").date()
+                    record = {"Date": pd.Timestamp(day)}
+                    for column, key in (
+                        ("Open", "stck_oprc"),
+                        ("High", "stck_hgpr"),
+                        ("Low", "stck_lwpr"),
+                        ("Close", "stck_clpr"),
+                        ("Volume", "acml_vol"),
+                    ):
+                        value = item.get(key)
+                        record[column] = float(value) if value not in (None, "") else float("nan")
+                    records.append(record)
+                except (KeyError, TypeError, ValueError) as exc:
+                    raise InputHistoryError("invalid KIS range daily OHLCV record") from exc
+                page_days.append(day)
+            earliest = min(page_days)
+            if earliest <= target_start:
+                reached_start = True
+                break
+            if earliest > cursor:
+                break
+            cursor = earliest - timedelta(days=1)
+        if not reached_start:
+            logger.warning("KIS range truncated before requested start for %s", ticker)
+        frame = pd.DataFrame(records)
+        if not frame.empty:
+            frame = frame.set_index("Date")
+        return unknown_history(
+            frame,
+            provider="kis",
+            adjustment_policy=f"KIS_FID_ORG_ADJ_PRC_{ADJUSTED}",
+            start=start,
+            end=end,
+            reached_start=reached_start,
+            no_session_basis=(
+                f"exchange_calendars:{version('exchange-calendars')}:XKRX:Asia/Seoul"
+                if not expected
+                else None
+            ),
+        )
 
     async def get_balance(self) -> dict:
         """Get portfolio balance and positions."""

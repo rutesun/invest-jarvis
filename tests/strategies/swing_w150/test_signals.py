@@ -268,7 +268,7 @@ def test_prefix_and_full_replay_agree_after_skipped_runs(signal_factory, ladder_
         prefix = replace(
             features, frame=features.frame.iloc[:end], finalities=features.finalities[:end]
         )
-        assert detect_test(prefix, ladder_params) == snapshots[end - 1]
+        assert detect_test(prefix, ladder_params).model_dump() == snapshots[end - 1].model_dump()
 
 
 def test_provisional_watch_cannot_become_a_completed_watch_for_next_entry(
@@ -551,7 +551,7 @@ def test_pullback_invalidates_when_its_only_support_disappears(
         prefix = replace(
             features, frame=features.frame.iloc[:bar], finalities=features.finalities[:bar]
         )
-        assert detect_test(prefix, params) == snapshots[bar - 1]
+        assert detect_test(prefix, params).model_dump() == snapshots[bar - 1].model_dump()
 
 
 def test_pullback_still_reverses_when_another_captured_support_remains(signal_factory, params):

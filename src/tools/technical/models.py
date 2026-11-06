@@ -1,9 +1,10 @@
 from datetime import datetime
-from typing import Literal, Self
+from typing import Any, Literal, Self
 
 import pandas as pd
 from pydantic import BaseModel, Field, StrictInt, model_validator
 
+from src.tools.technical.chart_analysis.models import ChartAnalysis, FactSelection
 from src.tools.technical.scorecard_models import TechnicalScorecard
 
 
@@ -423,6 +424,13 @@ class ZoneTestArtifact(BaseModel):
 
 class TechnicalResult(BaseModel):
     """Complete technical analysis result."""
+
+    # Explicitly accessed metadata; legacy model_dump/recorders keep their schema.
+    common_analyses: tuple[ChartAnalysis, ...] = Field(default=(), exclude=True)
+    chart_analysis_id: str | None = Field(default=None, exclude=True)
+    quality_raw_dataframe: pd.DataFrame | None = Field(default=None, exclude=True)
+    quality_history_provider: Any | None = Field(default=None, exclude=True)
+    fact_selections: tuple[FactSelection, ...] | None = Field(default=None, exclude=True)
 
     ticker: str | None
     timestamp: datetime

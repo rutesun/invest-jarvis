@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 
+from src.tools.technical.context import common_evidence
 from src.tools.technical.models import ComponentResult, ComponentSignal
 
 
@@ -8,8 +9,9 @@ SLOPE_THRESHOLD = 0.05
 ACCEL_THRESHOLD = 0.02
 
 
-def analyze_velocity(df: pd.DataFrame) -> ComponentResult:
+def analyze_velocity(df: pd.DataFrame, *, common_analysis=None) -> ComponentResult:
     """Analyze MA slope and acceleration."""
+    facts = common_evidence(df, common_analysis, "chart.velocity.legacy")
     if "SMA_20" not in df.columns or len(df) < 15:
         return ComponentResult(
             signals=[],
@@ -27,33 +29,18 @@ def analyze_velocity(df: pd.DataFrame) -> ComponentResult:
             score=0,
         )
 
-    recent_15 = sma_20_series.iloc[-15:].values
-    current_5 = recent_15[-5:]
-    previous_5 = recent_15[-10:-5]
-
-    current_slope = _linear_slope(current_5)
-    previous_slope = _linear_slope(previous_5)
-
-    sma_20_latest = recent_15[-1]
-    if sma_20_latest == 0:
-        return ComponentResult(
-            signals=[],
-            evidence=["SMA_20 값 0"],
-            metrics={},
-            score=0,
+    if not facts.get("available", False):
+        return ComponentResult(signals=[], evidence=["SMA_20 값 0"], metrics={}, score=0)
+    current_slope, previous_slope, norm_slope, slope_change, price_above_sma20 = (
+        facts[key]
+        for key in (
+            "current_slope",
+            "previous_slope",
+            "norm_slope",
+            "slope_change",
+            "price_above_sma20",
         )
-
-    norm_slope = (current_slope / sma_20_latest) * 100
-    norm_prev_slope = (previous_slope / sma_20_latest) * 100
-    slope_change = norm_slope - norm_prev_slope
-
-    # 종가가 이미 SMA20 위면 SMA20 기울기의 하락은 지연(lag) 아티팩트다 — 반등 초입에
-    # '하락 가속/전환점'으로 역방향 벌점을 주는 것을 막는다(상태 vs 이벤트 분리).
-    price_above_sma20 = False
-    if "Close" in df.columns:
-        close_latest = df["Close"].dropna()
-        if not close_latest.empty:
-            price_above_sma20 = float(close_latest.iloc[-1]) > sma_20_latest
+    )
 
     signals = []
     evidence = []
@@ -136,8 +123,6 @@ def analyze_velocity(df: pd.DataFrame) -> ComponentResult:
 
 def _linear_slope(values: np.ndarray) -> float:
     """Calculate linear regression slope."""
-    x = np.arange(len(values))
-    if len(values) < 2:
-        return 0.0
-    coeffs = np.polyfit(x, values, 1)
-    return coeffs[0]
+    from src.tools.technical.chart_analysis._legacy_components import linear_slope
+
+    return linear_slope(values)

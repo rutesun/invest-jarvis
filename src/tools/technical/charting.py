@@ -70,7 +70,7 @@ def _badge(ax: Any, text: str, *, xy: tuple[float, float] = (0.01, 0.96)) -> Non
     )
 
 
-def _right_value_labels(fig: Any, ax: Any, df: pd.DataFrame) -> None:
+def _right_value_labels(fig: Any, ax: Any, df: pd.DataFrame, *, ticker: str = "") -> Any:
     """Display moving average labels grouped in one box outside chart area."""
     if df.empty:
         return
@@ -101,11 +101,12 @@ def _right_value_labels(fig: Any, ax: Any, df: pd.DataFrame) -> None:
 
     text_lines = []
     for name, value, _color in ma_texts:
-        text_lines.append(f"{name}: ${value:.1f}")
+        price = f"₩{value:,.0f}" if ticker.endswith((".KS", ".KQ")) else f"${value:.1f}"
+        text_lines.append(f"{name}: {price}")
 
     combined_text = "\n".join(text_lines)
 
-    ax.text(
+    return ax.text(
         1.08,
         0.98,
         combined_text,
@@ -125,6 +126,27 @@ def _right_value_labels(fig: Any, ax: Any, df: pd.DataFrame) -> None:
         zorder=10,
         clip_on=False,
     )
+
+
+def _place_right_value_labels(fig: Any, ax: Any, label: Any) -> None:
+    """최종 가격축 글자 영역 바깥에 범례를 배치한다."""
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    axis_texts = [*ax.get_yticklabels(), ax.yaxis.label, ax.yaxis.get_offset_text()]
+    right = max(
+        [ax.bbox.x1]
+        + [
+            text.get_window_extent(renderer).x1
+            for text in axis_texts
+            if text.get_visible() and text.get_text()
+        ]
+    )
+    # text 원점과 둥근 box 사이의 padding도 실제 extent에서 읽는다.
+    box_padding = (
+        label.get_window_extent(renderer).x0 - label.get_bbox_patch().get_window_extent(renderer).x0
+    )
+    x = right + renderer.points_to_pixels(8) + box_padding
+    label.set_x(ax.transAxes.inverted().transform((x, 0))[0])
 
 
 def _draw_support_resistance(
@@ -444,13 +466,14 @@ def render_technical_chart(
             return panels
 
         panels = _primary_axes_by_panel(fig)
+        value_labels = None
         if panels:
             ax_price = panels[0]
             if chosen_font:
                 ax_price.set_title(ticker, fontname=chosen_font, color="white")
             else:
                 ax_price.set_title(ticker, color="white")
-            _right_value_labels(fig, ax_price, df_plot)
+            value_labels = _right_value_labels(fig, ax_price, df_plot, ticker=ticker)
 
             # Draw support/resistance levels
             if price_levels:
@@ -486,6 +509,9 @@ def render_technical_chart(
             crsi_panel_i = 3 if has_macd else 2
             if len(panels) > crsi_panel_i:
                 _badge(panels[crsi_panel_i], "cRSI(dc=20,vib=10,lvl=10%)", xy=(0.01, 0.92))
+
+        if value_labels is not None:
+            _place_right_value_labels(fig, panels[0], value_labels)
 
         filename = f"{ticker.replace('/', '_')}_technical.png"
         path = os.path.join(out_dir, filename)

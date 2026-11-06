@@ -5,6 +5,8 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
+from src.tools.technical.chart_analysis.models import ChartAnalysis, FactSelection
+
 
 class DataStatus(StrEnum):
     COMPLETE = "complete"
@@ -117,6 +119,8 @@ class ScoreDimension(BaseModel):
 
 
 class TechnicalScorecard(BaseModel):
+    common_analyses: tuple[ChartAnalysis, ...] = Field(default=(), exclude=True)
+    fact_selections: tuple[FactSelection, ...] = Field(default=(), exclude=True)
     version: str
     ticker: str
     as_of: date

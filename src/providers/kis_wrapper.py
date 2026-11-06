@@ -1,9 +1,12 @@
 """KIS Provider wrapper for yfinance-compatible interface."""
 
+from datetime import date
+
 import pandas as pd
 
 from src.core.interfaces import BaseProvider
 from src.providers.kis import KISProvider
+from src.providers.price_history_range import RawHistory
 
 
 class KISProviderWrapper(BaseProvider):
@@ -16,6 +19,18 @@ class KISProviderWrapper(BaseProvider):
 
     def __init__(self, kis_provider: KISProvider):
         self.kis_provider = kis_provider
+
+    @property
+    def live_range_enabled(self) -> bool:
+        return self.kis_provider.live_range_enabled
+
+    @property
+    def range_evidence_status(self) -> str:
+        return self.kis_provider.range_evidence_status
+
+    async def get_price_history_range(self, ticker: str, *, start: date, end: date) -> RawHistory:
+        raw_ticker = ticker.split(".")[0]
+        return await self.kis_provider.get_price_history_range(raw_ticker, start=start, end=end)
 
     async def get_quote(self, ticker: str) -> dict:
         """Get current quote.

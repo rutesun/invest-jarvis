@@ -17,12 +17,21 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
-import numpy as np
 import pandas as pd
 
-from src.tools.technical.bottoming import _detect_higher_low, _detect_volume_dry
+from src.tools.technical.bottoming import (
+    _detect_higher_low,
+    _detect_volume_dry,
+    bottoming_measurements,
+)
+from src.tools.technical.chart_analysis.models import FactRef, FactSelection
 from src.tools.technical.components.patterns import _detect_vcp
 from src.tools.technical.components.velocity import SLOPE_THRESHOLD
+from src.tools.technical.context import (
+    common_evidence,
+    compatibility_rule_request,
+    matches_common_request,
+)
 
 
 # setup_score 밴드. 39종목×2.5년(US+KR) 재보정:
@@ -129,47 +138,39 @@ def decide_action_v2(
 def _velocity_state(df: pd.DataFrame) -> int:
     """velocity 상태(SMA20 기울기 방향 ±10). 가속·전환점 이벤트는 제외.
 
-    종가가 이미 SMA20 위면 하락 기울기는 지연 신호로 보고 벌점 보류(velocity.py와 동일 규율)."""
-    if "SMA_20" not in df.columns:
-        return 0
-    ser = df["SMA_20"].dropna()
-    if len(ser) < 15:
-        return 0
-    recent = ser.iloc[-15:].to_numpy(dtype=float)
-    slope = float(np.polyfit(np.arange(5), recent[-5:], 1)[0])
-    latest = recent[-1]
-    if latest == 0:
-        return 0
-    norm_slope = (slope / latest) * 100
-    if norm_slope > SLOPE_THRESHOLD:
+    종가가 이미 SMA20 위면 하락 기울기는 지연 신호로 보고 벌점 보류(velocity.py와 동일 규율).
+    """
+    from src.tools.technical.chart_analysis._legacy_components import (
+        raw_latest_close,
+        velocity_slope_values,
+    )
+
+    values = velocity_slope_values(df)
+    norm = values.get("norm_slope", 0)
+    if norm > SLOPE_THRESHOLD:
         return 10
-    if norm_slope < -SLOPE_THRESHOLD:
-        price_above = "Close" in df.columns and float(df["Close"].iloc[-1]) > latest
-        return 0 if price_above else -10
+    if norm < -SLOPE_THRESHOLD:
+        close = raw_latest_close(df)
+        return 0 if close is not None and close > values["last_valid_sma20"] else -10
     return 0
 
 
 def _crsi_state(df: pd.DataFrame) -> int:
     """cRSI 상태(과매도 +10 / 과매수 -10 / squeeze +5). Hook 이벤트는 제외."""
-    for col in ("cRSI", "cRSI_HighBand", "cRSI_LowBand"):
-        if col not in df.columns:
-            return 0
-    latest = df.iloc[-1]
-    crsi, high, low = latest.get("cRSI"), latest.get("cRSI_HighBand"), latest.get("cRSI_LowBand")
-    if pd.isna(crsi) or pd.isna(high) or pd.isna(low):
-        return 0
-    crsi, high, low = float(crsi), float(high), float(low)
-    score = 0
-    if (high - low) < 10:
-        score += 5
-    if crsi < low:
-        score += 10
-    elif crsi > high:
-        score -= 10
-    return score
+    from src.tools.technical.chart_analysis._legacy_structure import latest_values
+
+    values = latest_values(df, ("cRSI", "cRSI_HighBand", "cRSI_LowBand"))
+    value, high, low = (values.get(key) for key in ("cRSI", "cRSI_HighBand", "cRSI_LowBand"))
+    return (
+        0
+        if None in (value, high, low)
+        else (5 if high - low < 10 else 0) + (10 if value < low else -10 if value > high else 0)
+    )
 
 
-def setup_state_score(df: pd.DataFrame, components: dict[str, dict]) -> int:
+def setup_state_score(
+    df: pd.DataFrame, components: dict[str, dict], *, common_analysis=None
+) -> int:
     """상태(state)만 합산한 setup 점수. 일회성 이벤트는 제외해 변동성을 낮춘다.
 
     - velocity: 기울기 방향 ±10
@@ -178,9 +179,32 @@ def setup_state_score(df: pd.DataFrame, components: dict[str, dict]) -> int:
     - risk: 지지/저항 confluence(추세 벌점은 이미 제거됨 → risk.score = confluence)
     - volume·divergence: 상태 기여 없음(전부 이벤트)
     """
-    vcp = int(_detect_vcp(df).get("score", 0) or 0)
+    if common_analysis is None:
+        velocity, crsi = _velocity_state(df), _crsi_state(df)
+        vcp = int(_detect_vcp(df).get("score", 0) or 0)
+    else:
+        slope = common_evidence(df, common_analysis, "chart.velocity.legacy")
+        latest = common_evidence(df, common_analysis, "chart.legacy.state_windows")["latest"]
+        norm = slope.get("norm_slope", 0)
+        # A-prime uses the last Close, while the Legacy component drops NaN Close.
+        above = (
+            slope.get("last_close") is not None
+            and slope.get("last_valid_sma20") is not None
+            and slope["last_close"] > slope["last_valid_sma20"]
+        )
+        velocity = (
+            10 if norm > SLOPE_THRESHOLD else -10 if norm < -SLOPE_THRESHOLD and not above else 0
+        )
+        value, high, low = (latest.get(key) for key in ("cRSI", "cRSI_HighBand", "cRSI_LowBand"))
+        crsi = (
+            0
+            if None in (value, high, low)
+            else (5 if high - low < 10 else 0) + (10 if value < low else -10 if value > high else 0)
+        )
+        pattern = common_evidence(df, common_analysis, "chart.vcp.legacy")
+        vcp = 20 if pattern.get("strong") else 10 if pattern.get("in_vcp") else 0
     risk_confluence = int((components.get("risk") or {}).get("score", 0) or 0)
-    return _velocity_state(df) + _crsi_state(df) + vcp + risk_confluence
+    return velocity + crsi + vcp + risk_confluence
 
 
 def _regime(components: dict[str, dict], context) -> str:
@@ -205,44 +229,23 @@ def _near_52w_high(components: dict[str, dict]) -> bool:
 
 def _fresh_close_breakout(df: pd.DataFrame, lookback: int = 20) -> bool:
     """종가가 직전 lookback일 고점을 처음 상향 돌파(장중 wick 제외, 당일이 첫 돌파일)."""
-    if "Close" not in df.columns or "High" not in df.columns or len(df) < lookback + 2:
-        return False
-    close = df["Close"].to_numpy(dtype=float)
-    high = df["High"].to_numpy(dtype=float)
+    from src.tools.technical.chart_analysis._legacy_structure import nanmax_close_breakout_values
 
-    def broke(idx: int) -> bool:
-        prior = high[idx - lookback : idx]
-        return len(prior) > 0 and np.isfinite(np.nanmax(prior)) and close[idx] > np.nanmax(prior)
-
-    n = len(df)
-    return bool(broke(n - 1) and not broke(n - 2))
+    return nanmax_close_breakout_values(df, lookback=lookback)["fresh"]
 
 
 def _buy_flip_age(df: pd.DataFrame) -> tuple[bool, int | None]:
     """(현재 up인가, 매수전환 후 경과 거래일). 전환이 관측 안 되면 age=None."""
-    if "SuperTrend_Dir" not in df.columns:
-        return False, None
-    direction = df["SuperTrend_Dir"].to_numpy(dtype=float)
-    n = len(direction)
-    if n == 0 or direction[-1] != 1:
-        return False, None
-    count = 0
-    i = n - 1
-    while i >= 0 and direction[i] == 1:
-        count += 1
-        i -= 1
-    if i < 0:
-        # 관측 구간 내내 up — 신선한 전환으로 보지 않음
-        return True, None
-    return True, count - 1
+    from src.tools.technical.chart_analysis._legacy_structure import supertrend_age_values
+
+    values = supertrend_age_values(df)
+    return values["st_up"], values["buy_flip_age"]
 
 
 def _close_below_sma20_streak(df: pd.DataFrame, days: int) -> bool:
-    if "Close" not in df.columns or "SMA_20" not in df.columns or len(df) < days:
-        return False
-    close = df["Close"].to_numpy(dtype=float)[-days:]
-    sma20 = df["SMA_20"].to_numpy(dtype=float)[-days:]
-    return bool((close < sma20).all())
+    from src.tools.technical.chart_analysis._legacy_structure import below_streak_value
+
+    return below_streak_value(df, "SMA_20", days)
 
 
 def _volume_breakdown(context) -> bool:
@@ -256,15 +259,18 @@ def _established_weakness(df: pd.DataFrame, need: int = 8, lookback: int = 10) -
     """최근 lookback 거래일 중 need일 이상 종가가 SMA50 아래 = 확립된 약세.
 
     고점에서 막 무너진 첫 다리(ARM류)는 아직 SMA50 아래 일수가 적어 제외되고, 수주간 다진
-    진짜 바닥(BE류)만 통과한다 — dead-cat 가짜 바닥 방지."""
-    if "Close" not in df.columns or "SMA_50" not in df.columns or len(df) < lookback:
+    진짜 바닥(BE류)만 통과한다 — dead-cat 가짜 바닥 방지.
+    """
+    from src.tools.technical.chart_analysis._legacy_structure import below_count_value
+
+    if not {"Close", "SMA_50"} <= set(df) or len(df) < lookback:
         return False
-    close = df["Close"].to_numpy(dtype=float)[-lookback:]
-    sma50 = df["SMA_50"].to_numpy(dtype=float)[-lookback:]
-    return bool(np.count_nonzero(close < sma50) >= need)
+    return below_count_value(df, "SMA_50", lookback) >= need
 
 
-def _bottoming_watch(regime: str, df: pd.DataFrame, context, fresh_sell_flip: bool) -> bool:
+def _bottoming_watch(
+    regime: str, df: pd.DataFrame, context, fresh_sell_flip: bool, *, common_analysis=None
+) -> bool:
     """weak + 확립된 약세 + 저점높이기 + 거래량마름 + SMA200 위. hard 위험에만 무효화.
 
     느슨한 is_breakdown(SMA20 아래+10일수익률 음수)까지 끄면 진짜 바닥이 깜빡이므로 제외하되,
@@ -275,24 +281,47 @@ def _bottoming_watch(regime: str, df: pd.DataFrame, context, fresh_sell_flip: bo
         return False
     if _volume_breakdown(context) or fresh_sell_flip:
         return False
+    if common_analysis is not None:
+        values = common_evidence(df, common_analysis, "chart.legacy.state_windows")
+        if values["below_sma50_count"] < 8:
+            return False
+        higher_low, volume_dry = bottoming_measurements(values)
+        return higher_low and volume_dry
     if not _established_weakness(df):
         return False
     return _detect_higher_low(df) and _detect_volume_dry(df)
 
 
-def compute_shadow_v2(df: pd.DataFrame, components: dict[str, dict], context) -> ShadowScoreV2:
+def compute_shadow_v2(
+    df: pd.DataFrame, components: dict[str, dict], context, *, common_analysis=None
+) -> ShadowScoreV2:
     """단일 바 shadow 산출(히스테리시스 미적용, as-of 결정적)."""
-    setup = setup_state_score(df, components)
+    setup = setup_state_score(df, components, common_analysis=common_analysis)
     regime = _regime(components, context)
     stage2 = (components.get("minervini") or {}).get("metrics", {}).get("is_stage2") == 1.0
-    st_up, buy_flip_age = _buy_flip_age(df)
+    windows = (
+        common_evidence(df, common_analysis, "chart.legacy.state_windows")
+        if common_analysis is not None
+        else None
+    )
+    st_up, buy_flip_age = (
+        _buy_flip_age(df) if windows is None else (windows["st_up"], windows["buy_flip_age"])
+    )
     fresh_buy_flip = st_up and buy_flip_age is not None and buy_flip_age <= FRESH_FLIP_MAX_AGE
     fresh_sell_flip = bool(getattr(context, "supertrend_sell_transition", False))
-    bottoming_watch = _bottoming_watch(regime, df, context, fresh_sell_flip)
+    bottoming_watch = _bottoming_watch(
+        regime, df, context, fresh_sell_flip, common_analysis=common_analysis
+    )
     volume_breakdown = _volume_breakdown(context)
     overextended = bool(getattr(context, "is_overextended", False))
-    sma20_break_2d = _close_below_sma20_streak(df, 2)
-    fresh_breakout = _fresh_close_breakout(df)
+    sma20_break_2d = (
+        _close_below_sma20_streak(df, 2) if windows is None else windows["below_sma20_streak"]
+    )
+    fresh_breakout = (
+        _fresh_close_breakout(df)
+        if windows is None
+        else common_evidence(df, common_analysis, "chart.close_breakout.nanmax")["fresh"]
+    )
     near52 = _near_52w_high(components)
 
     action_v2, entry_v2 = decide_action_v2(
@@ -384,3 +413,51 @@ def apply_hysteresis(rows: list[ShadowScoreV2]) -> list[ShadowScoreV2]:
         prev_st = r.st_up
 
     return out
+
+
+# Raw setup measurements plus the existing component/context values actually read above.
+APRIME_RULE_IDS = (
+    "chart.velocity.legacy",
+    "chart.vcp.legacy",
+    "chart.legacy.state_windows",
+    "chart.context.breakdown",
+    "chart.close_breakout.nanmax",
+    "chart.stage2.minervini",
+    "legacy.confluence",
+)
+_APRIME_UNUSED_FAMILIES = {
+    "chart.crsi.legacy": "APRIME_CURRENT_CRSI_FROM_STATE_WINDOWS",
+    "chart.supertrend.legacy": "APRIME_SUPERTREND_FROM_STATE_WINDOWS",
+    "chart.legacy.patterns_extra": "APRIME_PATTERN_EVENTS_NOT_USED",
+    "chart.legacy.volume_extra": "APRIME_VOLUME_COMPONENT_NOT_USED",
+    "chart.pocket_pivot.down_candle": "APRIME_VOLUME_COMPONENT_NOT_USED",
+    "chart.power_gap": "APRIME_VOLUME_COMPONENT_NOT_USED",
+    "legacy.divergence": "APRIME_DIVERGENCE_NOT_USED",
+}
+
+
+def shadow_fact_selections(analysis, components):
+    """Audit A-prime's actual dependency map independently of whether a condition is true."""
+    selections = []
+    for item in analysis.items:
+        if item.rule_id not in APRIME_RULE_IDS and item.rule_id not in _APRIME_UNUSED_FAMILIES:
+            continue
+        if not matches_common_request(item, compatibility_rule_request(item.rule_id)):
+            selected, reason = False, "APRIME_FACT_VARIANT_NOT_SELECTED"
+        elif item.rule_id in _APRIME_UNUSED_FAMILIES:
+            selected, reason = False, _APRIME_UNUSED_FAMILIES[item.rule_id]
+        elif item.state == "UNAVAILABLE":
+            selected = False
+            reason = "APRIME_FACT_" + next(iter(item.evidence.get("reasons", ())), "UNAVAILABLE")
+        elif item.rule_id == "chart.stage2.minervini" and not (
+            components.get("minervini") or {}
+        ).get("metrics"):
+            selected, reason = False, "APRIME_MINERVINI_COMPONENT_UNAVAILABLE"
+        elif item.rule_id == "legacy.confluence" and not (components.get("risk") or {}).get(
+            "metrics"
+        ):
+            selected, reason = False, "APRIME_RISK_COMPONENT_UNAVAILABLE"
+        else:
+            selected, reason = True, "APRIME_CONSUMED"
+        selections.append(FactSelection(FactRef(analysis.analysis_id, item.id), selected, reason))
+    return tuple(selections)

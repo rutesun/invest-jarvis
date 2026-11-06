@@ -1,10 +1,12 @@
 import pandas as pd
 
+from src.tools.technical.context import common_evidence
 from src.tools.technical.models import ComponentResult, ComponentSignal
 
 
-def analyze_risk(df: pd.DataFrame) -> ComponentResult:
+def analyze_risk(df: pd.DataFrame, *, common_analysis=None) -> ComponentResult:
     """Analyze risk levels using support/resistance confluence."""
+    facts = common_evidence(df, common_analysis, "legacy.confluence")
     if df.empty or len(df) < 20:
         return ComponentResult(
             signals=[],
@@ -30,80 +32,15 @@ def analyze_risk(df: pd.DataFrame) -> ComponentResult:
     score = 0
     metadata = []
 
-    # Collect support/resistance levels
-    support_levels = []
-    resistance_levels = []
-
-    # 1. Dynamic MA support/resistance
-    for ma_col in ["SMA_20", "SMA_50", "SMA_150", "SMA_200"]:
-        if ma_col in df.columns:
-            ma_val = latest.get(ma_col)
-            if not pd.isna(ma_val):
-                ma_val = float(ma_val)
-                if ma_val < close:
-                    support_levels.append({"level": ma_val, "type": ma_col})
-                else:
-                    resistance_levels.append({"level": ma_val, "type": ma_col})
-
-    # 2. Swing High/Low (static levels)
-    if "Swing_High" in df.columns:
-        swing_highs = df["Swing_High"].dropna().tail(5)
-        for val in swing_highs:
-            val = float(val)
-            if val > close:
-                resistance_levels.append({"level": val, "type": "Swing High"})
-
-    if "Swing_Low" in df.columns:
-        swing_lows = df["Swing_Low"].dropna().tail(5)
-        for val in swing_lows:
-            val = float(val)
-            if val < close:
-                support_levels.append({"level": val, "type": "Swing Low"})
-
-    # 3. Pivot points
-    if "Pivot" in df.columns and not pd.isna(latest.get("Pivot")):
-        pivot = float(latest["Pivot"])
-        if pivot < close:
-            support_levels.append({"level": pivot, "type": "Pivot"})
-        else:
-            resistance_levels.append({"level": pivot, "type": "Pivot"})
-
-    if "S1" in df.columns and not pd.isna(latest.get("S1")):
-        s1 = float(latest["S1"])
-        if s1 < close:
-            support_levels.append({"level": s1, "type": "S1"})
-
-    if "R1" in df.columns and not pd.isna(latest.get("R1")):
-        r1 = float(latest["R1"])
-        if r1 > close:
-            resistance_levels.append({"level": r1, "type": "R1"})
-
-    # 4. Gap levels (unfilled gaps)
-    if "Is_Gap_Up" in df.columns and "Gap_Up_Lower" in df.columns:
-        gap_up_rows = df[df["Is_Gap_Up"]].tail(3)
-        for _idx, row in gap_up_rows.iterrows():
-            gap_lower = row.get("Gap_Up_Lower")
-            if not pd.isna(gap_lower):
-                gap_lower = float(gap_lower)
-                if gap_lower < close:
-                    support_levels.append({"level": gap_lower, "type": "Gap Up (unfilled)"})
-
-    if "Is_Gap_Down" in df.columns and "Gap_Down_Upper" in df.columns:
-        gap_down_rows = df[df["Is_Gap_Down"]].tail(3)
-        for _idx, row in gap_down_rows.iterrows():
-            gap_upper = row.get("Gap_Down_Upper")
-            if not pd.isna(gap_upper):
-                gap_upper = float(gap_upper)
-                if gap_upper > close:
-                    resistance_levels.append({"level": gap_upper, "type": "Gap Down (unfilled)"})
+    support_levels = facts["support_levels"]
+    resistance_levels = facts["resistance_levels"]
 
     metrics["support_levels_count"] = len(support_levels)
     metrics["resistance_levels_count"] = len(resistance_levels)
 
     # Calculate confluence (levels within 2% of current price)
-    price_range = close * 0.02
-    support_confluence = [s for s in support_levels if abs(s["level"] - close) <= price_range]
-    resistance_confluence = [r for r in resistance_levels if abs(r["level"] - close) <= price_range]
+    support_confluence = facts["support_confluence"]
+    resistance_confluence = facts["resistance_confluence"]
 
     metrics["support_confluence"] = len(support_confluence)
     metrics["resistance_confluence"] = len(resistance_confluence)

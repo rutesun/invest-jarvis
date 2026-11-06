@@ -1,9 +1,23 @@
 # 아키텍처
 
+## 공통 차트 사실과 Quality의 책임
+
+원시 시세를 받은 Tools가 버전이 명시된 입력·지표·Event/Observation/Risk를 계산합니다. Strategies는 공통 사실을 선택·조합하고 매수·청산·상태 전이를 소유합니다. Quality는 같은 공통 계층의 strict 특성을 소비하는 독립 상태 요약이며 기존 전략의 입력·판정을 교체하지 않습니다.
+
+Pipelines는 요청 한 번의 불변 분석 묶음과 FactRef를 전달합니다. 동일 표시 사실은 화면에서만 합치고 모든 참조와 선택 이유를 보존합니다. 공통 renderer가 `check`·`analyze`·`brief`에 사실 → Quality를 한 번 출력하며 detail 선택 시 FactRef와 전략 선택 audit를 추가합니다. LLM 입력에는 계산된 설명 자료만 넣고 기존 deterministic action(규칙이 확정한 행동)을 유지합니다.
+
+날짜 계산은 API가 반환한 마지막 관측 세션 T를 기준으로 2년 전 날짜부터의 입력을 준비합니다. 외부 거래일 달력과 대조하거나 응답에 없는 날짜의 행을 생성하지 않습니다. 반환된 OHLCV·finality·최소 봉 수를 검사하며 API 자체의 행 누락은 휴장과 구분하지 않습니다. 기간의 날짜별 계산은 같은 T의 단일 조회와 같은 입력을 사용합니다. 요청 날짜에 봉이 없으면 직전 관측 봉을 사용하고 요청 날짜는 표시 metadata로 보존합니다. 기본·history·기간 조회도 실제 응답 세션을 선택합니다.
+
+기존 분석에서는 이미 받은 raw·실제 공급 기간·봉 finality로 별도 strict 계산을 수행합니다. canonical 원점이 부족하면 세 통합 명령의 AnalysisStrategyService에서 기존 provider의 3y 입력을 최대 한 번 보충합니다. 보충 raw는 Quality 전용이며 원래 전략 raw를 교체하지 않습니다. 날짜·timezone을 정규화하고 평가일까지 자르며 겹치는 유효 OHLCV의 불일치를 거부합니다. 관측 첫날을 상장일로 추정하지 않습니다. 이 경로의 Quality 오류는 신규 표시 metadata로만 전달하며 기존 verdict·warning·직렬화·recorder payload를 변경하지 않습니다. 신규 raw/provider metadata는 기존 serializer에서 제외합니다. supplied-chart의 과거 FINAL 추론은 live range API 검증과 구분합니다.
+
+PositionPlanner는 동일 보유·계좌 입력에서 전략별 독립 수량을 계산합니다. pipeline 결과의 `position_plans`는 strategy_id로 식별하며 단일 `position_plan`은 기존 소비자 호환용입니다. 화면은 keyed plans를 사용하고 수량을 합산하거나 대표 전략을 선택하지 않습니다. verdict 기반 계획 모두에 기존 실행 확인 safeguard를 적용합니다.
+
+독립 날짜/범위 조회의 live transport는 `STUB_ONLY`입니다. offline raw·주입 provider 검증과 기존 normalized 시장 입력 parity는 fresh raw transport 계약 검증을 대신하지 않습니다. 결과 저장소·영속 cache·backfill을 추가하지 않았고 기존 별도 운영 진단 기록은 그대로 유지합니다.
+
 ## 레이어 구조
 
 ```
-Providers → Tools → Pipelines → CLI
+Providers → Tools → Strategies → Pipelines → CLI
 ```
 
 ### Providers (데이터 수집)

@@ -4,6 +4,7 @@ import os
 from datetime import datetime, timedelta
 
 import pandas as pd
+import pytest
 
 from src.tools.technical.charting import ChartResult, render_technical_chart
 from src.tools.technical.models import ChartPatternResult, IndicatorSnapshot, PriceLevel
@@ -159,3 +160,66 @@ def test_render_technical_chart_empty_df():
 
     assert result.success is False
     assert "Empty dataframe" in result.error or "empty" in result.error.lower()
+
+
+@pytest.mark.parametrize(("ticker", "scale"), [("161890.KS", 1000), ("ALAB", 1)])
+def test_ma_legend_leaves_actual_price_axis_labels_readable(ticker, scale, tmp_path, monkeypatch):
+    """실제 글자 영역의 겹침을 검사하며 특정 픽셀 위치를 계약으로 고정하지 않는다."""
+    from matplotlib.figure import Figure
+    from PIL import Image
+
+    closes = [(80 + i) * scale for i in range(90)]
+    df = pd.DataFrame(
+        {
+            "Open": [value * 0.99 for value in closes],
+            "High": [value * 1.02 for value in closes],
+            "Low": [value * 0.98 for value in closes],
+            "Close": closes,
+            "Volume": [1000000] * 90,
+            **{
+                f"SMA_{period}": [value * ratio for value in closes]
+                for period, ratio in (
+                    (10, 0.99),
+                    (20, 0.97),
+                    (50, 0.95),
+                    (120, 0.92),
+                    (150, 0.90),
+                    (200, 0.85),
+                )
+            },
+        },
+        index=pd.bdate_range("2026-06-01", periods=90),
+    )
+    before = df.copy(deep=True)
+    geometry = {}
+    original_savefig = Figure.savefig
+
+    def capture(fig, *args, **kwargs):
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+        legend = next(
+            text for ax in fig.axes for text in ax.texts if text.get_text().startswith("MA10:")
+        )
+        axis = legend.axes
+        ticks = [text for text in axis.get_yticklabels() if text.get_visible() and text.get_text()]
+        geometry["legend"] = legend.get_bbox_patch().get_window_extent(renderer)
+        geometry["ticks"] = [text.get_window_extent(renderer) for text in ticks]
+        geometry["tick_texts"] = [text.get_text() for text in ticks]
+        geometry["title"] = axis.title.get_window_extent(renderer)
+        geometry["ylabel"] = axis.yaxis.label.get_window_extent(renderer)
+        return original_savefig(fig, *args, **kwargs)
+
+    monkeypatch.setattr(Figure, "savefig", capture)
+    result = render_technical_chart(ticker=ticker, df=df, indicators={}, out_dir=str(tmp_path))
+    assert result.success, result.error
+    assert geometry["ticks"]
+    if scale == 1000:
+        assert any(
+            len(text.replace("−", "").replace(".", "")) >= 6 for text in geometry["tick_texts"]
+        )
+    assert not any(geometry["legend"].overlaps(box) for box in geometry["ticks"])
+    assert not geometry["legend"].overlaps(geometry["ylabel"])
+    assert not geometry["legend"].overlaps(geometry["title"])
+    pd.testing.assert_frame_equal(df, before)
+    with Image.open(result.path) as image:
+        image.verify()

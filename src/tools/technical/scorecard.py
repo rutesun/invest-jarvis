@@ -4,11 +4,19 @@ from datetime import date
 
 import pandas as pd
 
+from src.tools.technical.chart_analysis.models import FactRef, FactSelection
 from src.tools.technical.components.patterns import PatternThresholds
 from src.tools.technical.components.velocity import ACCEL_THRESHOLD, SLOPE_THRESHOLD
+from src.tools.technical.context import (
+    common_evidence,
+    validate_common_requests,
+    validate_common_scope,
+)
+from src.tools.technical.context import compatibility_rule_request as rule_request
 from src.tools.technical.models import TechnicalResult
 from src.tools.technical.scorecard_models import (
     Acceleration,
+    AnalysisTriggerEvent,
     DataStatus,
     Direction,
     DirectionalMetric,
@@ -19,6 +27,7 @@ from src.tools.technical.scorecard_models import (
     ScoreDimension,
     TechnicalScorecard,
 )
+from src.tools.technical.trigger_registry import TRIGGER_RULES
 from src.tools.technical.triggers import detect_analysis_triggers
 
 
@@ -39,19 +48,22 @@ def _latest(df: pd.DataFrame, column: str, offset: int = 0) -> float | None:
 
 
 def _metric(
-    df: pd.DataFrame, column: str, code: str, bars: int, *, percent: bool = False
+    df: pd.DataFrame,
+    column: str,
+    code: str,
+    bars: int,
+    *,
+    percent: bool = False,
+    common_values=None,
 ) -> DirectionalMetric:
-    value = _latest(df, column)
-    previous = _latest(df, column, 1)
-    past = _latest(df, column, bars)
-    preceding = _latest(df, column, bars + 1)
-    delta = value - previous if value is not None and previous is not None else None
-    slope = None
-    prior_slope = None
-    if value is not None and past is not None and (not percent or past != 0):
-        slope = (value - past) / past * 100 if percent else value - past
-    if previous is not None and preceding is not None and (not percent or preceding != 0):
-        prior_slope = (previous - preceding) / preceding * 100 if percent else previous - preceding
+    if common_values is None:
+        from src.tools.technical.chart_analysis._legacy_structure import directional_window_values
+
+        common_values = {column: directional_window_values(df, column, bars, percent=percent)}
+    values = common_values[column]
+    value, delta, slope, prior_slope = (
+        values[key] for key in ("value", "delta", "slope", "prior_slope")
+    )
     # DIRECTION_V1: exact zero is flat; a direction transition has unknown acceleration.
     direction = (
         Direction.UNKNOWN
@@ -197,9 +209,11 @@ def _missing(df: pd.DataFrame, columns: list[str]) -> list[str]:
     return [column for column in columns if _latest(df, column) is None]
 
 
-def _trend(df: pd.DataFrame, legacy: TechnicalResult) -> ScoreDimension:
+def _trend(df: pd.DataFrame, legacy: TechnicalResult, *, common_values=None) -> ScoreDimension:
     metrics: dict = {
-        f"sma{length}": _metric(df, f"SMA_{length}", f"sma{length}", 21, percent=True)
+        f"sma{length}": _metric(
+            df, f"SMA_{length}", f"sma{length}", 21, percent=True, common_values=common_values
+        )
         for length in (20, 50, 100, 150, 200)
     }
     metrics["supertrend_direction"] = _latest(df, "SuperTrend_Dir")
@@ -301,14 +315,14 @@ def _structure(df: pd.DataFrame, legacy: TechnicalResult) -> ScoreDimension:
     return _dimension("structure", (0, 20), [contribution], metrics, [])
 
 
-def _momentum(df: pd.DataFrame, legacy: TechnicalResult) -> ScoreDimension:
-    metrics: dict = {"crsi": _metric(df, "cRSI", "crsi", 5)}
+def _momentum(df: pd.DataFrame, legacy: TechnicalResult, *, common_values=None) -> ScoreDimension:
+    metrics: dict = {"crsi": _metric(df, "cRSI", "crsi", 5, common_values=common_values)}
     for column, code in (
         ("MACD", "macd"),
         ("MACD_Signal", "macd_signal"),
         ("MACD_Hist", "macd_histogram"),
     ):
-        metrics[code] = _metric(df, column, code, 5)
+        metrics[code] = _metric(df, column, code, 5, common_values=common_values)
     metrics["rsi"] = _latest(df, "RSI")
     observations = []
     macd = _latest(df, "MACD")
@@ -395,11 +409,15 @@ def _momentum(df: pd.DataFrame, legacy: TechnicalResult) -> ScoreDimension:
     return _dimension("momentum", (-30, 35), contributions, metrics, observations)
 
 
-def _demand(df: pd.DataFrame) -> ScoreDimension:
+def _demand(df: pd.DataFrame, *, common_values=None) -> ScoreDimension:
     metrics: dict = {
-        "volume": _metric(df, "Volume", "volume", 5, percent=True),
-        "vol_sma20": _metric(df, "Vol_SMA_20", "vol_sma20", 5, percent=True),
-        "vol_sma50": _metric(df, "Vol_SMA_50", "vol_sma50", 5, percent=True),
+        "volume": _metric(df, "Volume", "volume", 5, percent=True, common_values=common_values),
+        "vol_sma20": _metric(
+            df, "Vol_SMA_20", "vol_sma20", 5, percent=True, common_values=common_values
+        ),
+        "vol_sma50": _metric(
+            df, "Vol_SMA_50", "vol_sma50", 5, percent=True, common_values=common_values
+        ),
     }
     volume = _latest(df, "Volume")
     average = _latest(df, "Vol_SMA_20")
@@ -454,21 +472,104 @@ def _safety(df: pd.DataFrame, legacy: TechnicalResult) -> ScoreDimension:
 
 
 def build_scorecard(
-    df: pd.DataFrame, legacy: TechnicalResult, *, ticker: str, as_of: date, version: str = _VERSION
+    df: pd.DataFrame,
+    legacy: TechnicalResult,
+    *,
+    ticker: str,
+    as_of: date,
+    version: str = _VERSION,
+    common_analysis=None,
 ) -> TechnicalScorecard:
     """Build parallel five-axis state scores; legacy totals and verdict stay authoritative."""
     if version != _VERSION:
         raise ValueError(f"Unsupported scorecard version: {version}")
-    return TechnicalScorecard(
+    common_values = None
+    if common_analysis is not None:
+        validate_common_scope(df, common_analysis, ticker=ticker or None, as_of=as_of)
+        validate_common_requests(
+            common_analysis,
+            (
+                rule_request("chart.legacy.state_windows"),
+                *(
+                    rule_request(rule.code, {"frame_policy": "SUPPLIED_AS_IS"})
+                    for rule in TRIGGER_RULES
+                ),
+            ),
+        )
+        common_values = common_evidence(df, common_analysis, "chart.legacy.state_windows")[
+            "directional"
+        ]
+    result = TechnicalScorecard(
         version=version,
         ticker=ticker,
         as_of=as_of,
-        trend=_trend(df, legacy),
+        trend=_trend(df, legacy, common_values=common_values),
         structure=_structure(df, legacy),
-        momentum=_momentum(df, legacy),
-        demand=_demand(df),
+        momentum=_momentum(df, legacy, common_values=common_values),
+        demand=_demand(df, common_values=common_values),
         safety=_safety(df, legacy),
-        triggers=detect_analysis_triggers(df, as_of=as_of),
+        triggers=detect_analysis_triggers(df, as_of=as_of)
+        if common_analysis is None
+        else _triggers_from_common(common_analysis),
         legacy_raw_total=legacy.component_raw_total,
         legacy_adjusted_score=legacy.adjusted_score,
     )
+
+    if common_analysis is not None:
+        result.common_analyses = (common_analysis,)
+        trigger_codes = {rule.code for rule in TRIGGER_RULES}
+        result.fact_selections = tuple(
+            _scorecard_selection(common_analysis, item)
+            for item in common_analysis.items
+            if item.rule_id == "chart.legacy.state_windows" or item.rule_id in trigger_codes
+        )
+    return result
+
+
+def _triggers_from_common(analysis):
+    """Restore legacy display enums, wording and ordering from common events."""
+    definitions = {rule.code: rule for rule in TRIGGER_RULES}
+    events = []
+    for item in analysis.items:
+        if item.rule_id not in definitions or item.state == "UNAVAILABLE":
+            continue
+        expected = rule_request(item.rule_id, {"frame_policy": "SUPPLIED_AS_IS"})
+        if item.rule_version != expected.rule_version or item.parameter_id != expected.parameter_id:
+            continue
+        values = item.evidence
+        rule = definitions[item.rule_id]
+        events.append(
+            AnalysisTriggerEvent(
+                **{
+                    key: values[key]
+                    for key in AnalysisTriggerEvent.model_fields
+                    if key not in ("direction", "evidence")
+                },
+                direction=Direction.RISING if rule.sense == "up" else Direction.FALLING,
+                evidence=[
+                    Evidence(
+                        code=rule.code,
+                        message=rule.occurrence_predicate,
+                        observed_value=values["observed_value"],
+                        reference_value=values["reference_value"],
+                        importance=Importance.MEDIUM,
+                        source=rule.source,
+                    )
+                ],
+            )
+        )
+    return sorted(events, key=lambda event: (event.occurred_on, event.code), reverse=True)
+
+
+def _scorecard_selection(analysis, item):
+    if item.rule_id == "chart.legacy.state_windows":
+        selected, reason = item.state != "UNAVAILABLE", "SCORECARD_DIRECTION"
+    else:
+        expected = rule_request(item.rule_id, {"frame_policy": "SUPPLIED_AS_IS"})
+        matches = (
+            item.rule_version == expected.rule_version
+            and item.parameter_id == expected.parameter_id
+        )
+        selected = matches and item.state != "UNAVAILABLE"
+        reason = "SCORECARD_TRIGGER" if matches else "SCORECARD_TRIGGER_VARIANT_NOT_SELECTED"
+    return FactSelection(FactRef(analysis.analysis_id, item.id), selected, reason)

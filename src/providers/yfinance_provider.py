@@ -1,11 +1,18 @@
 import asyncio
 import logging
+from collections.abc import Callable
+from datetime import date, timedelta
 from functools import partial
 
 import pandas as pd
 import yfinance as yf
 
 from src.core.interfaces import BaseProvider
+from src.providers.price_history_range import (
+    RangeHistoryUnavailableError,
+    RawHistory,
+    unknown_history,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -13,6 +20,45 @@ logger = logging.getLogger(__name__)
 
 class YFinanceProvider(BaseProvider):
     """YFinance data provider for US stocks."""
+
+    live_range_enabled = False
+    range_evidence_status = "STUB_ONLY"
+
+    def __init__(self, *, range_history_fetcher: Callable[..., pd.DataFrame] | None = None):
+        self._range_history_fetcher = range_history_fetcher
+
+    async def get_price_history_range(self, ticker: str, *, start: date, end: date) -> RawHistory:
+        """Inclusive daily range using an explicit offline transport only.
+
+        No default live fallback until captured raw range evidence is available.
+        The injected callable follows ``Ticker.history`` keyword semantics.
+        """
+        if self._range_history_fetcher is None:
+            raise RangeHistoryUnavailableError(
+                "captured yfinance raw range evidence is unavailable"
+            )
+        if start > end:
+            raise ValueError("range start must not follow end")
+        loop = asyncio.get_event_loop()
+        frame = await loop.run_in_executor(
+            None,
+            partial(
+                self._range_history_fetcher,
+                ticker,
+                start=start,
+                end=end + timedelta(days=1),
+                interval="1d",
+                auto_adjust=True,
+            ),
+        )
+        return unknown_history(
+            frame,
+            provider="yfinance",
+            adjustment_policy="YFINANCE_AUTO_ADJUST_TRUE_1D",
+            start=start,
+            end=end,
+            reached_start=True,
+        )
 
     async def get_quote(self, ticker: str) -> dict:
         """Get current quote for ticker."""

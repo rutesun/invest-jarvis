@@ -44,6 +44,8 @@ def build_entry_source_anchors(
     observation_history: Sequence[StrategyObservationEpisode],
 ) -> EntrySourceAnchors:
     """Freeze only observed source-prefix values without changing signal evidence."""
+    if source.occurred_on > bundle.as_of:
+        raise ValueError("Future source anchor is unavailable at as_of")
     frame = features.frame.loc[: pd.Timestamp(source.occurred_on)]
     breakout_column = _BREAKOUT_COLUMNS.get(source.code)
     origin_support = pullback_low = None

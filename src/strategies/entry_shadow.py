@@ -97,6 +97,9 @@ def evaluate_entry_shadow(
     bundle: ChartBundle,
     *,
     params: EntryShadowParameters | None = None,
+    common_analysis=None,
+    common_context=None,
+    common_anchors=(),
 ) -> EntryShadowResult:
     """Replay source-bounded chart bars without inspecting eligibility or future outcomes."""
     parameters = params or EntryShadowParameters()
@@ -147,6 +150,14 @@ def evaluate_entry_shadow(
         if not _positive(value):
             return result(f"MISSING_{name}")
 
+    from src.strategies.shadow_common import shadow_analysis, shadow_rows
+    from src.tools.technical.chart_analysis.models import FactRef, FactSelection
+
+    if common_analysis is None:
+        common_analysis = shadow_analysis(
+            bundle, anchors, parameters, context=common_context, extra_anchors=common_anchors
+        )
+    facts, used_items = shadow_rows(common_analysis, bundle, anchors, parameters)
     rules = {rule: _Episode() for rule in (("B1", "B4") if breakout else ("P1", "P2", "P3"))}
     low_episode = _Episode()
     confirmed = anchors.anchor_finality is SignalFinality.FINAL
@@ -155,6 +166,7 @@ def evaluate_entry_shadow(
         if breakout
         else None
     )
+    flag_dates: dict[str, tuple[date, date | None]] = {}
     for age, bar in enumerate(source_bars):
         confirmed = confirmed and bar.finality is BarFinality.FINAL
         if not confirmed:
@@ -162,14 +174,14 @@ def evaluate_entry_shadow(
         if age > 0:
             close = bar.close
             if breakout:
-                breach = close < anchors.breakout_level
+                breach = facts["breakout"][bar.session_date]["below"]
                 rules["B1"].step(bar.session_date, breach)
                 early = rules["B4"]
                 early.step(bar.session_date, breach, can_start=age <= parameters.initial_bars)
                 if (
                     early.started_on is not None
                     and age <= parameters.initial_bars
-                    and close <= adverse_level
+                    and facts["adverse"][bar.session_date]["at_or_below"]
                     and early.candidate_on is None
                 ):
                     early.candidate_on = bar.session_date
@@ -180,16 +192,14 @@ def evaluate_entry_shadow(
                 if early.candidate_on is not None:
                     early.status = "FAILURE_CANDIDATE"
             else:
-                support_breach = close < anchors.origin_support
-                low_breach = close < anchors.pullback_low
+                support_breach = facts["origin"][bar.session_date]["below"]
+                low_breach = facts["pullback"][bar.session_date]["below"]
                 rules["P1"].step(bar.session_date, support_breach)
                 rules["P2"].step(bar.session_date, support_breach)
                 if rules["P2"].started_on is not None and low_breach:
                     rules["P2"].status = "FAILURE_CANDIDATE"
                 repeated = rules["P3"]
-                repeated.step(
-                    bar.session_date, close < max(anchors.origin_support, anchors.pullback_low)
-                )
+                repeated.step(bar.session_date, facts["combined"][bar.session_date]["below"])
                 repeated.low_closes = repeated.low_closes + 1 if low_breach else 0
                 if repeated.low_closes >= parameters.low_failure_closes:
                     repeated.status = "FAILURE_CANDIDATE"
@@ -198,6 +208,38 @@ def evaluate_entry_shadow(
             for episode in rules.values():
                 episode.confirmed_status = episode.status
                 episode.confirmed_as_of = bar.session_date
+
+        # Track the current output predicates, rather than borrowing a broader
+        # structure episode's start for a later deterioration or recovery.
+        observed_finality = SignalFinality.FINAL if confirmed else SignalFinality.PROVISIONAL
+        active_flags: dict[str, SignalFinality] = {}
+        structures = (
+            ((rules["B1"], "BREAKOUT_LEVEL"),)
+            if breakout
+            else ((rules["P1"], "ORIGIN_SUPPORT"), (low_episode, "PULLBACK_LOW"))
+        )
+        for episode, prefix in structures:
+            if episode.started_on is not None:
+                active_flags[f"{prefix}_BREACH"] = observed_finality
+            elif episode.status == "RECLAIMED":
+                active_flags[f"{prefix}_RECLAIMED"] = observed_finality
+        if breakout:
+            if age > 0 and facts["adverse"][bar.session_date]["at_or_below"]:
+                active_flags["LARGE_ADVERSE_MOVE"] = observed_finality
+            if rules["B4"].status == "FAILURE_CANDIDATE":
+                active_flags["EARLY_FAILED_BREAKOUT_CANDIDATE"] = (
+                    rules["B4"].candidate_finality or observed_finality
+                )
+        elif any(rules[rule].status == "FAILURE_CANDIDATE" for rule in ("P2", "P3")):
+            active_flags["SEVERE_PULLBACK_DETERIORATION"] = observed_finality
+        flag_dates = {
+            code: (
+                flag_dates.get(code, (bar.session_date, None))[0],
+                flag_dates.get(code, (bar.session_date, None))[1]
+                or (bar.session_date if flag_finality is SignalFinality.FINAL else None),
+            )
+            for code, flag_finality in active_flags.items()
+        }
 
     flags = []
 
@@ -215,6 +257,8 @@ def evaluate_entry_shadow(
                 code=code,
                 message=message,
                 finality=flag_finality or finality,
+                occurred_on=flag_dates.get(code, (None, None))[0],
+                confirmed_on=flag_dates.get(code, (None, None))[1],
                 evidence=[
                     Evidence(
                         code=code,
@@ -237,7 +281,7 @@ def evaluate_entry_shadow(
     high_risk = False
     if breakout:
         structure_flags(rules["B1"], "BREAKOUT_LEVEL", "돌파 기준선", anchors.breakout_level)
-        if len(source_bars) > 1 and bars[-1].close <= adverse_level:
+        if len(source_bars) > 1 and facts["adverse"][bars[-1].session_date]["at_or_below"]:
             high_risk = True
             flag("LARGE_ADVERSE_MOVE", "Signal 당시 ATR 대비 큰 하락", adverse_level, high=True)
         if rules["B4"].status == "FAILURE_CANDIDATE":
@@ -276,6 +320,13 @@ def evaluate_entry_shadow(
     states = {rule: episode.snapshot(finality) for rule, episode in rules.items()}
     return result(
         "EVALUATED",
+        common_analyses=(common_analysis,),
+        fact_selections=tuple(
+            FactSelection(
+                FactRef(common_analysis.analysis_id, item.id), True, "ENTRY_SHADOW_FACT_CONSUMED"
+            )
+            for item in used_items
+        ),
         risk_level=risk,
         risk_flags=flags,
         breakout_states=states if breakout else {},

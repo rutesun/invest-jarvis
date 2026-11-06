@@ -1,0 +1,650 @@
+{
+  "schema_version": "CHART_BASELINE_V1",
+  "baseline_commit": "ad880af12c1076eb6c798d1ce8b48d0378dd33db",
+  "captured_on": "2026-10-28",
+  "environment": {
+    "python": "3.13.14",
+    "packages": {
+      "pandas": "3.0.2",
+      "pandas-ta": "0.4.71b0",
+      "numpy": "2.2.6",
+      "scipy": "1.17.1",
+      "pydantic": "2.13.2"
+    },
+    "talib_installed": false,
+    "backend": "pandas-ta / native pandas-numpy; TA-Lib unavailable",
+    "uv_lock_sha256": "320c68d968916565f5ce5b369a105f5e19908c79b0909340bcf772e2b3b22739",
+    "consumer_process_hash_seed": 0,
+    "hash_seed_scope": [
+      "G2_panw_breakout",
+      "G2_panw_overheat",
+      "G2_be_bottoming",
+      "G2_nvda_trend",
+      "G2_lulu_downtrend",
+      "G2_arm_collapse",
+      "G2_samsung_short",
+      "G4_service"
+    ]
+  },
+  "inputs": {
+    "seed": {
+      "path": "tests/fixtures/chart_analysis/seed_path.csv",
+      "sha256": "851ead38d2e1b308e8cf827aec71362d2640a7dc55c4fec9170ec4d2dd0b5164",
+      "rows": 270,
+      "columns": [
+        "Open",
+        "High",
+        "Low",
+        "Close",
+        "Volume"
+      ],
+      "actual_start": "2024-01-02",
+      "actual_end": "2025-01-13",
+      "query_range": {
+        "requested_start": null,
+        "requested_end": null,
+        "note": "Original provider request bounds are not independently preserved; tests use the exact local CSV range and explicit cutoff in the case registry."
+      },
+      "adjustment_policy": "synthetic_no_corporate_actions",
+      "provenance": {
+        "kind": "synthetic",
+        "source": "deterministic arithmetic path",
+        "capture_verified_this_task": false,
+        "evidence": "seed close=100+i*0.15+triangle36(i)*0.4; 270 business-day sessions; synthetic calendar"
+      }
+    },
+    "v2": {
+      "path": "tests/fixtures/swing_w150/v2_signal_path.csv",
+      "sha256": "6afad27896a063138c4ed4f4ca56679a4e3c90e561ba307878e4ceee86a936c4",
+      "rows": 253,
+      "columns": [
+        "Open",
+        "High",
+        "Low",
+        "Close",
+        "Volume"
+      ],
+      "actual_start": "2024-01-02",
+      "actual_end": "2024-12-19",
+      "query_range": {
+        "requested_start": null,
+        "requested_end": null,
+        "note": "Original provider request bounds are not independently preserved; tests use the exact local CSV range and explicit cutoff in the case registry."
+      },
+      "adjustment_policy": "synthetic_no_corporate_actions",
+      "provenance": {
+        "kind": "synthetic",
+        "source": "existing repository CSV; no provider called in this task",
+        "capture_verified_this_task": false,
+        "evidence": "tests/strategies/swing_w150/test_signals.py"
+      }
+    },
+    "panw_long": {
+      "path": "tests/fixtures/technical/scoring/panw_2024-01-01_2026-05-20.csv",
+      "sha256": "e89e03889033b9aaaadef322a6ec7eb4cb18878a4f6bbab45af858e84189898c",
+      "rows": 598,
+      "columns": [
+        "Open",
+        "High",
+        "Low",
+        "Close",
+        "Volume"
+      ],
+      "actual_start": "2024-01-02",
+      "actual_end": "2026-05-20",
+      "query_range": {
+        "requested_start": null,
+        "requested_end": null,
+        "note": "Original provider request bounds are not independently preserved; tests use the exact local CSV range and explicit cutoff in the case registry."
+      },
+      "adjustment_policy": "unknown_from_local_fixture",
+      "provenance": {
+        "kind": "existing_market_fixture",
+        "source": "existing repository CSV; no provider called in this task",
+        "capture_verified_this_task": false,
+        "evidence": "docs/changes/technical-scoring-redesign.md"
+      }
+    },
+    "be_long": {
+      "path": "tests/fixtures/technical/scoring/be_bottoming_2025-01-01_2026-09-09.csv",
+      "sha256": "e90622b0a76cf119816b3f6bfa63909274781e35c4a66f92e6dd45bc22a9348c",
+      "rows": 422,
+      "columns": [
+        "Open",
+        "High",
+        "Low",
+        "Close",
+        "Volume"
+      ],
+      "actual_start": "2025-01-02",
+      "actual_end": "2026-09-09",
+      "query_range": {
+        "requested_start": null,
+        "requested_end": null,
+        "note": "Original provider request bounds are not independently preserved; tests use the exact local CSV range and explicit cutoff in the case registry."
+      },
+      "adjustment_policy": "unknown_from_local_fixture",
+      "provenance": {
+        "kind": "existing_market_fixture",
+        "source": "existing repository CSV; no provider called in this task",
+        "capture_verified_this_task": false,
+        "evidence": "docs/changes/technical-scoring-redesign.md"
+      }
+    },
+    "nvda": {
+      "path": "tests/fixtures/technical/scoring/nvda_2025-01-01_2026-09-09.csv",
+      "sha256": "78b201dd1d4f45d6f12d2b97a449b40a6d7970449388a879c15b3ef8b3abdb53",
+      "rows": 422,
+      "columns": [
+        "Open",
+        "High",
+        "Low",
+        "Close",
+        "Volume"
+      ],
+      "actual_start": "2025-01-02",
+      "actual_end": "2026-09-09",
+      "query_range": {
+        "requested_start": null,
+        "requested_end": null,
+        "note": "Original provider request bounds are not independently preserved; tests use the exact local CSV range and explicit cutoff in the case registry."
+      },
+      "adjustment_policy": "unknown_from_local_fixture",
+      "provenance": {
+        "kind": "existing_market_fixture",
+        "source": "existing repository CSV; no provider called in this task",
+        "capture_verified_this_task": false,
+        "evidence": "docs/changes/technical-scoring-redesign.md"
+      }
+    },
+    "lulu": {
+      "path": "tests/fixtures/technical/scoring/lulu_2025-01-01_2026-09-09.csv",
+      "sha256": "d049a42c6ef93655fac1bfea913b383a61a8a405123dc0fc6e2dd00d2fc5eca7",
+      "rows": 422,
+      "columns": [
+        "Open",
+        "High",
+        "Low",
+        "Close",
+        "Volume"
+      ],
+      "actual_start": "2025-01-02",
+      "actual_end": "2026-09-09",
+      "query_range": {
+        "requested_start": null,
+        "requested_end": null,
+        "note": "Original provider request bounds are not independently preserved; tests use the exact local CSV range and explicit cutoff in the case registry."
+      },
+      "adjustment_policy": "unknown_from_local_fixture",
+      "provenance": {
+        "kind": "existing_market_fixture",
+        "source": "existing repository CSV; no provider called in this task",
+        "capture_verified_this_task": false,
+        "evidence": "docs/changes/technical-scoring-redesign.md"
+      }
+    },
+    "arm": {
+      "path": "tests/fixtures/technical/scoring/arm_2025-01-01_2026-09-09.csv",
+      "sha256": "6e7873422d687810033239a7ff674589ee9a5c7fa89e2389df76f733f87beaf0",
+      "rows": 422,
+      "columns": [
+        "Open",
+        "High",
+        "Low",
+        "Close",
+        "Volume"
+      ],
+      "actual_start": "2025-01-02",
+      "actual_end": "2026-09-09",
+      "query_range": {
+        "requested_start": null,
+        "requested_end": null,
+        "note": "Original provider request bounds are not independently preserved; tests use the exact local CSV range and explicit cutoff in the case registry."
+      },
+      "adjustment_policy": "unknown_from_local_fixture",
+      "provenance": {
+        "kind": "existing_market_fixture",
+        "source": "existing repository CSV; no provider called in this task",
+        "capture_verified_this_task": false,
+        "evidence": "docs/changes/technical-scoring-redesign.md"
+      }
+    },
+    "samsung": {
+      "path": "tests/fixtures/technical/scoring/005930_ks_2026-06-01_2026-07-16.csv",
+      "sha256": "669742f97f0142d6caee7f01534b4c7bb0e26eb88e69cabb825aa4b665005ac0",
+      "rows": 33,
+      "columns": [
+        "Open",
+        "High",
+        "Low",
+        "Close",
+        "Adj Close",
+        "Volume"
+      ],
+      "actual_start": "2026-06-01",
+      "actual_end": "2026-07-16",
+      "query_range": {
+        "requested_start": null,
+        "requested_end": null,
+        "note": "Original provider request bounds are not independently preserved; tests use the exact local CSV range and explicit cutoff in the case registry."
+      },
+      "adjustment_policy": "unknown_from_local_fixture",
+      "provenance": {
+        "kind": "existing_market_fixture",
+        "source": "existing repository CSV; no provider called in this task",
+        "capture_verified_this_task": false,
+        "evidence": "docs/changes/technical-scoring-redesign.md"
+      }
+    },
+    "COIN": {
+      "path": "tests/fixtures/swing_w150/COIN.csv",
+      "sha256": "73a13b96107ca3dfa39361e086d64cfcc244927b6ccd647fc99c5e6f9f9a5949",
+      "rows": 1371,
+      "columns": [
+        "Open",
+        "High",
+        "Low",
+        "Close",
+        "Volume"
+      ],
+      "actual_start": "2021-04-14",
+      "actual_end": "2026-09-28",
+      "query_range": {
+        "requested_start": null,
+        "requested_end": null,
+        "note": "Original provider request bounds are not independently preserved; tests use the exact local CSV range and explicit cutoff in the case registry."
+      },
+      "adjustment_policy": "unknown_from_local_fixture",
+      "provenance": {
+        "kind": "existing_market_fixture",
+        "source": "existing repository CSV; no provider called in this task",
+        "capture_verified_this_task": false,
+        "evidence": "docs/changes/swing-w150-strategy-engine.md"
+      }
+    },
+    "AMAT": {
+      "path": "tests/fixtures/swing_w150/AMAT.csv",
+      "sha256": "c277edc1bbbae5000ddda9c5feebfdff050ee553eaf4f6b58fda7702b8fd0797",
+      "rows": 3203,
+      "columns": [
+        "Open",
+        "High",
+        "Low",
+        "Close",
+        "Volume"
+      ],
+      "actual_start": "2014-01-02",
+      "actual_end": "2026-09-28",
+      "query_range": {
+        "requested_start": null,
+        "requested_end": null,
+        "note": "Original provider request bounds are not independently preserved; tests use the exact local CSV range and explicit cutoff in the case registry."
+      },
+      "adjustment_policy": "unknown_from_local_fixture",
+      "provenance": {
+        "kind": "existing_market_fixture",
+        "source": "existing repository CSV; no provider called in this task",
+        "capture_verified_this_task": false,
+        "evidence": "docs/changes/swing-w150-strategy-engine.md"
+      }
+    },
+    "PYPL": {
+      "path": "tests/fixtures/swing_w150/PYPL.csv",
+      "sha256": "56c686b3824cf37509a2c651508b8126f5ad72cfce9b9b7e3c1073d7c6dc6a91",
+      "rows": 2825,
+      "columns": [
+        "Open",
+        "High",
+        "Low",
+        "Close",
+        "Volume"
+      ],
+      "actual_start": "2015-07-06",
+      "actual_end": "2026-09-28",
+      "query_range": {
+        "requested_start": null,
+        "requested_end": null,
+        "note": "Original provider request bounds are not independently preserved; tests use the exact local CSV range and explicit cutoff in the case registry."
+      },
+      "adjustment_policy": "unknown_from_local_fixture",
+      "provenance": {
+        "kind": "existing_market_fixture",
+        "source": "existing repository CSV; no provider called in this task",
+        "capture_verified_this_task": false,
+        "evidence": "docs/changes/swing-w150-strategy-engine.md"
+      }
+    },
+    "UPST": {
+      "path": "tests/fixtures/swing_w150/UPST.csv",
+      "sha256": "5f7d8ddacad333c9b03fb7fbfb2eacc651c8a8fc4301be03a2c6878998b2d5bd",
+      "rows": 1451,
+      "columns": [
+        "Open",
+        "High",
+        "Low",
+        "Close",
+        "Volume"
+      ],
+      "actual_start": "2020-12-16",
+      "actual_end": "2026-09-28",
+      "query_range": {
+        "requested_start": null,
+        "requested_end": null,
+        "note": "Original provider request bounds are not independently preserved; tests use the exact local CSV range and explicit cutoff in the case registry."
+      },
+      "adjustment_policy": "unknown_from_local_fixture",
+      "provenance": {
+        "kind": "existing_market_fixture",
+        "source": "existing repository CSV; no provider called in this task",
+        "capture_verified_this_task": false,
+        "evidence": "docs/changes/swing-w150-strategy-engine.md"
+      }
+    }
+  },
+  "source_sha256": {
+    "src/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/backtest/observation_calibration.py": "3f25f4298c50a5bd8da7049f0c831e7429aa58e82631d9f7277a078e64699bfa",
+    "src/backtest/preset_v0.py": "b5e79fbc19fcee1f4d091edca21f8569cdc288cdf071703d8ae3e3e3507e16b7",
+    "src/backtest/swing_w150.py": "5d44039a4db13b959000201aa50bd65c0e06270865720fe7ef6f8016436764d4",
+    "src/backtest/universe_adaptive.py": "87d6a90956cf036a3d2cac83cbdb99766f4834ffb796f0200e6bb1637955f681",
+    "src/backtest/universe_adaptive_holdout.py": "d43d6c236803c453499da4c3055cc74407e1b3d4b0eb06c9aee88bd8cd08b9a4",
+    "src/backtest/universe_chase.py": "6c28066777b3fc741d26ac9cc0c79ff384049de4eed203b29246c1824eb71023",
+    "src/backtest/universe_chase_regime.py": "d107f23e9cc7f35f130ad136f9c827e0de3323502aae8c329582e09cb957534b",
+    "src/backtest/universe_climax_grid.py": "90130d08b0609cdbe78e0b8a5b680174baa08e023cde3cacaa7c2a6a27a736e8",
+    "src/backtest/universe_entry_compare.py": "63375486c1715902e64f881d78df838cd908ec3c97bc8d6cdf3e7812dccb4010",
+    "src/backtest/universe_entry_quality.py": "b01646a386d654f1815838f824c7c4edfb4e598807ee74f797d486469cfd3e5d",
+    "src/backtest/universe_extra.py": "2c2d752119feec11809b2498e337c430718a5bc05db72f6ff18b6dd8b7201cd5",
+    "src/backtest/universe_holdout.py": "90a9d7db48deb5d7124b37822b0f9d012865223d3cc39490c7aaab49df40ef3c",
+    "src/backtest/universe_jarvis_indicators.py": "e9ce4ed458e6edef98b5fcacc7e128307bc0b1d5c8decf48dbf34d90add5c9b7",
+    "src/backtest/universe_market_filter.py": "a1d422afadc8806dc7ca9c498417f2bc4888fd287f4ab134b3bfc1c456815b66",
+    "src/backtest/universe_matrix.py": "6394f9e6639eb593b3c0ea43c8565f4f52f5a813e64faa4aab0e7df1e58f92c7",
+    "src/backtest/universe_trailing_beta.py": "c41b329a98cd099cd8710a49293bd6783fa61ce5d4772330219b9fcebf419737",
+    "src/backtest/universe_transition.py": "edebd3a653910b2bcb3d0833c50f5df343038d87bf2c5392617f4c1bccd166ae",
+    "src/backtest/universe_trim.py": "ab4e1895d50ba644f82442436453120e817ee88442441b8ab7020eaeddfc8bbe",
+    "src/backtest/universe_v04.py": "a115cf4337ab4ce36bef50360bc01dbaa405baab8c912bd584a27e7af7cc76e6",
+    "src/backtest/universe_validate.py": "2b550432595b63db070c138fcd18bbd289e7a300d6e7b14bb8daeea25f5a1925",
+    "src/backtest/universe_walkforward.py": "532755cc24d0cc5607bd8232257dd58c137a99174a6b6ebcd146affe4927546f",
+    "src/cli/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/cli/main.py": "33361f14b2bc0cc6c4ef8deb9d8fe5139454a4cbfad06a15845cd9dcbcc64025",
+    "src/cli/notebook.py": "72e72c2f4381711049b05a6bd2a698dcb9a8d51a9c8dc6275ef3e73b3ca51e59",
+    "src/core/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/core/config.py": "cbe930ce11177a0346386ebcc474ca1069b89f945eb7e9d43f7106525f8c55d6",
+    "src/core/interfaces.py": "1d986d47ca51ca43bb60013a53b6ec3c65a5c490349977ee225f43e08edcd193",
+    "src/core/models.py": "c96e1ebfc3854b597ebaed6ffdf0158ab665974004ed5eca3d208bcde7cbd491",
+    "src/integrations/__init__.py": "f8fc6d03321dc9c52c9efdb975b7f5f6243d0f089f788a359d79a66e3fcade3a",
+    "src/integrations/notebook_notion/__init__.py": "2f6ce70e86cd10e5e22cee2463eedf9084165b386664d40751397f8c3fda3efc",
+    "src/integrations/notebook_notion/apply.py": "fd9cc9454b2f5bdd35eb7699a52efa98c650523b5c260eb070e6e9888f6f4ba4",
+    "src/integrations/notebook_notion/plan.py": "975e313e373548eb26a9c5741e27b3029fcee2af351b707218c914f1843f61b4",
+    "src/integrations/notebook_notion/remote.py": "05c5c1ae8c6cf77c6c340be9b0953375f72fe317fe4362043e7b1de988bc134b",
+    "src/integrations/notion.py": "e0fd5abb8d0708980b4468d2ee43f97bfd5775df5f15e3128b854f583c314c95",
+    "src/llm/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/llm/analyzer.py": "c8883f9f0e9b30e2c6d0f61a5a60234e761e273a79f26141b47b27ddda6472f3",
+    "src/llm/models.py": "7daea853c2b928a88014ded7aa3235bc01f751f63eb2b6f29d178f91849f1b57",
+    "src/llm/provider.py": "84a96a53b6712e2b65aac47671f5e8cc27cd092986a4c472bc7ed727a79dd439",
+    "src/llm/retry.py": "c8d30ce5b1dfb70d9108e100d806c8542ef95a3ed8dfe64a08a66cf8f27a1171",
+    "src/llm/stage_config.py": "3d711915d416794ed56a3019a52f5487edc55e4f82e058d7e4bcfb4bae4a042a",
+    "src/pipelines/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/pipelines/analyze_decision.py": "10da8a7b879c5c10c2bc22259b3e118064330d3d9ebf6150240d9da5bc885eb4",
+    "src/pipelines/brief.py": "0c0ab9b84c84c8d6c865c7c6fc28bf7a90f0f57e4c04506767ac913348e34140",
+    "src/pipelines/daily_report/__init__.py": "b44437dd227ab55a456f9e766cac4f7f317885e57b9404ca273e72c704bcd2fa",
+    "src/pipelines/daily_report/config.py": "af172497cacd905b265ccd391ec2418ea0591c724f087f4c92af94e92ac55b46",
+    "src/pipelines/daily_report/examples/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/pipelines/daily_report/examples/map_examples.py": "173d3464a1c8ac7dce281506b6ad5d1daf87614b7e887e0155dd0cf2e9da8123",
+    "src/pipelines/daily_report/examples/reduce_examples.py": "15c63cec849a85ee5b6492ba5178ee8c951683eeb02bd2a7ea8f15820b681b30",
+    "src/pipelines/daily_report/examples/shuffle_examples.py": "1f9695767e55dfa9e60f3a982525a241c3460cbbe4b82c7539161c5e54f36104",
+    "src/pipelines/daily_report/examples/wrapup_examples.py": "e605086e7f458e5fa7bab67dea6169fc05eace9b1418928136bda36dd5d15adc",
+    "src/pipelines/daily_report/llm_utils.py": "012d876d076cb0679207f1ab08092c3d885f2bae2c6ad49c72f549e5f5560a1f",
+    "src/pipelines/daily_report/models.py": "6c409ad1fab546ceb8c8373a9e0805058782e4d16afdb36a25bafded87d815d8",
+    "src/pipelines/daily_report/pipeline.py": "a6c47b24375421956a0883213bdc190f7b2bb9723a60e7650529a0f7874c405b",
+    "src/pipelines/daily_report/prompts.py": "03cd1830a6053a82e5607d99eee864ef3cc3b1fd4a3d714dde63a27babdc3bfa",
+    "src/pipelines/daily_report/stages/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/pipelines/daily_report/stages/ingest_stage.py": "1e5979a6cf639a9fad911ebed4835f0f406e0ead40673c7b285c088c29b32c32",
+    "src/pipelines/daily_report/stages/map_stage.py": "dda39dd8e4bf2cfca85465b67e99808cf8d69e10d38d323ac2678615fc1a5ea3",
+    "src/pipelines/daily_report/stages/reduce_stage.py": "30181288c5660c884b9411877d0f361b8fb27512a17f1048ab501e9e0e0c4019",
+    "src/pipelines/daily_report/stages/shuffle_stage.py": "f65a94e0bb445a258537f766441ac36afce019f3d6773726442955e49e58d576",
+    "src/pipelines/daily_report/stages/wrapup_stage.py": "8793596714818ee5fafdadc208579586a754fe66c9125e5c3205575821d1f316",
+    "src/pipelines/deep_dive.py": "57573a252e1e14a7fbefeb0fda9421571fc1adc7283e7dd8060b92d451a2be6e",
+    "src/pipelines/quick_check.py": "838e92d6ce53af29fd4fbb554214153fb76cdad390816601a85091993ed26f25",
+    "src/pipelines/screener.py": "8962d91af641001aac1b8dccbb2190791237fa5aaffb0a6fec8ba6895ea3daa5",
+    "src/pipelines/stock_report/__init__.py": "b6f47292f8b6c0ee9a339121756746ee38b40bea7f436677db03cd7c5dbe9097",
+    "src/pipelines/stock_report/chunking.py": "46fa84380b12901e7714e20c818c66b6f23ae1cfd71f65d1ebb043e649a3aec8",
+    "src/pipelines/stock_report/classify.py": "5992a15cd91da167b0678ee37640da0b63465a146e1a3ac6ce039d843472dae0",
+    "src/pipelines/stock_report/config.py": "d5798dd87ae2fcc0e79648525187d5f08b4249f71fe3fc96a224c5b29a1ae28b",
+    "src/pipelines/stock_report/db.py": "8a19d34a404fe072caa0c08f93498241d6f43ed580e7b79ff1b9df555d1698c5",
+    "src/pipelines/stock_report/embed.py": "7a1839f21df3c17d5058b84bff11364440ecd3a11afad56d7e404a344cda2dd1",
+    "src/pipelines/stock_report/event_safety_net.py": "1f03b163ca4796b3736f6fd902f5c237b661f19b634382cbe0ef57279ab6bb95",
+    "src/pipelines/stock_report/google_grounding.py": "83c3bbc294219ff2b944af3255e1b06410240e92644166da555dc7f9beaf69ce",
+    "src/pipelines/stock_report/llm_tools.py": "82b3bb24a2f1f1d1ebc3e8d946db45ef38df9f607010e8399c0d128c5d6ecb8e",
+    "src/pipelines/stock_report/models.py": "6226cabc2d0720dc3ea3459964753489cec7f081a3a5b32e47da731eb9d14a13",
+    "src/pipelines/stock_report/normalize.py": "8b9ede57b8d39ee6eec10ae54194416f3fee408ee5ba75b00a1441c0784c2bb7",
+    "src/pipelines/stock_report/pdf_chunking.py": "446a9d3c96020d52e89c7cfda35a9af39feff9d6874f433596b850716ddb4a1d",
+    "src/pipelines/stock_report/pdf_classify.py": "c6e25128098579b40ef88616e92306a6101e2a31f9031230761e72492e132a93",
+    "src/pipelines/stock_report/pdf_ingest.py": "0d379aef71c5230501f42701b04beb9a06508820ecf958627a710ca5cb4c21f2",
+    "src/pipelines/stock_report/pdf_metadata.py": "a199eae17c859f7daec0370c01b697ffede1633ccf5ba52f2649bf7b846a50a0",
+    "src/pipelines/stock_report/pdf_parser.py": "0d8decf2e944b01601a85199028c61237ef782302e17fbb213042baf80f6fc35",
+    "src/pipelines/stock_report/pipeline.py": "689c8dc956e11e7d6ef9edaf61006ea1575c5cd2b798d197207eaeb889318a94",
+    "src/pipelines/stock_report/prompts.py": "6ed2c6506cb55bb9d9c248478376417cdf1367e8c1d625cdb7acc541077e593e",
+    "src/pipelines/stock_report/render_markdown.py": "a55317311fba1cb6f9e31a9ff2e8fba88afffb1d431653eb4994fdea8b53c629",
+    "src/pipelines/stock_report/retrieval.py": "79373195fd65e3f59ac71bd009dfadcfddddb6055ba702e47730eef099ec95d5",
+    "src/pipelines/stock_report/synthesize.py": "445747c07b152531d447c0d8971aaed655f0274a29faa2bab91f36bef393a093",
+    "src/pipelines/stock_report/taxonomy.py": "449457ec48d4588994da5bd5dabff779048fd1470808e5a0945ad0db145deab4",
+    "src/pipelines/stock_report/telegram_ingest.py": "ad8164ee93acd8040dc6cdbac78327be8ebc1497c37aec18cf161f8f6651db4e",
+    "src/pipelines/stock_report/tuning.py": "464f776041100b71af330d9396f5b85eff4f987c24705b782b69760689f89d97",
+    "src/pipelines/strategy_analysis.py": "0b4e07408ad1afef5517d7852e5aefe657234cf7a4ec498dcbb4e15d25c138d9",
+    "src/pipelines/strategy_render.py": "d65f15afd00dcdafb9c256b06cec455eae2851daa5f894695051894eab59b580",
+    "src/pipelines/telegram_pipeline.py": "dd9063132922d58dcf39a95c6444cac5f48b6011137d5797b3dfca218815d24c",
+    "src/position/__init__.py": "f49d65dc0a5369842a8cc8b5df1ea148ea9aacf8061617cbaa83f2a3dfc8b1f1",
+    "src/position/execution.py": "83b55680a15bac9b0e1b8416df42700937659f815248a70bf70dcd9040cb05f5",
+    "src/position/models.py": "77858c517cc2da37ff041231cb216ec7b74ea557fcde46745b5b6148ddac351c",
+    "src/position/planner.py": "1a8be770dd42ca6b115d041abe41f219758162ec25153672f02029749f38b3e6",
+    "src/position/policy.py": "6710fb6c2d1ac65bd0b7ea51e972a57f8123ca7cc9ac5921922f6a9d4a7ab1bf",
+    "src/providers/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/providers/exchange_calendar.py": "88c0f738566ecf92338b588fca98abe37867ced9af877935865d71a2e813e30e",
+    "src/providers/fmp_provider.py": "8799239711e7b3af6f2bb1e3e0240b3ab8cab36cfc013dff5bd0b42cb3dc171c",
+    "src/providers/index_provider.py": "519a9925343937a458a9a936694dbe5a0fe43b32f5095c523ae69118b6d65453",
+    "src/providers/kis.py": "33eb8791a9edc5ed2f30c11e804afc0c509264bb80fe82bc5bfd0d6148f3e774",
+    "src/providers/kis_models.py": "393a0804d0bb0b6360178b04ff018f2236f5f76d906e7ea54bf4b44b0d5d92c1",
+    "src/providers/kis_wrapper.py": "6f7944ae3e3a009f6abdaa419646451147f7ee1348eb6208497c8e2953f51424",
+    "src/providers/llm_ticker_agent.py": "111b1e843ac2dfe529741bf609e5ade0bbcc94277d04025e52028a4efd436fbb",
+    "src/providers/naver.py": "fa337ac5bde64dd70f46a61d61e50318acb9bc2b78b4740332c3afca30cbf1d8",
+    "src/providers/stock_search.py": "e82e315f02052a5d6e375c3d01c5e844503c0b18ca0dd3e34a4f9f642bb254b9",
+    "src/providers/telegram/__init__.py": "80d81faa61a64202fb07348dbd0f44fbd50e1391538c24bd7824db94c763c40d",
+    "src/providers/telegram/client.py": "f8b660cedb5ae05c6125b382f0b4398f9eebde9851e1910b75e1454d2356ac31",
+    "src/providers/telegram/collector.py": "d53cf69bb09b6c9d71ee4d259c1e047cf7c6708e8b2e101c977b8e0fe0d2a802",
+    "src/providers/telegram/config.py": "2394dbc9c655c66e230549358c44fd1646e7f81e1e02ad5ec4f7407a61f8d314",
+    "src/providers/telegram/loader.py": "a92090cebded4c85e73603e1210f961502372573ecd88de22b4b195b7a5f51ca",
+    "src/providers/telegram/media.py": "ca8a32cc367398f0e31bf0a3448d58b3cb96bd2f54c994fb3d1c7d333d18c12b",
+    "src/providers/telegram/state.py": "24e3a7b6f715622dad664aa7221a3352e7349572d1b710dfc2d6d471090ed677",
+    "src/providers/telegram/storage.py": "be6fc252a539c8bd679016bfca8c728f605b926488a8965f97bcca97f5f8c063",
+    "src/providers/ticker_cache.py": "ef049220fc58be0f08832241de80b9aac2fc8a61afa996fd1c94ec4ab57af5d7",
+    "src/providers/ticker_models.py": "f5c574b122ffae1599ab4d94f2f57666c6bd1ee96ddadd3fe28c9bc9c024c0a0",
+    "src/providers/ticker_resolver.py": "fcbc2dbdd64a523d69531541cedabb4230708459bff39860e67cf98dcdfd5d07",
+    "src/providers/yfinance_provider.py": "61a1f0642c18e772151cd28b94b2856d7d8843905825748e41f33357739e2934",
+    "src/storage/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/storage/cache.py": "a4be59f7d93ec95dbcc663186fd06c5cfb5a1dea2ac014083c6782474264afac",
+    "src/storage/canonical.py": "c3911ee021d143b2aa7cab727e5d7609f8024615edfbf17d95791288e66f2056",
+    "src/storage/entry_shadow.py": "2da3f1a79c4a6aef02e666d1f6635f64a103b31d4bcce46bb88f29090dd2be73",
+    "src/storage/postgres/__init__.py": "63d0b2cd8d39c3a3dae88ebaad18344ae2b02275d9c09b699effa6e9ced47e03",
+    "src/storage/postgres/connection.py": "4b046db443841e98f61061acb8b9552077c8b7507b0e75c39e4c6d8822a50db4",
+    "src/storage/postgres/migrations.py": "fb10b523cbfb4fdbb07e1a3d9d82ef36700953a85a0880861313c4d92e7c00c7",
+    "src/strategies/__init__.py": "530122969cb59959ae959d6933c4a94e17c27b7a6d9657b657700a3a470da504",
+    "src/strategies/chart_bundle.py": "8320307347a102cc46ba29a7425417367ab45490f22af100a037f834df683ada",
+    "src/strategies/entry_anchors.py": "b17afe23856c277b3088b86ccb554013e07b627bb8e3cb09f5ac5277115ec5b4",
+    "src/strategies/entry_opportunity.py": "deec6be6de913770891930b84cafb07e209e0112ed2b69ad678be93684ba1650",
+    "src/strategies/entry_shadow.py": "7a5129b8fdcaeaa394147374e34b578d53bfe4f0f4e016e0c2d86a7bac7016df",
+    "src/strategies/legacy_technical.py": "a130e23ea5a5dc3f1dabf78869a1b2896b94bf2683675f90e1d04af678732326",
+    "src/strategies/models.py": "912f8795bdcffd31fbd434e57b70aabbad0862549a8eac7677009ff686f795df",
+    "src/strategies/observations/__init__.py": "b16835cdefcfb1b6280705a47054f468315e6fb84f290013bb9dd571a62f567e",
+    "src/strategies/observations/detectors.py": "6d6f182d640b20256657ef91667525a129f537b28d65f867dc5f40b465ee25f4",
+    "src/strategies/observations/parameters.py": "22dee6125e00938d3276e7902db88e89fc903fb0c631d2de33b41d2c5def4ff0",
+    "src/strategies/observations/registry.py": "2186f3a7e81c54b0b104af80fa15e6c193d1726734adfa116a411cd592d0c347",
+    "src/strategies/playbook.py": "4eeafb15ab48bf46ab18b6cd55d0612fb5ebf2a656b2b833355e5b5e2264f680",
+    "src/strategies/protocol.py": "ff6e49efeba6962b20bef890d41523c1361818e2ca9faf6bf0e274456d99fc1f",
+    "src/strategies/runner.py": "8f9d2665baf27225977f018e8c81be109bd7745eba1d7c05db1ec253cbfbf214",
+    "src/strategies/signal_performance.py": "d41ad2e8a11d17eb4dd93577997664a28c85bb2f4ed08a05b35c01997defd855",
+    "src/strategies/signal_selection.py": "119f40cacba0230f7b6ce75dc62a335dfab8fef8331d4513a357c82aa8311216",
+    "src/strategies/swing_w150/__init__.py": "eb23bfc8e15c6c62b226b899fd709b93fed1cae6f2fa277408f43761df737b46",
+    "src/strategies/swing_w150/adapter.py": "733f67e1c6e6846596fe9acc8daf70e29ac68a2a0b2bc1bad4ea1d69210d018f",
+    "src/strategies/swing_w150/engine.py": "f335d085fb19d13fac001d44c65d349c038d7af0f2899197c58eb7886026cf3b",
+    "src/strategies/swing_w150/features.py": "bd514aa800333c13f8459905c863f2781ca70aa44207bd29b2cf33a875594775",
+    "src/strategies/swing_w150/models.py": "028ef1a8e449c5982ad6914dee126bc4371c81d96e4888e2d8ad14eb9a57115d",
+    "src/strategies/swing_w150/parameters.py": "c9fc7de10b61ee00c65af074930dda84fcf958510d1bb347f5ec4b89897a767f",
+    "src/strategies/swing_w150/rules.py": "d184f4602fa2f26b19027ac9f7a45660f0ea1f0d635b7325ccbaf5aea788569b",
+    "src/strategies/swing_w150/signals.py": "bd122566b4a9be21d209d1d75290bc685e7f885e311e70a193e7c147f134ddc4",
+    "src/strategies/swing_w150/support_ladder.py": "7eaa06d78fcfd7d6f70a1d5a48fa2cdb9b05939f3be41ca5a300d224278e4553",
+    "src/strategies/swing_w150/up_cycle.py": "6ad00c9858e3269ffafe82bb2688fcb8c1423c6f129a4b3ab8d3a104c97858fb",
+    "src/tools/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/tools/brief/__init__.py": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "src/tools/brief/models.py": "5f74378fbae6cc1135ee4e8773634cfd8b52cdeed8a40113f230cc73f0d29a4f",
+    "src/tools/brief/name_resolver.py": "4dd5642f2a04cb9e1969e59d83de5b67453a297a7427936c0a778e8cf20ef619",
+    "src/tools/brief/render.py": "0bb01776643449197423ab6ad015f0f8da423c1e8233ef66ca309ba546c90849",
+    "src/tools/brief/scoring.py": "8e8a1a2a19e8276f11e522c59e7f2eb9884f8b4a4027560cb235916abb412cf7",
+    "src/tools/disclosure.py": "f52609a64e93e0e998f9811f5567273e34cc120da7a853aec646e3294193b090",
+    "src/tools/flow.py": "9776137f54d6ccd574fd3f80565ffacf5407c4fbeffc650ef4b4c6ab10247be2",
+    "src/tools/fundamental.py": "0b78b9b64ff11b2c852c05432f33ea09f09a14271f73473ff904f297136e12ff",
+    "src/tools/macro.py": "99753eabed096bed54e6b3fb2ab110b78358f745b5ce0ee7b863d3089291857c",
+    "src/tools/news.py": "cec723667f9403edb5c40284efdb1ebb214d62d14e4b12867909ad9f9d8e5f25",
+    "src/tools/notebook/__init__.py": "37fc77a1b7a3064d6358e153cc72d4686357e9ca85672817089a877d6f1fb6cf",
+    "src/tools/notebook/markdown.py": "46d112e6d8bffd6a6e933fd0c6467f1c0d7e9afc1e173aac80937f3995572a1b",
+    "src/tools/notebook/models.py": "0f29b8df833543aabce1d902a5ce2430ef2f3b91d667be176a0fbb18d219fca6",
+    "src/tools/notebook/parser.py": "42dc86f8148c71d32ab7d636b57ce9603560e82b029f02c2b4d058662d7b5012",
+    "src/tools/notebook/stocks.py": "58118d92ce5680efc2ca270c56ab142159d754fd2899791891d52488708bcc66",
+    "src/tools/playbook/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/tools/playbook/accumulation.py": "9fff4c4e4c85e965c01a08c7ed9307ed4a92feabc8db5dda5416ab9be8a881d3",
+    "src/tools/playbook/canslim.py": "392efb0bc66625c80bc923917477fa1d9468dc7df34ee56ffaed22adb9d9a0da",
+    "src/tools/playbook/engine.py": "187a02461cab2e812350e276e92ca195a89a5b00f50a62c8f9343fe02afefa3a",
+    "src/tools/playbook/exit_rules.py": "aa529c58c5f91c73091b0129b2106aa140a50cfe965bfb0dabfc897272cdcacc",
+    "src/tools/playbook/gate.py": "b29d651d923f80b65ad6ec5decbd77ba86808cb79b8ed10ba63d1b2a7a34fb19",
+    "src/tools/playbook/holdings.py": "9e0f3f249822d9eec1ba53aa3c996e489e28d48a6d0336b44b10eb4c44124c82",
+    "src/tools/playbook/market_regime.py": "bbf7f443e2aa0f4a298e48b871b507ea8f8f3a9c367f63d72f2bbdb7d0390cc2",
+    "src/tools/playbook/models.py": "b6ddf6c8745cbb11ed2554a73f138dc3fffac3685cd847b482b1ed88f8c02afd",
+    "src/tools/playbook/relative_strength.py": "e946369bbfee85ea180cb7fc8762e7db04efaa34a54da0d5d225de173c78d816",
+    "src/tools/playbook/sector_strength.py": "0e293a23ac4e486a63c31cb2a30d62405394f44e20fa913538a9a629149bcc11",
+    "src/tools/playbook/sizing.py": "e1784ab90c8002e4f1a7716a70aa1ed5d8858d965b686e6ae77bb645b6341f20",
+    "src/tools/playbook/vcp.py": "241f931bfbf3b589534757431293c8c80494cbfcc71c203cf97a6ffbf6191e2e",
+    "src/tools/screener/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/tools/screener/evidence.py": "806156ab186dac21e1a244ebc9a6649467a7d6c8be60660f4a62fc8ac61bc3e0",
+    "src/tools/screener/models.py": "4727418ce274879223faed11cf327f3dbe807cfa8d348ddaae6ebaef1ebc0117",
+    "src/tools/screener/scoring.py": "1b3b2d4227f7d3ff30c0eafcc4971bd70d86e59a6c2037991e57e1c6fdf0f574",
+    "src/tools/screener/universe.py": "b4bcca003863e494575960dcf5388ce71f62114a142bbcc9ffadc42cb0e9c5b8",
+    "src/tools/technical/__init__.py": "74d15f6c448140ace1a19579fd03c6899d4e3d2df8b5791b1a21064bded06a9f",
+    "src/tools/technical/aggregator.py": "a763f5e7eb3c536389cfb9bf9488a2b628c765501e689d9513967cc58ec76270",
+    "src/tools/technical/base.py": "9e2d5c0dbe19d8f010df16196106a0476264053fc23c0dae92a2ff5f4c9bff1e",
+    "src/tools/technical/bottoming.py": "cb2e1bbeafd8e606e4354a90cbe861030ae9be265215a523ac7567aa9da2a92d",
+    "src/tools/technical/charting.py": "8bd2d5cc7f89dce86efe9dc35f9a9411517cb29879613df3324fc1b5e01117b8",
+    "src/tools/technical/components/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/tools/technical/components/chart_patterns.py": "6a8a4d4380b07107232789067cce48217b9375e3408478e3dbabe50c62a9b4d1",
+    "src/tools/technical/components/crsi.py": "fce1c227714d30daba7f57dc73b3e2b1ef476b95ddd4901b8235c5ef9e45b94f",
+    "src/tools/technical/components/divergence.py": "6712afb5fdeaa37b6746a0a20bedef852f635338f9e65ab1386baf7f386c5547",
+    "src/tools/technical/components/minervini.py": "d4d0020a5110a468aae9595a4810880cf43b876b12a4a4b00ca62ed9651b1cf6",
+    "src/tools/technical/components/pattern_engine.py": "37b1413034a8f097ede71c736041e7083284515d0aad9abb156983a346deae39",
+    "src/tools/technical/components/patterns.py": "181bd34ede1788630cdb91715a02ef2c578a36edc21e831627d76d760f34726e",
+    "src/tools/technical/components/risk.py": "55fe9c767d4575960cb755fad94198a1967c8b9c283fdfa145c5efa613e52d19",
+    "src/tools/technical/components/structure_zones.py": "ce6714d38c27b0e6bc3792c9ae2987096071bf0297f3b4f6e47676ee4abe8f7d",
+    "src/tools/technical/components/supertrend.py": "fc8af43805b8f016e7927677dce4cc4486ca42b9b9b535581ae2375042427b93",
+    "src/tools/technical/components/swing_extractor.py": "5e2c8a78792b47e3c866fadf3362efb4bdc9b330cacfc4f7a198e43ccdcae225",
+    "src/tools/technical/components/velocity.py": "9631a15a6a926046b67acc82546535d835002dae005fc790169ba3b796c48b73",
+    "src/tools/technical/components/volume.py": "ff2aad443e6d4b3802dca6c5f6b36437c2031353874be552aa1faa0721aeda2a",
+    "src/tools/technical/context.py": "e41d07506b9b40af0774e791c5ff8277a44900006fbc84e253721ba1fbf2ee36",
+    "src/tools/technical/indicators.py": "52f64776b04355e9abf01fca6c6ace984268452b5a37dbe0f39975574a09789d",
+    "src/tools/technical/level_composer.py": "7f6bf38f50b5da5db4c6840380ce90d54ec323dbf947b74032026340aae335db",
+    "src/tools/technical/models.py": "db50a2407cc61e540ee402e30ee4cbdeb63dc2299086cb194ed7ad157fa73bfe",
+    "src/tools/technical/pivots.py": "7be8267455f3af043d006d9a491e41a7779cadb0be7c48782c922ea98c97cfb9",
+    "src/tools/technical/presentation.py": "828d92050f7aa7d5e47654a797c23dda5f1ecbeaaaa9a8ceb3c4601144b63570",
+    "src/tools/technical/price_levels.py": "49c375fd3ad232036f76a714b7ac43d675751cb2f0d885b5fe008b64b1c8c520",
+    "src/tools/technical/registry.py": "988722c126f3cd02aaa30ad924c0d651b7e44f5e9e3b368fb6bcacd2468679d5",
+    "src/tools/technical/scorecard.py": "d6106691c043863c8a23ab7c8178cae5fdc5da6c40663221da6e32f4262b1f62",
+    "src/tools/technical/scorecard_models.py": "bd20b1f3cb70080dd6590abdf4526bfc09a702db7c0c146a3c819162fda40919",
+    "src/tools/technical/scorer.py": "8d68dc06da47d07f0d137b0f470b5b05f3a8b71b08666aa0e9a3acc490f84b51",
+    "src/tools/technical/shadow_v2.py": "e5efa446bc649db5c05b83adf64439bafb5c79ddac56e6bd4fe40108589e9f4d",
+    "src/tools/technical/staleness.py": "b3b99b3f3567edf361a8a9a25e4197f17753f0a6f362ba613362f6c013c7b346",
+    "src/tools/technical/strategies/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/tools/technical/strategies/disparity.py": "7f781b56ca26696b8912bbc79e6ebdebed1fbe2cd1f9df1814f0036281bb8040",
+    "src/tools/technical/strategies/divergence.py": "afa5c6649346e780fa51f0b002b2dad3b8c43f2dec371e9e8757ae0919e15f9e",
+    "src/tools/technical/strategies/oscillator.py": "2fbdd5f318aeb2bf8556035aa1041361850f858ec4845de63f5184b47c77adea",
+    "src/tools/technical/strategies/risk.py": "029ac7702b79f6bec4c59f0d8e26625e4e99318c37682de22321b26ea5461e1c",
+    "src/tools/technical/strategies/trend.py": "02789dd5c74b4cdc3010aec44453e09e86e49fb25a96725fb6631352a0fd2289",
+    "src/tools/technical/structure_presentation.py": "dc6da3ac1ae698e9ffee423b4c87e9b3d8ada2a965ac5828734b9238291f205b",
+    "src/tools/technical/structure_zone_inspector.py": "ee665078cd363fd6c7f14afa193f8fce19071d41514a6b3bb391ccb9e4430963",
+    "src/tools/technical/structure_zones.py": "21f01a6bf9e360bc43ca7de47b3f5d75ba658b33768317c17f8ca15196383a0d",
+    "src/tools/technical/tool.py": "f4b1c9d8ffe6726ce7df658eb411b17e03488f026700c515fffdaa2ab9431302",
+    "src/tools/technical/trigger_registry.py": "38675bb632833a4a2c7ad2becef1b462e8f18b3295b5daf063fd575cc48e90d5",
+    "src/tools/technical/triggers.py": "d299893e4fd92358f153604ffdd862f3e9a79e7f9ef51cd2133b7ca659bbdff1",
+    "src/tools/technical/turnaround.py": "0c80f9d716f6bfde99e7c1c839431f00565e26383befa840224c99481be93fc7",
+    "src/tools/technical/utils.py": "067b6ad0e194f9fc113bf001b5c37d1dc50f0b1b44388f017c778f5d4d52b1cc",
+    "src/utils/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/utils/sector_metrics.py": "7578ba21120be4c3f47e30c2cec974e1048481ba60b7390e50e03a311b9231c5"
+  },
+  "synthetic_feature_sources": {
+    "tests/strategies/swing_w150/conftest.py": "5ceab6650d4fda2ee39d11bead1072f40f4e19125836b6a55248d79199ef6466",
+    "tests/strategies/test_entry_anchors.py": "26e993870e81c3fa9ce9762b5f25bc6ff81bcde04708f5eae274a1dce118d7d7",
+    "tests/strategies/test_entry_shadow.py": "fb89d84f2cc288a1605e00f633f316a423195ba5540054c888541f79821e46f9"
+  },
+  "normalization": {
+    "excluded_fields": [
+      "TechnicalResult.timestamp (execution wall clock only)",
+      "EntryShadow recorder recorded_at (execution wall clock only)"
+    ],
+    "float_policy": "exact values; nonfinite numeric values encoded as $float, semantic null retained",
+    "dates_ids_evidence_order": "preserved"
+  },
+  "limitations": [
+    "Existing market fixtures are local market data, not newly verified provider raw responses.",
+    "Original provider query bounds, adjustment policy and collection package version are not independently proven; current capture backend versions are pinned separately.",
+    "Synthetic business-day calendars do not claim exchange calendar accuracy.",
+    "Pre-existing scorer._top_component_changes iterates a set: continuous change_drivers order is process-dependent. Snapshot execution uses PYTHONHASHSEED=0; no sorting or product correction is applied."
+  ],
+  "scenario_roles": {
+    "G4_service": {
+      "instrument": "panw_long from 2024-05-07 through 2026-05-07",
+      "market": "same PANW CSV used as a synthetic benchmark proxy, not real SPY data",
+      "requested_period": "2y",
+      "pipeline": [
+        "check",
+        "analyze",
+        "brief"
+      ],
+      "recorder": "real EntryShadowJsonlRecorder writing into TemporaryDirectory only"
+    }
+  },
+  "cutoff_cases": {
+    "G2_panw_breakout": {
+      "input": "panw_long",
+      "through": "2026-05-07",
+      "ticker": "PANW"
+    },
+    "G2_panw_overheat": {
+      "input": "panw_long",
+      "through": "2026-05-08",
+      "ticker": "PANW"
+    },
+    "G2_be_bottoming": {
+      "input": "be_long",
+      "through": "2026-08-18",
+      "ticker": "BE"
+    },
+    "G2_nvda_trend": {
+      "input": "nvda",
+      "through": "2026-09-09",
+      "ticker": "NVDA"
+    },
+    "G2_lulu_downtrend": {
+      "input": "lulu",
+      "through": "2026-05-15",
+      "ticker": "LULU"
+    },
+    "G2_arm_collapse": {
+      "input": "arm",
+      "through": "2026-07-22",
+      "ticker": "ARM"
+    },
+    "G2_samsung_short": {
+      "input": "samsung",
+      "through": "2026-07-02",
+      "ticker": "005930.KS"
+    }
+  },
+  "auxiliary_fixture_sha256": {
+    "tests/fixtures/swing_w150/v2_backtest_expected.json": "064c04505b73ef24b377ed2d75f3c98c6b00cd8c76df1906ddbc9fd3d0020cc5"
+  }
+}

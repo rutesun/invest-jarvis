@@ -6,7 +6,7 @@ Korean/US 주식 투자 분석 CLI 도구
 
 | 기능 | 명령어 | 설명 |
 |------|--------|------|
-| **Quick Check** | `jarvis check AAPL` | LLM 없이 빠른 기술적 분석 (5-전략 시스템) |
+| **Quick Check** | `jarvis check AAPL` | 빠른 기술 분석 · 기본 텍스트와 차트 HTML 선택 출력 |
 | **Deep Dive** | `jarvis analyze AAPL` | 기술 + 뉴스 + LLM 종합 분석 |
 | **Daily Report** | `jarvis report` | 매크로 지표 + 다중 종목 리포트 |
 | **Daily Brief** | `jarvis brief` | playbook.yaml(보유+워치) 기반 일일 액션 브리핑 |
@@ -33,9 +33,12 @@ cp .env.example .env
 
 # 3. 실행
 uv run jarvis check AAPL
+uv run jarvis check ALAB 161890 --html
 uv run jarvis analyze AAPL
 uv run jarvis report
 ```
+
+`check --html`은 기본 텍스트와 함께 현재 상태·전략별 수량·기술 차트·Quality를 담은 HTML을 `tmp/reports/`에 자동 저장하고 파일 링크를 출력합니다. 경로를 정하려면 `--html reports/check.html`, 기존 파일을 교체하려면 `--force`를 추가합니다. 상세 옵션은 [CLI 사용 가이드](docs/CLI_USAGE.md#check---텍스트와-기술-차트-html)를 확인하세요.
 
 ## Stock Report V2 DB (개발 환경)
 

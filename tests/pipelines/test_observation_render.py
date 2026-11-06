@@ -132,7 +132,10 @@ def test_event_is_history_not_persistent_active():
         pivot_date=date(2026, 8, 27),
     )
     analysis = _analysis([event])
-    output = render_strategy_sections(analysis.scorecard, analysis)
+    compact = render_strategy_sections(analysis.scorecard, analysis)
+    assert "HIGHER_HIGH —" not in compact
+    assert "최근 Observation history" not in compact
+    output = render_strategy_sections(analysis.scorecard, analysis, detail=True)
     current = output.split("### 현재 Observation\n")[1].split("### 최근 Observation history")[0]
     history = output.split("### 최근 Observation history")[1].split("### 최근 Signal history")[0]
     assert "HIGHER_HIGH" not in current.split("#### 평가 상태")[0]
@@ -145,7 +148,7 @@ def test_event_is_history_not_persistent_active():
 def test_unresolved_detector_is_not_rendered_as_no_risk():
     analysis = _analysis()
     output = render_strategy_sections(analysis.scorecard, analysis)
-    current = output.split("### 현재 Observation\n")[1].split("### 최근 Observation history")[0]
+    current = output.split("### 현재 Observation\n")[1].split("### 당일 Signal")[0]
     assert "DOWN_VOLUME_EXPANSION" in current
     assert "UNRESOLVED" in current and "미평가" in current
     assert "detector" in current and "predictive usefulness=UNRESOLVED" in current
@@ -214,7 +217,9 @@ def test_cycle_support_and_observation_groups_precede_decisions():
 
     analysis = _analysis(
         [
-            _observation(ObservationCode.PULLBACK_WATCH, day=date(2026, 7, 1)),
+            _observation(
+                ObservationCode.PULLBACK_WATCH, day=date(2026, 7, 1), status_as_of=date(2026, 9, 2)
+            ),
             _observation(ObservationCode.MOMENTUM_DECELERATION),
             _observation(
                 ObservationCode.HIGHER_LOW,
@@ -261,7 +266,7 @@ def test_cycle_support_and_observation_groups_precede_decisions():
         "SETUP",
         "Positive Observations",
         "Risk Observations",
-        "최근 Signal history",
+        "당일 Signal",
         "오늘 EntryOpportunity",
         "Risk: CAUTION",
     ]
@@ -270,14 +275,15 @@ def test_cycle_support_and_observation_groups_precede_decisions():
     )
     assert "anchor=SMA150" in output and "origin=2026-07-01@95" in output
     assert "current_value=98" in output and "HELD" in output
+    assert "PULLBACK_WATCH" in output.split("### 현재 Observation")[1].split("### 당일 Signal")[0]
     assert (
         "PULLBACK_WATCH"
-        in output.split("### 현재 Observation")[1].split("### 최근 Observation history")[0]
+        in render_strategy_sections(analysis.scorecard, analysis, detail=True)
+        .split("### 최근 Observation history")[1]
+        .split("### 최근 Signal history")[0]
     )
-    assert (
-        "PULLBACK_WATCH"
-        not in output.split("### 최근 Observation history")[1].split("### 최근 Signal history")[0]
-    )
+
+    assert "### 최근 Observation history" not in output
 
 
 def test_source_free_structure_volume_are_once_per_observation_and_terminal_reclaim_is_context():
@@ -328,7 +334,7 @@ def test_source_free_structure_volume_are_once_per_observation_and_terminal_recl
     bundle.signal_history = []
     bundle.current_signals = []
     output = render_strategy_sections(analysis.scorecard, analysis)
-    current = output.split("### 현재 Observation\n")[1].split("### 최근 Observation history")[0]
+    current = output.split("### 현재 Observation\n")[1].split("### 당일 Signal")[0]
     assert current.count("HIGHER_HIGH —") == 1
     assert current.count("UP_VOLUME_EXPANSION —") == 1
     assert "scopes=ENTRY,POSITION" in current

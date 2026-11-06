@@ -1,10 +1,12 @@
 import pandas as pd
 
+from src.tools.technical.context import common_evidence
 from src.tools.technical.models import ComponentResult, ComponentSignal
 
 
-def analyze_crsi(df: pd.DataFrame) -> ComponentResult:
+def analyze_crsi(df: pd.DataFrame, *, common_analysis=None) -> ComponentResult:
     """Analyze Cycle RSI signals."""
+    facts = common_evidence(df, common_analysis, "chart.crsi.legacy")
     if "cRSI" not in df.columns or len(df) < 2:
         return ComponentResult(
             signals=[],
@@ -33,6 +35,10 @@ def analyze_crsi(df: pd.DataFrame) -> ComponentResult:
     crsi_high = float(crsi_high)
     crsi_low = float(crsi_low)
     prev_crsi = float(prev_crsi)
+
+    crsi, crsi_high, crsi_low, prev_crsi = (
+        facts[key] for key in ("crsi", "crsi_high_band", "crsi_low_band", "previous_crsi")
+    )
 
     signals = []
     evidence = []

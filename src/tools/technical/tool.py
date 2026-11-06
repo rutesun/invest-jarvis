@@ -46,6 +46,7 @@ class TechnicalAnalysisTool(BaseTool):
             # 최신 봉 종가가 비어 있으면(yfinance 미마감 봉 등) 걷어낸 뒤 계산한다.
             # 그대로 두면 스냅샷은 이전 유효 봉으로, market context는 close=0.0으로 갈려
             # 스테일 종가가 조용히 흘러나간다.
+            quality_raw = df.copy(deep=True)
             df, stale = drop_trailing_nan_close(df)
             if df.empty:
                 logger.warning("All close values are NaN for %s", ticker)
@@ -59,7 +60,14 @@ class TechnicalAnalysisTool(BaseTool):
             df = self.calculator.calculate(df)
 
             logger.debug("Scoring %s", ticker)
-            technical_result = self.scorer.score(df, ticker=ticker)
+            score_options = {
+                key: kwargs[key]
+                for key in ("common_analysis", "request_context")
+                if kwargs.get(key) is not None
+            }
+            technical_result = self.scorer.score(df, ticker=ticker, **score_options)
+            technical_result.quality_raw_dataframe = quality_raw
+            technical_result.quality_history_provider = self.provider
             logger.debug("Score for %s: %s", ticker, technical_result.total_score)
 
             if stale.is_stale:

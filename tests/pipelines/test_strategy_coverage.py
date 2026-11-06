@@ -1,4 +1,4 @@
-"""Coverage must come from exchange sessions, independently of price responses."""
+"""CLI chronology follows API bars; strategy history/alignment guards remain."""
 
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -72,17 +72,17 @@ def entry_on_october_six():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("ticker", ["AAPL", "005930.KS"])
-async def test_shared_provider_gap_is_missing_from_complete_instrument_coverage(ticker):
+async def test_absent_api_date_is_not_inserted_into_instrument_coverage(ticker):
     sparse = prices().drop(pd.Timestamp("2026-10-07"))
     bundle = await load(ticker, sparse, sparse)
-    assert date(2026, 10, 7) in bundle.exchange_sessions
-    assert bundle.instrument.coverage.complete is False
-    assert bundle.market.coverage.complete is False
+    assert date(2026, 10, 7) not in bundle.exchange_sessions
+    assert bundle.instrument.coverage.complete is True
+    assert bundle.market.coverage.complete is True
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("ticker", ["AAPL", "005930.KS"])
-async def test_shared_provider_gap_cannot_authorize_entry_opportunity(ticker):
+async def test_response_only_coverage_does_not_bypass_market_regime_rules(ticker):
     sparse = prices().drop(pd.Timestamp("2026-10-07"))
     bundle = await load(ticker, sparse, sparse)
     opportunity = evaluate_signal_entry_opportunity(
@@ -93,13 +93,13 @@ async def test_shared_provider_gap_cannot_authorize_entry_opportunity(ticker):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("ticker", ["AAPL", "005930.KS"])
-async def test_shared_provider_gap_cannot_be_next_tradable_open(ticker):
+async def test_next_returned_bar_provides_execution_reference(ticker):
     sparse = prices().drop(pd.Timestamp("2026-10-07"))
     bundle = await load(ticker, sparse, sparse)
     performance = evaluate_signal_performance(entry_on_october_six(), bundle)
-    assert performance.executed_data_status is DataStatus.NOT_EVALUATED
-    assert performance.executed_status_reason == "UNACCOUNTED_EXECUTION_SESSIONS"
-    assert performance.execution_reference_price is None
+    assert performance.executed_data_status is DataStatus.COMPLETE
+    assert performance.execution_as_of == date(2026, 10, 8)
+    assert performance.execution_reference_price == Decimal("100")
 
 
 @pytest.mark.asyncio
@@ -147,7 +147,7 @@ async def evaluate_with_five_shares(frame, market):
 
 
 @pytest.mark.asyncio
-async def test_instrument_provider_gap_cannot_create_sma_exit_or_sell_real_holding():
+async def test_sma_exit_counts_consecutive_returned_bars():
     full = rising_prices()
     for day, close in [("2026-10-06", 120), ("2026-10-07", 200), ("2026-10-08", 120)]:
         full.loc[pd.Timestamp(day), ["Open", "High", "Low", "Close"]] = [
@@ -157,11 +157,10 @@ async def test_instrument_provider_gap_cannot_create_sma_exit_or_sell_real_holdi
             close,
         ]
     result = await evaluate_with_five_shares(full.drop(pd.Timestamp("2026-10-07")), prices())
-    assert result.position_plan.sell_quantity == 0
+    assert result.position_plan.sell_quantity == 5
     swing = result.strategy_run.signal_bundles[0]
-    assert swing.current_signals == []
-    assert swing.data_status is DataStatus.PARTIAL
-    assert swing.entry_opportunity.status is EntryOpportunityStatus.NOT_EVALUATED
+    assert [signal.code for signal in swing.current_signals] == ["SMA150_EXIT"]
+    assert swing.data_status is DataStatus.COMPLETE
 
 
 @pytest.mark.asyncio
@@ -191,15 +190,17 @@ def live_two_year_prices():
 async def test_live_two_year_first_session_boundary_is_complete(instrument_skip, market_skip):
     full = live_two_year_prices()
     bundle = await load("NVDA", full.iloc[instrument_skip:], full.iloc[market_skip:])
-    assert bundle.exchange_sessions[0] == date(2024, 10, 7)
-    assert len(bundle.exchange_sessions) == 502
+    assert bundle.exchange_sessions[0] == (
+        date(2024, 10, 8) if instrument_skip else date(2024, 10, 7)
+    )
+    assert len(bundle.exchange_sessions) == 502 - instrument_skip
     assert bundle.instrument.coverage.complete is True
     assert bundle.market.coverage.complete is True
     for series, skip in ((bundle.instrument, instrument_skip), (bundle.market, market_skip)):
         assert series.coverage.complete is True
         assert series.coverage.requested_start == date(2024, 10, 7)
         assert series.coverage.listing_first_session is None
-        assert series.coverage.effective_start == (date(2024, 10, 8) if skip else None)
+        assert series.coverage.effective_start is None
         assert series.coverage.expected_sessions[0] == (
             date(2024, 10, 8) if skip else date(2024, 10, 7)
         )
@@ -227,7 +228,7 @@ async def test_live_two_year_first_session_boundary_allows_v2_evaluation():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("case", ["leading_two", "leading_one_and_internal", "internal_only"])
-async def test_live_two_year_boundary_policy_does_not_hide_other_gaps(case):
+async def test_api_response_defines_leading_and_internal_dates(case):
     full = live_two_year_prices()
     sparse = (
         full.iloc[2:]
@@ -237,10 +238,10 @@ async def test_live_two_year_boundary_policy_does_not_hide_other_gaps(case):
         else full.drop(pd.Timestamp("2026-10-06"))
     )
     bundle = await load("NVDA", sparse, sparse)
-    assert bundle.instrument.coverage.complete is False
-    assert bundle.market.coverage.complete is False
-    assert date(2024, 10, 7) in bundle.instrument.coverage.expected_sessions
-    assert date(2026, 10, 6) in bundle.instrument.coverage.expected_sessions
+    assert bundle.instrument.coverage.complete is True
+    assert bundle.market.coverage.complete is True
+    assert bundle.instrument.coverage.expected_sessions == tuple(sparse.index.date)
+    assert bundle.market.coverage.expected_sessions == tuple(sparse.index.date)
 
 
 @pytest.mark.asyncio
@@ -248,4 +249,5 @@ async def test_live_two_year_boundary_policy_does_not_hide_trailing_market_gap()
     full = live_two_year_prices()
     bundle = await load("NVDA", full.iloc[1:], full.iloc[1:-1])
     assert bundle.market.coverage.complete is False
-    assert date(2026, 10, 7) in bundle.market.coverage.expected_sessions
+    assert bundle.market.coverage.actual_end == date(2026, 10, 6)
+    assert bundle.market.coverage.truncation_reason == "market_history_incomplete"

@@ -1,7 +1,15 @@
+import logging
+from collections.abc import Callable
 from typing import Any
 
-from src.pipelines.strategy_analysis import AnalysisStrategyService, evaluate_optional
-from src.pipelines.strategy_render import render_strategy_sections
+from src.pipelines.analysis_overview import render_analysis_overview
+from src.pipelines.strategy_analysis import (
+    AnalysisStrategyService,
+    account_from_capital,
+    evaluate_optional,
+)
+from src.position.models import PositionSnapshot
+from src.tools.playbook.holdings import load_holdings
 from src.tools.technical.presentation import format_long_sma
 from src.tools.technical.tool import TechnicalAnalysisTool
 from src.tools.technical.turnaround import TurnaroundSignal, score_turnaround
@@ -18,7 +26,7 @@ class QuickCheckPipeline:
         self.technical_tool = technical_tool
         self.strategy_service = strategy_service
 
-    async def run(self, ticker: str) -> dict[str, Any]:
+    async def run(self, ticker: str, *, include_chart: bool = False) -> dict[str, Any]:
         """Run quick check analysis."""
         result = await self.technical_tool.execute(ticker)
 
@@ -30,9 +38,27 @@ class QuickCheckPipeline:
             }
 
         tech = result.data
+        position = account = None
+        position_warning = None
+        if self.strategy_service is not None:
+            try:
+                config = load_holdings()
+                holding = config.find(ticker)
+                position = PositionSnapshot(holding.quantity if holding else 0)
+                account = account_from_capital(*config.get_account_for(ticker))
+            except Exception as exc:
+                position_warning = f"Position 입력 이용 불가: {type(exc).__name__}: {exc}"
+                logging.getLogger(__name__).warning("%s: %s", ticker, position_warning)
         strategy_analysis, strategy_warning = await evaluate_optional(
-            self.strategy_service, ticker, tech, pipeline="check"
+            self.strategy_service,
+            ticker,
+            tech,
+            position=position,
+            account=account,
+            pipeline="check",
         )
+
+        strategy_warning = "; ".join(filter(None, (strategy_warning, position_warning))) or None
 
         # Support both old (indicators) and new (snapshot) formats
         snapshot = tech.indicators or tech.snapshot
@@ -72,7 +98,29 @@ class QuickCheckPipeline:
 
         turnaround = score_turnaround(tech.raw_dataframe)
 
+        chart = {}
+        if include_chart:
+            from src.pipelines.check_chart import render_check_chart
+
+            png, warning = render_check_chart(ticker, tech)
+            chart = {"chart_png": png, "chart_warning": warning}
+            from src.tools.technical.chart_brief import build_chart_brief
+
+            try:
+                chart["chart_brief"] = build_chart_brief(
+                    tech,
+                    common_analyses=(
+                        strategy_analysis.common_analyses.values() if strategy_analysis else ()
+                    ),
+                )
+                chart["chart_brief_warning"] = None
+            except Exception as exc:
+                chart["chart_brief"] = None
+                chart["chart_brief_warning"] = f"차트 브리핑 미산출: {type(exc).__name__}: {exc}"
+                logging.getLogger(__name__).warning("%s: %s", ticker, chart["chart_brief_warning"])
+
         return {
+            **chart,
             "ticker": ticker,
             "success": True,
             "scorecard": tech.scorecard,
@@ -114,22 +162,48 @@ class QuickCheckPipeline:
         result: dict[str, Any],
         detailed_history: bool = False,
         detailed_strategy: bool = False,
+        *,
+        price_formatter: Callable[[float], str] | None = None,
     ) -> str:
         """Format result as readable string."""
         if not result.get("success", False):
             return f"Error: {result.get('error', 'Unknown error')}"
 
+        if result.get("strategy_analysis") is not None and not detailed_strategy:
+            overview = render_analysis_overview(
+                result.get("scorecard"),
+                result["strategy_analysis"],
+                warning=result.get("strategy_warning"),
+                expanded_observations=True,
+            )
+            lines = [f"## {result['ticker']} Quick Check", "", overview]
+            if detailed_history:
+                lines += ["", "### 기존 Technical Score 상세"]
+                previous = None
+                for point in (result.get("score_history") or [])[-5:]:
+                    lines.extend(_format_detailed_history_point(point, previous))
+                    previous = point
+            turnaround = result.get("turnaround")
+            if turnaround and turnaround.get("score", 0) > 0:
+                lines += ["", "### 턴어라운드 신호", f"- {turnaround['summary']}"]
+                lines.append("- 탐색용 참고 관찰이며 위 전략의 매매 판정을 대체하지 않습니다.")
+            lines.extend(f"- 데이터 주의: {message}" for message in result.get("warnings", []))
+            return "\n".join(lines)
+
+        def format_price(value: float) -> str:
+            return price_formatter(value) if price_formatter is not None else f"${value:.2f}"
+
         lines = [
             f"## {result['ticker']} Quick Check",
             "",
-            render_strategy_sections(
+            render_analysis_overview(
                 result.get("scorecard"),
                 result.get("strategy_analysis"),
                 warning=result.get("strategy_warning"),
                 detail=detailed_strategy,
             ),
             "",
-            f"**가격**: ${result['price']:.2f} ({result['change_pct']:+.2f}%)",
+            f"**가격**: {format_price(result['price'])} ({result['change_pct']:+.2f}%)",
             f"**총점**: {result['total_score']}",
             "",
         ]
@@ -252,16 +326,16 @@ class QuickCheckPipeline:
         indicators = result.get("indicators", {})
         lines.append("### 주요 지표")
         if indicators.get("sma_20"):
-            lines.append(f"- SMA 20: ${indicators['sma_20']:.2f}")
+            lines.append(f"- SMA 20: {format_price(indicators['sma_20'])}")
         if indicators.get("sma_50"):
-            lines.append(f"- SMA 50: ${indicators['sma_50']:.2f}")
+            lines.append(f"- SMA 50: {format_price(indicators['sma_50'])}")
         lines.append(
-            f"- **SMA 100**: {format_long_sma(indicators.get('sma_100'), indicators.get('sma_100_slope_pct'))}"
+            f"- **SMA 100**: {format_long_sma(indicators.get('sma_100'), indicators.get('sma_100_slope_pct'), price_formatter=price_formatter)}"
         )
         if indicators.get("sma_150"):
-            lines.append(f"- SMA 150: ${indicators['sma_150']:.2f}")
+            lines.append(f"- SMA 150: {format_price(indicators['sma_150'])}")
         lines.append(
-            f"- **SMA 200**: {format_long_sma(indicators.get('sma_200'), indicators.get('sma_200_slope_pct'))}"
+            f"- **SMA 200**: {format_long_sma(indicators.get('sma_200'), indicators.get('sma_200_slope_pct'), price_formatter=price_formatter)}"
         )
         if indicators.get("rsi"):
             lines.append(f"- RSI: {indicators['rsi']:.1f}")

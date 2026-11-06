@@ -75,10 +75,9 @@ async def test_loader_records_market_identity_and_unverified_listing(ticker, mar
     assert provider.requests == [(market_ticker, "2y")]
     assert bundle.market_ticker == market_ticker
     assert bundle.instrument.coverage.listing_first_session is None
-    assert bundle.instrument.coverage.complete is False
+    assert bundle.instrument.coverage.complete is True
     assert bundle.instrument.coverage.actual_start == sessions[2].date()
-    assert bundle.exchange_sessions[-4:] == (
-        date(2025, 1, 2),
+    assert bundle.exchange_sessions == (
         date(2025, 1, 3),
         date(2025, 1, 6),
         date(2025, 1, 7),
@@ -171,10 +170,9 @@ def test_renderer_keeps_new_section_order_and_detail_evidence():
     headings = [
         "Technical Scorecard",
         "중요 상태 / Evidence",
-        "최근 Analysis Trigger",
+        "현재 Analysis Trigger",
         "현재 Observation",
-        "최근 Observation history",
-        "최근 Signal history",
+        "당일 Signal",
         "전략",
         "오늘 EntryOpportunity",
     ]
@@ -327,7 +325,14 @@ def _position_service(entry: EntryIntent, exit: ExitIntent):
             return {"PLAYBOOK_V1": "1"}
 
         def run(self, bundle, *, legacy_result):
-            return SimpleNamespace(scorecard=legacy_result.scorecard, verdicts=[verdict], errors=[])
+            return SimpleNamespace(
+                scorecard=legacy_result.scorecard,
+                as_of=legacy_result.scorecard.as_of,
+                verdicts=[verdict],
+                errors=[],
+                diagnostic_errors=[],
+                signal_bundles=[],
+            )
 
     service = AnalysisStrategyService(chart_loader=Loader(), strategy_runner=Runner())
     return service, SimpleNamespace(scorecard=scorecard)
@@ -658,7 +663,14 @@ def signal_analysis():
         data_status=DataStatus.COMPLETE,
     )
     scorecard = _legacy_result(scorecard_as_of=today).scorecard
-    run = SimpleNamespace(scorecard=scorecard, verdicts=[], signal_bundles=[bundle], errors=[])
+    run = SimpleNamespace(
+        scorecard=scorecard,
+        as_of=today,
+        verdicts=[],
+        signal_bundles=[bundle],
+        errors=[],
+        diagnostic_errors=[],
+    )
     return AnalysisStrategyResult(scorecard, run, sessions, 111.32)
 
 
@@ -811,7 +823,7 @@ def test_position_plan_displays_finality_and_detail_reproduction_metadata(
 
     analysis = _analysis_with_position_plan(signal_analysis, SignalFinality(finality))
     rendered = render_strategy_sections(analysis.scorecard, analysis, detail=detail)
-    position_section = rendered.split("### Position Plan\n", 1)[1]
+    position_section = rendered.split("### Position Plans\n", 1)[1]
     assert f"signal_finality={finality.upper()}" in position_section
     assert ("장중 후보" if finality == "provisional" else "확정") in position_section
     assert "current=5, target=2, buy=0, sell=3 (available)" in position_section
@@ -828,9 +840,11 @@ def test_position_plan_displays_finality_and_detail_reproduction_metadata(
 def test_position_plan_without_signal_metadata_preserves_playbook_output(signal_analysis, detail):
     analysis = _analysis_with_position_plan(signal_analysis, None)
     rendered = render_strategy_sections(analysis.scorecard, analysis, detail=detail)
-    position_section = rendered.split("### Position Plan\n", 1)[1]
-    assert position_section == (
-        "- reduce_current_by_fraction: current=5, target=2, buy=0, sell=3 (available)"
+    position_section = rendered.split("### Position Plans\n", 1)[1]
+    assert "독립 대안" in position_section
+    assert (
+        "호환 Position Plan: reduce_current_by_fraction: current=5, target=2, buy=0, sell=3 (available)"
+        in position_section
     )
 
 
@@ -948,21 +962,30 @@ def test_three_surfaces_show_same_core_strategy_content(
     brief = BriefPipeline.__new__(BriefPipeline).format_output(
         {"date": technical.timestamp, "macro": None, "items": [item]}, detailed_strategy=detail
     )
-    common = render_strategy_sections(signal_analysis.scorecard, signal_analysis, detail=detail)
-    for rendered in (check, analyze, brief):
-        assert common in rendered
+    from src.pipelines.analysis_overview import render_analysis_overview
+
+    common = render_analysis_overview(signal_analysis.scorecard, signal_analysis, detail=detail)
+    check_common = render_analysis_overview(
+        signal_analysis.scorecard,
+        signal_analysis,
+        detail=detail,
+        expanded_observations=True,
+    )
+    for surface, rendered in (("check", check), ("analyze", analyze), ("brief", brief)):
+        assert (check_common if surface == "check" else common) in rendered
+        if not detail:
+            current_heading = "현재 유효 상태" if surface == "check" else "현재 상태"
+            for heading in (current_heading, "주요 가격대", "최근 5거래일", "전략별 대응"):
+                assert heading in rendered
+            assert "최근 Observation history" not in rendered
+            continue
         for text in (
             "현재 Observation",
-            "최근 Observation history",
-            "최근 Signal history",
             "PULLBACK_WATCH",
             "PULLBACK_REVERSAL_ENTRY",
             "오늘 EntryOpportunity",
             "ALLOW",
             "SMA150 support",
-            "rising",
-            f"{signal_analysis.exchange_sessions[-20]} SWING_W150 POST_OVERHEAT_RECOVERY_WATCH",
-            "BOUNDARY_ENTRY",
             "확장 +2.1%",
             "cycle / support",
             "Positive Observations",
@@ -973,13 +996,21 @@ def test_three_surfaces_show_same_core_strategy_content(
             "현재 실측: 모멘텀 현재 실측 (관측값=109, 기준값=110)",
         ):
             assert text in rendered
+        assert ("rising" in rendered) is detail
+        assert ("최근 Observation history" in rendered) is detail
+        assert ("최근 Signal history" in rendered) is detail
+        assert ("BOUNDARY_ENTRY" in rendered) is detail
+        assert (
+            f"{signal_analysis.exchange_sessions[-20]} SWING_W150 POST_OVERHEAT_RECOVERY_WATCH"
+            in rendered
+        ) is detail
         old_watch = (
             f"{signal_analysis.exchange_sessions[-21]} SWING_W150 POST_OVERHEAT_RECOVERY_WATCH"
         )
         assert (old_watch in rendered) is detail
         assert ("OLD_ENTRY" in rendered) is detail
         assert "medium signal evidence" in rendered
-        position_section = rendered.split("### Position Plan\n", 1)[1]
+        position_section = rendered.split("### Position Plans\n", 1)[1]
         assert "signal_finality=PROVISIONAL" in position_section
         assert "장중 후보" in position_section
         assert ("calculated_at=2025-02-04T15:00:00+00:00" in position_section) is detail
@@ -992,7 +1023,7 @@ def test_three_surfaces_show_same_core_strategy_content(
 
 
 def test_observation_and_signal_history_are_separate(signal_analysis):
-    rendered = render_strategy_sections(signal_analysis.scorecard, signal_analysis)
+    rendered = render_strategy_sections(signal_analysis.scorecard, signal_analysis, detail=True)
     current = rendered.split("### 현재 Observation\n")[1].split("### 최근 Observation history")[0]
     observations = rendered.split("### 최근 Observation history")[1].split(
         "### 최근 Signal history"
@@ -1050,6 +1081,7 @@ def test_default_output_explains_signal_opportunity_and_five_day_score_history(
     bundle.signal_history[-1] = signal
     opportunity = bundle.entry_opportunity.model_copy(
         update={
+            "entry_signal": signal,
             "status": EntryOpportunityStatus.WATCH,
             "extension_pct": Decimal("0.051"),
             "evidence": [
@@ -1149,7 +1181,6 @@ def test_default_output_explains_signal_opportunity_and_five_day_score_history(
     )
 
     rendered = render_strategy_sections(analysis.scorecard, analysis)
-    signal_section = rendered.split("최근 Signal history — 20거래일", 1)[1].split("### 전략", 1)[0]
     opportunity_section = rendered.split("오늘 EntryOpportunity", 1)[1].split(
         "### 최근 5거래일 Technical Score", 1
     )[0]
@@ -1157,10 +1188,10 @@ def test_default_output_explains_signal_opportunity_and_five_day_score_history(
         "### 중요 상태 / Evidence", 1
     )[0]
 
-    assert "발생 원인: 눌림목 지지 후 반등 진입 조건 충족" in signal_section
-    assert "근거: SMA50 지지 확인" in signal_section
-    assert "근거: SMA50 기울기 방향 상승" in signal_section
-    assert "관측값=219.34" in signal_section
+    assert "발생 원인: 눌림목 지지 후 반등 진입 조건 충족" in opportunity_section
+    assert "근거: SMA50 지지 확인" in opportunity_section
+    assert "근거: SMA50 기울기 방향 상승" in opportunity_section
+    assert "관측값=219.34" in opportunity_section
     assert "상태 원인: 상승장·구조 유효, 확장 +5.1%가 허용 상한 +5.0% 초과" in opportunity_section
     assert "근거: 허용 이격 초과 또는 시장 조건 대기" in opportunity_section
     assert "관측값=0.051, 기준값=0.05" in opportunity_section
@@ -1209,13 +1240,20 @@ def test_real_opportunity_price_basis_matches_all_three_surfaces(age, label, det
         scorecard=_legacy_result(scorecard_as_of=chart.as_of).scorecard,
     )
     run = SimpleNamespace(
+        as_of=chart.as_of,
         verdicts=[],
         errors=[],
+        diagnostic_errors=[],
         signal_bundles=[
             SimpleNamespace(
                 strategy_id="SWING_W150",
+                as_of=chart.as_of,
                 signal_history=[source],
                 observation_history=[],
+                support_tests=[],
+                observations_enabled=False,
+                observation_parameters=None,
+                diagnostic_errors=[],
                 entry_opportunity=opportunity,
             )
         ],
@@ -1268,7 +1306,9 @@ def test_real_opportunity_price_basis_matches_all_three_surfaces(age, label, det
         detailed_strategy=detail,
     )
     for rendered in (check, analyze, brief):
-        section = rendered.split("### 오늘 EntryOpportunity\n", 1)[1]
+        section = rendered.split(
+            "### 오늘 EntryOpportunity\n" if detail else "### 전략별 대응\n", 1
+        )[1]
         assert label in section
         if age == 0:
             assert "거래 가능 시가" not in section
@@ -1322,15 +1362,17 @@ async def test_service_evaluates_entry_signal_performance_on_demand(signal_analy
     assert performance.estimated_return_from_signal_close == Decimal("0.2")
     assert performance.executed_return_from_next_tradable_open == Decimal("0.1")
     compact = render_strategy_sections(result.scorecard, result)
-    assert "Signal 종가 추정 +20.0%" in compact
-    assert "다음 실제 거래 가능 시가 체결 +10.0%" in compact
-    assert "signal_close_estimate" in compact
-    assert "next_open_actual" in compact
+    assert "Signal 종가 추정 +20.0%" not in compact
+    assert "다음 실제 거래 가능 시가 체결 +10.0%" not in compact
+    detailed = render_strategy_sections(result.scorecard, result, detail=True)
+    assert "Signal 종가 추정 +20.0%" in detailed
+    assert "다음 실제 거래 가능 시가 체결 +10.0%" in detailed
+    assert "signal_close_estimate" in detailed
+    assert "next_open_actual" in detailed
     if provisional:
         assert performance.estimated_data_status is DataStatus.PARTIAL
         assert performance.executed_data_status is DataStatus.PARTIAL
-        assert compact.count("PARTIAL (PROVISIONAL_EVALUATION_CLOSE)") == 2
-    detailed = render_strategy_sections(result.scorecard, result, detail=True)
+        assert detailed.count("PARTIAL (PROVISIONAL_EVALUATION_CLOSE)") == 2
     assert f"signal_id={source.signal_id}" in detailed
     assert "parameter_fingerprint=fingerprint" in detailed
 
@@ -1347,8 +1389,8 @@ def test_renderer_distinguishes_missing_execution_reason(signal_analysis):
         source, chart([(source.occurred_on, "109", "110", BarFinality.FINAL)])
     )
     analysis = replace(signal_analysis, signal_performances=(performance,))
-    rendered = render_strategy_sections(analysis.scorecard, analysis)
+    rendered = render_strategy_sections(analysis.scorecard, analysis, detail=True)
     assert "Signal 종가 추정 +0.0%" in rendered
     assert "다음 실제 거래 가능 시가 체결 NOT_EVALUATED" in rendered
     assert "NEXT_TRADABLE_BAR_UNAVAILABLE" in rendered
-    assert "signal_id=" not in rendered
+    assert "signal_id=" in rendered

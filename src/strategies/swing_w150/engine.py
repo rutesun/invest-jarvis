@@ -22,7 +22,6 @@ from src.strategies.swing_w150.models import (
     SwingTrade,
 )
 from src.tools.disclosure import is_korean_ticker
-from src.tools.technical.indicators import IndicatorCalculator
 
 
 logger = logging.getLogger(__name__)
@@ -62,8 +61,41 @@ class _Run:
         )
 
 
-def _features(df: pd.DataFrame) -> rules.SwingFeatures:
-    return rules.build_features(IndicatorCalculator().calculate(df.copy()))
+def _features(
+    df: pd.DataFrame, *, common_analysis=None, common_context=None
+) -> rules.SwingFeatures:
+    from src.strategies.models import BarFinality
+    from src.strategies.swing_w150.common import (
+        raw_rules,
+        raw_swing_analysis,
+        row_frame,
+        swing_analysis,
+        validate_frame_analysis,
+    )
+    from src.strategies.swing_w150.features import SwingFeatureFrame
+    from src.strategies.swing_w150.parameters import SwingW150Parameters
+    from src.tools.technical.chart_analysis.features import LEGACY_VERSION
+    from src.tools.technical.scorecard_models import DataStatus
+
+    params = SwingW150Parameters()
+    if common_analysis is None:
+        common_analysis = raw_swing_analysis(df, params, context=common_context)
+    validate_frame_analysis(common_analysis, df, raw_rules(params), feature_version=LEGACY_VERSION)
+    frame = row_frame(common_analysis, raw_rules(params)[0])
+    frame.index = df.index.copy()
+    material = SwingFeatureFrame(
+        frame,
+        DataStatus.COMPLETE,
+        tuple(
+            BarFinality(common_analysis.manifest.finality[stamp.date()].lower())
+            for stamp in frame.index
+        ),
+        common_analyses=(common_analysis,),
+    )
+    facts = swing_analysis(
+        common_analysis.manifest.ticker, material, params, replay=True, context=common_context
+    )
+    return rules.build_features(material.frame, common_analysis=facts)
 
 
 def _walk(
@@ -174,9 +206,15 @@ def _replay(f: rules.SwingFeatures, events: list[SwingReplayEvent] | None = None
     return runs
 
 
-def replay_trace(df: pd.DataFrame) -> SwingReplayTrace:
+def replay_trace(
+    df: pd.DataFrame, *, common_analysis=None, common_context=None
+) -> SwingReplayTrace:
     """Replay a FLAT seed and retain every evaluated transition in rule order."""
-    f = _features(df)
+    f = (
+        _features(df, common_analysis=common_analysis, common_context=common_context)
+        if common_analysis is not None or common_context is not None
+        else _features(df)
+    )
     events: list[SwingReplayEvent] = []
     runs = _replay(f, events)
     last = len(f.close) - 1
@@ -219,9 +257,13 @@ def replay_trace(df: pd.DataFrame) -> SwingReplayTrace:
     return SwingReplayTrace(tuple(events), state)
 
 
-def replay(df: pd.DataFrame) -> list[SwingTrade]:
+def replay(df: pd.DataFrame, *, common_analysis=None) -> list[SwingTrade]:
     """df: 원본 OHLCV(날짜 오름차순). 마지막 매매가 열려 있으면 마지막 종가로 why='end'."""
-    f = _features(df)
+    f = (
+        _features(df, common_analysis=common_analysis)
+        if common_analysis is not None
+        else _features(df)
+    )
     return [run.to_trade(f) for run in _replay(f)]
 
 
@@ -233,14 +275,18 @@ def _breakout_reference(f: rules.SwingFeatures, lookback: int) -> dict:
     return {"breakout_level": float(f.high[-lookback:].max()), "breakout_blocked": False}
 
 
-def current_state(df: pd.DataFrame) -> SwingState:
+def current_state(df: pd.DataFrame, *, common_analysis=None) -> SwingState:
     """마지막 봉 종가 기준 상태. SIGNAL은 다음 봉 시가 진입을 뜻한다."""
     if len(df) < rules.WARMUP_BARS + 1:
         return SwingState(
             status=SwingStatus.NOT_ELIGIBLE,
             reason=f"데이터 부족({len(df)}봉 < {rules.WARMUP_BARS + 1}봉)",
         )
-    f = _features(df)
+    f = (
+        _features(df, common_analysis=common_analysis)
+        if common_analysis is not None
+        else _features(df)
+    )
     last = len(f.close) - 1
     as_of = f.dates[last]
     runs = _replay(f)

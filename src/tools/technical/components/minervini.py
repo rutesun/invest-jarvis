@@ -1,5 +1,6 @@
 import pandas as pd
 
+from src.tools.technical.context import common_evidence
 from src.tools.technical.models import ComponentResult, ComponentSignal
 
 
@@ -14,8 +15,9 @@ STAGE2_CONDITION_LABELS: dict[str, str] = {
 }
 
 
-def analyze_minervini(df: pd.DataFrame) -> ComponentResult:
+def analyze_minervini(df: pd.DataFrame, *, common_analysis=None) -> ComponentResult:
     """Analyze Minervini Stage 2 conditions (7 conditions)."""
+    facts = common_evidence(df, common_analysis, "chart.stage2.minervini")
     if df.empty or len(df) < 200:
         return ComponentResult(
             signals=[],
@@ -24,52 +26,13 @@ def analyze_minervini(df: pd.DataFrame) -> ComponentResult:
             score=0,
         )
 
-    latest = df.iloc[-1]
-
-    def safe(col: str) -> float:
-        val = latest.get(col)
-        if pd.isna(val) or val is None:
-            return 0.0
-        return float(val)
-
-    close = safe("Close")
-    sma_50 = safe("SMA_50")
-    sma_150 = safe("SMA_150")
-    sma_200 = safe("SMA_200")
-    high_52w = safe("High_52w")
-    low_52w = safe("Low_52w")
-
-    if not all([close, sma_50, sma_150, sma_200]):
-        return ComponentResult(
-            signals=[],
-            evidence=["이동평균 계산 불가"],
-            metrics={},
-            score=0,
-        )
-
-    # SMA_200 21일 전 (기존)
-    sma_200_prev = 0.0
-    if len(df) > 21:
-        val = df.iloc[-22].get("SMA_200")
-        if not pd.isna(val) and val is not None:
-            sma_200_prev = float(val)
-
-    # SMA_150 21일 전 [신규: sma_150_rising 판정용]
-    sma_150_prev = 0.0
-    if len(df) > 21:
-        val = df.iloc[-22].get("SMA_150")
-        if not pd.isna(val) and val is not None:
-            sma_150_prev = float(val)
-
-    conditions = {
-        "ma_stack": close > sma_150 > sma_200,  # 1
-        "ma_50_stack": sma_50 > sma_150 > sma_200,  # 2 [신규]
-        "sma_150_rising": (sma_150 > sma_150_prev) if sma_150_prev else False,  # 3 [신규]
-        "sma_200_rising": (sma_200 > sma_200_prev) if sma_200_prev else False,  # 4
-        "above_50": close > sma_50,  # 5
-        "above_52w_low_30pct": (close >= low_52w * 1.30) if low_52w else False,  # 6
-        "within_52w_high_25pct": (close >= high_52w * 0.75) if high_52w else False,  # 7
-    }
+    if not facts.get("available", False):
+        return ComponentResult(signals=[], evidence=["이동평균 계산 불가"], metrics={}, score=0)
+    close, sma_50, sma_150, sma_200, high_52w, low_52w = (
+        facts[key] for key in ("close", "sma_50", "sma_150", "sma_200", "high_52w", "low_52w")
+    )
+    sma_150_prev, sma_200_prev = facts["sma_150_previous"], facts["sma_200_previous"]
+    conditions = facts["conditions"]
 
     met_count = sum(conditions.values())
     is_stage2 = met_count == 7

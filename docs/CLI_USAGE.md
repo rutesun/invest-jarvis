@@ -32,6 +32,64 @@ jarvis report
 
 ## 명령어 상세
 
+### 공통 Quality와 전략별 수량 (`check` / `analyze` / `brief`)
+
+기존 세 명령에 공통 사실·Quality와 전략별 Position Plans(목표·매수·매도 수량)를 표시합니다. 독립 `score` 명령은 제공하지 않습니다.
+
+```bash
+uv run jarvis check AAPL
+uv run jarvis check AAPL --detail-strategy
+uv run jarvis analyze AAPL
+uv run jarvis brief
+```
+
+기본 출력은 현재 상태 → Quality·4축·미공개 사유 → 주요 가격대 → 최근 5거래일과 핵심 변화 → 전략별 대응·수량 순서입니다. 돌파·지지·회복 기준은 현재 유효한 실측이 있을 때 표시하고, 종료된 진입의 옛 가격은 과거 구조 참고로 구분합니다. 5거래일 표의 기술점수는 기존 Technical Score이며 현재 Quality와 별도입니다. Quality는 각 날짜 원점에서 재계산하며 장중값·미산출을 구분합니다. 과거·해소·무효화 이력은 `--detail-strategy`에서 전체 FactRef(사실 참조) 및 전략 채택·거절 audit와 함께 확인합니다. 현재 유효한 ACTIVE 상태는 발생한 지 20세션이 지났어도 표시하며, 당일 판정의 과거 source 근거와 미평가 경고는 유지합니다. Quality는 실험적 상태 지수이며 기존 Technical Score·매매판정·brief 순위를 바꾸지 않습니다. 연속 FINAL 252봉과 입력 완전성을 충족하지 못하면 null과 이유를 표시합니다. 미완성 봉은 PROVISIONAL/preview로 구분합니다.
+
+Quality의 canonical 2년 원점이 부족할 때 기존 공급자의 `3y` 입력을 최대 한 번 보충합니다. 보충 시세는 Quality에만 사용하고 겹치는 유효 OHLCV가 다르면 Quality를 unavailable로 표시합니다. 기존 전략 입력·점수는 유지합니다. 과거 봉 FINAL은 기존 supplied-chart 추론 규약이며, live range API의 `STUB_ONLY` 검증 상태를 바꾸지 않습니다.
+
+`TECHNICAL_LEGACY`, `PLAYBOOK_V1`, `SWING_W150`의 계획은 같은 실제 보유·계좌 입력에 대한 독립 대안입니다. 수량을 합산하지 않습니다. 보유 설정 읽기가 실패하면 미보유 0주로 처리하지 않고 수량 미정과 오류를 표시합니다. 매수의 자본·위험 예산·주당 위험·시세·실행 확인이 부족하면 수량은 unavailable입니다. 주문이나 계좌 설정 쓰기는 수행하지 않습니다.
+
+### check - 텍스트와 기술 차트 HTML
+
+```bash
+# 기본 텍스트
+uv run jarvis check ALAB 161890
+
+# 텍스트 + HTML 자동 저장, 저장 경로와 파일 링크 출력
+uv run jarvis check ALAB 161890 --html
+
+# HTML 저장 경로 직접 지정
+uv run jarvis check ALAB 161890 --html reports/check.html
+
+# 전체 전략 근거와 점수 이력을 텍스트로 출력하고 HTML 상세도 펼쳐 저장
+uv run jarvis check ALAB 161890 --detail-strategy --detail-history \
+  --html reports/check-detail.html
+
+# 기존 보고서를 교체할 때만 명시
+uv run jarvis check ALAB 161890 --html reports/check.html --force
+
+# 사용 가능한 옵션 확인 (시세 조회 없음)
+uv run jarvis check --help
+```
+
+#### 출력 읽는 법과 저장 동작
+
+`check` 기본 화면은 현재 유효 상태와 최근 20개 응답 거래일의 관찰 흐름을 먼저 연결합니다. 현재 상태의 시작·조건 충족 사건은 기간 밖이어도 포함하고, 같은 회복을 설명하는 `이탈 관찰 종료`와 `회복 확인`은 합칩니다. 점수 추이는 기존 5일 범위를 유지합니다. 예를 들어 `150일선: 청산 조건 충족 후 미회복`은 과거 조건 충족과 현재 상태를 뜻합니다. `오늘 신규 매매 지시 없음 · 보유 수량 유지`와 함께 표시될 수 있으며 실제 매도 완료나 새로운 매도 수량을 뜻하지 않습니다.
+
+`--html`은 기본 텍스트를 출력한 뒤 UTF-8 HTML을 추가 저장합니다. 경로를 생략하면 실행한 디렉터리의 `tmp/reports/check-<시각>-<고유ID>.html`에 매번 새 파일을 만듭니다. 저장 후 절대경로와 복사 가능한 `file://` 링크를 출력합니다. 경로를 직접 정할 때는 `--html reports/check.html` 또는 `--html=reports/check.html`을 사용합니다. 종목은 `--html` 앞에 적습니다. 바로 뒤의 일반 인자는 저장 경로로 해석합니다. `--html` 옵션 전체를 생략하면 텍스트만 출력하고 보고서 파일·폴더를 만들지 않습니다.
+
+여러 종목을 입력 순서대로 한 파일에 담고, `analyze`의 기술 차트를 같은 실행 데이터로 생성해 내장합니다. 외부 CDN·서버 없이 파일을 옮겨 열 수 있으며 자동으로 브라우저를 열지 않습니다. 추가 뉴스·LLM 조회는 없고, HTML 요청 시 로컬 차트 렌더 시간과 파일 크기가 더해집니다. 기존 이름→티커 해석 경로는 유지됩니다.
+
+차트 위의 브리핑은 추세·가격 위치·가격 구조·cRSI·거래량과 이동평균 네 개를 요약합니다. 상승/위쪽 수치는 초록, 하락/아래쪽은 붉은색, 과매도는 별도 상태색입니다. 이동평균 방향은 선 자체의 최근 21봉 변화이고 주가 이격과 구별합니다. cRSI는 가변밴드를 사용하며 거래량 비중은 최근 20개 응답 봉의 상승일·하락일 기준(보합 제외)입니다. 50/200의 현재 배열과 실제 교차 사건 날짜를 구분하고 기준일·잠정 여부·미산출 사유를 함께 표시합니다.
+
+HTML 상단의 `현재 상태`에서 기준일과 핵심 세 항목을 먼저 확인합니다. 각 항목의 `이 상태가 된 경과 보기`를 펼치면 회복·재이탈·조건 충족 날짜를 읽을 수 있습니다. 추가 현재 상태와 `지난 관찰 전체 보기`는 기본 접힘이며 현재 청산 상태 확인 불가·잠정·미평가 경고는 바로 표시합니다. 기본 텍스트의 현재 상태·관찰 흐름은 유지합니다.
+
+차트 아래의 전략 카드는 판단·보유→목표·매수/매도 수량을 함께 보여줍니다. 각 전략은 독립 대안이므로 수량을 합산하지 않습니다. Quality 선 그래프는 최근 5거래일이며 4축 막대는 표시된 평가일 기준입니다. 확정 총점과 장중 잠정 축의 날짜가 다를 수 있습니다. 날짜별 수치와 보조 위험의 세부 근거는 펼쳐서 확인하며 현재 위험 수준·미평가·데이터 경고는 기본 화면에서 확인할 수 있습니다.
+
+출력 경로와 기존 파일 충돌은 시세 조회 전에 확인합니다. 기존 파일은 `--force`가 있어야 교체하며 `--force` 단독 사용은 오류입니다. 저장 실패 시 기존 파일을 보존합니다. 종목 일부가 실패하면 성공 결과와 실패 사유를 함께 저장하고 exit 1로 종료합니다. 차트만 실패하면 경고와 분석 결과를 남깁니다. `--detail-history`, `--detail-strategy`는 텍스트와 HTML 모두에 적용되며 HTML의 상세 근거는 펼쳐서 볼 수 있습니다.
+
+HTML의 구조화된 가격·이동평균은 종목 통화에 맞춰 표시합니다. 상세 technical 진단 원문에는 국내 가격에도 기존 `$` 기호가 남을 수 있습니다. 이는 원문 보존에 따른 표시 제한이며 실제 USD 단위를 뜻하지 않습니다.
+
 ### notebook sync - 투자 notebook 지속 동기화
 
 기본 실행은 Notion API `2025-09-03`으로 지정 Database를 읽는 remote-aware dry-run입니다. `.env`의 `NOTION_TOKEN`을 사용하며 리포트용 `NOTION_DATABASE_ID`와 별개로 `--database-id`를 지정합니다. 기본 대상은 투자 notebook Database입니다.
@@ -122,6 +180,12 @@ uv run jarvis check AAPL MSFT 005930.KS
 
 ---
 
+### 차트 상태 점수와 최근 5거래일
+
+`check`·`analyze`·`brief`의 기본 화면에서 신규 Quality 총점·4축의 의미·실측 근거·전일차를 확인합니다. 최근 5거래일 표는 신규 Quality(0~100)와 기존 Technical Score를 구분하고, 핵심 변화에는 확정 기간의 총점·4축 변화와 날짜별 관찰·전략 신호를 함께 표시합니다. 장중 일봉은 현재가격으로 표시하며 확정 점수와 구분합니다. 공개 조건을 충족하지 못한 진단값을 정상 점수로 대신 표시하지 않습니다.
+
+구조 위험은 발생일·첫 확정일·현재 평가일을 구분합니다. 이탈 후 회복하고 다시 이탈하면 새 연속 구간의 시작일을 표시합니다. 기본 화면은 신호 이름·날짜·가격 기준을 보여주며 내부 source ID와 원시 근거는 `--detail-strategy`에서 확인합니다.
+
 ### EntryOpportunity와 구조 위험 진단
 
 `check`, `analyze`, `brief`의 공통 기본 출력에 신규 진입 상태, 이유, source Signal·발생일·경과 거래일, Production policy와 별도 구조 위험도를 표시한다. `EXECUTION_WATCH`는 기존 내부 `WATCH`의 사용자 표시다. `ALLOW + CAUTION/HIGH_RISK`는 기존 진입 조건을 통과했으나 연구상 구조 경고가 함께 있다는 뜻이며, 위험도 자체가 진입 차단·매도 지시는 아니다. 장중은 `PROVISIONAL`, 완료된 차트는 `FINAL`로 구분한다.
@@ -135,7 +199,7 @@ JARVIS_ENTRY_SHADOW_LOG_PATH=data/research/my-entry-shadow.jsonl uv run jarvis c
 
 JSONL은 갱신형 DB가 아닌 분석용 평가 snapshot이다. 반복 실행·장중/종가·서로 다른 policy/parameter 기록을 삭제하거나 덮지 않는다. 분석 시 source·차트 거래일·policy/parameter·finality를 구분하고 동일 판단의 중복 snapshot은 선택 기준을 명시해 처리한다. 기록에 실제 보유 수량·주문·손절·미래 outcome은 포함하지 않는다. 프로그램에서 `AnalysisStrategyService(shadow_recorder=None)`으로 기록만 끌 수 있으며, `StrategyRunner(shadow_enabled=False)`는 Shadow 계산을 끄고 Production 결과는 유지한다.
 
-Trading Observation v1은 기본 ON이며 공통 출력에서 cycle/support, 현재 SETUP·Positive/Risk EPISODE, 당일 EVENT, 최근 20거래일 Observation·Signal history를 보여준다. WATCH는 지지 관찰이며 신규 매수 허용을 뜻하지 않는다. 기본 출력에서 날짜·가격·판단 Evidence를 확인하고 `--detail-strategy`에서 설정·fingerprint와 재현 정보를 추가로 확인한다. 기본 ON과 detector별 설정 선정은 별개다. 거래량 확장·수축 ratio는 미선정이므로 기본 실행에서 해당 항목은 `UNRESOLVED`/미평가이며, 평가 실패·Observation OFF와도 구분한다.
+Trading Observation v1은 기본 ON이며 공통 출력에서 cycle/support, 현재 SETUP·Positive/Risk EPISODE, 당일 EVENT를 보여준다. 최근 20거래일 Observation·Signal history와 과거·종료된 전체 이력은 `--detail-strategy`에서 확인한다. WATCH는 지지 관찰이며 신규 매수 허용을 뜻하지 않는다. 기본 출력에서 날짜·가격·판단 Evidence를 확인하고 `--detail-strategy`에서 설정·fingerprint와 재현 정보를 추가로 확인한다. 기본 ON과 detector별 설정 선정은 별개다. 거래량 확장·수축 ratio는 미선정이므로 기본 실행에서 해당 항목은 `UNRESOLVED`/미평가이며, 평가 실패·Observation OFF와도 구분한다.
 
 기본 Pullback은 `SWING_W150_V2_PARAMS_V1`이다. support ladder V2는 failure/restart 미선정으로 기본 CLI에서 활성화되지 않으며, 아래 offline 연구 명령에서 사전 고정된 진단 설정으로만 비교한다. 이 명령은 provider/LLM/실계좌와 연구 JSONL을 사용하지 않는다.
 

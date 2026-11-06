@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from src.pipelines.chart_analysis_render import render_common_strategy_analysis
 from src.pipelines.strategy_analysis import AnalysisStrategyResult
 from src.strategies.models import (
     EntryOpportunityStatus,
@@ -13,7 +14,7 @@ from src.strategies.models import (
 )
 from src.strategies.observations.registry import OBSERVATION_REGISTRY
 from src.strategies.signal_performance import ENTRY_SIGNAL_CODES, SignalPerformance
-from src.tools.technical.scorecard_models import Importance, TechnicalScorecard
+from src.tools.technical.scorecard_models import Importance, TechnicalScorecard, TriggerStatus
 
 
 def render_strategy_sections(
@@ -65,11 +66,18 @@ def render_strategy_sections(
                 value = metric.model_dump(mode="json") if hasattr(metric, "model_dump") else metric
                 lines.append(f"- {dimension.code}.{code}: {value}")
 
-    lines.extend(["", "### 최근 Analysis Trigger — 20거래일"])
+    lines.extend(
+        ["", "### 최근 Analysis Trigger — 20거래일" if detail else "### 현재 Analysis Trigger"]
+    )
     for trigger in sorted(
         scorecard.triggers, key=lambda item: (item.occurred_on, item.code), reverse=True
     ):
-        if trigger.bars_ago <= 20:
+        if (detail and trigger.bars_ago <= 20) or (
+            not detail
+            and trigger.status is TriggerStatus.ACTIVE
+            and trigger.status_as_of == scorecard.as_of
+            and trigger.occurred_on <= scorecard.as_of
+        ):
             lines.append(
                 f"- {trigger.occurred_on} {trigger.code} — {trigger.status.value}"
                 f" ({trigger.status_reason})"
@@ -78,7 +86,6 @@ def render_strategy_sections(
                 lines.extend(f"  - {evidence.message}" for evidence in trigger.evidence)
 
     bundles = getattr(analysis.strategy_run, "signal_bundles", []) if analysis else []
-    recent = set(analysis.exchange_sessions[-20:]) if analysis else set()
     lines.extend(["", "### cycle / support"])
     for bundle in bundles:
         lines.extend(_cycle_support_lines(bundle, detail))
@@ -92,6 +99,13 @@ def render_strategy_sections(
         for episode in bundle.observation_history
         if episode.status is ObservationStatus.ACTIVE
         and episode.temporal_type is ObservationTemporalType.EPISODE
+        and (
+            detail
+            or (
+                episode.status_as_of == bundle.as_of
+                and _observation_known_as_of(episode, bundle.as_of)
+            )
+        )
     ]
     for label, selected in (
         (
@@ -127,40 +141,54 @@ def render_strategy_sections(
         for item in bundle.observation_history
         if item.temporal_type is ObservationTemporalType.EVENT
         and (item.confirmed_on or item.started_on) == bundle.as_of
+        and (detail or _observation_known_as_of(item, bundle.as_of))
     ]
     for bundle, event in today_events:
         lines.extend(_observation_lines(bundle.strategy_id, event, detail))
     if not today_events:
         lines.append("- 당일 EVENT 기록 없음 — 평가 상태는 아래 참조")
     lines.append("#### 평가 상태")
+    if not detail:
+        for bundle in bundles:
+            for episode in bundle.observation_history:
+                if not _observation_known_as_of(episode, bundle.as_of) or (
+                    episode.status is ObservationStatus.ACTIVE
+                    and episode.temporal_type is ObservationTemporalType.EPISODE
+                    and episode.status_as_of != bundle.as_of
+                ):
+                    lines.append(
+                        f"- {bundle.strategy_id} {episode.code}: 현재 미평가 — 상태/가용일 불일치; 마지막 상태일="
+                        f"{episode.status_as_of} [{episode.finality.value.upper()}], "
+                        f"평가일={bundle.as_of}; 원근거는 --detail-strategy"
+                    )
     for bundle in bundles:
         lines.extend(_observation_evaluation_lines(bundle, detail))
     if not bundles:
         lines.append("- 미평가 — Strategy bundle 없음")
 
-    lines.extend(["", "### 최근 Observation history — 20거래일"])
-    observations = sorted(
-        (
-            (bundle.strategy_id, episode)
-            for bundle in bundles
-            for episode in bundle.observation_history
-            if detail or episode.started_on in recent or episode.ended_on in recent
-        ),
-        key=lambda item: (item[1].started_on, item[0], item[1].code),
-        reverse=True,
-    )
-    for strategy_id, episode in observations:
-        lines.extend(_observation_lines(strategy_id, episode, detail))
-    if not observations:
-        lines.append("- 최근 20거래일 Observation 기록 없음 — 평가 상태는 위 참조")
+    if detail:
+        lines.extend(["", "### 최근 Observation history — 20거래일"])
+        observations = sorted(
+            (
+                (bundle.strategy_id, episode)
+                for bundle in bundles
+                for episode in bundle.observation_history
+            ),
+            key=lambda item: (item[1].started_on, item[0], item[1].code),
+            reverse=True,
+        )
+        for strategy_id, episode in observations:
+            lines.extend(_observation_lines(strategy_id, episode, detail))
+        if not observations:
+            lines.append("- 최근 20거래일 Observation 기록 없음 — 평가 상태는 위 참조")
 
-    lines.extend(["", "### 최근 Signal history — 20거래일"])
+    lines.extend(["", "### 최근 Signal history — 20거래일" if detail else "### 당일 Signal"])
     signals = sorted(
         (
             signal
             for bundle in bundles
             for signal in bundle.signal_history
-            if detail or signal.occurred_on in recent
+            if detail or signal.occurred_on == bundle.as_of
         ),
         key=lambda signal: (signal.occurred_on, signal.strategy_id, signal.code),
         reverse=True,
@@ -253,6 +281,16 @@ def render_strategy_sections(
         lines.append(" — ".join(parts))
         lines.append(f"  - 상태 원인: {_opportunity_reason(opportunity)}")
         lines.extend(_decision_evidence_lines(opportunity.evidence))
+        if (
+            not detail
+            and opportunity.entry_signal is not None
+            and opportunity.entry_signal.occurred_on != bundle.as_of
+        ):
+            lines.extend(
+                _decision_evidence_lines(
+                    opportunity.entry_signal.evidence, first_label="source 발생 원인"
+                )
+            )
         if opportunity.terminal_on is not None:
             terminal_finality = opportunity.terminal_finality
             label = terminal_finality.value.upper() if terminal_finality else "UNKNOWN"
@@ -261,29 +299,56 @@ def render_strategy_sections(
     if not bundles:
         lines.append("- 없음 또는 평가 불가")
 
-    if analysis is not None and analysis.position_plan is not None:
-        plan = analysis.position_plan
+    if analysis is not None:
         lines.extend(
             [
                 "",
-                "### Position Plan",
-                f"- {plan.directive.kind.value}: current={plan.current_quantity}, "
-                f"target={plan.target_quantity}, buy={plan.buy_quantity}, sell={plan.sell_quantity} "
-                f"({plan.quantity_status.value})",
+                "### Position Plans",
+                "- 같은 보유·계좌 입력의 전략별 독립 대안입니다. 수량을 합산하지 않습니다.",
             ]
         )
-        if plan.signal_finality is not None:
-            label = "장중 후보" if plan.signal_finality is SignalFinality.PROVISIONAL else "확정"
-            lines.append(f"- signal_finality={plan.signal_finality.value.upper()} ({label})")
-            if detail:
-                calculated_at = plan.calculated_at.isoformat() if plan.calculated_at else "N/A"
-                lines.extend(
-                    [
-                        f"  - calculated_at={calculated_at}",
-                        f"  - market_snapshot_hash={plan.market_snapshot_hash or 'N/A'}",
-                    ]
+        plans = getattr(analysis, "position_plans", {})
+        # Older result objects remain readable, explicitly labelled compatibility.
+        if not plans and analysis.position_plan is not None:
+            plans = {"호환 Position Plan": analysis.position_plan}
+        for strategy_id, plan in plans.items():
+            lines.append(
+                f"- {strategy_id}: {plan.directive.kind.value}: current={plan.current_quantity}, "
+                f"target={plan.target_quantity}, buy={plan.buy_quantity}, sell={plan.sell_quantity} "
+                f"({plan.quantity_status.value})"
+            )
+            if plan.quantity_status.value == "unavailable":
+                lines.append(
+                    "  - 수량 미정: 자본·위험 예산·주당 위험·시세 또는 다음 세션 실행 확인이 부족합니다"
                 )
-    return "\n".join(lines)
+            if plan.directive.kind.value == "freeze":
+                lines.append("  - 미평가: 수량 변경을 보류합니다")
+            if plan.signal_finality is not None:
+                label = (
+                    "장중 후보" if plan.signal_finality is SignalFinality.PROVISIONAL else "확정"
+                )
+                lines.append(f"- signal_finality={plan.signal_finality.value.upper()} ({label})")
+                if detail:
+                    calculated_at = plan.calculated_at.isoformat() if plan.calculated_at else "N/A"
+                    lines.extend(
+                        [
+                            f"  - calculated_at={calculated_at}",
+                            f"  - market_snapshot_hash={plan.market_snapshot_hash or 'N/A'}",
+                        ]
+                    )
+        if not plans:
+            lines.append("- 수량 미정: 보유 입력 또는 전략 평가를 확인할 수 없습니다")
+    common = (
+        render_common_strategy_analysis(analysis, detail=detail) if analysis is not None else ""
+    )
+    return "\n\n".join(part for part in (common, "\n".join(lines)) if part)
+
+
+def _observation_known_as_of(episode, as_of) -> bool:
+    return all(
+        day is None or day <= as_of
+        for day in (episode.started_on, episode.confirmed_on, episode.status_as_of)
+    )
 
 
 def _shadow_lines(bundle, detail: bool) -> list[str]:

@@ -211,3 +211,12 @@ def test_reversal_uses_matching_watch_anchor_origin(kind, price):
     anchors = _build(source, bundle, features, [earlier, episode])
     assert anchors.origin_support == Decimal(price)
     assert anchors.pullback_low == Decimal("97")
+
+
+def test_future_source_cannot_create_a_current_fixed_anchor():
+    from datetime import timedelta
+
+    source, bundle, features, episode = _inputs()
+    future = source.model_copy(update={"occurred_on": bundle.as_of + timedelta(days=1)})
+    with pytest.raises(ValueError, match="Future"):
+        _build(future, bundle, features, [episode])

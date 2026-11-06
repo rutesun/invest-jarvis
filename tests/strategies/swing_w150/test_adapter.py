@@ -264,7 +264,7 @@ def _runtime_state():
 def test_recent_events_are_preserved_and_today_exit_wins(pypl, monkeypatch):
     frame, _ = pypl
 
-    def trace(df):
+    def trace(df, **_kwargs):
         end = len(df) - 1
         return SwingReplayTrace(
             (
@@ -334,7 +334,7 @@ def test_signal_two_sessions_ago_rechecks_entry(close, intent, monkeypatch):
     market = frame.copy()
     market["Close"] = [90] * (len(days) - 51) + [100] * 50 + [110]
 
-    def trace(df):
+    def trace(df, **_kwargs):
         return SwingReplayTrace(
             (SwingReplayEvent("S_ENTRY", len(df) - 3, "S", 100, 94),), _runtime_state()
         )
@@ -625,7 +625,7 @@ def test_terminal_source_reclaim_does_not_revive_opportunity_or_mix_live_source(
         }
     )
     monkeypatch.setattr(swing_adapter, "build_swing_features", lambda *_args, **_kwargs: f)
-    monkeypatch.setattr(swing_adapter, "detect_swing", lambda *_args: detection)
+    monkeypatch.setattr(swing_adapter, "detect_swing", lambda *_args, **_kwargs: detection)
     result = SwingW150SignalStrategy().evaluate_signals(bundle)
     assert result.entry_opportunity.entry_signal == source_b
     assert result.entry_opportunity.status not in {

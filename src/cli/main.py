@@ -3,22 +3,26 @@ import contextlib
 import logging
 import os
 import re
+from datetime import datetime
 from pathlib import Path
+from tempfile import NamedTemporaryFile
+from uuid import uuid4
 
 import typer
 from dotenv import load_dotenv
 from rich.console import Console
 from rich.markdown import Markdown
+from typer.core import TyperCommand
 
 from src.cli.notebook import notebook_app
 from src.llm.provider import LLMProvider
 from src.llm.stage_config import resolve_stage_llm
+from src.pipelines.analysis_overview import render_analysis_overview
 from src.pipelines.brief import BriefPipeline
 from src.pipelines.deep_dive import DeepDivePipeline
 from src.pipelines.quick_check import QuickCheckPipeline
 from src.pipelines.screener import ScreenerPipeline
 from src.pipelines.strategy_analysis import AnalysisStrategyService
-from src.pipelines.strategy_render import render_strategy_sections
 from src.providers.kis import KISProvider
 from src.providers.naver import NaverProvider
 from src.providers.ticker_resolver import TickerResolver
@@ -173,7 +177,7 @@ async def resolve_ticker(query: str) -> str:
         raise ValueError(f"Could not resolve ticker for '{query}': {e}") from e
 
 
-async def run_quick_check(ticker_or_name: str) -> dict:
+async def run_quick_check(ticker_or_name: str, *, include_chart: bool = False) -> dict:
     """Run quick check pipeline."""
     # Resolve ticker if company name is provided
     ticker = await resolve_ticker(ticker_or_name)
@@ -215,15 +219,20 @@ async def run_quick_check(ticker_or_name: str) -> dict:
     scorer = TechnicalScorer()
     tool = TechnicalAnalysisTool(provider=provider, scorer=scorer)
     pipeline = QuickCheckPipeline(technical_tool=tool, strategy_service=AnalysisStrategyService())
+    if include_chart:
+        return await pipeline.run(ticker, include_chart=True)
     return await pipeline.run(ticker)
 
 
-async def run_quick_checks(queries: list[str]) -> list[dict]:
+async def run_quick_checks(queries: list[str], *, include_chart: bool = False) -> list[dict]:
     """Run quick checks independently for each query."""
     results: list[dict] = []
     for query in queries:
         try:
-            results.append(await run_quick_check(query))
+            if include_chart:
+                results.append(await run_quick_check(query, include_chart=True))
+            else:
+                results.append(await run_quick_check(query))
         except Exception as exc:
             results.append(
                 {
@@ -235,7 +244,62 @@ async def run_quick_checks(queries: list[str]) -> list[dict]:
     return results
 
 
-@app.command()
+def _prepare_check_html_path(path: Path, *, force: bool) -> None:
+    """조회 전에 출력 충돌과 parent 생성을 검증한다."""
+    if path.is_symlink():
+        raise ValueError("HTML 출력 경로는 symlink일 수 없습니다.")
+    if path.exists():
+        if not path.is_file():
+            raise ValueError("HTML 출력 경로가 일반 파일이 아닙니다.")
+        if not force:
+            raise ValueError("HTML 파일이 이미 있습니다. 교체하려면 --force를 사용하세요.")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not os.access(path.parent, os.W_OK):
+        raise ValueError("HTML 출력 디렉터리에 쓰기 권한이 없습니다.")
+
+
+def _write_check_html(path: Path, document: str, *, force: bool) -> None:
+    """같은 디렉터리에 완성한 UTF-8 파일만 원자적으로 게시한다."""
+    temporary = None
+    try:
+        with NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=path.parent, prefix=".jarvis-check-", delete=False
+        ) as handle:
+            temporary = Path(handle.name)
+            handle.write(document)
+            handle.flush()
+            os.fsync(handle.fileno())
+        if force:
+            if path.is_symlink() or (path.exists() and not path.is_file()):
+                raise ValueError("HTML 출력 경로가 일반 파일이 아닙니다.")
+            temporary.replace(path)
+        else:
+            # 조회 중 생긴 파일도 덮어쓰지 않는다. link는 파일 존재 시 원자적으로 실패한다.
+            os.link(temporary, path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
+class _CheckCommand(TyperCommand):
+    """Typer의 필수 옵션 값 경계에서 bare --html만 빈 값으로 변환한다."""
+
+    def parse_args(self, ctx, args: list[str]) -> list[str]:
+        normalized = []
+        for index, arg in enumerate(args):
+            if arg == "--":
+                normalized.extend(args[index:])
+                break
+            if arg == "--html" and (
+                index + 1 == len(args)
+                or (args[index + 1].startswith("-") and args[index + 1] != "-")
+            ):
+                arg = "--html="
+            normalized.append(arg)
+        return super().parse_args(ctx, normalized)
+
+
+@app.command(cls=_CheckCommand)
 def check(
     queries: list[str] = typer.Argument(  # noqa: B008 (typer 관용구)
         ..., help="One or more stock tickers or company names"
@@ -248,9 +312,32 @@ def check(
     detail_strategy: bool = typer.Option(
         False, "--detail-strategy", help="Show every Scorecard metric and evidence"
     ),
+    html: str | None = typer.Option(  # noqa: B008 (typer 관용구)
+        None,
+        "--html",
+        metavar="[PATH]",
+        help="Save standalone HTML with charts (default: tmp/reports/check-<time>-<id>.html)",
+    ),
+    force: bool = typer.Option(False, "--force", help="Replace an existing HTML file"),
 ):
     """Quick check - multi-ticker technical analysis without LLM or Macro."""
-    results = asyncio.run(run_quick_checks(queries))
+    if force and html is None:
+        raise typer.BadParameter("--force는 --html과 함께 사용하세요.")
+    html_path = None
+    html_force = force and bool(html)
+    if html is not None:
+        html_path = (
+            Path(html)
+            if html
+            else Path("tmp/reports") / f"check-{datetime.now():%Y%m%d-%H%M%S}-{uuid4().hex}.html"
+        )
+        try:
+            _prepare_check_html_path(html_path, force=html_force)
+        except (OSError, ValueError) as exc:
+            raise typer.BadParameter(str(exc), param_hint="--html") from exc
+        results = asyncio.run(run_quick_checks(queries, include_chart=True))
+    else:
+        results = asyncio.run(run_quick_checks(queries))
     formatter = QuickCheckPipeline(technical_tool=None)
     failed = False
 
@@ -269,6 +356,25 @@ def check(
             failed = True
             ticker = result.get("ticker", "UNKNOWN")
             console.print(f"[red]{ticker}: {result.get('error', 'Unknown error')}[/red]")
+
+    if html_path is not None:
+        from src.pipelines.check_html import render_check_html
+
+        try:
+            document = render_check_html(
+                results, detailed_history=detail_history, detailed_strategy=detail_strategy
+            )
+            _write_check_html(html_path, document, force=html_force)
+        except Exception as exc:
+            console.print(f"HTML 저장 실패: {exc}", style="red", markup=False)
+            raise typer.Exit(1) from exc
+        absolute_path = html_path.resolve()
+        console.print(
+            f"HTML 저장: {absolute_path}", style="green", markup=False, emoji=False, soft_wrap=True
+        )
+        console.print(
+            f"HTML 링크: {absolute_path.as_uri()}", markup=False, emoji=False, soft_wrap=True
+        )
 
     if failed:
         raise typer.Exit(1)
@@ -624,13 +730,9 @@ def _format_presented_structure(presented_structure) -> str:
     return text
 
 
-def _format_raw_analysis_sections(result: dict) -> str:
-    ticker = result.get("ticker", "")
+def _format_technical_analysis_sections(result: dict) -> str:
     technical = result["technical"]
     tech_summary = result["technical_summary"]
-    news_analysis = result.get("news_analysis")
-    fundamental = result.get("fundamental")
-    fundamental_summary = result.get("fundamental_summary")
     snapshot = technical.indicators or technical.snapshot
     long_sma_snapshot = technical.snapshot
 
@@ -758,6 +860,16 @@ def _format_raw_analysis_sections(result: dict) -> str:
         for insight in tech_summary.key_insights:
             output += f"- {insight}\n"
         output += "\n"
+
+    return output
+
+
+def _format_raw_analysis_sections(result: dict, *, include_technical: bool = True) -> str:
+    ticker = result.get("ticker", "")
+    news_analysis = result.get("news_analysis")
+    fundamental = result.get("fundamental")
+    fundamental_summary = result.get("fundamental_summary")
+    output = _format_technical_analysis_sections(result) if include_technical else ""
 
     if fundamental and fundamental_summary:
         output += "## Fundamental Analysis\n\n"
@@ -1024,7 +1136,7 @@ def format_deep_dive_output(result: dict, detailed_strategy: bool = False) -> st
 
     output = f"# Deep Dive Analysis: {ticker}\n\n"
     output += (
-        render_strategy_sections(
+        render_analysis_overview(
             result.get("scorecard"),
             result.get("strategy_analysis"),
             warning=result.get("strategy_warning"),
@@ -1057,7 +1169,9 @@ def format_deep_dive_output(result: dict, detailed_strategy: bool = False) -> st
         output += _format_playbook_section(playbook_verdict)
 
     output += "\n"
-    output += _format_raw_analysis_sections(result)
+    output += _format_raw_analysis_sections(
+        result, include_technical=detailed_strategy or result.get("strategy_analysis") is None
+    )
     return output
 
 

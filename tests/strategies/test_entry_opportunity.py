@@ -196,7 +196,7 @@ def test_adapter_passes_canonical_features_to_production_and_observation_sources
     detected = detect_swing(bundle.ticker, features, params).model_copy(
         update={"signal_history": [source], "current_signals": []}
     )
-    monkeypatch.setattr(adapter, "detect_swing", lambda *_args: detected)
+    monkeypatch.setattr(adapter, "detect_swing", lambda *_args, **_kwargs: detected)
     original_observations = adapter.evaluate_observations
     captured = []
 
