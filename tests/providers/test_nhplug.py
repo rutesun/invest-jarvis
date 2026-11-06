@@ -248,6 +248,44 @@ def test_all_pages_are_collected_and_final_summary_is_used(tmp_path, official):
     assert snapshot.summaries[0].total_assets == Decimal("1639431101")
 
 
+def test_continuation_business_code_collects_every_trade_page(tmp_path, official):
+    calls = []
+
+    def override(request):
+        if request.url.path == "/krstock/inquiry/v1/dailyOrderExecution":
+            calls.append(request.headers.get("cts"))
+            body = official("kr_executions")
+            if len(calls) == 1:
+                body["Output_0"] = body["Output_0"][:1]
+                body["rsp_cd"] = "00218"
+                return response(body, cts_flag="Y", cts="SYNTHETIC-NEXT")
+            body["Output_0"] = body["Output_0"][1:]
+            return response(body)
+
+    with make_client(tmp_path, ordinary_handler(official, override)) as client:
+        trades = client.trades(client.accounts()[0], date(2025, 4, 21), date(2025, 4, 21))
+    expected = [row for row in official("kr_executions")["Output_0"] if row["tot_cns_qty"] > 0]
+    assert len([trade for trade in trades if trade.market == "KR"]) == len(expected)
+    assert calls == ["", "SYNTHETIC-NEXT"]
+
+
+@pytest.mark.parametrize(
+    "headers", [{"cts_flag": "N"}, {"cts_flag": "Y"}, {"cts": "NEXT"}]
+)
+def test_continuation_business_code_requires_valid_continuation(tmp_path, official, headers):
+    def override(request):
+        if request.url.path == "/krstock/inquiry/v1/dailyOrderExecution":
+            body = official("kr_executions")
+            body["rsp_cd"] = "00218"
+            return httpx.Response(200, content=json.dumps(body, default=str), headers=headers)
+
+    with (
+        make_client(tmp_path, ordinary_handler(official, override)) as client,
+        pytest.raises(provider().NHError),
+    ):
+        client.trades(client.accounts()[0], date(2025, 4, 21), date(2025, 4, 21))
+
+
 @pytest.mark.parametrize(
     "headers",
     [{"cts_flag": "Y"}, {"cts_flag": "BAD"}, {"cts": "NEXT"}, {"cts": "NEXT", "cts_flag": ""}],

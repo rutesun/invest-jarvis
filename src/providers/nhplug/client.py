@@ -311,7 +311,16 @@ class NHClient:
                 and body.get("Output_0") == []
                 and flag == "N"
             )
-            if body.get("rsp_cd") != expected and not empty_history:
+            continuation = (
+                path in (KR_BALANCE_PATH, US_BALANCE_PATH, KR_TRADE_PATH, US_TRADE_PATH)
+                and body.get("rsp_cd") == "00218"
+                and flag == "Y"
+                and isinstance(
+                    body.get("Output_1" if path in (KR_BALANCE_PATH, US_BALANCE_PATH) else "Output_0"),
+                    list,
+                )
+            )
+            if body.get("rsp_cd") != expected and not empty_history and not continuation:
                 raise NHError("NH business response failure") from None
             if flag not in ("Y", "N") or (flag == "Y" and (not next_cursor or next_cursor in seen)):
                 raise NHError("NH pagination failure") from None

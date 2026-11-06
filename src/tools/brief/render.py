@@ -9,6 +9,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import datetime
 
+from markdown_it import MarkdownIt
+
 from src.providers.nhplug import NHBalanceSnapshot
 from src.tools.brief.broker import render_broker_header, render_broker_holding
 from src.tools.brief.models import BUCKET_LABELS, BriefItem
@@ -67,6 +69,17 @@ def _display(item: BriefItem) -> str:
     return item.ticker
 
 
+def _nested_analysis(markdown: str) -> str:
+    """공통 분석의 제목을 종목 H3 아래로 내린다. 코드 블록은 보존한다."""
+    lines = markdown.splitlines()
+    for token in MarkdownIt().parse(markdown):
+        if token.type == "heading_open" and token.map and token.tag != "h6":
+            index = token.map[0]
+            if lines[index].startswith("#"):
+                lines[index] = "#" + lines[index]
+    return "\n".join(lines)
+
+
 def _macro_section(macro: TickerMacroSnapshot | None) -> list[str]:
     if macro is None:
         return []
@@ -115,7 +128,8 @@ def _item_section(
     lines.append(f"### {_display(item)} — {label}{title_extra}")
     lines.extend(broker_lines or [])
     if strategy_renderer is not None:
-        lines.extend(["", strategy_renderer(item), ""])
+        lines.extend(["", _nested_analysis(strategy_renderer(item)), ""])
+    reference_start = len(lines)
 
     if item.note:
         lines.append(f"- **메모**: {item.note}")
@@ -223,5 +237,7 @@ def _item_section(
     if next_check:
         lines.append(f"- **다음 확인 지점**: {next_check}")
 
+    if strategy_renderer is not None and any(line.strip() for line in lines[reference_start:]):
+        lines[reference_start:reference_start] = ["#### 대응 근거·참고 정보", ""]
     lines.append("")
     return lines

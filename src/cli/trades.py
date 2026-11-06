@@ -75,6 +75,7 @@ def sync(
 @trades_app.command("list")
 def list_cases(
     db: Database = DEFAULT_DB,
+    detail: Annotated[bool, typer.Option("--detail", help="거래 ID·원문 필드·확인사항 전체 표시")] = False,
     ticker: Annotated[str | None, typer.Option("--ticker")] = None,
     start: Annotated[str | None, typer.Option("--from", help="YYYY-MM-DD")] = None,
     end: Annotated[str | None, typer.Option("--to", help="YYYY-MM-DD")] = None,
@@ -101,7 +102,7 @@ def list_cases(
             reviewed=reviewed,
             tags=tuple(tag) if tag is not None else None,
         )
-        rendered = render_cases(cases)
+        rendered = render_cases(cases, detailed=detail)
     except Exception as error:
         _fail(error)
     typer.echo(rendered)
@@ -190,13 +191,14 @@ def split(
 @trades_app.command("export")
 def export(
     db: Database = DEFAULT_DB,
+    detail: Annotated[bool, typer.Option("--detail", help="요약 대신 거래 전체 내보내기")] = False,
     case_id: Annotated[str | None, typer.Option("--case", help="투자 건 ID")] = None,
     month: Annotated[str | None, typer.Option("--month", help="YYYY-MM")] = None,
     output: Annotated[Path | None, typer.Option("--output", help="로컬 Markdown 저장 경로")] = None,
 ):
     """Markdown으로 출력하거나 로컬 파일로 내보낸다."""
     try:
-        rendered = TradeJournal(path=db).export(case_id=case_id, month=month, output=output)
+        rendered = TradeJournal(path=db).export(case_id=case_id, month=month, output=output, detailed=detail)
     except Exception as error:
         _fail(error)
     typer.echo(f"내보내기 완료: {output}" if output is not None else rendered)

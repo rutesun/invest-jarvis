@@ -87,13 +87,64 @@ def test_fractional_us_trade_roundtrip_render_and_export(tmp_path):
         case.case_id, source_links=(SourceLink("https://example.test/report", "retrospective"),)
     )
     output = tmp_path / "exports" / "notes.md"
-    markdown = journal.export(case_id=case.case_id, output=output)
+    markdown = journal.export(case_id=case.case_id, output=output, detailed=True)
     assert "0.004552" in markdown
     assert "2026-11-01" in markdown and "2026-11-03" in markdown
     assert "결제" in markdown and "사후" in markdown
     assert "fee_raw=0.000001" in markdown and "tax_raw=0.002" in markdown
     assert output.read_text() == markdown
     assert (output.stat().st_mode & 0o777) == 0o600
+
+
+def test_default_export_is_a_readable_summary_with_details_opt_in(tmp_path):
+    journal = TradeJournal(tmp_path / "journal.sqlite3")
+    item = trade(quantity="3", fee_fields={"fee_raw": Decimal("7")})
+    journal.sync([item])
+    case = journal.cases()[0]
+    journal.note(case.case_id, reason="실적 회복 확인 후 진입")
+    summary = journal.export()
+    assert "## 선택 투자 건의 월별 거래금액" in summary and "## 투자 건 요약" in summary
+    assert "실적 회복 확인 후 진입" in summary
+    assert "미기록" not in summary and "fee_raw" not in summary
+    assert case.case_id not in summary and item.trade_id not in summary
+    assert f"계좌: {case.account_id}" in summary
+    assert "### 거래 사실" not in summary
+    assert len(summary.splitlines()) < 35
+    detailed = journal.export(detailed=True)
+    assert case.case_id in detailed and item.trade_id in detailed
+    assert "fee_raw=7" in detailed
+
+
+def test_summary_never_combines_accounts_or_currencies(tmp_path):
+    journal = TradeJournal(tmp_path / "journal.sqlite3")
+    journal.sync([
+        trade(amount=Decimal("1000")),
+        trade(account_id="other", market="US", currency="USD", ticker="AAPL", amount=Decimal("25")),
+    ])
+    summary = journal.export()
+    assert "KR/KRW" in summary and "US/USD" in summary
+    assert "1,000" in summary and "25" in summary and "1,025" not in summary
+    assert "other" in summary and "## 계좌" in summary
+
+
+def test_month_selection_discloses_full_case_scope_and_partial_account_totals(tmp_path):
+    from src.tools.trades.render import render_cases
+
+    journal = TradeJournal(tmp_path / "journal.sqlite3")
+    journal.sync([
+        trade("oct-buy", day="2026-10-01", quantity="10", amount=Decimal("1000")),
+        trade("nov-sell", day="2026-11-01", side="sell", quantity="3", amount=Decimal("300")),
+        trade("other-oct", day="2026-10-01", ticker="000660", name="SK하이닉스", amount=Decimal("2000")),
+    ])
+    for summary in (
+        journal.export(month="2026-11"),
+        render_cases(journal.cases(start=date(2026, 11, 1), end=date(2026, 11, 30))),
+    ):
+        assert "2026-10" in summary and "1,000" in summary
+        assert "SK하이닉스" not in summary and "2,000" not in summary
+        assert "선택 투자 건의 월별 거래금액" in summary
+        assert "선택한 투자 건의 전체 거래 이력" in summary
+        assert "계좌 전체의 월별 합계를 뜻하지 않습니다" in summary
 
 
 def test_conflicting_or_stale_batch_rolls_back_every_fact(tmp_path):

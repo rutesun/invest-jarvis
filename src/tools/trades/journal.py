@@ -609,7 +609,8 @@ class TradeJournal:
             return self._case(connection, case_id)
 
     def export(
-        self, *, case_id: str | None = None, month: str | None = None, output: Path | None = None
+        self, *, case_id: str | None = None, month: str | None = None,
+        output: Path | None = None, detailed: bool = False,
     ) -> str:
         from .render import render_cases
 
@@ -627,7 +628,7 @@ class TradeJournal:
                     for trade in case.trades
                 )
             ]
-        markdown = render_cases(selected)
+        markdown = render_cases(selected, detailed=detailed)
         if output is not None:
             path = Path(output)
             _private_parent(path)

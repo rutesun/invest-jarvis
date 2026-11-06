@@ -46,6 +46,7 @@ def test_sync_list_show_note_and_resync_preserve_user_records(nh_cli, tmp_path):
         [
             "trades",
             "list",
+            "--detail",
             "--db",
             str(db),
             "--ticker",
@@ -100,11 +101,22 @@ def test_sync_list_show_note_and_resync_preserve_user_records(nh_cli, tmp_path):
     assert notes.strategy_tags == ("swing", "growth")
     assert notes.source_links[0].provenance == "retrospective"
     result = runner.invoke(
-        app, ["trades", "list", "--db", str(db), "--reviewed", "--tag", "growth"]
+        app, ["trades", "list", "--detail", "--db", str(db), "--reviewed", "--tag", "growth"]
     )
     assert result.exit_code == 0 and case_id in result.output
     result = runner.invoke(app, ["trades", "list", "--db", str(db), "--tag", "missing"])
     assert result.exit_code == 0 and case_id not in result.output
+
+
+def test_list_and_export_default_to_summary_with_explicit_details(nh_cli, tmp_path):
+    db = tmp_path / "journal.sqlite3"
+    assert _sync(nh_cli, db).exit_code == 0
+    summary = runner.invoke(app, ["trades", "list", "--db", str(db)])
+    assert summary.exit_code == 0
+    assert "월별 거래금액" in summary.output and "nh-trade-" not in summary.output
+    detail = runner.invoke(app, ["trades", "export", "--detail", "--db", str(db)])
+    assert detail.exit_code == 0
+    assert "nh-trade-" in detail.output and "거래 사실" in detail.output
 
 
 def test_split_and_markdown_export_stay_local(nh_cli, tmp_path):
