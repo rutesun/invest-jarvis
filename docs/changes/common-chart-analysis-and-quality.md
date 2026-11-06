@@ -1,8 +1,8 @@
 # Change Record: 공통 차트 분석과 실험적 Quality
 
-**Status**: In Progress
+**Status**: Merged
 **Date**: 2026-11-06
-**PRs**: 미생성
+**PRs**: [#65](https://github.com/rutesun/invest-jarvis/pull/65)
 **Type**: feat
 
 ## Why

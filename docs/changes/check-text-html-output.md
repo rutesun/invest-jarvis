@@ -1,8 +1,8 @@
 # Change Record: check 텍스트와 차트 HTML 출력
 
-**Status**: In Progress
+**Status**: Merged
 **Date**: 2026-11-06
-**PRs**: 미생성
+**PRs**: [#65](https://github.com/rutesun/invest-jarvis/pull/65)
 **Type**: feat
 
 ## Why
