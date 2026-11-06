@@ -40,7 +40,7 @@ jobs:
           fi
         continue-on-error: true
 
-  test:
+  unit-tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -55,4 +55,62 @@ jobs:
         run: uv sync --dev
 
       - name: Run unit tests
-        run: uv run pytest tests/ -v --ignore=tests/integration --cov=src --cov-report=term-missing
+        run: uv run pytest tests/ -q --tb=short --maxfail=1 --ignore=tests/integration -m "not integration and not chart_snapshot" --cov=src --cov-report=term-missing
+
+  chart-baseline:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: false
+
+      - name: Set up capture Python
+        run: uv python install 3.13.14
+
+      - name: Install frozen dependencies
+        run: uv sync --dev --frozen --python 3.13.14
+
+      - name: Verify capture environment
+        run: |
+          uv run --frozen --python 3.13.14 python - <<'PY'
+          import importlib.metadata
+          import json
+          import platform
+          from pathlib import Path
+
+          import numpy as np
+          import scipy
+
+          manifest = json.loads(Path("tests/fixtures/chart_analysis/manifest.json").read_text())
+          print(f"Platform: {platform.platform()} ({platform.system()}/{platform.machine()})")
+          print(f"Python: {platform.python_version()}")
+          assert platform.system() == "Darwin", platform.system()
+          assert platform.machine() == "arm64", platform.machine()
+          assert platform.python_version() == manifest["environment"]["python"]
+          for name in ("pandas", "numpy", "pandas-ta", "numba", "llvmlite", "scipy", "pydantic"):
+              print(f"{name}: {importlib.metadata.version(name)}")
+          print("NumPy build configuration:")
+          np.show_config()
+          print("SciPy build configuration:")
+          scipy.show_config()
+          PY
+
+      - name: Run complete chart parity file
+        run: uv run --frozen --python 3.13.14 pytest tests/strategies/test_common_chart_parity.py -q --tb=short --maxfail=1
+
+  test:
+    needs: [unit-tests, chart-baseline]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require both test jobs to pass
+        env:
+          UNIT_TESTS_RESULT: ${{ needs.unit-tests.result }}
+          CHART_BASELINE_RESULT: ${{ needs.chart-baseline.result }}
+        run: |
+          if [[ "$UNIT_TESTS_RESULT" != "success" || "$CHART_BASELINE_RESULT" != "success" ]]; then
+            exit 1
+          fi

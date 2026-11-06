@@ -53,6 +53,7 @@ testpaths = ["tests"]
 addopts = "-m 'not integration'"
 markers = [
     "integration: tests requiring external APIs (KIS, OpenAI, Telegram, Naver)",
+    "chart_snapshot: exact full-payload captures requiring the native float baseline environment (macOS ARM64, Python 3.13.14)",
 ]
 
 [tool.ruff]

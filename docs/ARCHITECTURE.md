@@ -14,6 +14,8 @@ PositionPlanner는 동일 보유·계좌 입력에서 전략별 독립 수량을
 
 독립 날짜/범위 조회의 live transport는 `STUB_ONLY`입니다. offline raw·주입 provider 검증과 기존 normalized 시장 입력 parity는 fresh raw transport 계약 검증을 대신하지 않습니다. 결과 저장소·영속 cache·backfill을 추가하지 않았고 기존 별도 운영 진단 기록은 그대로 유지합니다.
 
+공통 차트의 frozen full-payload capture는 macOS ARM64·Python 3.13.14 환경에서 exact 비교하며 backend 버전과 fixture 계약도 함께 검증합니다. Linux에서는 경계 조건과 같은 실행 내 결과 비교 등 일반 회귀를 유지합니다. CSV float parsing과 native 수치 계산의 차이 때문에 서로 다른 OS·CPU 환경의 마지막 bit까지 같은 결과를 보장하지 않습니다. 임계값에 가까운 입력에서는 이 수치 차이가 관찰 상태나 이력에도 영향을 줄 수 있으므로, 플랫폼 간 동일한 상태·판정을 보장하지 않습니다.
+
 ## 레이어 구조
 
 ```

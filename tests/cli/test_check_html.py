@@ -5,6 +5,7 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
+from click import unstyle
 from typer.testing import CliRunner
 
 import src.cli.main as cli
@@ -140,16 +141,22 @@ def test_bare_html_does_not_hide_unknown_options(monkeypatch, tmp_path):
 
 
 @pytest.mark.parametrize("args", [["--help"], ["ALAB", "--html", "--help"]])
+@pytest.mark.parametrize("color", [False, True])
 def test_help_describes_optional_path_and_default_without_running_checks(
-    monkeypatch, tmp_path, args
+    monkeypatch, tmp_path, args, color
 ):
     calls = fake_checks(monkeypatch)
     monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.setenv("TERM", "xterm-256color")
+    monkeypatch.setattr("typer.rich_utils.FORCE_TERMINAL", color)
 
-    output = runner.invoke(cli.app, ["check", *args])
+    output = runner.invoke(cli.app, ["check", *args], color=color)
 
     assert output.exit_code == 0 and calls == []
-    assert "[PATH]" in output.stdout and "tmp/reports/check-<time>-<id>.html" in output.stdout
+    assert ("\x1b[" in output.stdout) is color
+    plain_output = unstyle(output.stdout)
+    assert "[PATH]" in plain_output and "tmp/reports/check-<time>-<id>.html" in plain_output
     assert list(tmp_path.iterdir()) == []
 
 

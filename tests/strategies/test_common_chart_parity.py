@@ -447,6 +447,7 @@ def _first_difference(actual, expected, path="payload"):
     return path, actual, expected
 
 
+@pytest.mark.chart_snapshot
 @pytest.mark.parametrize("case", CASES)
 def test_complete_existing_consumer_payload_is_preserved(case, chart_fixture):
     """Catch changed values, evidence, IDs, dates, order, nulls and status together."""
@@ -588,6 +589,7 @@ def test_pivot_equality_keeps_original_indices_and_three_final_bar_confirmation(
     ]
 
 
+@pytest.mark.chart_snapshot
 @pytest.mark.parametrize("case", TECHNICAL_CASES)
 def test_legacy_full_payload_parity(case):
     """Common facts must preserve every Legacy field, trace and history reason."""
@@ -629,6 +631,7 @@ def test_aprime_raw_and_hysteresis_parity(case, chart_fixture):
     assert apply_hysteresis(common_rows) == apply_hysteresis(old_rows)
 
 
+@pytest.mark.chart_snapshot
 @pytest.mark.parametrize("case", TECHNICAL_CASES)
 def test_scorecard_full_payload_parity(case, chart_fixture):
     from src.tools.technical.scorecard import build_scorecard
@@ -767,6 +770,7 @@ def test_playbook_market_dependency_parity(case, chart_fixture):
     assert ("chart.rs" in consumed) is (case not in {"missing", "stale", "shared20"})
 
 
+@pytest.mark.chart_snapshot
 @pytest.mark.parametrize(
     "case",
     [
@@ -800,6 +804,7 @@ def test_swing_v2_full_history_parity(case, chart_fixture, monkeypatch):
     assert actual == expected, _first_difference(actual, expected)
 
 
+@pytest.mark.chart_snapshot
 @pytest.mark.parametrize("ticker", ["COIN", "AMAT", "PYPL", "UPST"])
 def test_swing_v1_replay_trace_parity(ticker, chart_fixture):
     from src.strategies.swing_w150.common import raw_swing_analysis
