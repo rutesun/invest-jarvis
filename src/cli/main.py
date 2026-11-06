@@ -1223,7 +1223,7 @@ def analyze(
 
 @app.command()
 def brief(
-    broker: str = typer.Option("local", "--broker", help="보유 출처: local(YAML) 또는 nh"),
+    broker: str | None = typer.Option(None, "--broker", help="보유 출처: 저장된 계좌 설정 사용; local 또는 nh로 지정"),
     account: str | None = typer.Option(None, "--account", help="NH 공개 계좌 식별자"),
     no_llm: bool = typer.Option(False, "--no-llm", help="LLM 문장화 없이 규칙 원문만 출력"),
     detail_strategy: bool = typer.Option(
@@ -1243,13 +1243,13 @@ def brief(
         console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1) from None
     except Exception:
-        if broker != "nh":
+        if broker == "local":
             raise
         console.print("[red]NH 브리핑 중단: 계좌 조회 또는 브리핑 처리에 실패했습니다.[/red]")
         raise typer.Exit(1) from None
 
 
-async def run_brief(use_llm: bool, broker: str = "local", account: str | None = None) -> dict:
+async def run_brief(use_llm: bool, broker: str | None = None, account: str | None = None) -> dict:
     """brief 파이프라인 조립·실행. run_deep_dive와 동일한 도구 조립 패턴."""
     from src.providers.index_provider import IndexProvider
     from src.providers.kis_wrapper import KISProviderWrapper
@@ -1257,16 +1257,26 @@ async def run_brief(use_llm: bool, broker: str = "local", account: str | None = 
     from src.tools.playbook.engine import PlaybookEngine
     from src.tools.playbook.holdings import load_holdings
 
-    if broker not in ("local", "nh"):
+    if broker not in (None, "local", "nh"):
         raise ValueError("--broker는 local 또는 nh를 지정하세요")
+    path = Path("playbook.yaml")
+    if path.is_symlink():
+        raise ValueError("playbook.yaml은 symlink 대신 일반 파일을 사용하세요")
+    original = path.read_bytes() if path.exists() else None
+    config = load_holdings(preserve_held_watches=True)
+    broker = broker or config.broker_provider or "local"
     if account is not None and broker != "nh":
         raise ValueError("--account는 --broker nh와 함께 지정하세요")
-    config = load_holdings(preserve_held_watches=True) if broker == "nh" else load_holdings()
     if broker == "nh":
         from src.pipelines.broker_account import merge_broker_holdings
+        from src.tools.playbook.broker_sync import save_broker_holdings
 
-        snapshot = await asyncio.to_thread(fetch_snapshot, account)
+        snapshot = await asyncio.to_thread(fetch_snapshot, account or config.broker_account_id)
         config = merge_broker_holdings(config, snapshot)
+        save_broker_holdings(config, snapshot, original)
+        config = merge_broker_holdings(load_holdings(preserve_held_watches=True), snapshot)
+    else:
+        config = load_holdings()
     if not config.holdings and not config.watchlist and config.broker_snapshot is None:
         raise ValueError("playbook.yaml에 holdings/watchlist가 없습니다")
 

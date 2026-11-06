@@ -570,6 +570,7 @@ uv run pytest tests/pipelines/stock_report/test_golden_set.py
 - 청산, 매수 가능, 축소, 진입 임박, 관망 후보 순으로 우선순위 정렬
 - 뉴스·공시·수급은 점수에 반영하지 않고 근거로만 표시
 - LLM 문장화 실패 또는 `--no-llm` 사용 시 규칙 원문으로 출력
+- NH 계좌 연결 후에는 실행마다 잔고를 조회해 playbook 보유를 갱신한 뒤 평가 ([연결 방법](#nh-계좌와-매매일지))
 
 **요구사항:**
 - `playbook.yaml` 필요
@@ -906,7 +907,13 @@ uv run jarvis broker holdings --account nh-계좌식별자
 uv run jarvis brief --broker nh --account nh-계좌식별자 --no-llm
 ```
 
-다른 worktree의 기존 `.env`를 읽으려면 `uv run --env-file /absolute/path/.env jarvis ...`를 사용한다. 키 값을 명령 인자로 직접 전달하지 않는다. 사용자 손절 기준과 관심 종목을 재사용하려면 해당 worktree의 로컬 `playbook.yaml`을 준비한다. NH 조회로 이 파일을 수정하지 않는다.
+다른 worktree의 기존 `.env`를 읽으려면 `uv run --env-file /absolute/path/.env jarvis ...`를 사용한다. 키 값을 명령 인자로 직접 전달하지 않는다. 사용자 손절 기준과 관심 종목을 재사용하려면 해당 worktree의 로컬 `playbook.yaml`을 준비한다.
+
+최초 `brief --broker nh --account nh-계좌식별자`가 성공하면 NH 주식 보유 목록·수량·매입단가와 계좌 연결 정보를 `playbook.yaml`에 저장한다. 이후에는 일반 `brief` 실행 때마다 저장된 계좌를 먼저 조회해 갱신한 뒤 분석한다. 조회가 성공했으면 후속 분석이 실패해도 갱신된 잔고는 유지된다. `--broker local`은 NH 조회·파일 갱신 없이 저장된 설정을 사용한다. 아직 계좌를 연결하지 않은 playbook은 기존 로컬 동작을 유지한다.
+
+손절 기준·메모·관심 목록·계좌 risk 설정·YAML 주석을 보존한다. 전량 매도 종목은 `holdings`에서 제외하고 사용자 필드는 `holding_settings`에 남겨 재진입 시 복원한다. RP 등 주식 분석 제외 자산은 보유 파일에 넣지 않고 브리프의 별도 표로 표시한다. 소수점 수량도 다시 읽을 때 보존한다. 기존 파일은 `data/broker/playbook-backups/`에 0600 권한으로 백업하고 원자적으로 교체한다. NH 조회·저장 실패나 조회 중 파일 편집이 감지되면 중단하며 기존 파일을 덮어쓰지 않는다.
+
+동시 브리프 저장은 잠금으로 직렬화하고 같은 원문에서 시작한 뒤늦은 저장은 거부한다. YAML alias/merge 참조(`*name`, `<<`)가 있으면 참조 의미를 바꾸지 않도록 자동 저장을 중단한다. 이 경우 개별 값으로 설정하거나 `--broker local`을 사용한다.
 
 잔고는 두 시장을 모두 조회한 후 표시한다. 한 시장이 실패하면 전체 조회를 실패로 처리하며 YAML 보유로 대체하지 않는다. NH 평가 기준가와 차트 분석 가격은 출처·시점이 다르다. 조회 시각은 가격 거래일을 뜻하지 않으며, 국내·해외 총자산과 KRW/USD 금액을 합산하지 않는다. NH 소수점 보유는 그대로 표시하고 기존 정수 기준 수량 계획만 생략한다.
 

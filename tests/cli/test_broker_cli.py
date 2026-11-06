@@ -146,7 +146,7 @@ def test_nh_brief_without_yaml_fetches_in_thread_and_closes(nh_cli, monkeypatch,
     assert any(h.ticker == "GOOGL" for h in observed[0].holdings)
     assert all(thread != threading.get_ident() for thread in nh_cli.threads)
     assert nh_cli.clients[-1]._http.is_closed
-    assert not (tmp_path / "playbook.yaml").exists()
+    assert (tmp_path / "playbook.yaml").exists()
 
 
 def test_default_brief_keeps_local_yaml(nh_cli, monkeypatch, tmp_path):
@@ -166,6 +166,7 @@ def test_nh_brief_failure_never_uses_yaml(nh_cli, monkeypatch, tmp_path):
     _, observed = _brief_pipeline(monkeypatch)
     monkeypatch.chdir(tmp_path)
     (tmp_path / "playbook.yaml").write_text("watchlist:\n- ticker: AAPL\n")
+    before = (tmp_path / "playbook.yaml").read_bytes()
     nh_cli.fail = "us_balance"
     result = runner.invoke(
         app, ["brief", "--broker", "nh", "--account", nh_cli.account.account_id, "--no-llm"]
@@ -174,10 +175,129 @@ def test_nh_brief_failure_never_uses_yaml(nh_cli, monkeypatch, tmp_path):
     assert not observed
     assert nh_cli.clients[-1]._http.is_closed
     assert "secret-token" not in result.output
+    assert (tmp_path / "playbook.yaml").read_bytes() == before
+
+
+def test_brief_saves_holdings_and_reuses_bound_account_by_default(nh_cli, monkeypatch, tmp_path):
+    import yaml
+
+    _, observed = _brief_pipeline(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    path = tmp_path / "playbook.yaml"
+    path.write_text(
+        '# 사용자 메모\naccount:\n  usd:\n    capital: 5000\n'
+        'holdings:\n- ticker: GOOGL\n  quantity: 1\n  avg_price: 100\n'
+        '  stop_price: 80\n  note: 장기 관찰\nwatchlist:\n- ticker: AAPL\n  note: 관심 유지\n'
+    )
+    before = path.read_bytes()
+    first = runner.invoke(app, ["brief", "--broker", "nh", "--account", nh_cli.account.account_id, "--no-llm"])
+    assert first.exit_code == 0, first.output
+    saved = yaml.safe_load(path.read_text())
+    googl = next(h for h in saved["holdings"] if h["ticker"] == "GOOGL")
+    assert str(googl["quantity"]) == "200" and googl["avg_price"] == 363.23
+    assert googl["stop_price"] == 80 and googl["note"] == "장기 관찰"
+    assert saved["watchlist"][0]["note"] == "관심 유지"
+    assert saved["account"]["usd"]["capital"] == 5000
+    assert '# 사용자 메모' in path.read_text()
+    assert saved["broker"]["account_id"] == nh_cli.account.account_id
+    assert saved["broker"]["synced_at"]
+    assert path.stat().st_mode & 0o777 == 0o600
+    backups = list((tmp_path / "data/broker/playbook-backups").glob("*.yaml"))
+    assert any(p.read_bytes() == before for p in backups)
+    nh_cli.bodies["us_balance"]["Output_1"][0]["cns_bse_bnc_qty"] = "0.004552"
+    second = runner.invoke(app, ["brief", "--no-llm"])
+    assert second.exit_code == 0, second.output
+    assert observed[-1].find("GOOGL").quantity == Decimal("0.004552")
+    from src.tools.playbook.holdings import load_holdings
+    assert load_holdings(path).find("GOOGL").quantity == Decimal("0.004552")
+
+
+def test_bound_brief_failure_preserves_file_and_local_override_skips_nh(nh_cli, monkeypatch, tmp_path):
+    _, observed = _brief_pipeline(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    path = tmp_path / "playbook.yaml"
+    path.write_text(f'broker:\n  provider: nh\n  account_id: {nh_cli.account.account_id}\n'
+                    'holdings:\n- ticker: AAPL\n  quantity: 3\n  avg_price: 100\n')
+    before = path.read_bytes()
+    nh_cli.fail = "us_balance"
+    failed = runner.invoke(app, ["brief", "--no-llm"])
+    assert failed.exit_code == 1 and not observed
+    assert before == path.read_bytes() and 'secret-token' not in failed.output
+    count = len(nh_cli.clients)
+    local = runner.invoke(app, ["brief", "--broker", "local", "--no-llm"])
+    assert local.exit_code == 0, local.output
+    assert len(nh_cli.clients) == count and path.read_bytes() == before
+
+
+def test_sold_holding_settings_survive_and_restore_on_reentry(nh_cli, monkeypatch, tmp_path):
+    import yaml
+
+    _, observed = _brief_pipeline(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    path = tmp_path / "playbook.yaml"
+    path.write_text('holdings:\n- ticker: GOOGL\n  quantity: 3\n  avg_price: 100\n'
+                    '  stop_price: 80\n  note: 재진입에도 유지\n'
+                    'watchlist:\n- ticker: GOOGL\n  note: 관심 메모\n')
+    previous = nh_cli.bodies["us_balance"]["Output_1"]
+    nh_cli.bodies["kr_balance"]["Output_1"] = []
+    nh_cli.bodies["us_balance"]["Output_1"] = []
+    result = runner.invoke(app, ["brief", "--broker", "nh", "--account", nh_cli.account.account_id, "--no-llm"])
+    assert result.exit_code == 0, result.output
+    saved = yaml.safe_load(path.read_text())
+    assert saved["holdings"] == []
+    assert saved["holding_settings"]["GOOGL"]["note"] == "재진입에도 유지"
+    assert observed[-1].watchlist[0].note == "관심 메모"
+    nh_cli.bodies["us_balance"]["Output_1"] = previous
+    result = runner.invoke(app, ["brief", "--no-llm"])
+    assert result.exit_code == 0, result.output
+    assert observed[-1].find("GOOGL").stop_price == 80
+    saved = yaml.safe_load(path.read_text())
+    googl = next(h for h in saved["holdings"] if h["ticker"] == "GOOGL")
+    assert googl["note"] == "재진입에도 유지" and googl["stop_price"] == 80
+    assert saved["watchlist"][0]["note"] == "관심 메모"
+
+
+def test_playbook_edit_during_balance_fetch_is_not_overwritten(nh_cli, monkeypatch, tmp_path):
+    module, observed = _brief_pipeline(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    path = tmp_path / "playbook.yaml"
+    path.write_text('watchlist:\n- ticker: AAPL\n')
+    fetch = module.fetch_snapshot
+    edited = 'watchlist:\n- ticker: NVDA\n  note: 사용자가 수정함\n'
+
+    def fetch_and_edit(account):
+        snapshot = fetch(account)
+        path.write_text(edited)
+        return snapshot
+
+    monkeypatch.setattr(module, "fetch_snapshot", fetch_and_edit)
+    result = runner.invoke(app, ["brief", "--broker", "nh", "--account", nh_cli.account.account_id, "--no-llm"])
+    assert result.exit_code == 1 and not observed
+    assert path.read_text() == edited and "변경되었습니다" in result.output
+
+
+def test_atomic_replace_failure_preserves_original_playbook(nh_cli, monkeypatch, tmp_path):
+    import src.tools.playbook.broker_sync as sync_module
+
+    _, observed = _brief_pipeline(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    path = tmp_path / "playbook.yaml"
+    path.write_text('watchlist:\n- ticker: AAPL\n')
+    before = path.read_bytes()
+
+    def fail_replace(*args):
+        raise OSError("synthetic replace failure")
+
+    monkeypatch.setattr(sync_module.os, "replace", fail_replace)
+    result = runner.invoke(app, ["brief", "--broker", "nh", "--account", nh_cli.account.account_id, "--no-llm"])
+    assert result.exit_code == 1 and not observed
+    assert path.read_bytes() == before
+    assert not list(tmp_path.glob(".playbook-*.tmp"))
 
 
 @pytest.mark.parametrize("args", [["--broker", "other"], ["--account", "nh-invalid"]])
-def test_brief_rejects_invalid_broker_or_account_with_local(args, nh_cli):
+def test_brief_rejects_invalid_broker_or_account_with_local(args, nh_cli, monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
     result = runner.invoke(app, ["brief", "--no-llm", *args])
     assert result.exit_code == 1
     assert not nh_cli.clients
