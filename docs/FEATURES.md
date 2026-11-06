@@ -749,6 +749,21 @@ V1은 기존 연구 Backtest와 4종목 Golden의 호환 기준으로 유지한�
 
 ---
 
+## NH 계좌 연동과 매매일지
+
+NH NAMUH PLUG의 국내·미국 실제 잔고를 조회하고 기존 일일 브리핑에 연결한다. 기본 `brief`는 기존 `playbook.yaml`을 사용하며 `--broker nh`에서만 실계좌 보유로 전환한다. 관심 종목·사용자 손절 기준·risk 설정은 로컬 설정을 유지한다.
+
+- `broker accounts/holdings`: 마스킹된 계좌 선택, 현금·신용별 보유 수량·매입단가·평가손익·조회 시각을 표시한다. 원화·외화 및 국내·해외 총자산 범위를 구분한다.
+- `brief --broker nh`: 실제 보유에 기존 차트 전략·뉴스·공시를 연결한다. 미국 소수점 수량은 보존하며 정수 기준 대응 수량 계산은 경고와 함께 생략한다.
+- `trades sync/list/show`: 국내 누적 체결과 미국 일별 매매내역을 수집해 투자 건별로 묶는다. 부분 체결 증가·재수집은 기존 기록을 갱신하며 메모와 수동 분리는 보존한다.
+- `trades note/split/export`: 진입 이유·무효화/손절 조건·추가매수 조건·전략 태그·복기를 남기고, 투자 건을 수동 분리하거나 로컬 Markdown으로 내보낸다. 분석 링크는 당시 저장/사후 재계산을 구분해 기록한다.
+
+거래 사실과 사용자 기록은 로컬 SQLite(`data/broker/trades.sqlite3`)에 분리 저장한다. 기존 notebook과 Notion은 자동 변경하지 않는다. 미국 거래는 결제 반영 지연이 있을 수 있고, 날짜 단위 기록으로 같은 날 정확한 청산·재진입 순서를 확정하지 않는다. 매도부터 시작하는 이력은 불완전으로 표시한다. 주문 전송과 주문 가능 금액 기반 매수 수량 제한은 제공하지 않는다.
+
+사용법: [CLI_USAGE.md](CLI_USAGE.md#nh-계좌와-매매일지) · 변경 기록: [nh-account-journal.md](changes/nh-account-journal.md)
+
+---
+
 ## 환경 변수
 
 | 변수 | 필수 | 용도 |
@@ -756,6 +771,7 @@ V1은 기존 연구 Backtest와 4종목 Golden의 호환 기준으로 유지한�
 | `OPENAI_API_KEY` | 택1 | OpenAI LLM |
 | `ANTHROPIC_API_KEY` | 택1 | Anthropic LLM |
 | `KIS_APP_KEY` / `KIS_APP_SECRET` | 선택 | 포트폴리오, 수급 |
+| `NS_APP_KEY` / `NS_APP_SECRET` | 선택 | NH 국내·미국 실제 잔고·거래 조회 |
 | `TELEGRAM_API_ID` / `TELEGRAM_API_HASH` | 선택 | 텔레그램 수집 |
 | `OPENDART_API_KEY` | 선택 | 한국 공시 |
 | `NOTION_TOKEN` / `NOTION_DATABASE_ID` | 선택 | 리포트 업로드 |

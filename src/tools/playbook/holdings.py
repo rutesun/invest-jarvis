@@ -4,11 +4,17 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from decimal import Decimal
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import yaml
 
 from src.tools.disclosure import is_korean_ticker
+
+
+if TYPE_CHECKING:
+    from src.providers.nhplug import NHBalanceSnapshot
 
 
 logger = logging.getLogger(__name__)
@@ -19,7 +25,7 @@ class HoldingEntry:
     """보유 종목 단일 항목."""
 
     ticker: str
-    quantity: int
+    quantity: int | Decimal
     avg_price: float
     stop_price: float | None
     currency: str  # "KRW" | "USD"
@@ -44,6 +50,7 @@ class HoldingsConfig:
     usd_risk_pct: float | None
     holdings: list[HoldingEntry] = field(default_factory=list)
     watchlist: list[WatchEntry] = field(default_factory=list)
+    broker_snapshot: NHBalanceSnapshot | None = None
 
     def find(self, ticker: str) -> HoldingEntry | None:
         """대소문자 무시 티커 검색. 없으면 None."""
@@ -57,7 +64,9 @@ class HoldingsConfig:
         return self.usd_capital, self.usd_risk_pct
 
 
-def load_holdings(path: str | Path = "playbook.yaml") -> HoldingsConfig:
+def load_holdings(
+    path: str | Path = "playbook.yaml", *, preserve_held_watches: bool = False
+) -> HoldingsConfig:
     """playbook.yaml 로드. 파일 없으면 빈 설정 반환. 스키마 오류는 항목 인덱스와 함께 즉시 예외."""
     p = Path(path)
     if not p.exists():
@@ -76,7 +85,9 @@ def load_holdings(path: str | Path = "playbook.yaml") -> HoldingsConfig:
     usd = account.get("usd") or {}
 
     holdings = _parse_holdings(data.get("holdings") or [])
-    watchlist = _parse_watchlist(data.get("watchlist") or [], holdings)
+    watchlist = _parse_watchlist(
+        data.get("watchlist") or [], [] if preserve_held_watches else holdings
+    )
 
     return HoldingsConfig(
         krw_capital=float(krw["capital"]) if krw.get("capital") is not None else None,

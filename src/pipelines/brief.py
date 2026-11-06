@@ -17,13 +17,13 @@ from langchain_core.language_models import BaseChatModel
 
 from src.llm.analyzer import generate_brief_narratives
 from src.pipelines.analysis_overview import render_analysis_overview
+from src.pipelines.broker_account import position_for_holding
 from src.pipelines.chart_analysis_render import chart_analysis_context
 from src.pipelines.strategy_analysis import (
     AnalysisStrategyService,
     account_from_capital,
     evaluate_optional,
 )
-from src.position.models import PositionSnapshot
 from src.tools.brief.models import BriefItem
 from src.tools.brief.name_resolver import TickerNameResolver
 from src.tools.brief.render import render_markdown
@@ -92,7 +92,10 @@ class BriefPipeline:
         if self.llm is not None and any(i.action != "error" for i in ranked):
             await self._attach_narratives(ranked)
 
-        return {"date": date, "macro": macro, "items": ranked}
+        result = {"date": date, "macro": macro, "items": ranked}
+        if config.broker_snapshot is not None:
+            result["broker_snapshot"] = config.broker_snapshot
+        return result
 
     async def _analyze_target(
         self,
@@ -110,14 +113,17 @@ class BriefPipeline:
                 raise RuntimeError(f"기술분석 실패: {tech_result.error}")
             technical = tech_result.data
             capital, risk_pct = config.get_account_for(ticker)
+            position, position_warning = position_for_holding(holding)
             strategy_analysis, strategy_warning = await evaluate_optional(
                 self.strategy_service,
                 ticker,
                 technical,
-                position=PositionSnapshot(holding.quantity if holding is not None else 0),
+                position=position,
                 account=account_from_capital(capital, risk_pct),
                 pipeline="brief",
             )
+            if position_warning:
+                strategy_warning = " · ".join(filter(None, [strategy_warning, position_warning]))
 
             flow = None
             if is_korean_ticker(ticker) and self.flow_tool is not None:
@@ -190,7 +196,7 @@ class BriefPipeline:
                 score_history_warning=technical.score_history_warning,
                 remaining_condition=remaining_condition,
                 turnaround=turnaround,
-                warnings=technical.warnings or [],
+                warnings=[*(technical.warnings or []), *([position_warning] if position_warning else [])],
             )
         except Exception as e:
             logger.warning("brief 종목 분석 실패 %s: %s", ticker, e)
@@ -263,6 +269,7 @@ class BriefPipeline:
             result["date"],
             result["macro"],
             result["items"],
+            broker_snapshot=result.get("broker_snapshot"),
             strategy_renderer=lambda item: render_analysis_overview(
                 item.scorecard,
                 item.strategy_analysis,
@@ -278,4 +285,6 @@ class BriefPipeline:
         dir_path.mkdir(parents=True, exist_ok=True)
         file_path = dir_path / f"brief_{date.strftime('%Y-%m-%d')}.md"
         file_path.write_text(self.format_output(result), encoding="utf-8")
+        if result.get("broker_snapshot") is not None:
+            file_path.chmod(0o600)
         return file_path

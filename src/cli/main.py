@@ -14,7 +14,9 @@ from rich.console import Console
 from rich.markdown import Markdown
 from typer.core import TyperCommand
 
+from src.cli.broker import broker_app, fetch_snapshot
 from src.cli.notebook import notebook_app
+from src.cli.trades import trades_app
 from src.llm.provider import LLMProvider
 from src.llm.stage_config import resolve_stage_llm
 from src.pipelines.analysis_overview import render_analysis_overview
@@ -139,6 +141,8 @@ logger = logging.getLogger(__name__)
 
 app = typer.Typer(help="Invest Jarvis - Financial Analysis CLI")
 app.add_typer(notebook_app, name="notebook")
+app.add_typer(broker_app, name="broker")
+app.add_typer(trades_app, name="trades")
 report_app = typer.Typer(help="리포트 생성")
 console = Console()
 
@@ -1219,6 +1223,8 @@ def analyze(
 
 @app.command()
 def brief(
+    broker: str = typer.Option("local", "--broker", help="보유 출처: local(YAML) 또는 nh"),
+    account: str | None = typer.Option(None, "--account", help="NH 공개 계좌 식별자"),
     no_llm: bool = typer.Option(False, "--no-llm", help="LLM 문장화 없이 규칙 원문만 출력"),
     detail_strategy: bool = typer.Option(
         False, "--detail-strategy", help="Show every Scorecard metric and evidence"
@@ -1228,7 +1234,7 @@ def brief(
     console.print("[bold]Daily brief 생성 중...[/bold]")
 
     try:
-        result = asyncio.run(run_brief(use_llm=not no_llm))
+        result = asyncio.run(run_brief(use_llm=not no_llm, broker=broker, account=account))
         pipeline = result.pop("_pipeline")
         console.print(Markdown(pipeline.format_output(result, detailed_strategy=detail_strategy)))
         report_path = pipeline.save_report(result)
@@ -1236,9 +1242,14 @@ def brief(
     except ValueError as e:
         console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1) from None
+    except Exception:
+        if broker != "nh":
+            raise
+        console.print("[red]NH 브리핑 중단: 계좌 조회 또는 브리핑 처리에 실패했습니다.[/red]")
+        raise typer.Exit(1) from None
 
 
-async def run_brief(use_llm: bool) -> dict:
+async def run_brief(use_llm: bool, broker: str = "local", account: str | None = None) -> dict:
     """brief 파이프라인 조립·실행. run_deep_dive와 동일한 도구 조립 패턴."""
     from src.providers.index_provider import IndexProvider
     from src.providers.kis_wrapper import KISProviderWrapper
@@ -1246,8 +1257,17 @@ async def run_brief(use_llm: bool) -> dict:
     from src.tools.playbook.engine import PlaybookEngine
     from src.tools.playbook.holdings import load_holdings
 
-    config = load_holdings()
-    if not config.holdings and not config.watchlist:
+    if broker not in ("local", "nh"):
+        raise ValueError("--broker는 local 또는 nh를 지정하세요")
+    if account is not None and broker != "nh":
+        raise ValueError("--account는 --broker nh와 함께 지정하세요")
+    config = load_holdings(preserve_held_watches=True) if broker == "nh" else load_holdings()
+    if broker == "nh":
+        from src.pipelines.broker_account import merge_broker_holdings
+
+        snapshot = await asyncio.to_thread(fetch_snapshot, account)
+        config = merge_broker_holdings(config, snapshot)
+    if not config.holdings and not config.watchlist and config.broker_snapshot is None:
         raise ValueError("playbook.yaml에 holdings/watchlist가 없습니다")
 
     kis_key = os.getenv("KIS_APP_KEY")

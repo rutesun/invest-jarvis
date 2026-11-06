@@ -892,3 +892,56 @@ uv run jarvis check AAPL > aapl_analysis.txt
 # 날짜별로 저장
 uv run jarvis report daily-v2 2026-05-19 > report_v2_$(date +%Y%m%d).txt
 ```
+
+
+---
+
+## NH 계좌와 매매일지
+
+`.env`에 `NS_APP_KEY`, `NS_APP_SECRET`을 설정한다. 토큰은 사용자 cache(`~/.cache/invest-jarvis/nhplug`)에서 AppKey별로 재사용한다. 원문 계좌번호 대신 `broker accounts`에 표시되는 `nh-...` 식별자를 사용한다. 개인 실계좌가 여러 개면 `--account`가 필수이며 모의·주문대리인 계좌는 자동 선택하지 않는다.
+
+```bash
+uv run jarvis broker accounts
+uv run jarvis broker holdings --account nh-계좌식별자
+uv run jarvis brief --broker nh --account nh-계좌식별자 --no-llm
+```
+
+다른 worktree의 기존 `.env`를 읽으려면 `uv run --env-file /absolute/path/.env jarvis ...`를 사용한다. 키 값을 명령 인자로 직접 전달하지 않는다. 사용자 손절 기준과 관심 종목을 재사용하려면 해당 worktree의 로컬 `playbook.yaml`을 준비한다. NH 조회로 이 파일을 수정하지 않는다.
+
+잔고는 두 시장을 모두 조회한 후 표시한다. 한 시장이 실패하면 전체 조회를 실패로 처리하며 YAML 보유로 대체하지 않는다. NH 평가 기준가와 차트 분석 가격은 출처·시점이 다르다. 조회 시각은 가격 거래일을 뜻하지 않으며, 국내·해외 총자산과 KRW/USD 금액을 합산하지 않는다. NH 소수점 보유는 그대로 표시하고 기존 정수 기준 수량 계획만 생략한다.
+
+### 거래 수집과 조회
+
+```bash
+uv run jarvis trades sync --account nh-계좌식별자 --from 2026-11-01 --to 2026-11-06
+uv run jarvis trades list
+uv run jarvis trades list --ticker AAPL --market US --not-reviewed
+uv run jarvis trades list --from 2026-11-01 --to 2026-11-30 --tag 돌파
+uv run jarvis trades show nh-case-투자건식별자
+```
+
+기간은 양 끝 날짜를 포함한다. 국내는 주문일 기준 누적 체결만 수집하고, 미국은 조회 장부일 기준 일별 거래내역에서 실제 매매를 수집하므로 최근 체결의 반영 지연이 있을 수 있다. 미국 실거래일은 제공된 경우 별도로 표시한다. 전체 수집이 성공한 뒤 한 번에 장부에 반영하며, 재수집은 같은 거래를 중복 추가하지 않는다.
+
+투자 건은 계좌·시장·통화·종목·신용/대출 구분별 장부를 기준으로 묶는다. 날짜 단위 자료로 같은 날 체결 순서를 단정하지 않으며, 이력 시작 전 보유를 알 수 없는 매도는 불완전으로 표시한다. 미국 거래의 시작 잔고가 양수이거나 거래 전·후 잔고와 수집한 매매가 맞지 않아도 불완전으로 표시하고 잔여 수량을 확정하지 않는다. 표시된 source 잔고는 해당 거래 당시 값이다. 장부상 수량/청산은 실계좌 전체 이력을 증명하지 않는다.
+
+### 이유·계획·복기 기록
+
+```bash
+uv run jarvis trades note nh-case-투자건식별자 --reason '돌파 후 거래량 유지' --invalidation '돌파선 종가 이탈' --add-condition '눌림목 지지 확인' --strategy '돌파' --tag 돌파
+uv run jarvis trades note nh-case-투자건식별자 --review '진입 기준은 지켰으나 비중 확대가 빨랐음'
+uv run jarvis trades note nh-case-투자건식별자 --source-link reports/entry-analysis.md --provenance saved_at_trade
+uv run jarvis trades note nh-case-투자건식별자 --source-link reports/recomputed-analysis.md --provenance retrospective
+uv run jarvis trades split nh-trade-거래식별자 --title '별도 전략' --strategy '눌림목'
+```
+
+지정하지 않은 메모 필드는 보존한다. 텍스트 필드는 빈 문자열을 명시하면 지운다. `--tag`와 `--source-link`는 반복 지정할 수 있으며 지정하면 해당 목록을 교체한다. 링크는 기록만 하고 자동 접속하거나 과거 분석을 재생성하지 않는다. 수동 분리 경계는 거래일과 안정적인 표시순 기준이며 같은 날 실제 체결 순서를 뜻하지 않는다.
+
+### 로컬 내보내기와 저장
+
+```bash
+uv run jarvis trades export --month 2026-11 --output reports/trades-2026-11.md
+uv run jarvis trades export --case nh-case-투자건식별자
+uv run jarvis trades list --db data/broker/another-journal.sqlite3
+```
+
+기본 장부는 `data/broker/trades.sqlite3`이며 모든 `trades` 명령에서 `--db`로 바꿀 수 있다. 자동 거래 사실과 사용자 메모를 분리 저장한다. 내보내기는 새 경로에만 파일을 생성하고 기존 파일·장부·symlink를 덮어쓰지 않는다. 기존 notebook과 Notion에는 자동 전송하지 않는다. 거래 수집·장부 충돌·조회 실패는 종료코드 1이며 메모와 기존 사실은 보존한다.

@@ -9,6 +9,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import datetime
 
+from src.providers.nhplug import NHBalanceSnapshot
+from src.tools.brief.broker import render_broker_header, render_broker_holding
 from src.tools.brief.models import BUCKET_LABELS, BriefItem
 from src.tools.macro import TickerMacroSnapshot
 
@@ -19,13 +21,19 @@ def render_markdown(
     items: list[BriefItem],
     top_n: int = 3,
     strategy_renderer: Callable[[BriefItem], str] | None = None,
+    broker_snapshot: NHBalanceSnapshot | None = None,
 ) -> str:
     lines: list[str] = [f"# Daily Brief — {date.strftime('%Y-%m-%d')}", ""]
 
+    lines.extend(render_broker_header(broker_snapshot))
     lines.extend(_macro_section(macro))
 
     if not items:
-        lines.append("설정된 종목 없음 — playbook.yaml에 holdings/watchlist를 추가하세요.")
+        lines.append(
+            "분석할 NH 보유·관심 종목이 없습니다."
+            if broker_snapshot is not None
+            else "설정된 종목 없음 — playbook.yaml에 holdings/watchlist를 추가하세요."
+        )
         return "\n".join(lines)
 
     lines.extend(_top_actions_section(items, top_n))
@@ -36,7 +44,12 @@ def render_markdown(
         lines.append(f"## 보유 ({len(holdings)}종목)")
         lines.append("")
         for item in holdings:
-            lines.extend(_item_section(item, strategy_renderer))
+            broker_lines = (
+                render_broker_holding([
+                    row for row in broker_snapshot.holdings if row.ticker == item.ticker
+                ]) if broker_snapshot is not None else []
+            )
+            lines.extend(_item_section(item, strategy_renderer, broker_lines))
     if watches:
         lines.append(f"## 워치리스트 ({len(watches)}종목)")
         lines.append("")
@@ -78,13 +91,16 @@ def _top_actions_section(items: list[BriefItem], top_n: int) -> list[str]:
 
 
 def _item_section(
-    item: BriefItem, strategy_renderer: Callable[[BriefItem], str] | None = None
+    item: BriefItem,
+    strategy_renderer: Callable[[BriefItem], str] | None = None,
+    broker_lines: list[str] | None = None,
 ) -> list[str]:
     label = BUCKET_LABELS.get(item.bucket, "?")
     lines: list[str] = []
 
     if item.action == "error":
         lines.append(f"### {_display(item)} — 데이터 조회 실패")
+        lines.extend(broker_lines or [])
         lines.append(f"- **오류**: {item.error}")
         lines.append("")
         return lines
@@ -97,6 +113,7 @@ def _item_section(
     if gate is not None and gate.quality_grade:
         title_extra = f" (grade {gate.quality_grade})"
     lines.append(f"### {_display(item)} — {label}{title_extra}")
+    lines.extend(broker_lines or [])
     if strategy_renderer is not None:
         lines.extend(["", strategy_renderer(item), ""])
 
