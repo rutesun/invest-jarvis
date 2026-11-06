@@ -4,10 +4,16 @@ from collections.abc import Sequence
 from decimal import Decimal
 
 from src.providers.nhplug import NHBalanceSnapshot, NHHolding
+from src.tools.disclosure import is_korean_ticker
 
 
 def _number(value: Decimal) -> str:
     return format(value, ",f").rstrip("0").rstrip(".") if "." in str(value) else format(value, ",f")
+
+
+def supports_stock_analysis(holding: NHHolding) -> bool:
+    """국내 전체 잔고에 섞인 RP 등 비주식 코드를 시세 provider에 보내지 않는다."""
+    return holding.market != "KR" or is_korean_ticker(holding.ticker)
 
 
 def render_broker_header(snapshot: NHBalanceSnapshot | None) -> list[str]:
@@ -27,6 +33,22 @@ def render_broker_header(snapshot: NHBalanceSnapshot | None) -> list[str]:
             f"{_number(summary.market_value)} | {_number(summary.unrealized_pnl)} | {_number(summary.cash)} |"
         )
     lines.append("")
+    excluded = [row for row in snapshot.holdings if not supports_stock_analysis(row)]
+    if excluded:
+        lines.extend([
+            "### 주식 분석 제외 자산",
+            "국내 주식 코드 형식을 지원하지 않는 자산은 잔고만 표시합니다. 수량 단위는 NH 제공 기준입니다.",
+            "",
+            "| 자산 | 코드 | 수량 | 평가액 | 평가손익 |",
+            "| --- | --- | ---: | ---: | ---: |",
+        ])
+        for row in excluded:
+            lines.append(
+                f"| {row.name} | {row.ticker} | {_number(row.quantity)} | "
+                f"{_number(row.market_value)} {row.currency} | "
+                f"{_number(row.unrealized_pnl)} {row.currency} |"
+            )
+        lines.append("")
     if not snapshot.holdings:
         lines.extend(["NH 조회 보유 종목이 없습니다.", ""])
     return lines

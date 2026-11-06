@@ -88,6 +88,35 @@ def test_empty_live_account_does_not_keep_stale_yaml_holdings():
     assert merged.holdings == [] and len(merged.watchlist) == 2
 
 
+def test_non_stock_kr_assets_keep_balance_facts_without_entering_stock_analysis():
+    observed = snapshot(row("RKRW221", "2000", "0"), row("0167A0", "3", "100"))
+    merged = merge_broker_holdings(HoldingsConfig(None, None, None, None), observed)
+    assert [holding.ticker for holding in merged.holdings] == ["0167A0"]
+    assert merged.broker_snapshot is observed
+    assert len(merged.broker_snapshot.holdings) == 2
+    header = "\n".join(render_broker_header(observed))
+    assert "주식 분석 제외 자산" in header and "RKRW221" in header
+    assert "수량 단위는 NH 제공 기준" in header
+    assert "2,000주" not in header
+
+
+@pytest.mark.asyncio
+async def test_non_stock_only_account_renders_facts_without_requesting_stock_analysis():
+    from unittest.mock import AsyncMock, MagicMock
+
+    from tests.pipelines.test_brief import _pipeline
+
+    observed = snapshot(row("RUSD200", "11.4", "0"))
+    merged = merge_broker_holdings(HoldingsConfig(None, None, None, None), observed)
+    engine = MagicMock()
+    engine.evaluate = AsyncMock()
+    pipeline = _pipeline(engine)
+    result = await pipeline.run(merged)
+    assert result["items"] == []
+    engine.evaluate.assert_not_awaited()
+    assert "RUSD200" in pipeline.format_output(result)
+
+
 def test_explicit_yaml_watch_survives_when_live_position_has_been_sold(tmp_path):
     from src.tools.playbook.holdings import load_holdings
 

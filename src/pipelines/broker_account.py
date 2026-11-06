@@ -5,6 +5,7 @@ from decimal import Decimal
 
 from src.position.models import PositionSnapshot
 from src.providers.nhplug import NHAccount, NHBalanceSnapshot
+from src.tools.brief.broker import supports_stock_analysis
 from src.tools.playbook.holdings import HoldingEntry, HoldingsConfig, WatchEntry
 
 
@@ -31,7 +32,7 @@ def merge_broker_holdings(local: HoldingsConfig, observed: NHBalanceSnapshot) ->
     for row in observed.holdings:
         if row.account_id != observed.account_id or row.quantity < 0:
             raise ValueError("NH 잔고 계좌 또는 수량 계약 오류")
-        if row.quantity == 0:
+        if row.quantity == 0 or not supports_stock_analysis(row):
             continue
         key = (row.market, row.currency, canonical_ticker(row.ticker))
         grouped.setdefault(key, []).append(row)
