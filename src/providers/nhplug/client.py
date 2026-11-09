@@ -316,7 +316,9 @@ class NHClient:
                 and body.get("rsp_cd") == "00218"
                 and flag == "Y"
                 and isinstance(
-                    body.get("Output_1" if path in (KR_BALANCE_PATH, US_BALANCE_PATH) else "Output_0"),
+                    body.get(
+                        "Output_1" if path in (KR_BALANCE_PATH, US_BALANCE_PATH) else "Output_0"
+                    ),
                     list,
                 )
             )

@@ -196,7 +196,10 @@ class BriefPipeline:
                 score_history_warning=technical.score_history_warning,
                 remaining_condition=remaining_condition,
                 turnaround=turnaround,
-                warnings=[*(technical.warnings or []), *([position_warning] if position_warning else [])],
+                warnings=[
+                    *(technical.warnings or []),
+                    *([position_warning] if position_warning else []),
+                ],
             )
         except Exception as e:
             logger.warning("brief 종목 분석 실패 %s: %s", ticker, e)

@@ -269,9 +269,7 @@ def test_continuation_business_code_collects_every_trade_page(tmp_path, official
     assert calls == ["", "SYNTHETIC-NEXT"]
 
 
-@pytest.mark.parametrize(
-    "headers", [{"cts_flag": "N"}, {"cts_flag": "Y"}, {"cts": "NEXT"}]
-)
+@pytest.mark.parametrize("headers", [{"cts_flag": "N"}, {"cts_flag": "Y"}, {"cts": "NEXT"}])
 def test_continuation_business_code_requires_valid_continuation(tmp_path, official, headers):
     def override(request):
         if request.url.path == "/krstock/inquiry/v1/dailyOrderExecution":

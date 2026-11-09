@@ -35,13 +35,15 @@ def render_broker_header(snapshot: NHBalanceSnapshot | None) -> list[str]:
     lines.append("")
     excluded = [row for row in snapshot.holdings if not supports_stock_analysis(row)]
     if excluded:
-        lines.extend([
-            "### 주식 분석 제외 자산",
-            "국내 주식 코드 형식을 지원하지 않는 자산은 잔고만 표시합니다. 수량 단위는 NH 제공 기준입니다.",
-            "",
-            "| 자산 | 코드 | 수량 | 평가액 | 평가손익 |",
-            "| --- | --- | ---: | ---: | ---: |",
-        ])
+        lines.extend(
+            [
+                "### 주식 분석 제외 자산",
+                "국내 주식 코드 형식을 지원하지 않는 자산은 잔고만 표시합니다. 수량 단위는 NH 제공 기준입니다.",
+                "",
+                "| 자산 | 코드 | 수량 | 평가액 | 평가손익 |",
+                "| --- | --- | ---: | ---: | ---: |",
+            ]
+        )
         for row in excluded:
             lines.append(
                 f"| {row.name} | {row.ticker} | {_number(row.quantity)} | "

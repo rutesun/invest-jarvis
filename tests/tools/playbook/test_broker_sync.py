@@ -24,7 +24,7 @@ def apply(path, observed):
 
 def test_deleted_stop_is_not_restored_after_sale_and_reentry(tmp_path):
     path = tmp_path / "playbook.yaml"
-    path.write_text(BASELINE.replace('"005930"', 'AAPL'))
+    path.write_text(BASELINE.replace('"005930"', "AAPL"))
     apply(path, snapshot(row("AAPL", market="US")))
     data = yaml.safe_load(path.read_text())
     data["holdings"][0].pop("stop_price")
@@ -63,11 +63,14 @@ def test_two_saves_of_the_same_original_cannot_both_replace_it(tmp_path, monkeyp
     assert sorted(outcomes) == ["conflict", "saved"]
 
 
-@pytest.mark.parametrize("original", [
-    'defaults: &risk\n  stop_price: 80\n  note: shared\n'
-    'holdings:\n- <<: *risk\n  ticker: AAPL\n  quantity: 1\n  avg_price: 100\n',
-    'holdings:\n- <<: {stop_price: 80}\n  ticker: AAPL\n  quantity: 1\n  avg_price: 100\n',
-])
+@pytest.mark.parametrize(
+    "original",
+    [
+        "defaults: &risk\n  stop_price: 80\n  note: shared\n"
+        "holdings:\n- <<: *risk\n  ticker: AAPL\n  quantity: 1\n  avg_price: 100\n",
+        "holdings:\n- <<: {stop_price: 80}\n  ticker: AAPL\n  quantity: 1\n  avg_price: 100\n",
+    ],
+)
 def test_yaml_alias_is_not_flattened_or_overwritten(tmp_path, original):
     path = tmp_path / "playbook.yaml"
     path.write_text(original)

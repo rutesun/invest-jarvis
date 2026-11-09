@@ -47,9 +47,11 @@ def render_markdown(
         lines.append("")
         for item in holdings:
             broker_lines = (
-                render_broker_holding([
-                    row for row in broker_snapshot.holdings if row.ticker == item.ticker
-                ]) if broker_snapshot is not None else []
+                render_broker_holding(
+                    [row for row in broker_snapshot.holdings if row.ticker == item.ticker]
+                )
+                if broker_snapshot is not None
+                else []
             )
             lines.extend(_item_section(item, strategy_renderer, broker_lines))
     if watches:

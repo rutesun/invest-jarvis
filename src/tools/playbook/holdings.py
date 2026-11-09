@@ -124,7 +124,9 @@ def _parse_holdings(raw: list) -> list[HoldingEntry]:
             holdings.append(
                 HoldingEntry(
                     ticker=ticker,
-                    quantity=int(quantity) if quantity == quantity.to_integral_value() else quantity,
+                    quantity=int(quantity)
+                    if quantity == quantity.to_integral_value()
+                    else quantity,
                     avg_price=float(item["avg_price"]),
                     stop_price=float(item["stop_price"])
                     if item.get("stop_price") is not None

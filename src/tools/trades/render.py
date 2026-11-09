@@ -113,27 +113,37 @@ def _summary(cases: list[TradeCase], level: int) -> list[str]:
         "| --- | --- | ---: | ---: | ---: |",
     ]
     for (month, market, currency), (buy, sell, count) in sorted(months.items()):
-        lines.append(f"| {month} | {market}/{currency} | {_number(buy)} | {_number(sell)} | {count} |")
-    lines.extend([
-        "",
-        "금액은 NH 거래금액 합계이며 실현손익이 아닙니다.",
-        "",
-        f"{heading} 투자 건 요약",
-        "",
-        "| 종목 | 시장/통화·구분 | 기록 기간 | 매수 수량 | 매도 수량 | 장부 잔여 | 상태 |",
-        "| --- | --- | --- | ---: | ---: | ---: | --- |",
-    ])
+        lines.append(
+            f"| {month} | {market}/{currency} | {_number(buy)} | {_number(sell)} | {count} |"
+        )
+    lines.extend(
+        [
+            "",
+            "금액은 NH 거래금액 합계이며 실현손익이 아닙니다.",
+            "",
+            f"{heading} 투자 건 요약",
+            "",
+            "| 종목 | 시장/통화·구분 | 기록 기간 | 매수 수량 | 매도 수량 | 장부 잔여 | 상태 |",
+            "| --- | --- | --- | ---: | ---: | ---: | --- |",
+        ]
+    )
     for case in sorted(cases, key=lambda item: (item.end_date, item.case_id), reverse=True):
         bought = sum((t.quantity for t in case.trades if t.side == "buy"), Decimal(0))
         sold = sum((t.quantity for t in case.trades if t.side == "sell"), Decimal(0))
-        status = {"open": "진행 중", "closed": "장부상 청산", "incomplete": "이력 불완전"}[case.status]
+        status = {"open": "진행 중", "closed": "장부상 청산", "incomplete": "이력 불완전"}[
+            case.status
+        ]
         category = case.credit_type if case.credit_type != "unspecified" else "구분 미제공"
         if case.loan_date:
             category += f" / 대출 {case.loan_date}"
         cells = (
-            f"{case.name} ({case.ticker})", f"{case.market}/{case.currency} · {category}",
-            f"{case.start_date} ~ {case.end_date}", _number(bought), _number(sold),
-            _number(case.quantity), status,
+            f"{case.name} ({case.ticker})",
+            f"{case.market}/{case.currency} · {category}",
+            f"{case.start_date} ~ {case.end_date}",
+            _number(bought),
+            _number(sold),
+            _number(case.quantity),
+            status,
         )
         lines.append("| " + " | ".join(_cell(cell) for cell in cells) + " |")
     incomplete = sum(case.incomplete for case in cases)
@@ -142,20 +152,33 @@ def _summary(cases: list[TradeCase], level: int) -> list[str]:
     if incomplete:
         lines.append(f"- 이력 불완전 {incomplete}건은 장부 잔여 수량을 확정하지 않습니다.")
     if flagged:
-        lines.append(f"- {flagged}개 투자 건에 날짜·체결 순서·이력 경계 등의 확인사항이 있습니다. 세부 사유는 `--detail`로 확인하세요.")
+        lines.append(
+            f"- {flagged}개 투자 건에 날짜·체결 순서·이력 경계 등의 확인사항이 있습니다. 세부 사유는 `--detail`로 확인하세요."
+        )
     if any(trade.market == "US" for trade in trades):
-        lines.append("- 미국 거래는 결제 반영이 늦을 수 있습니다. 실거래일 미제공 시 조회일 기준으로 표시합니다.")
+        lines.append(
+            "- 미국 거래는 결제 반영이 늦을 수 있습니다. 실거래일 미제공 시 조회일 기준으로 표시합니다."
+        )
     notes_lines = []
     for case in cases:
         notes = case.notes
-        values = [(label, value) for label, value in (
-            ("전략", notes.strategy_label), ("진입 이유", notes.reason),
-            ("무효화·손절", notes.invalidation), ("추가매수 조건", notes.add_condition),
-            ("태그", ", ".join(notes.strategy_tags)), ("복기", notes.review),
-        ) if value]
+        values = [
+            (label, value)
+            for label, value in (
+                ("전략", notes.strategy_label),
+                ("진입 이유", notes.reason),
+                ("무효화·손절", notes.invalidation),
+                ("추가매수 조건", notes.add_condition),
+                ("태그", ", ".join(notes.strategy_tags)),
+                ("복기", notes.review),
+            )
+            if value
+        ]
         if not (notes.title or values or notes.source_links):
             continue
-        notes_lines.extend(["", f"{heading}# {_cell(notes.title or f'{case.name} ({case.ticker})')}", ""])
+        notes_lines.extend(
+            ["", f"{heading}# {_cell(notes.title or f'{case.name} ({case.ticker})')}", ""]
+        )
         notes_lines.extend(f"- {label}: {value}" for label, value in values)
         for link in notes.source_links:
             provenance = "당시 저장" if link.provenance == "saved_at_trade" else "사후 재계산·기록"
@@ -176,17 +199,31 @@ def _current_holdings(snapshot: NHBalanceSnapshot, level: int) -> list[str]:
         "| --- | --- | --- | --- | --- | ---: |",
     ]
     for row in snapshot.holdings:
-        cells = (row.ticker, row.name, f"{row.market}/{row.currency}", row.credit_type,
-                 row.loan_date or "-", _number(row.quantity))
+        cells = (
+            row.ticker,
+            row.name,
+            f"{row.market}/{row.currency}",
+            row.credit_type,
+            row.loan_date or "-",
+            _number(row.quantity),
+        )
         lines.append("| " + " | ".join(_cell(cell) for cell in cells) + " |")
     if not snapshot.holdings:
         lines.append("보유 내역 없음 (국내·미국 조회 완료).")
-    lines.extend(["", "수량은 NH 제공 기준입니다. 미국은 체결 기준 잔고이며, 거래 장부는 결제 반영이 늦을 수 있습니다.", ""])
+    lines.extend(
+        [
+            "",
+            "수량은 NH 제공 기준입니다. 미국은 체결 기준 잔고이며, 거래 장부는 결제 반영이 늦을 수 있습니다.",
+            "",
+        ]
+    )
     return lines
 
 
 def render_cases(
-    cases: Iterable[TradeCase], *, detailed: bool = False,
+    cases: Iterable[TradeCase],
+    *,
+    detailed: bool = False,
     snapshots: Iterable[NHBalanceSnapshot] = (),
 ) -> str:
     selected = list(cases)
@@ -195,7 +232,9 @@ def render_cases(
     accounts = sorted({case.account_id for case in selected})
     observed = {}
     for snapshot in snapshots:
-        if snapshot.account_id in observed or any(row.account_id != snapshot.account_id for row in snapshot.holdings):
+        if snapshot.account_id in observed or any(
+            row.account_id != snapshot.account_id for row in snapshot.holdings
+        ):
             raise JournalError("현재 잔고의 계좌가 중복되거나 일치하지 않습니다.")
         observed[snapshot.account_id] = snapshot
     if observed and set(observed) != set(accounts):

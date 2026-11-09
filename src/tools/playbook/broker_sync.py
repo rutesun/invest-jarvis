@@ -22,42 +22,55 @@ def _ticker(value: str) -> str:
 
 def _has_merge(node) -> bool:
     if isinstance(node, MappingNode):
-        return any(key.tag == "tag:yaml.org,2002:merge" or _has_merge(value)
-                   for key, value in node.value)
+        return any(
+            key.tag == "tag:yaml.org,2002:merge" or _has_merge(value) for key, value in node.value
+        )
     if isinstance(node, SequenceNode):
         return any(_has_merge(value) for value in node.value)
     return False
 
 
 def save_broker_holdings(
-    config: HoldingsConfig, snapshot: NHBalanceSnapshot, original: bytes | None,
+    config: HoldingsConfig,
+    snapshot: NHBalanceSnapshot,
+    original: bytes | None,
     path: str | Path = "playbook.yaml",
 ) -> None:
     """저장 구간을 직렬화하고 같은 원문에서 시작한 경쟁 갱신을 거부한다."""
     target = Path(path)
     private_dir = target.parent / "data/broker"
     private_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
-    descriptor = os.open(private_dir / "playbook-sync.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    descriptor = os.open(
+        private_dir / "playbook-sync.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600
+    )
     with os.fdopen(descriptor, "rb") as lock:
         fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
         _save_broker_holdings(config, snapshot, original, target)
 
 
 def _save_broker_holdings(
-    config: HoldingsConfig, snapshot: NHBalanceSnapshot, original: bytes | None,
+    config: HoldingsConfig,
+    snapshot: NHBalanceSnapshot,
+    original: bytes | None,
     target: Path,
 ) -> None:
     """주석·사용자 필드 보존, 원문 백업, 충돌 확인 후 원자적으로 교체한다."""
 
     def unchanged():
         if target.is_symlink() or (target.read_bytes() if target.exists() else None) != original:
-            raise ValueError("playbook.yaml이 조회 중 변경되었습니다. 파일을 확인한 뒤 다시 실행하세요")
+            raise ValueError(
+                "playbook.yaml이 조회 중 변경되었습니다. 파일을 확인한 뒤 다시 실행하세요"
+            )
 
     unchanged()
     if original is not None:
         text = original.decode("utf-8")
-        if any(isinstance(event, AliasEvent) for event in YAML().parse(text)) or _has_merge(YAML().compose(text)):
-            raise ValueError("playbook.yaml에 YAML alias/merge가 있어 자동 갱신을 중단했습니다. 참조 설정을 개별 값으로 작성하세요")
+        if any(isinstance(event, AliasEvent) for event in YAML().parse(text)) or _has_merge(
+            YAML().compose(text)
+        ):
+            raise ValueError(
+                "playbook.yaml에 YAML alias/merge가 있어 자동 갱신을 중단했습니다. 참조 설정을 개별 값으로 작성하세요"
+            )
     yaml = YAML()
     yaml.preserve_quotes = True
     data = yaml.load(original.decode("utf-8")) if original is not None else {}
@@ -80,19 +93,32 @@ def _save_broker_holdings(
     for holding in config.holdings:
         ticker = _ticker(holding.ticker)
         row = deepcopy(previous.get(ticker, settings.get(ticker, {})))
-        row.update(ticker=ticker, quantity=int(holding.quantity) if holding.quantity == int(holding.quantity)
-                   else str(holding.quantity), avg_price=holding.avg_price)
+        row.update(
+            ticker=ticker,
+            quantity=int(holding.quantity)
+            if holding.quantity == int(holding.quantity)
+            else str(holding.quantity),
+            avg_price=holding.avg_price,
+        )
         holdings.append(row)
     data["holdings"] = holdings
     broker = data.get("broker") or {}
     data["broker"] = broker
-    broker.update(provider="nh", account_id=snapshot.account_id, synced_at=snapshot.as_of.isoformat())
+    broker.update(
+        provider="nh", account_id=snapshot.account_id, synced_at=snapshot.as_of.isoformat()
+    )
     buffer = StringIO()
     yaml.dump(data, buffer)
     temporary = None
     try:
-        with NamedTemporaryFile(mode="w", encoding="utf-8", dir=target.parent,
-                                prefix=".playbook-", suffix=".tmp", delete=False) as stream:
+        with NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=target.parent,
+            prefix=".playbook-",
+            suffix=".tmp",
+            delete=False,
+        ) as stream:
             temporary = Path(stream.name)
             os.fchmod(stream.fileno(), 0o600)
             stream.write(buffer.getvalue())

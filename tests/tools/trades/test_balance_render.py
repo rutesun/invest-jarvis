@@ -11,13 +11,22 @@ from tests.tools.trades.test_journal import trade
 
 
 def holding(**values):
-    return NHHolding(**{
-        "account_id": "nh-synthetic-account", "market": "US", "currency": "USD",
-        "ticker": "AAPL", "name": "Apple", "quantity": Decimal("0.004552"),
-        "avg_price": Decimal("100"), "current_price": Decimal("120"),
-        "market_value": Decimal("0.54624"), "unrealized_pnl": Decimal("0.09104"),
-        "credit_type": "현금", **values,
-    })
+    return NHHolding(
+        **{
+            "account_id": "nh-synthetic-account",
+            "market": "US",
+            "currency": "USD",
+            "ticker": "AAPL",
+            "name": "Apple",
+            "quantity": Decimal("0.004552"),
+            "avg_price": Decimal("100"),
+            "current_price": Decimal("120"),
+            "market_value": Decimal("0.54624"),
+            "unrealized_pnl": Decimal("0.09104"),
+            "credit_type": "현금",
+            **values,
+        }
+    )
 
 
 def snapshot(*rows, account="nh-synthetic-account"):
@@ -27,11 +36,13 @@ def snapshot(*rows, account="nh-synthetic-account"):
 @pytest.mark.parametrize("detailed", [False, True])
 def test_current_quantity_is_once_per_account_not_per_historical_case(tmp_path, detailed):
     journal = TradeJournal(tmp_path / "journal.sqlite3")
-    journal.sync([
-        trade("buy", day="2026-10-01", quantity="2"),
-        trade("sell", day="2026-10-02", quantity="2", side="sell"),
-        trade("reentry", day="2026-11-01", quantity="1"),
-    ])
+    journal.sync(
+        [
+            trade("buy", day="2026-10-01", quantity="2"),
+            trade("sell", day="2026-10-02", quantity="2", side="sell"),
+            trade("reentry", day="2026-11-01", quantity="1"),
+        ]
+    )
     cases = journal.cases()
     assert len(cases) == 2
     observed = snapshot(
@@ -70,7 +81,9 @@ def test_balance_accounts_cannot_be_mixed_or_partially_missing(tmp_path):
     with pytest.raises(JournalError):
         render_cases(cases, snapshots=[snapshot()])
     with pytest.raises(JournalError):
-        render_cases(cases, snapshots=[snapshot(holding(account_id="other")), snapshot(account="other")])
+        render_cases(
+            cases, snapshots=[snapshot(holding(account_id="other")), snapshot(account="other")]
+        )
     with pytest.raises(JournalError):
         render_cases(cases, snapshots=[snapshot(), snapshot(), snapshot(account="other")])
     output = render_cases(cases, snapshots=[snapshot(holding()), snapshot(account="other")])

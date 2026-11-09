@@ -14,7 +14,12 @@ from src.tools.trades import JournalError, SourceLink, TradeJournal, render_case
 trades_app = typer.Typer(help="NH 거래 수집과 투자 건별 로컬 매매일지")
 DEFAULT_DB = Path("data/broker/trades.sqlite3")
 Database = Annotated[Path, typer.Option("--db", help="로컬 SQLite 장부 경로")]
-Balance = Annotated[bool, typer.Option("--balance/--no-balance", help="현재 NH 잔고 조회; --no-balance는 로컬 장부만 표시")]
+Balance = Annotated[
+    bool,
+    typer.Option(
+        "--balance/--no-balance", help="현재 NH 잔고 조회; --no-balance는 로컬 장부만 표시"
+    ),
+]
 
 
 def _date(value: str | None) -> date | None:
@@ -77,7 +82,9 @@ def sync(
 def list_cases(
     db: Database = DEFAULT_DB,
     balance: Balance = True,
-    detail: Annotated[bool, typer.Option("--detail", help="거래 ID·원문 필드·확인사항 전체 표시")] = False,
+    detail: Annotated[
+        bool, typer.Option("--detail", help="거래 ID·원문 필드·확인사항 전체 표시")
+    ] = False,
     ticker: Annotated[str | None, typer.Option("--ticker")] = None,
     start: Annotated[str | None, typer.Option("--from", help="YYYY-MM-DD")] = None,
     end: Annotated[str | None, typer.Option("--to", help="YYYY-MM-DD")] = None,
@@ -208,7 +215,11 @@ def export(
         cases = journal.cases_for_export(case_id=case_id, month=month)
         snapshots = fetch_account_balances(case.account_id for case in cases) if balance else ()
         rendered = journal.export(
-            case_id=case_id, month=month, output=output, detailed=detail, snapshots=snapshots,
+            case_id=case_id,
+            month=month,
+            output=output,
+            detailed=detail,
+            snapshots=snapshots,
         )
     except Exception as error:
         _fail(error)

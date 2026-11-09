@@ -122,7 +122,7 @@ def test_explicit_yaml_watch_survives_when_live_position_has_been_sold(tmp_path)
 
     path = tmp_path / "playbook.yaml"
     path.write_text(
-        'holdings:\n  - ticker: AAPL\n    quantity: 2\n    avg_price: 100\n'
+        "holdings:\n  - ticker: AAPL\n    quantity: 2\n    avg_price: 100\n"
         'watchlist:\n  - ticker: AAPL\n    note: "재진입 관찰"\n'
     )
     assert load_holdings(path).watchlist == []

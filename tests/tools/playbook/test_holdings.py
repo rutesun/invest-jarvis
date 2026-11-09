@@ -316,6 +316,6 @@ def test_invalid_quantity_is_a_schema_error(tmp_path, quantity):
     from src.tools.playbook.holdings import load_holdings
 
     path = tmp_path / "playbook.yaml"
-    path.write_text(f'holdings:\n- ticker: AAPL\n  quantity: {quantity}\n  avg_price: 100\n')
+    path.write_text(f"holdings:\n- ticker: AAPL\n  quantity: {quantity}\n  avg_price: 100\n")
     with pytest.raises(ValueError, match=r"holdings\[0\]"):
         load_holdings(path)

@@ -16,8 +16,13 @@ NUMERIC_FIELDS = {
     ),
     "kr_executions": ("itg_orr_no", "tot_cns_qty", "cns_avg_uit_pr", "cns_amt"),
     "us_history": (
-        "trd_sno", "trd_qty", "trd_uit_pr", "fc_trd_amt", "krw_trd_amt",
-        "trd_bf_bnc_qty", "trd_af_bnc_qty",
+        "trd_sno",
+        "trd_qty",
+        "trd_uit_pr",
+        "fc_trd_amt",
+        "krw_trd_amt",
+        "trd_bf_bnc_qty",
+        "trd_af_bnc_qty",
     ),
 }
 

@@ -117,10 +117,14 @@ def test_default_export_is_a_readable_summary_with_details_opt_in(tmp_path):
 
 def test_summary_never_combines_accounts_or_currencies(tmp_path):
     journal = TradeJournal(tmp_path / "journal.sqlite3")
-    journal.sync([
-        trade(amount=Decimal("1000")),
-        trade(account_id="other", market="US", currency="USD", ticker="AAPL", amount=Decimal("25")),
-    ])
+    journal.sync(
+        [
+            trade(amount=Decimal("1000")),
+            trade(
+                account_id="other", market="US", currency="USD", ticker="AAPL", amount=Decimal("25")
+            ),
+        ]
+    )
     summary = journal.export()
     assert "KR/KRW" in summary and "US/USD" in summary
     assert "1,000" in summary and "25" in summary and "1,025" not in summary
@@ -131,11 +135,19 @@ def test_month_selection_discloses_full_case_scope_and_partial_account_totals(tm
     from src.tools.trades.render import render_cases
 
     journal = TradeJournal(tmp_path / "journal.sqlite3")
-    journal.sync([
-        trade("oct-buy", day="2026-10-01", quantity="10", amount=Decimal("1000")),
-        trade("nov-sell", day="2026-11-01", side="sell", quantity="3", amount=Decimal("300")),
-        trade("other-oct", day="2026-10-01", ticker="000660", name="SK하이닉스", amount=Decimal("2000")),
-    ])
+    journal.sync(
+        [
+            trade("oct-buy", day="2026-10-01", quantity="10", amount=Decimal("1000")),
+            trade("nov-sell", day="2026-11-01", side="sell", quantity="3", amount=Decimal("300")),
+            trade(
+                "other-oct",
+                day="2026-10-01",
+                ticker="000660",
+                name="SK하이닉스",
+                amount=Decimal("2000"),
+            ),
+        ]
+    )
     for summary in (
         journal.export(month="2026-11"),
         render_cases(journal.cases(start=date(2026, 11, 1), end=date(2026, 11, 30))),

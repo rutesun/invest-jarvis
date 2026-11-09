@@ -609,7 +609,10 @@ class TradeJournal:
             return self._case(connection, case_id)
 
     def cases_for_export(
-        self, *, case_id: str | None = None, month: str | None = None,
+        self,
+        *,
+        case_id: str | None = None,
+        month: str | None = None,
     ) -> list[TradeCase]:
         """내보내기 기간은 해당 월에 거래가 있는 투자 건을 선택한다."""
         selected = [self.show(case_id)] if case_id else self.cases()
@@ -629,8 +632,12 @@ class TradeJournal:
         return selected
 
     def export(
-        self, *, case_id: str | None = None, month: str | None = None,
-        output: Path | None = None, detailed: bool = False,
+        self,
+        *,
+        case_id: str | None = None,
+        month: str | None = None,
+        output: Path | None = None,
+        detailed: bool = False,
         snapshots: Iterable[NHBalanceSnapshot] = (),
     ) -> str:
         from .render import render_cases

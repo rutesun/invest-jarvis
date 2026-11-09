@@ -120,7 +120,9 @@ def test_list_and_export_default_to_summary_with_explicit_details(nh_cli, tmp_pa
 
 
 @pytest.mark.parametrize("command", ["list", "show", "export"])
-def test_current_balances_are_live_account_facts_separate_from_incomplete_history(nh_cli, tmp_path, command):
+def test_current_balances_are_live_account_facts_separate_from_incomplete_history(
+    nh_cli, tmp_path, command
+):
     db = tmp_path / "journal.sqlite3"
     assert _sync(nh_cli, db).exit_code == 0
     journal = TradeJournal(db)

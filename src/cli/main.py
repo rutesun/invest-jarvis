@@ -1223,7 +1223,9 @@ def analyze(
 
 @app.command()
 def brief(
-    broker: str | None = typer.Option(None, "--broker", help="보유 출처: 저장된 계좌 설정 사용; local 또는 nh로 지정"),
+    broker: str | None = typer.Option(
+        None, "--broker", help="보유 출처: 저장된 계좌 설정 사용; local 또는 nh로 지정"
+    ),
     account: str | None = typer.Option(None, "--account", help="NH 공개 계좌 식별자"),
     no_llm: bool = typer.Option(False, "--no-llm", help="LLM 문장화 없이 규칙 원문만 출력"),
     detail_strategy: bool = typer.Option(
