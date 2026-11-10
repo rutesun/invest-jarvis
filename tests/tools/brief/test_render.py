@@ -59,6 +59,26 @@ def test_render_all_items_present_no_omission():
         assert md.count(ticker) >= 2  # Top-N 또는 상세 섹션 + 헤더
 
 
+def test_embedded_analysis_headings_are_children_of_each_stock():
+    from markdown_it import MarkdownIt
+
+    analysis = "### 현재 상태\n\n정상\n\n#### 세부 근거\n\n```md\n### 코드 예시\n```"
+    md = render_markdown(
+        datetime(2026, 11, 6), None, _items(), strategy_renderer=lambda item: analysis
+    )
+    tokens = MarkdownIt().parse(md)
+    stock_headings = [
+        tokens[index + 1].content
+        for index, token in enumerate(tokens)
+        if token.type == "heading_open" and token.tag == "h3"
+    ]
+    assert len(stock_headings) == len(_items())
+    assert all("현재 상태" not in title for title in stock_headings)
+    assert "#### 현재 상태" in md and "##### 세부 근거" in md
+    assert "```md\n### 코드 예시\n```" in md
+    assert "#### 대응 근거·참고 정보" in md
+
+
 def test_render_marker_shown():
     md = render_markdown(datetime(2026, 7, 14), macro=None, items=_items())
     assert "스탑 근접" in md

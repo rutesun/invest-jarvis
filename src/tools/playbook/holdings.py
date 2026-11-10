@@ -4,11 +4,17 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import yaml
 
 from src.tools.disclosure import is_korean_ticker
+
+
+if TYPE_CHECKING:
+    from src.providers.nhplug import NHBalanceSnapshot
 
 
 logger = logging.getLogger(__name__)
@@ -19,7 +25,7 @@ class HoldingEntry:
     """보유 종목 단일 항목."""
 
     ticker: str
-    quantity: int
+    quantity: int | Decimal
     avg_price: float
     stop_price: float | None
     currency: str  # "KRW" | "USD"
@@ -44,6 +50,9 @@ class HoldingsConfig:
     usd_risk_pct: float | None
     holdings: list[HoldingEntry] = field(default_factory=list)
     watchlist: list[WatchEntry] = field(default_factory=list)
+    broker_snapshot: NHBalanceSnapshot | None = None
+    broker_provider: str | None = None
+    broker_account_id: str | None = None
 
     def find(self, ticker: str) -> HoldingEntry | None:
         """대소문자 무시 티커 검색. 없으면 None."""
@@ -57,7 +66,9 @@ class HoldingsConfig:
         return self.usd_capital, self.usd_risk_pct
 
 
-def load_holdings(path: str | Path = "playbook.yaml") -> HoldingsConfig:
+def load_holdings(
+    path: str | Path = "playbook.yaml", *, preserve_held_watches: bool = False
+) -> HoldingsConfig:
     """playbook.yaml 로드. 파일 없으면 빈 설정 반환. 스키마 오류는 항목 인덱스와 함께 즉시 예외."""
     p = Path(path)
     if not p.exists():
@@ -72,11 +83,18 @@ def load_holdings(path: str | Path = "playbook.yaml") -> HoldingsConfig:
         data = yaml.safe_load(f) or {}
 
     account = data.get("account") or {}
+    broker = data.get("broker") or {}
+    if not isinstance(broker, dict) or broker.get("provider") not in (None, "nh", "local"):
+        raise ValueError("playbook.yaml broker.provider는 nh 또는 local이어야 합니다")
+    if broker.get("account_id") is not None and not isinstance(broker["account_id"], str):
+        raise ValueError("playbook.yaml broker.account_id는 문자열이어야 합니다")
     krw = account.get("krw") or {}
     usd = account.get("usd") or {}
 
     holdings = _parse_holdings(data.get("holdings") or [])
-    watchlist = _parse_watchlist(data.get("watchlist") or [], holdings)
+    watchlist = _parse_watchlist(
+        data.get("watchlist") or [], [] if preserve_held_watches else holdings
+    )
 
     return HoldingsConfig(
         krw_capital=float(krw["capital"]) if krw.get("capital") is not None else None,
@@ -89,6 +107,8 @@ def load_holdings(path: str | Path = "playbook.yaml") -> HoldingsConfig:
         else None,
         holdings=holdings,
         watchlist=watchlist,
+        broker_provider=broker.get("provider"),
+        broker_account_id=broker.get("account_id"),
     )
 
 
@@ -98,10 +118,15 @@ def _parse_holdings(raw: list) -> list[HoldingEntry]:
         try:
             ticker = str(item["ticker"])
             currency = "KRW" if is_korean_ticker(ticker) else "USD"
+            quantity = Decimal(str(item["quantity"]))
+            if not quantity.is_finite() or quantity < 0:
+                raise ValueError("quantity는 유한한 0 이상의 수량이어야 합니다")
             holdings.append(
                 HoldingEntry(
                     ticker=ticker,
-                    quantity=int(item["quantity"]),
+                    quantity=int(quantity)
+                    if quantity == quantity.to_integral_value()
+                    else quantity,
                     avg_price=float(item["avg_price"]),
                     stop_price=float(item["stop_price"])
                     if item.get("stop_price") is not None
@@ -109,7 +134,7 @@ def _parse_holdings(raw: list) -> list[HoldingEntry]:
                     currency=currency,
                 )
             )
-        except (KeyError, TypeError, ValueError) as e:
+        except (KeyError, TypeError, ValueError, InvalidOperation) as e:
             raise ValueError(f"playbook.yaml holdings[{i}] 파싱 실패: {e!r}") from e
     return holdings
 

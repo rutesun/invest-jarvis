@@ -1,5 +1,6 @@
 """Chart provenance and shared strategy presentation boundaries."""
 
+import re
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
@@ -972,7 +973,12 @@ def test_three_surfaces_show_same_core_strategy_content(
         expanded_observations=True,
     )
     for surface, rendered in (("check", check), ("analyze", analyze), ("brief", brief)):
-        assert (check_common if surface == "check" else common) in rendered
+        expected_common = check_common if surface == "check" else common
+        if surface == "brief":
+            # 브리프의 종목 H3 아래에 공통 분석을 중첩하되 본문은 그대로 보존한다.
+            expected_common = re.sub(r"^(#{3,5})(?= )", r"#\1", expected_common, flags=re.MULTILINE)
+            assert "\n### AAPL — 보유\n" in rendered
+        assert expected_common in rendered
         if not detail:
             current_heading = "현재 유효 상태" if surface == "check" else "현재 상태"
             for heading in (current_heading, "주요 가격대", "최근 5거래일", "전략별 대응"):
@@ -1010,7 +1016,8 @@ def test_three_surfaces_show_same_core_strategy_content(
         assert (old_watch in rendered) is detail
         assert ("OLD_ENTRY" in rendered) is detail
         assert "medium signal evidence" in rendered
-        position_section = rendered.split("### Position Plans\n", 1)[1]
+        position_heading = "####" if surface == "brief" else "###"
+        position_section = rendered.split(f"{position_heading} Position Plans\n", 1)[1]
         assert "signal_finality=PROVISIONAL" in position_section
         assert "장중 후보" in position_section
         assert ("calculated_at=2025-02-04T15:00:00+00:00" in position_section) is detail

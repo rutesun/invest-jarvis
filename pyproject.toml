@@ -27,6 +27,7 @@ dependencies = [
     "psycopg[binary]>=3.2.12",
     "google-genai>=1.0.0",
     "opendataloader-pdf>=2.4.7",
+    "ruamel-yaml>=0.18,<0.19",
 ]
 
 [project.optional-dependencies]

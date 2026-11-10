@@ -1,0 +1,18 @@
+{
+    "Output_0": [
+        {
+            "acct_no": "ACCOUNT NUMBER 1",
+            "acct_type": "01"
+        },
+        {
+            "acct_no": "ACCOUNT NUMBER 2",
+            "acct_type": "01"
+        },
+        {
+            "acct_no": "ACCOUNT NUMBER 3",
+            "acct_type": "03"
+        }
+    ],
+    "rsp_cd": "00000",
+    "rsp_msg": "조회가 완료되었습니다."
+}
